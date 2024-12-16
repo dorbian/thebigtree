@@ -8,5 +8,5 @@ import os
 def optsargs():
     from optparse import OptionParser
     p = OptionParser()
-    p.add_option('-t', '--token', dest='token',default='' help='HelpText' )
+    p.add_option( '-t', '--token', dest='token', default='a', help='HelpText' )
     bigtree.options, bigtree.args = p.parse_args()
