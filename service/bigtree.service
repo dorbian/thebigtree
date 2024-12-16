@@ -5,8 +5,8 @@ After=default.target
 [Service]
 Type=simple
 Environment=PYTHONUNBUFFERED=1
-WorkingDirectory=~/.config/bigtree
-ExecStart=/usr/bin/python3 ~/.config/bigtree/bigtree.py
+WorkingDirectory=%h/.config/bigtree/
+ExecStart=/usr/bin/python3 %h/.config/bigtree/thebigtree.py
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
 Restart=on-failure
