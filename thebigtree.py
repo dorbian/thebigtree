@@ -25,8 +25,8 @@ contest_dir = "/data/contest"
 guildid = "1224347680776523847"
 messages = []
 # Open token file and read it in
-with open('{}/token'.format(os.getenv("HOME")), 'r') as f:
-    token_src = b'{}'.format(f.read())
+raw_token_src = open('{}/token'.format(os.getenv("HOME")), 'r').read()
+token_src = b'{}'.format(raw_token_src)
 token = base64.b64decode(token_src)
 
 # -------
