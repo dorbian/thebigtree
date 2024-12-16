@@ -1,6 +1,7 @@
 [Unit]
 Description=TheBigTree Service
-After=multi-user.target
+After=default.target
+
 [Service]
 Type=simple
 Environment=PYTHONUNBUFFERED=1
@@ -10,5 +11,6 @@ ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
 Restart=on-failure
 RestartSec=42s
+
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
