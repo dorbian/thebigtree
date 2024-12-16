@@ -1,0 +1,6 @@
+[Unit]
+Description=Update service for BigTree
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/.config/bigtree/service/update.sh
