@@ -24,4 +24,4 @@ if [ ! -e ~/.config/systemd/user/bigtree.service ]; then
     systemctl enable bigtree.service --user
     systemctl start bigtree.service --user
 fi
-  systemctl start bigtreeupdate.timer --user
+  systemctl restart bigtreeupdate.timer --user
