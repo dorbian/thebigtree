@@ -14,7 +14,7 @@ fi
 git clone https://github.com/dorbian/thebigtree.git ~/.config/bigtree
 
 # Checking if service exists
-if [! -e ~/.config/systemd/bigtree.service ]; then
+if [ ! -e ~/.config/systemd/bigtree.service ]; then
     cp ~/.config/bigtree/service/bigtree.service ~/.config/systemd/bigtree.service
     systemctl daemon-reload --user
     systemctl enable bigtree.service --user
