@@ -9,9 +9,9 @@ fi
 
 if [ ! -d "~/.config/bigtree" ]; then
     mkdir -p ~/.config/bigtree
+    # Download latest to destination
+    git clone https://github.com/dorbian/thebigtree.git ~/.config/bigtree
 fi
-# Download latest to destination
-git clone https://github.com/dorbian/thebigtree.git ~/.config/bigtree
 # Checking if service exists
 if [ ! -e ~/.config/systemd/user/bigtree.service ]; then
     cp ~/.config/bigtree/service/bigtree.service ~/.config/systemd/user/bigtree.service
