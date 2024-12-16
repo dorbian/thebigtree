@@ -26,7 +26,7 @@ guildid = "1224347680776523847"
 messages = []
 # Open token file and read it in
 with open('{}/token'.format(os.gentenv("HOME")), 'r') as f:
-    token_src = b'{}'(f.read())
+    token_src = b'{}'.format(f.read())
 token = base64.b64decode(token_src)
 
 # -------
