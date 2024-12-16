@@ -1,6 +1,7 @@
 #!/bin/bash
 WORKDIR=~/.config/bigtree
 cd $WORKDIR
+git fetch
 update_status=$(git log ..origin/main --oneline | wc -l)
 if (( update_status > 0 )); then
     echo -e "Stopping BigTree"
