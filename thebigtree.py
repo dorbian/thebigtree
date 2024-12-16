@@ -196,4 +196,4 @@ async def contest(message):
 # -------
 8
 if __name__ == "__main__":
-    bot.run(token(encoding="utf-8"))
+    bot.run(token)
