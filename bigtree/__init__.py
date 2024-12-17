@@ -13,6 +13,7 @@ from pathlib import Path
 from tinydb import TinyDB, Query
 from discord.ext import commands
 from bigtree import Arguments
+import bigtree.inc.logging as loch
 # -------
 # Configuration of initial components
 # -------
@@ -78,8 +79,7 @@ class TheBigTree(commands.Bot):
         
     async def on_ready(self):
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="saplings"))
-        print(f'Logged in as {self.user} (ID: {bot.user.id})')
-        print('------')
+        loch.logger.info(f'Logged in as {self.user} (ID: {bot.user.id})')
 
 
 # -------
@@ -107,6 +107,8 @@ class MyView(discord.ui.View):
         button.disabled = True # set button.disabled to True to disable the button 
         button.label = "No more pressing!" # change the button's label to something else 
         await interaction.response.edit_message(view=self) # edit the message's view
+
+bot = TheBigTree()
 
 # -------
 # Commands to process
@@ -192,7 +194,7 @@ def initialize():
         import bigtree.inc.banner
         
         # create and start
-        bot = TheBigTree()
+        
         bigtree.bot.run(token)
     return True
 
