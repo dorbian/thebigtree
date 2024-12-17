@@ -20,7 +20,9 @@ from bigtree import Arguments
 # predefine boolean
 __initialized__ = False
 # predefined lists
-options = args = messages = []
+options = args = messages = contestid = []
+# predefined strings
+
 
 thread_lock = threading.Lock()
 threading.current_thread().name = 'BigTree'
@@ -31,13 +33,6 @@ guildid = "1224347680776523847"
 # -------
 # Classless functions
 # -------
-
-def app_init():
-    global contestid
-    contestid = []
-    for file in os.listdir(contest_dir):
-        if file.endswith(".json"):
-            contestid.append(int(Path(file).stem))
 
 def contest_management(contest_id, insertdata, command):
     global contestid 
@@ -114,14 +109,6 @@ class MyView(discord.ui.View):
         await interaction.response.edit_message(view=self) # edit the message's view
 
 # -------
-# Initialize configuration and known lists
-# commune with TheBigTree, and open direct communications
-# -------
-
-app_init()
-bot = TheBigTree()
-
-# -------
 # Commands to process
 # -------
 @bot.command()
@@ -144,21 +131,12 @@ async def contest(message,* , description: str):
     await message.channel.send(embed=embedVar)
 
 
-@bot.command()
-@commands.is_owner()
-async def restart(message):
-    if message.author.id == bot.user.id:
-        return
-
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
-
 # -------
 # Incomming messages related code
 # -------
 
 @bot.listen('on_message')
-async def contest(message):
+async def receive(message):
     # Ignore if the bot is the one sending
     if message.author.id == bot.user.id:
         return
@@ -196,16 +174,25 @@ async def contest(message):
 # Finally run if we are directly executed
 # -------
 
-
-
 def initialize():
     with thread_lock:
-        global __initialized__, options, args
+        global __initialized__, options, args, contestid
 
+        # Load the argument parser
         Arguments.optsargs()
+        
         # Open token file and read it in
         token = open('{}/token'.format(os.getenv("HOME")), 'r').read()
+        
+        # Load contests
+        for file in os.listdir(contest_dir):
+            if file.endswith(".json"):
+                contestid.append(int(Path(file).stem))
+        # Proud and firm
         import bigtree.inc.banner
-        bot.run(token)
+        
+        # create and start
+        bot = TheBigTree()
+        bigtree.bot.run(token)
     return True
 
