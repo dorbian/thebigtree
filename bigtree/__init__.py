@@ -14,6 +14,7 @@ from tinydb import TinyDB, Query
 from discord.ext import commands
 from bigtree import Arguments
 import bigtree.inc.logging as loch
+import inc.core
 # -------
 # Configuration of initial components
 # -------
@@ -62,7 +63,7 @@ def contest_management(contest_id, insertdata, command):
         returnval = contestdb.insert(contest_list)
 
     return returnval
-    
+
 # -------
 # Base bot class
 # -------
@@ -147,7 +148,7 @@ async def receive(message):
     if message.channel.id in contestid:   
         if str(message.attachments) == "[]":
             await message.delete()
-        else:
+        if not str(message.attachments) == "[]":
             split_v1 = str(message.attachments).split("filename='")[1]
             filetype = Path(str(split_v1).split("' ")[0]).suffix
             savename = message.author.name + str(message.id) + filetype
