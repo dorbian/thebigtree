@@ -24,7 +24,7 @@ __initialized__ = False
 # predefined lists
 options = args = messages = contestid = []
 # predefined strings
-
+token = ''
 
 thread_lock = threading.Lock()
 threading.current_thread().name = 'BigTree'
@@ -179,7 +179,7 @@ async def receive(message):
 
 def initialize():
     with thread_lock:
-        global __initialized__, options, args, contestid
+        global __initialized__, options, args, contestid, token
 
         # Load the argument parser
         Arguments.optsargs()
@@ -193,9 +193,4 @@ def initialize():
                 contestid.append(int(Path(file).stem))
         # Proud and firm
         import bigtree.inc.banner
-        
-        # create and start
-        
-        bigtree.bot.run(token)
     return True
-

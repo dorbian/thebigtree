@@ -5,3 +5,5 @@ import bigtree
 
 if __name__ == '__main__':
     init = bigtree.initialize()
+    if init is True:
+        bigtree.bot.run(bigtree.token)
