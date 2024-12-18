@@ -14,7 +14,7 @@ from tinydb import TinyDB, Query
 from discord.ext import commands
 from bigtree import Arguments
 import bigtree.inc.logging as loch
-import inc.core
+import bigtree.inc.core
 # -------
 # Configuration of initial components
 # -------
@@ -38,7 +38,7 @@ guildid = "1224347680776523847"
 
 def contest_management(contest_id, insertdata, command):
     global contestid 
-    filepath = '/data/contest/{}.json'.format(contest_id)
+    filepath = os.path.join(contest_dir, '{}.json'.format(contest_id))
 
     if os.path.exists(filepath):
         contest_list = insertdata
@@ -152,9 +152,9 @@ async def receive(message):
             split_v1 = str(message.attachments).split("filename='")[1]
             filetype = Path(str(split_v1).split("' ")[0]).suffix
             savename = message.author.name + str(message.id) + filetype
-            await message.attachments[0].save(fp="/data/contest/{}".format(savename))
+            await message.attachments[0].save(fp="{}".format(os.path.join(contest_dir, savename)))
             await message.delete() # Delete the original message to get to reposting
-            file = discord.File("/data/contest/{}".format(savename), filename=savename)
+            file = discord.File(os.path.join(contest_dir, "{}".format(savename)), filename=savename)
             entry_data = {
                 'name': message.author.name,
                 'file': savename,
