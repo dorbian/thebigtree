@@ -2,13 +2,19 @@
 import bigtree
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
+import re
+import json
 
 # Select your transport with a defined url endpoint
 transport = AIOHTTPTransport(url="https://api.partake.gg/")
 client = Client(transport=transport, fetch_schema_from_transport=True)
 
 # Provide a GraphQL query
-def retrieve_event(eventID):
+def get_eventid(url):
+    value_found = re.findall('\d+', url)
+    return value_found[0]
+    
+async def retrieve_event(eventID):
     query = gql(
         """
         query getEventName($id: Int!) { 
@@ -16,6 +22,7 @@ def retrieve_event(eventID):
     """
     )
     eventid = {"id": int(eventID)}
-    result = client.execute(query, variable_values=eventid)
-    bigtree.Loch.info(result)
+    result = await client.execute_async(query, variable_values=eventid)
+    bigtree.loch.logger.info(result)
     return result
+

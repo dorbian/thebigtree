@@ -5,6 +5,7 @@ import discord
 import os
 import sys
 import threading
+import random
 # -------
 # From imports
 # -------
@@ -14,7 +15,9 @@ from tinydb import TinyDB, Query
 from discord.ext import commands
 from bigtree import Arguments
 import bigtree.inc.logging as loch
-import bigtree.inc.core
+import bigtree.inc.core as core
+import bigtree.modules.partake as partake
+
 # -------
 # Configuration of initial components
 # -------
@@ -133,7 +136,9 @@ async def contest(message,* , description: str):
     embedVar = discord.Embed(title=description, description="\nWelcome Elf!\nTo this amazing contest for the **Best ElfMass Poster** for 2024!\n\n**How to enter:**\nUpload a selfmade GPose or Pic that depicts ElfMass for you!\n\nWinner will get 2 million Gil\n\nAfter uploading, I will remove and judge your entry\n Afterwards, it will be posted here by me.\n\n**To Vote:**\n Please use <:TreeCone:1226115623323701341> to cast A vote on your favorite entry\nVote on as many as you like\n\nThe winner will me made known at the 21th of Elfcember\n", color=0x00ff00)
     await message.channel.send(embed=embedVar)
 
-
+# async def create_event(message, *, eventdata):
+#         myguild = client.guilds[0]
+#         roles = await myguild.fetch_roles()
 # -------
 # Incomming messages related code
 # -------
@@ -168,7 +173,16 @@ async def receive(message):
             view.message = message
             view.savename = savename
             await message.channel.send(file=file, embed=embed, view=view)
-
+    if 'partake.gg' in message.content:
+        event_source = await partake.retrieve_event(partake.get_eventid(core.find_url(message.content)))
+        # processed_event = converter.partake(event_source)
+    
+    # Random treeheart to images
+    if not str(message.attachments) == "[]":
+        testvalue = random.randrange(6)
+        if testvalue == 3:
+            emoji = "<:treeheart:1321831300088463452>"
+            await message.add_reaction(emoji)
 #todo:
 # delete_contest then adding
 # get nr from db
