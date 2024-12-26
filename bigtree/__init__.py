@@ -15,6 +15,7 @@ from tinydb import TinyDB, Query
 from discord.ext import commands
 from bigtree import Arguments
 import bigtree.inc.logging as loch
+import bigtree.inc.Config as Config
 import bigtree.inc.core as core
 import bigtree.modules.partake as partake
 
@@ -26,14 +27,12 @@ import bigtree.modules.partake as partake
 __initialized__ = False
 # predefined lists
 options = args = messages = contestid = []
+config_path = workingdir = config = contest_dir = guildid = None
 # predefined strings
 token = ''
 
 thread_lock = threading.Lock()
 threading.current_thread().name = 'BigTree'
-
-contest_dir = "/data/contest"
-guildid = "1224347680776523847"
 
 # -------
 # Classless functions
@@ -179,7 +178,7 @@ async def receive(message):
     
     # Random treeheart to images
     if not str(message.attachments) == "[]":
-        testvalue = random.randrange(6)
+        testvalue = random.randrange(3)
         if testvalue == 3:
             emoji = "<:treeheart:1321831300088463452>"
             await message.add_reaction(emoji)
@@ -187,20 +186,23 @@ async def receive(message):
 # delete_contest then adding
 # get nr from db
 
-# -------
-# Finally run if we are directly executed
-# -------
-
 def initialize():
     with thread_lock:
-        global __initialized__, options, args, contestid, token
+        
+        global __initialized__, options, args, contestid, token, config_path, workingdir, config
+
+        workingdir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(os.getenv("HOME"), os.path.join('.config', 'bigtree.ini'))
 
         # Load the argument parser
         Arguments.optsargs()
-        
-        # Open token file and read it in
-        token = open('{}/token'.format(os.getenv("HOME")), 'r').read()
-        
+        config = Config.ConfigCheck()
+        config.config_validate()
+
+        contest_dir = config.config["BOT"]["contest_dir"]
+        guildid = config.config["BOT"]["guildid"]
+        token = config.config["BOT"]["token"]
+        config.config_write
         # Load contests
         for file in os.listdir(contest_dir):
             if file.endswith(".json"):
