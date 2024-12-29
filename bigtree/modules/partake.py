@@ -1,4 +1,3 @@
-
 import bigtree
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -23,6 +22,5 @@ async def retrieve_event(eventID):
     )
     eventid = {"id": int(eventID)}
     result = await client.execute_async(query, variable_values=eventid)
-    bigtree.loch.logger.info(result)
     return result
 

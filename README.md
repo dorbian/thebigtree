@@ -1,4 +1,4 @@
-uses discordpy, tinydb
+uses discordpy, tinydb, pillow
 
 Sources:
 https://discordpy.readthedocs.io/en/stable/

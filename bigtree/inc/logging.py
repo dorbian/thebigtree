@@ -2,7 +2,7 @@ import bigtree
 import logging
 import logging.handlers
 
-logger = logging.getLogger('discord')
+logger = logging.getLogger('discord.bigtree')
 logger.setLevel(logging.DEBUG)
 logging.getLogger('discord.http').setLevel(logging.INFO)
 
