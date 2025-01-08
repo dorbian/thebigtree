@@ -3,7 +3,7 @@
 Welcome to the source of TheBigTree, Here you can find a collection of the Lore of the Forest, TheBigTree, and Elf.
 Also, the source of the individual components are stored here as well.
 
-If you would like to read the lore, please click [Here](LOREFORGE.md)
+If you would like to read the lore, please click [Here](LOREFORGE.MD)
 
 ## Discord Bot
 
