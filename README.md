@@ -1,3 +1,14 @@
+# TheBigTree
+
+Welcome to the source of TheBigTree, Here you can find a collection of the Lore of the Forest, TheBigTree, and Elf.
+Also, the source of the individual components are stored here as well.
+
+If you would like to read the lore, please click [Here](LOREFORGE.md)
+
+## Discord Bot
+
+The Discord bot uses the following modules:
+
 uses discordpy, tinydb, pillow
 
 Sources:
@@ -7,6 +18,7 @@ https://tinydb.readthedocs.io/en/latest/usage.html
 partake.gg module:  
 pip install "gql[all]"
 
-This assumes your token is in the home directory
+## Service setup
 
-run install.sh to install the service and update mechanisms for the bot source
+To run the bot as a service, use the included install.sh and configure the settings file with your own token and required information.
+This will automatically install a timer for the update service and setup the service itself.
