@@ -1,7 +1,7 @@
 import bigtree
 import discord
 from discord.ext import commands
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import requests
 from PIL import Image
 
@@ -21,7 +21,8 @@ async def create_event(guild, starttime, eventtitle, endtime, imageloc, eventloc
     bigtree.loch.logger.info('Event: {0} registered'.format(eventtitle))
     return True
 
-async def create_partake_event(guild, data, uri):
+async def create_partake_event(guild, data, uri):                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+    event_current_date = datetime.today()
     guild = guild
     event_type=discord.EntityType.external
     event_id = data['event']['id']
@@ -34,6 +35,9 @@ async def create_partake_event(guild, data, uri):
     # process if not returned
     event_age = data['event']['ageRating']
     event_starts = datetime.fromisoformat(data['event']['startsAt'][:-1] + '+00:00')
+    if datetime.now() > datetime.fromisoformat(data['event']['startsAt'][:-1]):
+        now = datetime.now() - timedelta(minutes=58)
+        event_starts = datetime.fromisoformat(now.strftime("%Y-%m-%d %H:%M:%S") + '+00:00')
     event_ends = datetime.fromisoformat(data['event']['endsAt'][:-1] + '+00:00')
     event_location = data['event']['location']
     event_description = data['event']['description']
