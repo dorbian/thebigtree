@@ -4,7 +4,7 @@ import os
 
 def contest_management(contest_id, insertdata, command):
     global contestid 
-    filepath = os.path.join(bigtree.contest_dir, '{}.json'.format(contest_id))
+    filepath = bigtree.contest_dir / f'{contest_id}.json'
 
     if os.path.exists(filepath):
         contest_list = insertdata

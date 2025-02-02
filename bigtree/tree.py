@@ -8,7 +8,7 @@ from discord.ext import commands
 
 class TheBigTree(commands.Bot):
     def __init__(self):
-        intents = discord.Intents.default()
+        intents = discord.Intents.all()
         intents.members = True  
         intents.message_content = True
 
@@ -19,3 +19,6 @@ class TheBigTree(commands.Bot):
     async def on_ready(self):
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="elves"))
         bigtree.loch.logger.info(f'Logged in as {self.user} (ID: {bigtree.bot.user.id})')
+        guild = discord.Object(id=bigtree.guildid)
+        # Add awesomeies to the server
+        synced = await self.tree.sync(guild=guild)

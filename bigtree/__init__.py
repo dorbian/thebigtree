@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import random
+import asyncio
 # -------
 # From imports
 # -------
@@ -20,7 +21,6 @@ import bigtree.inc.core as core
 import bigtree.modules.partake as partake
 import bigtree.modules.contest as contesta
 import bigtree.modules.event as event
-import bigtree.views.default as default_view
 # predefine boolean
 __initialized__ = False
 # predefined lists
@@ -32,14 +32,15 @@ token = ''
 thread_lock = threading.Lock()
 threading.current_thread().name = 'BigTree'
 
-bot = tree.TheBigTree()
+# bot = tree.TheBigTree()
 # Initialize module
 def initialize():
     with thread_lock:
         
-        global __initialized__, options, args, contestid, token, config_path, workingdir, config, bot
+        global __initialized__, options, args, contestid, token, config_path, workingdir, config, bot, guildid, tree, view_dir
 
-        workingdir = os.path.dirname(os.path.abspath(__file__))
+        workingdir = Path(__file__).parent
+        view_dir = workingdir / "cmds"
         config_path = os.path.join(os.getenv("HOME"), os.path.join('.config', 'bigtree.ini'))
 
         # Load the argument parser
@@ -51,6 +52,7 @@ def initialize():
         contest_dir = config.config["BOT"]["contest_dir"]
         guildid = config.config["BOT"]["guildid"]
         token = config.config["BOT"]["token"]
+        # Get server stuff
         # Write the config back to file to make sure any changes to the format are also stored.
         config.config_write
 
@@ -59,7 +61,12 @@ def initialize():
             if file.endswith(".json"):
                 contestid.append(int(Path(file).stem))
         # Proud and firm
-        bot = bot
+        bot = tree.TheBigTree()
+
         import bigtree.inc.banner
+        for cmd_file in view_dir.glob("*.py"):
+            if cmd_file.name != "__init__.py":
+                asyncio.run(bot.load_extension(f"bigtree.cmds.{cmd_file.name[:-3]}"))
+        # load commands
         import bigtree.modules.commands
     return True
