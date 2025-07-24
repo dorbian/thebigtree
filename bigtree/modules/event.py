@@ -94,7 +94,7 @@ async def create_partake_event(guild, data, uri):
         if attachments:
             for i, attachment_id in enumerate(attachments, 1):
                 try:
-                    attachment_url = f"https://cdn.partyverse.app/attachments/{attachment_id}"
+                    attachment_url = f"https://cdn.partake.gg/assets/{attachment_id}"
                     bigtree.loch.logger.debug(f"Processing attachment {i}/{len(attachments)}: {attachment_url}")
                     
                     response = requests.get(attachment_url, stream=True)
