@@ -27,11 +27,13 @@ async def create_partake_event(guild, data, uri):
     event_type=discord.EntityType.external
     event_id = data['event']['id']
     event_title = data['event']['title']
+    
     # Check if event exists before parsing the rest and downloading data
     events = await guild.fetch_scheduled_events()
     for existing in events:
         if existing.name == event_title and existing.creator.name == 'TheBigTree':
             return False
+            
     # process if not returned
     event_age = data['event']['ageRating']
     event_starts = datetime.fromisoformat(data['event']['startsAt'][:-1] + '+00:00')
@@ -41,14 +43,38 @@ async def create_partake_event(guild, data, uri):
     event_ends = datetime.fromisoformat(data['event']['endsAt'][:-1] + '+00:00')
     event_location = data['event']['location']
     event_description = data['event']['description']
-    event_attachements = data['event']['attachments'][0]
     event_location = '{0}-{1}'.format(data['event']['locationData']['dataCenter']['name'], data['event']['locationData']['server']['name'])
     event_content = 'Location: {0}\nAge: {1}\nLink: {2}\n\n{3}'.format(event_location, event_age, uri, event_description)[:1000]
-    # download image
-    image_resize = Image.open(requests.get('https://cdn.partyverse.app/attachments/{0}'.format(event_attachements), stream=True).raw)
-    image_resize.save('/tmp/image.png', quality=95, optimize=True)
-    image_send = open('/tmp/image.png', 'rb')
-    event_image = image_send.read()
-    image_send.close()
-    await create_event(guild, event_starts, event_title, event_ends, event_image, event_location, event_id, event_content, event_type)
+    
+    # Handle image attachment
+    event_image = None
+    if data['event']['attachments']:
+        try:
+            attachment_url = f"https://cdn.partyverse.app/attachments/{data['event']['attachments'][0]}"
+            response = requests.get(attachment_url, stream=True)
+            response.raise_for_status()  # Check if request was successful
+            
+            # Verify it's an image
+            image_resize = Image.open(response.raw)
+            image_resize.verify()  # Verify it's a valid image
+            image_resize = Image.open(response.raw)  # Need to reopen after verify
+            
+            image_resize.save('/tmp/image.png', quality=95, optimize=True)
+            with open('/tmp/image.png', 'rb') as image_send:
+                event_image = image_send.read()
+        except (requests.exceptions.RequestException, IOError, Image.UnidentifiedImageError) as e:
+            bigtree.loch.logger.warning(f"Failed to process event image: {e}")
+            # Continue without image if there's an error
+    
+    await create_event(
+        guild, 
+        event_starts, 
+        event_title, 
+        event_ends, 
+        event_image,  # This can be None if no valid image
+        event_location, 
+        event_id, 
+        event_content, 
+        event_type
+    )
     return True
