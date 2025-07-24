@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from datetime import datetime, timezone, timedelta
 import requests
+import json
 from PIL import Image
 
 async def create_event(guild, starttime, eventtitle, endtime, eventloc, partakeid, edescription, etype, imageloc=None):
