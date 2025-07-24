@@ -100,26 +100,31 @@ async def create_partake_event(guild, data, uri):
                     response = requests.get(attachment_url, stream=True)
                     response.raise_for_status()
                     
-                    # Check content type header first
-                    content_type = response.headers.get('Content-Type', '')
+                    # Check content type - now including WebP
+                    content_type = response.headers.get('Content-Type', '').lower()
                     bigtree.loch.logger.debug(f"Attachment content type: {content_type}")
                     
-                    if not content_type.startswith('image/'):
+                    if not any(ct in content_type for ct in ['image/jpeg', 'image/png', 'image/webp']):
                         bigtree.loch.logger.debug(f"Skipping non-image attachment: {content_type}")
                         continue
                         
-                    # Verify image
+                    # Verify image - now with WebP support
                     try:
-                        image = Image.open(response.raw)
-                        image.verify()
-                        image = Image.open(response.raw)  # Reopen after verify
+                        with Image.open(response.raw) as img:
+                            # Convert WebP to PNG if needed (Discord prefers PNG)
+                            if img.format == 'WEBP':
+                                bigtree.loch.logger.debug("Converting WebP to PNG")
+                                buffer = io.BytesIO()
+                                img.save(buffer, format='PNG')
+                                buffer.seek(0)
+                                event_kwargs['imageloc'] = buffer.read()
+                            else:
+                                buffer = io.BytesIO()
+                                img.save(buffer, format=img.format)
+                                buffer.seek(0)
+                                event_kwargs['imageloc'] = buffer.read()
                         
-                        # Save and use this image
-                        image.save('/tmp/image.png', quality=95, optimize=True)
-                        with open('/tmp/image.png', 'rb') as image_send:
-                            event_kwargs['imageloc'] = image_send.read()
-                        
-                        bigtree.loch.logger.debug(f"Successfully used attachment {attachment_id} as event image")
+                        bigtree.loch.logger.debug(f"Successfully used {img.format} image: {attachment_id}")
                         break
                         
                     except Exception as img_error:
@@ -129,8 +134,8 @@ async def create_partake_event(guild, data, uri):
                 except requests.exceptions.RequestException as req_error:
                     bigtree.loch.logger.debug(f"Failed to download attachment {attachment_id}: {req_error}")
                     continue
-        if not attachements:
-            bigtree.loch.logger.debug("No attachments found for event")
+
+        bigtree.loch.logger.debug("No valid image attachments found" if not attachments else "Finished processing attachments")
             
         await create_event(**event_kwargs)
         bigtree.loch.logger.info(f"Successfully created event: {event_title}")
