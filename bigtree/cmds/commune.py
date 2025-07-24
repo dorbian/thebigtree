@@ -17,7 +17,7 @@ async def commune(ctx):
         await ctx.send(f"Please do some subcommands :) ")
 
 @commune.command()
-async def title(ctx, *titles):
+async def create(ctx, *titles):
     communion.embed = discord.Embed(title=' '.join(titles), colour=discord.Colour.green())
     communion.embed.set_footer(text=f"TheBigTree Manifesto")
     await ctx.send('Title Registered')
@@ -41,9 +41,10 @@ async def draft(ctx):
 async def post(ctx):
     guild = bigtree.bot.guilds[0]
     channelID = int(communion.channel)
+    # communion.embed.add_field(name='', value=f'<#{channelID}>', inline=False)
     channel = communion.bot.get_channel(channelID)
     communion.embed.timestamp = datetime.datetime.utcnow()
-    await channel.send(embed=communion.embed)
+    await channel.send(content=f'@everyone', embed=communion.embed)
     communion.embed = ''
 
 @commune.command()

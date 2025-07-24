@@ -52,6 +52,7 @@ def initialize():
         contest_dir = config.config["BOT"]["contest_dir"]
         guildid = config.config["BOT"]["guildid"]
         token = config.config["BOT"]["token"]
+        adminid = config.config["BOT"]["adminid"]
         # Get server stuff
         # Write the config back to file to make sure any changes to the format are also stored.
         config.config_write
