@@ -13,7 +13,6 @@ import re
 import asyncio
 from collections import defaultdict, deque
 import bigtree.inc.ai as ai 
-from bigtree.cmds.contest import add_caption_button_to_view 
 
 PRIEST_ROLE_NAME = "Priest/ess"
 
@@ -140,7 +139,6 @@ async def receive(message):
                 view.savename = savename
                 sent = await message.channel.send(file=file, embed=embed, view=view)
 
-                add_caption_button_to_view(view, target_message_id=sent.id, owner_id=message.author.id)
                 await sent.edit(view=view)
 
         # partake.gg quick hook
