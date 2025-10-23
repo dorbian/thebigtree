@@ -84,12 +84,31 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
     _user_hist[user_id].append({"role": "assistant", "content": reply})
     return reply
 
+
 @bot.command()
 async def colour(ctx):
-    view = bigtree.views.commune.DropdownView()
-    await ctx.send('Pick your favourite colour:', view=view)
+    # Self-contained demo view to avoid missing bigtree.views.*
+    class ColourSelect(discord.ui.Select):
+        def __init__(self):
+            options = [
+                discord.SelectOption(label="Red"),
+                discord.SelectOption(label="Green"),
+                discord.SelectOption(label="Blue"),
+            ]
+            super().__init__(placeholder="Pick a colour…", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            await interaction.response.send_message(f"You picked **{self.values[0]}** ✅", ephemeral=True)
+
+    class ColourView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=180)
+            self.add_item(ColourSelect())
+
+    await ctx.send('Pick your favourite colour:', view=ColourView())
 
 @bot.listen('on_message')
+
 async def receive(message):
     try:
         if message.author.id == bot.user.id:
