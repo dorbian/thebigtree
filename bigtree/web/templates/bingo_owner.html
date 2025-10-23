@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bingo – Owner Cards</title>
+<style>
+  body{font-family:sans-serif;margin:0;padding:16px;background:#0b0f0c;color:#e5f4ea}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{border:1px solid #335;border-radius:12px;padding:12px;background:#10161a}
+  .muted{opacity:.7}
+</style>
+
+<!--
+  Expected query params:
+    ?game=<id>&owner=<url-encoded name>
+-->
+<h1>Bingo – Owner Cards</h1>
+<p class="muted">Use ?game=&amp;owner= in the URL to bind this view.</p>
+
+<div id="list" class="grid"></div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const game = params.get('game') || '';
+  const owner = params.get('owner') || '';
+  const grid = document.getElementById('list');
+
+  async function fetchOwnerCards(){
+    const r = await fetch(`/bingo/${encodeURIComponent(game)}/owner/${encodeURIComponent(owner)}/cards`);
+    return r.ok ? await r.json() : null;
+  }
+
+  function render(data){
+    if(!data){ grid.innerHTML = '<p>Missing or invalid query parameters.</p>'; return; }
+    const cards = data.cards || [];
+    grid.innerHTML = '';
+    cards.forEach(card=>{
+      const el = document.createElement('div'); el.className='card';
+      const nums = card.numbers || [];
+      let html = `<div><strong>${data.owner}</strong> — Card ${card.card_id}</div>`;
+      html += '<table style="border-collapse:collapse;margin-top:8px">';
+      for(let r=0;r<nums.length;r++){
+        html += '<tr>';
+        for(let c=0;c<nums[r].length;c++){
+          const n = nums[r][c];
+          html += `<td style="border:1px solid #335;padding:6px">${n}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</table>';
+      el.innerHTML = html;
+      grid.appendChild(el);
+    });
+  }
+
+  async function tick(){
+    render(await fetchOwnerCards());
+  }
+  setInterval(tick, 2000);
+  tick();
+</script>

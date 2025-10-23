@@ -1,7 +1,7 @@
 import bigtree
+from bigtree.inc.webserver import ensure_webserver, get_server
 import discord
 from discord.ext import commands
-
 # -------
 # Base bot class
 # -------
@@ -22,3 +22,12 @@ class TheBigTree(commands.Bot):
         guild = discord.Object(id=bigtree.guildid)
         # Add awesomeies to the server
         synced = await self.tree.sync(guild=guild)
+        # add near your other imports
+        if getattr(bigtree.bot, "_web_started", False):
+                return
+        srv = await ensure_webserver()
+        bigtree.bot._web_started = True
+        host = srv._cfg["host"]
+        port = srv._cfg["port"]
+        base = srv._cfg["base_url"]
+        bigtree.loch.logger.info(f"[web] started on {host}:{port} (base_url={base})")

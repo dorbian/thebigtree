@@ -2,9 +2,12 @@ import bigtree
 from tinydb import TinyDB, Query
 import os
 
+
 def contest_management(contest_id, insertdata, command):
     global contestid 
-    filepath = bigtree.contest_dir / f'{contest_id}.json'
+    print(contest_id, command)
+    filepath = os.path.join(bigtree.contest_dir,f'{contest_id}.json')
+    print (filepath)
 
     if os.path.exists(filepath):
         contest_list = insertdata
@@ -29,3 +32,4 @@ def contest_management(contest_id, insertdata, command):
         returnval = contestdb.insert(contest_list)
 
     return returnval
+

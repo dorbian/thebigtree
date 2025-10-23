@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tarrot {SID} - {VIEW}</title>
+<style>
+  body{font-family:sans-serif;margin:0;padding:16px;background:#0b0f0c;color:#e5f4ea}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+  .card{border:1px solid #335;border-radius:12px;padding:12px;background:#10161a}
+  h1{margin:0 0 8px 0}.muted{opacity:.7;font-size:12px}
+</style>
+<h1>Tarrot – session {SID} <span class="muted">({VIEW} view)</span></h1>
+<div id="grid" class="grid"></div>
+<script>
+  const view="{VIEW}", sid="{SID}";
+  const grid=document.getElementById('grid');
+  function render(state){
+    grid.innerHTML='';
+    (state.drawn||[]).forEach((c,idx)=>{
+      const flipped=(state.flipped||[]).includes(idx);
+      const el=document.createElement('div'); el.className='card';
+      let img=c.image?`<img src="${c.image}" alt="${c.title}" style="max-width:100%;border-radius:8px;margin-bottom:8px">`:'';
+      let title=`<div><strong>${c.title}</strong>${flipped?' (flipped)':''}</div>`;
+      let meaning=(view==='priest')?`<div class="muted">${c.meaning||''}</div>`:'';
+      el.innerHTML=img+title+meaning; grid.appendChild(el);
+    });
+  }
+  const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/tarot/'+sid);
+  ws.onmessage=(ev)=>{try{const d=JSON.parse(ev.data); if(d.type==='tarot_state'&&d.sid===sid) render(d.state);}catch(e){}};
+  fetch('/api/tarot/session/'+sid).then(r=>r.json()).then(j=>render((j.session||{}).state||{}));
+</script>

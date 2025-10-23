@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bingo – Play</title>
+<style>
+  body{font-family:sans-serif;margin:0;padding:16px;background:#0b0f0c;color:#e5f4ea}
+  .muted{opacity:.7}
+</style>
+<!--
+  Expected query params:
+    ?game=<id>&card=<uuid>
+  The page fetches JSON from:
+    GET /bingo/{game}/card/{card}
+    GET /bingo/{game}
+  and renders/updates the board.
+-->
+<h1>Bingo – Card</h1>
+<p class="muted">Use ?game=&amp;card= in the URL to bind this view.</p>
+
+<div id="app"></div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const game = params.get('game') || '';
+  const cardId = params.get('card') || '';
+
+  const app = document.getElementById('app');
+
+  async function fetchCard(){
+    const r = await fetch(`/bingo/${encodeURIComponent(game)}/card/${encodeURIComponent(cardId)}`);
+    return r.ok ? (await r.json()).card : null;
+  }
+  async function fetchState(){
+    const r = await fetch(`/bingo/${encodeURIComponent(game)}`);
+    return r.ok ? await r.json() : null;
+  }
+
+  function render(card, state){
+    if(!card || !state){ app.innerHTML = '<p>Missing or invalid game/card parameters.</p>'; return; }
+    const called = (state.game && state.game.called) || [];
+    const nums = card.numbers || [];
+    const marks = card.marks || [];
+    let html = `<div><strong>Owner:</strong> ${card.owner_name || ''}</div>`;
+    html += '<table style="border-collapse:collapse;margin-top:12px">';
+    for(let r=0;r<nums.length;r++){
+      html += '<tr>';
+      for(let c=0;c<nums[r].length;c++){
+        const n = nums[r][c];
+        const marked = marks.some(m=>m[0]===r && m[1]===c) || called.includes(n);
+        html += `<td style="border:1px solid #335;padding:8px;${marked?'background:#143;':''}">${n}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    app.innerHTML = html;
+  }
+
+  async function tick(){
+    const [card, state] = await Promise.all([fetchCard(), fetchState()]);
+    render(card, state);
+  }
+  setInterval(tick, 1500);
+  tick();
+</script>
