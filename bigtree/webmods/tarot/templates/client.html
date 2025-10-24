@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tarot Reading</title>
+<link rel="stylesheet" href="/static/tarot/main.css">
+</head><body><main class="container">
+<h1>🔮 Tarot Reading</h1>
+<div id="meta"></div>
+<ul id="cards"></ul>
+</main>
+<script>
+const token = location.pathname.split('/').pop();
+async function main(){
+  const s = await fetch(`/api/tarot/session/${token}`).then(r=>r.json());
+  if (s.error){ document.body.innerHTML="<h2>Session not found.</h2>"; return; }
+  document.getElementById('meta').textContent = `${s.subject} — ${s.spread}`;
+  const titles = encodeURIComponent((s.cards||[]).join(','));
+  const pub = await fetch(`/api/tarot/public-cards?titles=${titles}`).then(r=>r.json());
+  const ul = document.getElementById('cards'); ul.innerHTML="";
+  (s.cards||[]).forEach(t => {
+    const meta = pub.find(x=>x.title.toLowerCase()===t.toLowerCase()) || {};
+    const li = document.createElement('li');
+    const title = document.createElement('div'); title.className="card-title"; title.textContent=t; li.appendChild(title);
+    if (meta.image){
+      const img=document.createElement('img'); img.src=meta.image; img.alt=t; img.className="card-img"; li.appendChild(img);
+    }
+    ul.appendChild(li);
+  });
+}
+main();
+</script></body></html>

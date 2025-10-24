@@ -1,0 +1,69 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tarot Admin</title>
+<link rel="stylesheet" href="/static/tarot/main.css">
+</head><body><main class="container">
+<h1>🔮 Tarot Admin</h1>
+<div id="meta"></div>
+
+<section>
+  <button id="draw">Draw random</button>
+  <input id="manualTitle" placeholder="Add by title">
+  <button id="add">Add</button>
+</section>
+
+<h3>Cards</h3>
+<ul id="cards"></ul>
+
+<h3>Set card image by URL</h3>
+<div class="grid2">
+  <input id="imageTitle" placeholder="Card title">
+  <input id="imageUrl" placeholder="https://example.com/card.png">
+</div>
+<button id="saveImage">Set image</button>
+
+<h3>Private notes</h3>
+<textarea id="notes" rows="6" placeholder="Notes visible only to the priest(ess)"></textarea>
+<div><button id="saveNotes">Save notes</button></div>
+</main>
+<script>
+const token = location.pathname.split('/').pop();
+const meta = document.getElementById('meta');
+const cardsUl = document.getElementById('cards');
+const notes = document.getElementById('notes');
+async function fetchAdmin(){ return fetch(`/api/tarot/admin/${token}`).then(r=>r.json()); }
+async function refresh(){
+  const d = await fetchAdmin();
+  if (d.error){ document.body.innerHTML="<h2>Session not found.</h2>"; return; }
+  meta.textContent = `ID ${d.id} — ${d.subject} — ${d.spread}`;
+  cardsUl.innerHTML="";
+  // fetch public metadata for images
+  const titles = encodeURIComponent((d.cards||[]).join(','));
+  const pub = await fetch(`/api/tarot/public-cards?titles=${titles}`).then(r=>r.json());
+  (d.cards||[]).forEach(t => {
+    const li=document.createElement('li');
+    const meta=pub.find(x=>x.title.toLowerCase()===t.toLowerCase())||{};
+    li.innerHTML = `<div class="card-title">${t}</div>` + (meta.image? `<img class="card-img" src="${meta.image}" alt="${t}">`: "");
+    cardsUl.appendChild(li);
+  });
+  notes.value = d.notes || "";
+}
+document.getElementById('draw').onclick = ()=>{ fetch(`/api/tarot/admin/${token}/draw`, {method:"POST"}).then(refresh); };
+document.getElementById('add').onclick = ()=>{
+  const title=document.getElementById('manualTitle').value.trim(); if(!title) return;
+  fetch(`/api/tarot/admin/${token}/add-card`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({title})})
+    .then(()=>{ document.getElementById('manualTitle').value=""; refresh(); });
+};
+document.getElementById('saveImage').onclick = ()=>{
+  const title=document.getElementById('imageTitle').value.trim();
+  const url=document.getElementById('imageUrl').value.trim();
+  if(!title||!url) return;
+  fetch(`/api/tarot/admin/${token}/set-card-image`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({title, url})})
+    .then(()=>{ document.getElementById('imageTitle').value=""; document.getElementById('imageUrl').value=""; refresh(); });
+};
+document.getElementById('saveNotes').onclick = ()=>{
+  fetch(`/api/tarot/admin/${token}/notes`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({notes:notes.value})})
+    .then(()=>alert("Saved."));
+};
+refresh();
+</script></body></html>

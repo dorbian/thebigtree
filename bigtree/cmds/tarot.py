@@ -70,8 +70,8 @@ class Tarot(commands.Cog):
         await srv.broadcast({"type":"tarot_state","sid":session_id,"state": {"drawn":[],"flipped":[]}})
         await interaction.response.send_message("Session ended.", ephemeral=True)
 
-    @app_commands.command(name="tarot_addcard", description="Add a new card to a deck")
-    async def tarot_addcard(self, interaction: discord.Interaction):
+    @app_commands.command(name="tarot_add_card", description="Add a new card to a deck")
+    async def tarot_add_card(self, interaction: discord.Interaction):
         await interaction.response.send_modal(AddCardModal())
 
     @app_commands.command(name="tarot_stream", description="Toggle streaming presence for reading")

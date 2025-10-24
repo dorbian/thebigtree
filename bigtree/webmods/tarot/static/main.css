@@ -1,0 +1,6 @@
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b0e12;color:#e8e8e8}
+.container{max-width:900px;margin:2rem auto;padding:1rem;background:#121722;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.3)}
+h1,h3{margin:.5rem 0 1rem}button{background:#7c3aed;color:#fff;border:0;border-radius:8px;padding:.6rem .9rem;cursor:pointer}
+button:hover{filter:brightness(1.1)}input,textarea{width:100%;box-sizing:border-box;margin:.4rem 0;padding:.6rem .7rem;border-radius:8px;border:1px solid #283042;background:#0d1320;color:#e8e8e8}
+ul{list-style:'🜁 ';padding-left:1.1rem}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}.card-img{max-width:100%;border-radius:10px;margin:.3rem 0}
+.card-title{font-weight:600;margin:.2rem 0}
