@@ -17,7 +17,7 @@ class TheBigTree(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned_or('/'), intents=intents)
         
     async def on_ready(self):
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="elves"))
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="Listening to: elves"))
         bigtree.loch.logger.info(f'Logged in as {self.user} (ID: {bigtree.bot.user.id})')
         guild = discord.Object(id=bigtree.guildid)
         # Add awesomeies to the server
