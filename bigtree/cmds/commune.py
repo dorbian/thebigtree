@@ -167,7 +167,7 @@ class CommuneView(discord.ui.View):
             del _SESSIONS[self.session_key]
         await interaction.response.edit_message(content="❌ Cancelled.", view=None)
 
-    @discord.ui.select(cls=discord.ui.ChannelSelect, channel_types=[discord.ChannelType.text], placeholder="Choose target channel…", min_values=1, max_values=1)
+    @discord.ui.select(cls=discord.ui.ChannelSelect, channel_types=[discord.ChannelType.text, discord.ChannelType.news], placeholder="Choose target channel…", min_values=1, max_values=1)
     async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
         sess = _SESSIONS.get(self.session_key)
         if not sess or interaction.user.id != self.session_key[1]:
