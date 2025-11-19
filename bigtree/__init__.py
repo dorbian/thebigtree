@@ -87,7 +87,7 @@ def initialize():
         guildid = int(guildid_raw) if str(guildid_raw).isdigit() else 0
         adminid = int(adminid_raw) if str(adminid_raw).isdigit() else 0
 
-        token   = os.getenv("DISCORD_TOKEN") or bot_sec.get("token", "")
+        token = bot_sec.get("token", "")
 
 
         # OpenAI (modules can require these when they actually need them)
