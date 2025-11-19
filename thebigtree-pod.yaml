@@ -1,0 +1,53 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: thebigtree
+  labels:
+    app: thebigtree
+spec:
+  restartPolicy: Always
+  containers:
+    - name: thebigtree
+      # When using `podman play kube`, Podman can optionally build a local
+      # image if a directory with this name exists and contains a
+      # Containerfile/Dockerfile (see README-podman.md).
+      image: thebigtree:latest
+      imagePullPolicy: IfNotPresent
+      env:
+        # REQUIRED: set your Discord bot token here (or override with
+        # `podman play kube --configmap`/`--secret` if you prefer).
+        - name: DISCORD_TOKEN
+          value: "REPLACE_WITH_YOUR_DISCORD_BOT_TOKEN"
+
+        # REQUIRED: Discord guild/server ID the bot should attach to.
+        - name: BIGTREE__BOT__guildid
+          value: "REPLACE_WITH_YOUR_GUILD_ID"
+
+        # OPTIONAL: where contests get stored *inside* the container.
+        # By default this is /data/contest, which is backed by a hostPath
+        # volume defined further down in this YAML.
+        - name: BIGTREE__BOT__contest_dir
+          value: "/data/contest"
+
+        # OPTIONAL: webserver listen host/port; defaults to 0.0.0.0:8443
+        - name: BIGTREE__WEB__listen_host
+          value: "0.0.0.0"
+        - name: BIGTREE__WEB__listen_port
+          value: "8443"
+
+      ports:
+        # Expose the web UI on the host.
+        - containerPort: 8443
+          hostPort: 8443
+          protocol: TCP
+
+      volumeMounts:
+        - name: thebigtree-data
+          mountPath: /data
+
+  volumes:
+    - name: thebigtree-data
+      hostPath:
+        path: /srv/thebigtree
+        type: DirectoryOrCreate
