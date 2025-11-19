@@ -79,7 +79,7 @@ def initialize():
         bot_sec = settings["BOT"]
         contest_dir = bot_sec.get("contest_dir", "/data/contest")
         os.makedirs(contest_dir, exist_ok=True)
-        guildid     = int(bot_sec.get("guildid", ""))
+        guildid     = bot_sec.get("guildid", "")
         token       = os.getenv("DISCORD_TOKEN") or bot_sec.get("token", "")
         adminid     = bot_sec.get("adminid", "")
 
