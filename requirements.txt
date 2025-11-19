@@ -6,3 +6,4 @@ Pillow
 requests
 gql[all]
 PyJWT
+openai>=1.0.0

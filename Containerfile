@@ -1,21 +1,11 @@
-# Containerfile for TheBigTree Discord bot + webserver
-# Build with:
-#   podman build -t thebigtree:latest -f Containerfile .
-#
-# This image expects:
-#   - DISCORD_TOKEN environment variable set
-#   - BIGTREE__BOT__guildid set to your Discord guild/server ID
-#
-# Optional env overrides (see README-podman.md for more):
-#   - BIGTREE__BOT__contest_dir
-#   - BIGTREE__WEB__listen_host
-#   - BIGTREE__WEB__listen_port
-#   - OPENAI_API_KEY, BIGTREE__openai__openai_model, etc.
+# TheBigTree container using uv for dependency installation
 
 FROM python:3.11-slim
 
-# Install system dependencies (including Pillow deps)
+# System deps (Pillow build + tools for uv install)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl \
+      ca-certificates \
       build-essential \
       git \
       zlib1g-dev \
@@ -23,26 +13,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Install uv (Astral's fast Python package/venv manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && ln -s /root/.local/bin/uv /usr/local/bin/uv
+
 WORKDIR /opt/thebigtree
 
-# Python dependencies
+# Copy dependency spec first to maximize layer cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the TheBigTree source into the image.
-# When building, run the build command from the root of your
-# thebigtree git clone so that thebigtree.py and the bigtree/
-# package are in this context.
+# Install deps into the system Python environment using uv
+# (so we can keep CMD as `python thebigtree.py`)
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# Now copy the actual application code
 COPY . .
 
-# Runtime user + data directory
+# Runtime user + data
 RUN useradd -m -u 1000 bigtree \
     && mkdir -p /data/contest \
     && chown -R bigtree:bigtree /opt/thebigtree /data
+
 USER bigtree
 
-# Default runtime configuration (can be overridden with env)
 ENV PYTHONUNBUFFERED=1 \
     BIGTREE__BOT__contest_dir=/data/contest \
     BIGTREE__WEB__listen_host=0.0.0.0 \
@@ -52,5 +45,4 @@ VOLUME ["/data"]
 
 EXPOSE 8443
 
-# Start the Discord bot + webserver
 CMD ["python", "thebigtree.py"]
