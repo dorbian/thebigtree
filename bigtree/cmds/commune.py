@@ -180,7 +180,7 @@ class CommuneView(discord.ui.View):
 # -------------------------
 # Slash command
 # -------------------------
-@bot.tree.command(name="commune", description="Compose and post a message as The Big Tree", guild=discord.Object(id=bigtree.guildid))
+@bot.tree.command(name="commune", description="Compose and post a message as The Big Tree", guild=discord.Object(id=int(bigtree.guildid)))
 @app_commands.default_permissions(send_messages=True)  
 @is_bigtree_operator()
 async def commune_slash(interaction: discord.Interaction):

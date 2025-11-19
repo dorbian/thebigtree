@@ -79,9 +79,16 @@ def initialize():
         bot_sec = settings["BOT"]
         contest_dir = bot_sec.get("contest_dir", "/data/contest")
         os.makedirs(contest_dir, exist_ok=True)
-        guildid     = bot_sec.get("guildid", "")
-        token       = os.getenv("DISCORD_TOKEN") or bot_sec.get("token", "")
-        adminid     = bot_sec.get("adminid", "")
+
+        # Cast IDs from config to int
+        guildid_raw = bot_sec.get("guildid", "")
+        adminid_raw = bot_sec.get("adminid", "")
+
+        guildid = int(guildid_raw) if str(guildid_raw).isdigit() else 0
+        adminid = int(adminid_raw) if str(adminid_raw).isdigit() else 0
+
+        token   = os.getenv("DISCORD_TOKEN") or bot_sec.get("token", "")
+
 
         # OpenAI (modules can require these when they actually need them)
         openai_api_key        = settings.get("openai.openai_api_key", "", str) or os.getenv("OPENAI_API_KEY") or "none"
