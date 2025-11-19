@@ -4,6 +4,5 @@ discord.py
 tinydb
 Pillow
 requests
-validate
 gql[all]
 PyJWT
