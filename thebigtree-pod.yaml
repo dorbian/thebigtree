@@ -1,5 +1,35 @@
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: thebigtree-config
+data:
+  bigtree.ini: |
+    [BOT]
+    contest_dir=/data/contest
+    guildid=0000000000000000000
+    token=<DISCORD_BOT_TOKEN>
+    adminid=0000000000000000000
+    priest_role_ids=[]
+    elfministrator_role_ids=[]
+    tarot_db=/data/tarot.json
+
+    [openai]
+    openai_api_key=<OPENAI_API_KEY>
+    enable_priest_chat=True
+    openai_model=gpt-4o-mini
+    openai_temperature=0.7
+    openai_max_output_tokens=400
+
+    [WEB]
+    listen_host=0.0.0.0
+    listen_port=8443
+    base_url=https://example.thebigtree.life:8443
+    api_keys='["elfbingo","elfadmin"]'
+    api_key_scopes='{"elfbingo":"bingo:admin","elfadmin":"admin:message,admin:announce,bingo:admin"}'
+
+---
+apiVersion: v1
 kind: Pod
 metadata:
   name: thebigtree
@@ -9,13 +39,11 @@ spec:
   restartPolicy: Always
   containers:
     - name: thebigtree
-      image: thebigtree:latest
-      imagePullPolicy: IfNotPresent
+      # Replace with your multi-arch image reference
+      image: ghcr.io/YOURORG/YOURREPO/thebigtree:latest
+      imagePullPolicy: Always
       env:
-        - name: DISCORD_TOKEN
-          value: "REPLACE_WITH_YOUR_DISCORD_BOT_TOKEN"
-        - name: BIGTREE__BOT__guildid
-          value: "REPLACE_WITH_YOUR_GUILD_ID"
+        # You can still override some things via env if needed
         - name: BIGTREE__BOT__contest_dir
           value: "/data/contest"
         - name: BIGTREE__WEB__listen_host
@@ -24,13 +52,19 @@ spec:
           value: "8443"
       ports:
         - containerPort: 8443
-          hostPort: 8443
+          hostPort: 8443   # change this if it conflicts on the host
           protocol: TCP
       volumeMounts:
         - name: thebigtree-data
           mountPath: /data
+        - name: thebigtree-config
+          mountPath: /opt/thebigtree/bigtree.ini
+          subPath: bigtree.ini
   volumes:
     - name: thebigtree-data
       hostPath:
         path: /srv/thebigtree
         type: DirectoryOrCreate
+    - name: thebigtree-config
+      configMap:
+        name: thebigtree-config
