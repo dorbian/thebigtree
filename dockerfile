@@ -14,10 +14,13 @@
 
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies (including Pillow deps)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       git \
+      zlib1g-dev \
+      libjpeg62-turbo-dev \
+      libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -50,7 +53,4 @@ VOLUME ["/data"]
 EXPOSE 8443
 
 # Start the Discord bot + webserver
-#
-# thebigtree.py wraps bigtree.initialize() which starts the bot and
-# attaches the aiohttp webserver through the existing hooks.
 CMD ["python", "thebigtree.py"]
