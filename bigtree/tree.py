@@ -1,5 +1,7 @@
+import asyncio
 import bigtree
 from bigtree.inc.webserver import ensure_webserver, get_server
+from bigtree.modules import honse_presence
 import discord
 from discord.ext import commands
 # -------
@@ -17,7 +19,7 @@ class TheBigTree(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned_or('/'), intents=intents)
         
     async def on_ready(self):
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="Listening to: elves"))
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="elves"))
         bigtree.loch.logger.info(f'Logged in as {self.user} (ID: {bigtree.bot.user.id})')
         guild = discord.Object(id=bigtree.guildid)
         # Add awesomeies to the server
@@ -31,3 +33,19 @@ class TheBigTree(commands.Bot):
         port = srv._cfg["port"]
         base = srv._cfg["base_url"]
         bigtree.loch.logger.info(f"[web] started on {host}:{port} (base_url={base})")
+
+        if not getattr(bigtree.bot, "_presence_task", None):
+            bigtree.bot._presence_task = asyncio.create_task(self._presence_loop())
+
+    async def _presence_loop(self):
+        while True:
+            try:
+                count = await asyncio.to_thread(honse_presence.get_online_count)
+                if count and count > 0:
+                    label = f"{count} elf" if count == 1 else f"{count} elves"
+                else:
+                    label = "elves"
+                await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
+            except Exception as e:
+                bigtree.loch.logger.warning(f"[presence] update failed: {e}")
+            await asyncio.sleep(honse_presence.HONSE_REFRESH_SECONDS)

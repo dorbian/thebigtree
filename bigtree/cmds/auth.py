@@ -7,6 +7,8 @@ from discord.ext import commands
 import bigtree
 from bigtree.inc import web_tokens
 
+bot = bigtree.bot
+
 
 def _is_elfministrator(member: discord.Member) -> bool:
     cfg = bigtree.config.config.get("BOT", {}) if hasattr(bigtree, "config") else {}
@@ -28,7 +30,11 @@ class AuthCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="auth", description="Generate a 24h web API token for the overlay client.")
+    @bot.tree.command(
+        name="auth",
+        description="Generate a 24h web API token for the overlay client.",
+        guild=discord.Object(id=bigtree.guildid),
+    )
     async def auth(self, interaction: discord.Interaction):
         member = interaction.user
         if not isinstance(member, discord.Member):
