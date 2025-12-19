@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional, Set, Dict, Any, Callable
 from aiohttp import web
 import bigtree
+from bigtree.inc import web_tokens
 
 try:
     import jwt  # PyJWT (optional)
@@ -51,6 +52,8 @@ def _split_scopes(s: str | None) -> Set[str]:
 def _scopes_ok(needed: Set[str], granted: Set[str]) -> bool:
     if not needed:
         return True
+    if "*" in granted:
+        return True
     return needed.issubset(granted)
 
 def _verify_api_key(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
@@ -60,6 +63,12 @@ def _verify_api_key(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     if not cfg.scopes_map:
         return True
     return _scopes_ok(needed, _split_scopes(cfg.scopes_map.get(token)))
+
+def _verify_dynamic_token(token: str, needed: Set[str]) -> bool:
+    try:
+        return web_tokens.validate_token(token, needed)
+    except Exception:
+        return False
 
 def _verify_jwt(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     if not cfg.jwt_secret or jwt is None:
@@ -101,6 +110,8 @@ def auth_middleware() -> Callable:
         if token:
             # Try API key first
             ok = _verify_api_key(token, cfg, needed_scopes)
+            if not ok:
+                ok = _verify_dynamic_token(token, needed_scopes)
             # If that didn't match, try JWT (if configured)
             if not ok and cfg.jwt_secret:
                 ok = _verify_jwt(token, cfg, needed_scopes)

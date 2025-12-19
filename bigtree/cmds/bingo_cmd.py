@@ -181,6 +181,35 @@ class BingoCog(commands.Cog):
         await interaction.response.send_message(msg, ephemeral=True)
 
     @bot.tree.command(
+        name="buycards",
+        description="Buy multiple bingo cards for a player (FFXIV name required)",
+        guild=discord.Object(id=bigtree.guildid),
+    )
+    @app_commands.describe(quantity="How many cards to buy (1-10)")
+    async def buycards(self, interaction: discord.Interaction, name: str, quantity: int = 1, game_id: str = ""):
+        gid = _resolve_game_id(game_id, interaction.channel_id)
+        if not gid:
+            return await interaction.response.send_message(
+                "No active game in this channel. Specify `game_id:`.",
+                ephemeral=True,
+            )
+        cards, err = bingo.buy_cards(
+            gid,
+            owner_name=name,
+            count=quantity,
+            owner_user_id=interaction.user.id,
+        )
+        if err:
+            return await interaction.response.send_message(f"Error: {err}", ephemeral=True)
+
+        base = _api_base()
+        msg = f"OK. Bought **{len(cards)}** card(s) for **{name}**.\n- Game: `{gid}`"
+        if base:
+            owner_url = f"{base}/bingo/owner?game={gid}&owner={quote(name)}"
+            msg += f"\n- View all your cards: {owner_url}"
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @bot.tree.command(
         name="bingo-url",
         description="Get your web URL for a specific card",
         guild=discord.Object(id=bigtree.guildid),
