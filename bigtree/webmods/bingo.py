@@ -165,7 +165,7 @@ async def bingo_update(req: web.Request):
     except Exception:
         return web.json_response({"ok": False, "error": "invalid json"}, status=400)
     fields = {}
-    for key in ["title","price","currency","max_cards_per_player","free_center","size","max_number","status","background_path"]:
+    for key in ["title","price","currency","max_cards_per_player","free_center","size","max_number","status","background_path","stage","active","header"]:
         if key in body: fields[key] = body[key]
     ok, value = _update_game(game_id, fields)
     if not ok: return web.json_response({"ok": False, "error": value}, status=501)
@@ -177,6 +177,27 @@ async def bingo_delete(req: web.Request):
     ok, value = _delete_game(game_id)
     if not ok: return web.json_response({"ok": False, "error": value}, status=501)
     return web.json_response({"ok": True, "deleted": game_id})
+
+
+@route("POST", "/bingo/stage", scopes=["bingo:admin"])
+async def bingo_set_stage(req: web.Request):
+    body = await req.json()
+    g = str(body.get("game_id") or "")
+    stage = str(body.get("stage") or "")
+    ok, msg = bingo.set_stage(g, stage)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True})
+
+
+@route("POST", "/bingo/end", scopes=["bingo:admin"])
+async def bingo_end(req: web.Request):
+    body = await req.json()
+    g = str(body.get("game_id") or "")
+    ok = bingo.end_game(g)
+    if not ok:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    return web.json_response({"ok": True})
 
 # ---- Background upload (multipart/form-data) ----
 @route("POST", "/bingo/upload-bg", scopes=["bingo:admin"])

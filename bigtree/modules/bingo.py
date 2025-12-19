@@ -403,3 +403,86 @@ def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     db = _open(game_id)
     db.update(g, doc_ids=[g.doc_id])
     return True, dest
+
+# -------- admin helpers --------
+def list_games() -> List[Dict[str, Any]]:
+    _ensure_dirs()
+    games: List[Dict[str, Any]] = []
+    for name in os.listdir(_DB_DIR):
+        if not name.endswith(".json"):
+            continue
+        game_id = name[:-5]
+        g = get_game(game_id)
+        if not g:
+            continue
+        games.append({
+            "game_id": g.get("game_id"),
+            "title": g.get("title"),
+            "channel_id": g.get("channel_id"),
+            "created_at": g.get("created_at"),
+            "active": g.get("active", False),
+            "stage": g.get("stage", "single"),
+            "pot": g.get("pot", 0),
+        })
+    games.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
+    return games
+
+
+def update_game(game_id: str, **fields) -> Dict[str, Any]:
+    g = get_game(game_id)
+    if not g:
+        raise ValueError("Game not found.")
+    updated = False
+    if "title" in fields:
+        g["title"] = str(fields["title"] or "Bingo").strip() or "Bingo"
+        updated = True
+    if "price" in fields:
+        g["price"] = int(fields["price"] or 0)
+        updated = True
+    if "currency" in fields:
+        g["currency"] = str(fields["currency"] or "gil").strip() or "gil"
+        updated = True
+    if "max_cards_per_player" in fields:
+        g["max_cards_per_player"] = int(fields["max_cards_per_player"] or 1)
+        updated = True
+    if "header" in fields:
+        g["header"] = _normalize_header(str(fields["header"] or "BING"))
+        updated = True
+    if "background_path" in fields:
+        g["background_path"] = fields["background_path"]
+        updated = True
+    if "stage" in fields:
+        ok, msg = set_stage(game_id, str(fields["stage"]))
+        if not ok:
+            raise ValueError(msg)
+        g = get_game(game_id) or g
+        updated = True
+    if "active" in fields:
+        g["active"] = bool(fields["active"])
+        updated = True
+    if updated:
+        db = _open(game_id)
+        db.update(g, doc_ids=[g.doc_id])
+    return g
+
+
+def delete_game(game_id: str) -> bool:
+    _ensure_dirs()
+    db_path = _db_path(game_id)
+    if not os.path.exists(db_path):
+        return False
+    g = get_game(game_id)
+    try:
+        os.remove(db_path)
+    except Exception:
+        return False
+    if g and g.get("background_path") and os.path.exists(g["background_path"]):
+        try:
+            os.remove(g["background_path"])
+        except Exception:
+            pass
+    idx = _read_index()
+    active = idx.get("active_by_channel", {})
+    idx["active_by_channel"] = {k: v for k, v in active.items() if v != game_id}
+    _write_index(idx)
+    return True

@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>BigTree Overlay Client</title>
+    <style>
+      :root{
+        --bg-1:#0b0f1a;
+        --bg-2:#151d2e;
+        --bg-3:#182c3f;
+        --panel:#101a2a;
+        --panel-2:#0c131f;
+        --ink:#f5f0e6;
+        --muted:#b4c0d4;
+        --accent:#ffb347;
+        --accent-2:#62c6ff;
+        --line:#27324a;
+        --shadow:0 18px 40px rgba(0,0,0,.35);
+        --radius:18px;
+      }
+      *{box-sizing:border-box}
+      body{
+        margin:0;
+        min-height:100vh;
+        font-family:"Palatino Linotype","Book Antiqua",serif;
+        color:var(--ink);
+        background:
+          radial-gradient(1200px 600px at 15% -10%, rgba(255,179,71,.18), transparent 60%),
+          radial-gradient(900px 700px at 120% 20%, rgba(98,198,255,.18), transparent 60%),
+          linear-gradient(160deg, var(--bg-1), var(--bg-2) 55%, var(--bg-3));
+        padding:28px;
+      }
+      body.overlay{
+        background:transparent;
+      }
+      .shell{
+        display:flex;
+        flex-direction:column;
+        gap:18px;
+        animation:fadeup .6s ease both;
+      }
+      .top{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:16px;
+        padding:18px 22px;
+        border:1px solid var(--line);
+        border-radius:var(--radius);
+        background:rgba(9,13,22,.75);
+        backdrop-filter:blur(8px);
+        box-shadow:var(--shadow);
+      }
+      .brand{
+        font-family:"Copperplate Gothic","Palatino Linotype",serif;
+        font-size:20px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--accent);
+      }
+      .toggle{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:14px;
+        color:var(--muted);
+      }
+      .grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+        gap:18px;
+      }
+      .panel{
+        background:rgba(10,16,28,.86);
+        border:1px solid var(--line);
+        border-radius:var(--radius);
+        padding:18px 18px 16px;
+        box-shadow:var(--shadow);
+        position:relative;
+        overflow:hidden;
+        animation:rise .6s ease both;
+      }
+      .panel:before{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(120deg, rgba(255,179,71,.08), transparent 45%);
+        pointer-events:none;
+      }
+      .panel h2{
+        margin:0 0 10px;
+        font-size:18px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--accent-2);
+      }
+      .panel h3{
+        margin:14px 0 8px;
+        font-size:14px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--muted);
+      }
+      .row{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+        gap:10px;
+        margin-bottom:10px;
+      }
+      label{
+        display:block;
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--muted);
+        margin-bottom:4px;
+      }
+      input, select, textarea, button{
+        width:100%;
+        border-radius:10px;
+        border:1px solid var(--line);
+        background:var(--panel-2);
+        color:var(--ink);
+        padding:8px 10px;
+        font-family:"Palatino Linotype","Book Antiqua",serif;
+        font-size:14px;
+      }
+      textarea{min-height:70px;resize:vertical}
+      button{
+        cursor:pointer;
+        background:linear-gradient(135deg, rgba(255,179,71,.9), rgba(98,198,255,.7));
+        color:#1c1c1c;
+        border:none;
+        font-weight:700;
+        letter-spacing:.04em;
+        transition:transform .12s ease, box-shadow .12s ease;
+      }
+      button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(0,0,0,.25)}
+      .btn-ghost{
+        background:transparent;
+        border:1px solid var(--line);
+        color:var(--ink);
+      }
+      .pill{
+        display:inline-block;
+        padding:4px 10px;
+        border-radius:999px;
+        background:rgba(98,198,255,.12);
+        color:var(--accent-2);
+        font-size:12px;
+        letter-spacing:.06em;
+        text-transform:uppercase;
+      }
+      .status{
+        font-size:13px;
+        color:var(--muted);
+        padding:10px 12px;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(6,10,18,.6);
+      }
+      .status.ok{color:#b8ffce;border-color:rgba(160,255,196,.3)}
+      .status.err{color:#ff9f9f;border-color:rgba(255,159,159,.3)}
+      .list{
+        max-height:180px;
+        overflow:auto;
+        border-radius:12px;
+        border:1px solid var(--line);
+        padding:10px;
+        background:rgba(6,10,18,.6);
+        font-size:13px;
+        color:var(--muted);
+        white-space:pre-wrap;
+      }
+      .subgrid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+        gap:10px;
+      }
+      .links a{
+        color:var(--accent);
+        text-decoration:none;
+      }
+      .links a:hover{text-decoration:underline}
+      @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+      @media (max-width:720px){
+        body{padding:16px}
+        .top{flex-direction:column;align-items:flex-start}
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="brand">BigTree Overlay Client</div>
+        <label class="toggle">
+          <input type="checkbox" id="overlayMode">
+          Overlay mode
+        </label>
+      </header>
+
+      <section class="panel">
+        <h2>Connection</h2>
+        <div class="row">
+          <div>
+            <label for="baseUrl">Base URL</label>
+            <input id="baseUrl" placeholder="http://localhost:8443">
+          </div>
+          <div>
+            <label for="apiKey">API key</label>
+            <input id="apiKey" placeholder="X-API-Key">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="saveConn">Save settings</button>
+          </div>
+        </div>
+        <div class="status" id="status">Ready.</div>
+      </section>
+
+      <div class="grid">
+        <section class="panel" style="animation-delay:.05s">
+          <h2>Bingo Control</h2>
+          <h3>Create game</h3>
+          <div class="row">
+            <div>
+              <label for="bTitle">Title</label>
+              <input id="bTitle" placeholder="Bingo Night">
+            </div>
+            <div>
+              <label for="bPrice">Price</label>
+              <input id="bPrice" type="number" value="1000">
+            </div>
+            <div>
+              <label for="bCurrency">Currency</label>
+              <input id="bCurrency" value="gil">
+            </div>
+            <div>
+              <label for="bMaxCards">Max cards</label>
+              <input id="bMaxCards" type="number" value="10">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="bChannel">Channel ID</label>
+              <input id="bChannel" placeholder="0">
+            </div>
+            <div>
+              <label for="bCreatedBy">Created by</label>
+              <input id="bCreatedBy" placeholder="0">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="bCreate">Create</button>
+            </div>
+          </div>
+
+          <h3>Active game</h3>
+          <div class="row">
+            <div>
+              <label for="bGameId">Game ID</label>
+              <input id="bGameId" placeholder="game id">
+            </div>
+            <div>
+              <label for="bStage">Stage</label>
+              <select id="bStage">
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+                <option value="full">Full</option>
+              </select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="bSetStage">Set stage</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bEnd">End game</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="bNumber">Call number</label>
+              <input id="bNumber" type="number" placeholder="1-80">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="bCall">Call</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bRoll">Roll random</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bRefresh">Refresh</button>
+            </div>
+          </div>
+
+          <h3>Buy cards</h3>
+          <div class="row">
+            <div>
+              <label for="bOwner">Owner name</label>
+              <input id="bOwner" placeholder="Player name">
+            </div>
+            <div>
+              <label for="bOwnerId">Owner user id</label>
+              <input id="bOwnerId" placeholder="optional">
+            </div>
+            <div>
+              <label for="bQty">Quantity</label>
+              <input id="bQty" type="number" value="1">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="bBuy">Buy</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <span class="pill">Game state</span>
+            </div>
+          </div>
+          <div class="list" id="bState">No game loaded.</div>
+        </section>
+
+        <section class="panel" style="animation-delay:.1s">
+          <h2>Tarot Control</h2>
+          <h3>Deck</h3>
+          <div class="row">
+            <div>
+              <label for="tDeck">Deck</label>
+              <input id="tDeck" value="elf-classic">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tLoadDeck">Load deck</button>
+            </div>
+          </div>
+          <div class="list" id="tDeckList">No deck loaded.</div>
+
+          <h3>Add card</h3>
+          <div class="row">
+            <div>
+              <label for="tTitle">Title</label>
+              <input id="tTitle">
+            </div>
+            <div>
+              <label for="tImage">Image URL</label>
+              <input id="tImage" placeholder="https://">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="tMeaning">Meaning</label>
+              <textarea id="tMeaning"></textarea>
+            </div>
+            <div>
+              <label for="tTags">Tags</label>
+              <textarea id="tTags" placeholder="comma,separated"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button id="tAddCard">Add card</button>
+            </div>
+          </div>
+
+          <h3>Session</h3>
+          <div class="row">
+            <div>
+              <label for="tOwner">Owner ID</label>
+              <input id="tOwner" placeholder="0">
+            </div>
+            <div>
+              <label for="tSpread">Spread</label>
+              <input id="tSpread" value="single">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tCreateSession">Create session</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="tSessionId">Session ID</label>
+              <input id="tSessionId" placeholder="sid">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tLoadSession">Load session</button>
+            </div>
+          </div>
+          <div class="subgrid">
+            <div>
+              <label for="tDrawCount">Draw count</label>
+              <input id="tDrawCount" type="number" value="1">
+              <button id="tDraw">Draw</button>
+            </div>
+            <div>
+              <label for="tFlipIndex">Flip index</label>
+              <input id="tFlipIndex" type="number" value="0">
+              <button class="btn-ghost" id="tFlip">Flip</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tEnd">End session</button>
+            </div>
+          </div>
+          <div class="row links">
+            <div>
+              <span class="pill">Viewer link</span>
+              <div id="tLink">No session loaded.</div>
+            </div>
+          </div>
+          <div class="list" id="tState">No session loaded.</div>
+        </section>
+      </div>
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const statusEl = $("status");
+      const baseUrlEl = $("baseUrl");
+      const apiKeyEl = $("apiKey");
+      const overlayToggle = $("overlayMode");
+      const storage = window.localStorage;
+
+      function setStatus(msg, kind){
+        statusEl.textContent = msg;
+        statusEl.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function loadSettings(){
+        baseUrlEl.value = storage.getItem("bt_base_url") || window.location.origin;
+        apiKeyEl.value = storage.getItem("bt_api_key") || "";
+        overlayToggle.checked = storage.getItem("bt_overlay") === "1";
+        if (overlayToggle.checked) document.body.classList.add("overlay");
+      }
+
+      function saveSettings(){
+        storage.setItem("bt_base_url", baseUrlEl.value.trim() || window.location.origin);
+        storage.setItem("bt_api_key", apiKeyEl.value.trim());
+        storage.setItem("bt_overlay", overlayToggle.checked ? "1" : "0");
+        setStatus("Settings saved.", "ok");
+      }
+
+      function apiFetch(path, opts, withKey = true){
+        const base = baseUrlEl.value.trim() || window.location.origin;
+        const url = new URL(path, base).toString();
+        const options = opts || {};
+        options.headers = options.headers || {};
+        if (withKey){
+          const key = apiKeyEl.value.trim();
+          if (key) options.headers["X-API-Key"] = key;
+        }
+        return fetch(url, options);
+      }
+
+      async function jsonFetch(path, opts, withKey = true){
+        const res = await apiFetch(path, opts, withKey);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok){
+          throw new Error(data.error || "Request failed");
+        }
+        return data;
+      }
+
+      function showList(el, data){
+        el.textContent = JSON.stringify(data, null, 2);
+      }
+
+      $("saveConn").addEventListener("click", saveSettings);
+      overlayToggle.addEventListener("change", () => {
+        document.body.classList.toggle("overlay", overlayToggle.checked);
+        saveSettings();
+      });
+
+      $("bCreate").addEventListener("click", async () => {
+        try{
+          const body = {
+            title: $("bTitle").value,
+            price: Number($("bPrice").value || 0),
+            currency: $("bCurrency").value || "gil",
+            max_cards_per_player: Number($("bMaxCards").value || 10),
+            channel_id: Number($("bChannel").value || 0),
+            created_by: Number($("bCreatedBy").value || 0)
+          };
+          const data = await jsonFetch("/bingo/create", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          $("bGameId").value = data.game.game_id || "";
+          setStatus("Bingo game created.", "ok");
+          showList($("bState"), data.game);
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      async function refreshBingo(){
+        const gid = $("bGameId").value.trim();
+        if (!gid){
+          setStatus("Enter a game id.", "err");
+          return;
+        }
+        try{
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
+          showList($("bState"), data);
+          setStatus("Bingo state updated.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("bRefresh").addEventListener("click", refreshBingo);
+      $("bSetStage").addEventListener("click", async () => {
+        try{
+          const data = await jsonFetch("/bingo/stage", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: $("bGameId").value.trim(), stage: $("bStage").value})
+          });
+          setStatus("Stage updated.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bEnd").addEventListener("click", async () => {
+        try{
+          await jsonFetch("/bingo/end", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: $("bGameId").value.trim()})
+          });
+          setStatus("Game ended.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bCall").addEventListener("click", async () => {
+        try{
+          const num = $("bNumber").value;
+          const payload = {game_id: $("bGameId").value.trim(), number: Number(num)};
+          await jsonFetch("/bingo/call", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          setStatus("Number called.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bRoll").addEventListener("click", async () => {
+        try{
+          await jsonFetch("/bingo/roll", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: $("bGameId").value.trim()})
+          });
+          setStatus("Rolled random number.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bBuy").addEventListener("click", async () => {
+        try{
+          const body = {
+            game_id: $("bGameId").value.trim(),
+            owner_name: $("bOwner").value.trim(),
+            owner_user_id: $("bOwnerId").value.trim() || null,
+            quantity: Number($("bQty").value || 1)
+          };
+          const data = await jsonFetch("/bingo/buy", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          setStatus("Cards bought.", "ok");
+          showList($("bState"), data);
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("tLoadDeck").addEventListener("click", async () => {
+        try{
+          const deck = $("tDeck").value.trim() || "elf-classic";
+          const data = await jsonFetch("/api/tarot/deck/" + encodeURIComponent(deck) + "/cards", {method:"GET"});
+          showList($("tDeckList"), data);
+          setStatus("Deck loaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("tAddCard").addEventListener("click", async () => {
+        try{
+          const deck = $("tDeck").value.trim() || "elf-classic";
+          const tags = $("tTags").value.split(",").map(t => t.trim()).filter(Boolean);
+          const body = {
+            title: $("tTitle").value.trim(),
+            meaning: $("tMeaning").value.trim(),
+            image_url: $("tImage").value.trim(),
+            tags
+          };
+          const data = await jsonFetch("/api/tarot/deck/" + encodeURIComponent(deck) + "/cards", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          setStatus("Card added.", "ok");
+          $("tTitle").value = "";
+          $("tMeaning").value = "";
+          $("tImage").value = "";
+          $("tTags").value = "";
+          await $("tLoadDeck").click();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("tCreateSession").addEventListener("click", async () => {
+        try{
+          const body = {
+            owner_id: Number($("tOwner").value || 0),
+            deck: $("tDeck").value.trim() || "elf-classic",
+            spread: $("tSpread").value.trim() || "single"
+          };
+          const data = await jsonFetch("/api/tarot/session", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          $("tSessionId").value = data.session_id || "";
+          setStatus("Session created.", "ok");
+          renderSession(data.session);
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      async function loadSession(){
+        const sid = $("tSessionId").value.trim();
+        if (!sid){
+          setStatus("Enter a session id.", "err");
+          return;
+        }
+        try{
+          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid), {method:"GET"}, false);
+          renderSession(data.session);
+          setStatus("Session loaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      function renderSession(session){
+        if (!session){
+          $("tState").textContent = "No session loaded.";
+          $("tLink").textContent = "No session loaded.";
+          return;
+        }
+        showList($("tState"), session);
+        const base = baseUrlEl.value.trim() || window.location.origin;
+        const url = new URL("/tarot/session/" + session.sid, base).toString();
+        $("tLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
+      }
+
+      $("tLoadSession").addEventListener("click", loadSession);
+
+      $("tDraw").addEventListener("click", async () => {
+        try{
+          const sid = $("tSessionId").value.trim();
+          const body = {count: Number($("tDrawCount").value || 1)};
+          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/draw", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          renderSession(data.session);
+          setStatus("Cards drawn.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("tFlip").addEventListener("click", async () => {
+        try{
+          const sid = $("tSessionId").value.trim();
+          const body = {index: Number($("tFlipIndex").value || 0)};
+          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/flip", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          renderSession(data.session);
+          setStatus("Card flipped.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("tEnd").addEventListener("click", async () => {
+        try{
+          const sid = $("tSessionId").value.trim();
+          await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/end", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: "{}"
+          });
+          setStatus("Session ended.", "ok");
+          await loadSession();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadSettings();
+    </script>
+  </body>
+</html>
