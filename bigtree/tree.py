@@ -42,7 +42,7 @@ class TheBigTree(commands.Bot):
             try:
                 count = await asyncio.to_thread(honse_presence.get_online_count)
                 if count is not None and count > 0:
-                    label = f"{count} elf" if count == 1 else f"{count} elves"
+                    label = f"Channeling {count} Elf" if count == 1 else f"Channeling {count} Elves"
                     await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
             except Exception as e:
                 bigtree.loch.logger.warning(f"[presence] update failed: {e}")

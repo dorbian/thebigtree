@@ -16,7 +16,10 @@ TOKEN_TTL_SECONDS = 24 * 60 * 60
 def _settings_get(section: str, key: str, default=None):
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
-            return bigtree.settings.get(section, {}).get(key, default)
+            sec = bigtree.settings.section(section)
+            if isinstance(sec, dict):
+                return sec.get(key, default)
+            return bigtree.settings.get(f"{section}.{key}", default)
     except Exception:
         pass
     try:
