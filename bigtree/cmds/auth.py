@@ -10,9 +10,22 @@ from bigtree.inc import web_tokens
 bot = bigtree.bot
 
 
+def _settings_get(section: str, key: str, default=None):
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            return bigtree.settings.get(section, {}).get(key, default)
+    except Exception:
+        pass
+    try:
+        cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+        return cfg.get(section, {}).get(key, default)
+    except Exception:
+        pass
+    return default
+
+
 def _is_elfministrator(member: discord.Member) -> bool:
-    cfg = bigtree.config.config.get("BOT", {}) if hasattr(bigtree, "config") else {}
-    role_ids = cfg.get("elfministrator_role_ids", []) or []
+    role_ids = _settings_get("BOT", "elfministrator_role_ids", []) or []
     try:
         allowed = {int(r) for r in role_ids}
     except Exception:
