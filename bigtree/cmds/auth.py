@@ -29,17 +29,22 @@ def _settings_get(section: str, key: str, default=None):
 
 def _is_elfministrator(member: discord.Member) -> bool:
     role_ids = _settings_get("BOT", "elfministrator_role_ids", []) or []
-    try:
-        allowed = {int(r) for r in role_ids}
-    except Exception:
-        allowed = set()
-        for r in role_ids:
-            try:
-                allowed.add(int(r))
-            except Exception:
-                continue
+    allowed = set()
+    if isinstance(role_ids, (str, int)):
+        role_ids = [role_ids]
+    for r in role_ids:
+        try:
+            allowed.add(int(r))
+        except Exception:
+            continue
     roles = {r.id for r in getattr(member, "roles", [])}
-    return bool(allowed & roles)
+    if allowed and (allowed & roles):
+        return True
+    # Fallback: allow by role name if IDs not configured
+    for r in getattr(member, "roles", []):
+        if str(r.name or "").strip().lower() == "elfministrator":
+            return True
+    return False
 
 
 class AuthCog(commands.Cog):
