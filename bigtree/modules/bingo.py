@@ -339,6 +339,17 @@ def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Op
     logger.info(f"[bingo] Called number {n} in game {game_id}")
     return g, None
 
+def call_random_number(game_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    g = get_game(game_id)
+    if not g:
+        return None, "Game not found."
+    called = set(g.get("called", []))
+    remaining = [n for n in range(1, 81) if n not in called]
+    if not remaining:
+        return g, "All numbers already called."
+    n = random.choice(remaining)
+    return call_number(game_id, n)
+
 def mark_card(game_id: str, card_id: str, row: int, col: int) -> Tuple[bool, str]:
     db = _open(game_id)
     Card = Query()
@@ -418,7 +429,7 @@ def get_owner_cards(
         return []
     rows = db.search(q)
     rows.sort(key=lambda c: c.get("purchased_at", 0))  # oldest first
-    return rows[:10]
+    return rows
 
 # -------- background handling --------
 def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:

@@ -12,7 +12,16 @@
     --accent:#9de07d;
     --accent-2:#3ccf8e;
   }
-  body{font-family:"Palatino Linotype","Book Antiqua",serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  body{
+    font-family:"Palatino Linotype","Book Antiqua",serif;
+    margin:0;
+    padding:16px;
+    background:var(--bg);
+    color:var(--ink);
+    background-size:cover;
+    background-position:center;
+    background-attachment:fixed;
+  }
   .muted{opacity:.7}
   .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
   .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
@@ -69,6 +78,10 @@
   function render(card, state){
     if(!card || !state){ app.innerHTML = '<p>Missing or invalid game/card parameters.</p>'; return; }
     const called = (state.game && state.game.called) || [];
+    const bg = state.game && state.game.background ? new URL(state.game.background, location.origin).toString() : "";
+    document.body.style.backgroundImage = bg
+      ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
+      : "";
     const header = (state.game && state.game.header) || "BING";
     const nums = card.numbers || [];
     const localMarks = loadLocalMarks();

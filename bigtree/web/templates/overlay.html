@@ -393,9 +393,8 @@
         <h3>Menu</h3>
         <div class="menu-item active" id="menuBingo">Bingo</div>
         <div class="menu-sub" id="menuGames"></div>
-        <div class="menu-item" id="menuTarot">Tarot</div>
-        <h3>Actions</h3>
         <button class="btn-ghost" id="menuCreateGame">Create new game</button>
+        <div class="menu-item" id="menuTarot">Tarot</div>
       </aside>
       <main class="content">
         <header class="top">
@@ -424,12 +423,6 @@
         <div class="list" id="bGames">No games loaded.</div>
 
         <h3>Players</h3>
-        <div class="row">
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="bLoadOwners">Load players</button>
-          </div>
-        </div>
         <div class="list" id="bOwners">No players loaded.</div>
         <div class="list" id="bOwnerCards">No tickets loaded.</div>
 
@@ -871,6 +864,7 @@
             $("bGameId").value = g.game_id || "";
             $("bStage").value = g.stage || "single";
             refreshBingo();
+            loadOwnersForGame();
           };
           el.appendChild(item);
         });
@@ -889,7 +883,9 @@
               row.onclick = () => {
                 $("bGameId").value = g.game_id || "";
                 $("bStage").value = g.stage || "single";
+                showPanel("bingo");
                 refreshBingo();
+                loadOwnersForGame();
               };
               menu.appendChild(row);
             });
@@ -933,6 +929,21 @@
           };
           el.appendChild(item);
         });
+      }
+
+      async function loadOwnersForGame(){
+        const gid = $("bGameId").value.trim();
+        $("bOwnerCards").textContent = "No tickets loaded.";
+        if (!gid){
+          $("bOwners").textContent = "No players loaded.";
+          return;
+        }
+        try{
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners", {method:"GET"});
+          renderOwnersList(data.owners || []);
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       }
 
       function renderOwnerCards(owner, cards, called, header){
@@ -1008,20 +1019,7 @@
         }
       }
 
-      $("bLoadOwners").addEventListener("click", async () => {
-        const gid = $("bGameId").value.trim();
-        if (!gid){
-          setStatus("Enter a game id.", "err");
-          return;
-        }
-        try{
-          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners", {method:"GET"});
-          renderOwnersList(data.owners || []);
-          setStatus("Players loaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
+      // owner list loads automatically when selecting a game
 
       $("bNewGame").addEventListener("click", () => {
         $("bCreateModal").classList.add("show");
@@ -1069,6 +1067,7 @@
           setStatus("Bingo game created.", "ok");
           renderBingoState({game: data.game});
           loadGamesMenu();
+          loadOwnersForGame();
         }catch(err){
           setStatus(err.message, "err");
         }

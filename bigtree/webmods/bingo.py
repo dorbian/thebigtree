@@ -40,12 +40,15 @@ def _delete_game(game_id: str):
 def _call_random(game_id: str):
     try:
         if _supports("call_random_number"):
-            return True, bingo.call_random_number(game_id)
+            res = bingo.call_random_number(game_id)
+            if isinstance(res, tuple) and len(res) == 2:
+                game, err = res
+                if err:
+                    return False, err
+                return True, game
+            return True, res
         if _supports("call_number"):
-            try:
-                return True, bingo.call_number(game_id, None)  # type: ignore[arg-type]
-            except Exception:
-                return True, bingo.call_number(game_id, -1)    # type: ignore[arg-type]
+            return False, "Random rolling not supported by bingo module"
         return False, "Random rolling not supported by bingo module"
     except Exception as e:
         return False, str(e)

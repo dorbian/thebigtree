@@ -12,7 +12,16 @@
     --accent:#9de07d;
     --accent-2:#3ccf8e;
   }
-  body{font-family:"Palatino Linotype","Book Antiqua",serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  body{
+    font-family:"Palatino Linotype","Book Antiqua",serif;
+    margin:0;
+    padding:16px;
+    background:var(--bg);
+    color:var(--ink);
+    background-size:cover;
+    background-position:center;
+    background-attachment:fixed;
+  }
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
   .card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)}
   .muted{opacity:.7}
@@ -75,6 +84,10 @@
     const cards = data.cards || [];
     const g = state.game || {};
     const called = Array.isArray(g.called) ? g.called : [];
+    const bg = g.background ? new URL(g.background, location.origin).toString() : "";
+    document.body.style.backgroundImage = bg
+      ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
+      : "";
     summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
     calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
     grid.innerHTML = '';
