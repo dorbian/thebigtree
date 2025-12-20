@@ -113,6 +113,7 @@ async def bingo_create(req: web.Request):
         currency=str(body.get("currency") or "gil"),
         max_cards_per_player=int(body.get("max_cards_per_player") or 10),
         created_by=int(body.get("created_by") or 0),
+        header_text=str(body.get("header_text") or body.get("header") or "BING"),
         theme_color=str(body.get("theme_color") or "").strip() or None,
         **{k: v for k, v in {
             "size": body.get("size"),

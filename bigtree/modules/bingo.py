@@ -212,7 +212,19 @@ def get_game(game_id: str) -> Optional[Dict[str, Any]]:
         return None
     db = _open(game_id)
     rows = db.search(Query()._type == "game")
-    return rows[-1] if rows else None
+    if not rows:
+        return None
+    g = rows[-1]
+    changed = False
+    if "header_text" not in g:
+        g["header_text"] = (g.get("header") or "").strip() or None
+        changed = True
+    if "header" not in g:
+        g["header"] = _normalize_header(g.get("header_text"))
+        changed = True
+    if changed:
+        db.update(g, doc_ids=[g.doc_id])
+    return g
 
 def end_game(game_id: str) -> bool:
     g = get_game(game_id)

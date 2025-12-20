@@ -709,6 +709,25 @@
         <div class="list" id="bOwnerCards">No tickets loaded.</div>
       </div>
     </div>
+    <div class="modal" id="bPurchaseModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Player Link</div>
+          <button class="btn-ghost" id="bPurchaseClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="bPurchaseLink">Player link</label>
+            <input id="bPurchaseLink" readonly>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="bPurchaseCopy">Copy link</button>
+          </div>
+        </div>
+        <div class="status" id="bPurchaseStatus">Ready.</div>
+      </div>
+    </div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -1237,6 +1256,21 @@
       $("bOwnerClose").addEventListener("click", () => {
         $("bOwnerModal").classList.remove("show");
       });
+      $("bPurchaseClose").addEventListener("click", () => {
+        $("bPurchaseModal").classList.remove("show");
+      });
+      $("bPurchaseCopy").addEventListener("click", () => {
+        const link = $("bPurchaseLink").value || "";
+        if (!link){
+          return;
+        }
+        try{
+          navigator.clipboard.writeText(link);
+          $("bPurchaseStatus").textContent = "Link copied.";
+        }catch(err){
+          $("bPurchaseStatus").textContent = "Copy failed.";
+        }
+      });
 
       $("loginBtn").addEventListener("click", () => {
         if (!apiKeyEl.value.trim()){
@@ -1394,9 +1428,11 @@
 
       $("bBuy").addEventListener("click", async () => {
         try{
+          const gid = getGameId();
+          const ownerName = $("bOwner").value.trim();
           const body = {
-            game_id: getGameId(),
-            owner_name: $("bOwner").value.trim(),
+            game_id: gid,
+            owner_name: ownerName,
             owner_user_id: $("bOwnerId").value.trim() || null,
             quantity: Number($("bQty").value || 1)
           };
@@ -1406,6 +1442,15 @@
             body: JSON.stringify(body)
           });
           setStatus("Cards bought.", "ok");
+          await loadOwnersForGame();
+          if (gid && ownerName){
+            const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/token", {method:"GET"});
+            const base = getBase();
+            const url = new URL("/bingo/owner?token=" + encodeURIComponent(data.token || ""), base).toString();
+            $("bPurchaseLink").value = url;
+            $("bPurchaseStatus").textContent = "Share this link with the player.";
+            $("bPurchaseModal").classList.add("show");
+          }
         }catch(err){
           setStatus(err.message, "err");
         }
