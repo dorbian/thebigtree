@@ -100,9 +100,8 @@
     <div class="panel-title">Actions</div>
     <button id="claimBtn">I have BINGO!</button>
     <div class="muted" id="claimMsg" style="margin-top:6px;font-size:12px"></div>
-    <button class="btn-ghost" id="autoMarkBtn" style="margin-top:10px">Auto mark called</button>
-    <label class="muted" style="display:block;margin-top:8px;font-size:12px">
-      <input type="checkbox" id="autoDab" checked> Auto-daub called
+    <label class="muted" style="display:block;margin-top:10px;font-size:12px">
+      <input type="checkbox" id="autoDab"> Auto-mark called numbers
     </label>
   </div>
 </div>
@@ -126,7 +125,6 @@
   const payoutFull = document.getElementById('payoutFull');
   const claimBtn = document.getElementById('claimBtn');
   const claimMsg = document.getElementById('claimMsg');
-  const autoMarkBtn = document.getElementById('autoMarkBtn');
   const autoDabEl = document.getElementById('autoDab');
   const bingoOverlay = document.getElementById('bingoOverlay');
   let selectedCardId = '';
@@ -271,20 +269,19 @@
     }
   });
 
-  autoMarkBtn.addEventListener('click', async () => {
-    const data = await fetchOwnerCards();
-    const state = token ? (data && data.game ? {game: data.game} : null) : await fetchState();
-    if (!data || !state || !state.game) return;
-    const called = Array.isArray(state.game.called) ? state.game.called : [];
-    const calledSet = new Set(called);
-    (data.cards || []).forEach(card => {
-      const marks = buildMarksForCard(card, calledSet);
-      saveLocalMarks(card.card_id, marks);
-    });
-    render(data, state);
-  });
-
   autoDabEl.addEventListener('change', async () => {
+    if (autoDabEl.checked){
+      const data = await fetchOwnerCards();
+      const state = token ? (data && data.game ? {game: data.game} : null) : await fetchState();
+      if (data && state && state.game){
+        const called = Array.isArray(state.game.called) ? state.game.called : [];
+        const calledSet = new Set(called);
+        (data.cards || []).forEach(card => {
+          const marks = buildMarksForCard(card, calledSet);
+          saveLocalMarks(card.card_id, marks);
+        });
+      }
+    }
     const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
     if (token && data && data.game){
       render(data, {game: data.game});
