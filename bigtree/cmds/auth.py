@@ -63,7 +63,14 @@ class AuthCog(commands.Cog):
         if not member or not _is_elfministrator(member):
             await interaction.response.send_message("Not allowed.", ephemeral=True)
             return
-        doc = web_tokens.issue_token(user_id=member.id)
+        display_name = member.display_name or member.name
+        avatar_url = getattr(member, "display_avatar", None)
+        avatar_url = getattr(avatar_url, "url", None)
+        doc = web_tokens.issue_token(
+            user_id=member.id,
+            user_name=display_name,
+            user_icon=avatar_url,
+        )
         expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
         await interaction.response.send_message(
             f"Here is your 24h web token (keep it private):\n`{doc['token']}`\n"

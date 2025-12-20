@@ -6,6 +6,7 @@ metadata:
 data:
   bigtree.ini: |
     [BOT]
+    DATA_DIR=/data
     contest_dir=/data/contest
     guildid=0000000000000000000
     token=<DISCORD_BOT_TOKEN>
@@ -46,6 +47,8 @@ spec:
         # You can still override some things via env if needed
         - name: BIGTREE__BOT__contest_dir
           value: "/data/contest"
+        - name: BIGTREE__BOT__DATA_DIR
+          value: "/data"
         - name: BIGTREE__WEB__listen_host
           value: "0.0.0.0"
         - name: BIGTREE__WEB__listen_port

@@ -66,7 +66,13 @@ def save_tokens(tokens: List[Dict[str, Any]]) -> None:
     _save_json(_token_path(), {"tokens": tokens})
 
 
-def issue_token(user_id: int, scopes: Optional[List[str]] = None, ttl_seconds: int = TOKEN_TTL_SECONDS) -> Dict[str, Any]:
+def issue_token(
+    user_id: int,
+    scopes: Optional[List[str]] = None,
+    ttl_seconds: int = TOKEN_TTL_SECONDS,
+    user_name: Optional[str] = None,
+    user_icon: Optional[str] = None,
+) -> Dict[str, Any]:
     token = secrets.token_urlsafe(32)
     now = int(time.time())
     doc = {
@@ -76,6 +82,10 @@ def issue_token(user_id: int, scopes: Optional[List[str]] = None, ttl_seconds: i
         "created_at": now,
         "expires_at": now + int(ttl_seconds),
     }
+    if user_name:
+        doc["user_name"] = str(user_name)
+    if user_icon:
+        doc["user_icon"] = str(user_icon)
     tokens = load_tokens()
     tokens.append(doc)
     save_tokens(tokens)

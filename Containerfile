@@ -40,6 +40,7 @@ USER bigtree
 
 ENV PYTHONUNBUFFERED=1 \
     BIGTREE__BOT__contest_dir=/data/contest \
+    BIGTREE__BOT__DATA_DIR=/data \
     BIGTREE__WEB__listen_host=0.0.0.0 \
     BIGTREE__WEB__listen_port=8443
 
