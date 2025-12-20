@@ -4,8 +4,7 @@
 FROM python:3.11-slim-bookworm
 
 # System deps (Pillow build + tools for uv install)
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
       git \
