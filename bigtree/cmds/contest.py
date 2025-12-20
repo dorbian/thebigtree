@@ -13,6 +13,7 @@ try:
     import bigtree
 except Exception:
     bigtree = None
+from bigtree.modules.permissions import is_elfministrator
 
 DEFAULT_RULES = (
     "1) One entry per person\n"
@@ -100,7 +101,7 @@ class ContestCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="contest", description="Create a contest in this channel")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @is_elfministrator()
     async def contest_slash(self, interaction: discord.Interaction):
         class ContestSetupModal(discord.ui.Modal, title="Create a Contest"):
             contest_title = discord.ui.TextInput(label="Title", max_length=100, placeholder="Elfoween Costume Contest")
@@ -163,7 +164,7 @@ class ContestCog(commands.Cog):
         await interaction.response.send_modal(ContestSetupModal())
 
     @app_commands.command(name="contest_stop", description="Disable contest processing in this channel")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @is_elfministrator()
     async def contest_stop(self, interaction: discord.Interaction):
         _set_channel_enabled(interaction.channel_id, False)  # type: ignore
         await interaction.response.send_message("Contest processing disabled for this channel. 📴", ephemeral=True)
@@ -225,8 +226,8 @@ class ContestCog(commands.Cog):
     @contest_slash.error
     @contest_stop.error
     async def contest_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.errors.MissingPermissions):
-            await interaction.response.send_message("You need **Manage Server** to run this.", ephemeral=True)
+        if isinstance(error, app_commands.CheckFailure):
+            await interaction.response.send_message("You need to be an elfministrator to run this.", ephemeral=True)
             return
         await interaction.response.send_message(f"Something went wrong: {error}", ephemeral=True)
 

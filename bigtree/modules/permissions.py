@@ -31,3 +31,45 @@ def is_bigtree_operator():
         # No match -> fail
         raise app_commands.CheckFailure("You don’t have permission to use this command.")
     return app_commands.check(predicate)
+
+def is_elfministrator():
+    """Slash command check: allow admins or configured elfministrator roles/users."""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        member = interaction.user
+
+        # Admins always allowed
+        perms = getattr(member, "guild_permissions", None)
+        if perms and perms.administrator:
+            return True
+
+        # Configured role IDs (settings or globals)
+        role_ids = set(getattr(bigtree, "elfministrator_role_ids", []) or [])
+        try:
+            settings = getattr(bigtree, "settings", None)
+            if settings:
+                raw = settings.get("BOT.elfministrator_role_ids", [], cast="json") or []
+                if isinstance(raw, (str, int)):
+                    raw = [raw]
+                for r in raw:
+                    try:
+                        role_ids.add(int(r))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        if role_ids:
+            if any(getattr(r, "id", 0) in role_ids for r in getattr(member, "roles", [])):
+                return True
+
+        # Configured user IDs (optional)
+        user_ids = set(getattr(bigtree, "elfministrator_user_ids", []) or [])
+        if user_ids and member.id in user_ids:
+            return True
+
+        # Fallback by role name
+        for r in getattr(member, "roles", []):
+            if str(getattr(r, "name", "")).strip().lower() == "elfministrator":
+                return True
+
+        raise app_commands.CheckFailure("You do not have permission to use this command.")
+    return app_commands.check(predicate)
