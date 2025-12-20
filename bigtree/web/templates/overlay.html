@@ -6,16 +6,16 @@
     <title>BigTree Overlay Client</title>
     <style>
       :root{
-        --bg-1:#0b0f1a;
-        --bg-2:#151d2e;
-        --bg-3:#182c3f;
-        --panel:#101a2a;
-        --panel-2:#0c131f;
-        --ink:#f5f0e6;
-        --muted:#b4c0d4;
-        --accent:#ffb347;
-        --accent-2:#62c6ff;
-        --line:#27324a;
+        --bg-1:#0b1611;
+        --bg-2:#0e2419;
+        --bg-3:#102c1d;
+        --panel:#0f1e16;
+        --panel-2:#0a1510;
+        --ink:#e8f7ef;
+        --muted:#9bb6a7;
+        --accent:#9de07d;
+        --accent-2:#3ccf8e;
+        --line:#1f3a2b;
         --shadow:0 18px 40px rgba(0,0,0,.35);
         --radius:18px;
       }
@@ -85,7 +85,7 @@
         content:"";
         position:absolute;
         inset:0;
-        background:linear-gradient(120deg, rgba(255,179,71,.08), transparent 45%);
+        background:linear-gradient(120deg, rgba(157,224,125,.12), transparent 45%);
         pointer-events:none;
       }
       .panel h2{
@@ -129,8 +129,8 @@
       textarea{min-height:70px;resize:vertical}
       button{
         cursor:pointer;
-        background:linear-gradient(135deg, rgba(255,179,71,.9), rgba(98,198,255,.7));
-        color:#1c1c1c;
+        background:linear-gradient(135deg, rgba(157,224,125,.9), rgba(60,207,142,.75));
+        color:#0a1510;
         border:none;
         font-weight:700;
         letter-spacing:.04em;
@@ -146,7 +146,7 @@
         display:inline-block;
         padding:4px 10px;
         border-radius:999px;
-        background:rgba(98,198,255,.12);
+        background:rgba(60,207,142,.18);
         color:var(--accent-2);
         font-size:12px;
         letter-spacing:.06em;
@@ -218,9 +218,9 @@
         color:var(--ink);
       }
       .bingo-cell.marked{
-        background:rgba(98,198,255,.18);
-        border-color:rgba(98,198,255,.6);
-        color:#d8f2ff;
+        background:rgba(60,207,142,.2);
+        border-color:rgba(60,207,142,.7);
+        color:#d6ffe9;
       }
       .bingo-called{
         font-size:12px;
@@ -247,21 +247,21 @@
         cursor:pointer;
       }
       .bingo-call-btn.active{
-        background:rgba(255,179,71,.2);
-        border-color:rgba(255,179,71,.6);
-        color:#ffe2b6;
+        background:rgba(157,224,125,.2);
+        border-color:rgba(157,224,125,.6);
+        color:#dcffcf;
       }
       .bingo-callout{
         position:fixed;
         right:24px;
         bottom:24px;
         background:rgba(8,12,20,.9);
-        border:1px solid rgba(255,179,71,.5);
+        border:1px solid rgba(157,224,125,.55);
         border-radius:14px;
         padding:12px 16px;
         font-weight:700;
         letter-spacing:.06em;
-        color:#ffe2b6;
+        color:#dcffcf;
         box-shadow:var(--shadow);
         opacity:0;
         transform:translateY(10px);
@@ -329,6 +329,16 @@
         </div>
         <div class="list" id="bGames">No games loaded.</div>
 
+        <h3>Players</h3>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="bLoadOwners">Load players</button>
+          </div>
+        </div>
+        <div class="list" id="bOwners">No players loaded.</div>
+        <div class="list" id="bOwnerCards">No tickets loaded.</div>
+
         <h3>Create game</h3>
         <div class="row">
           <div>
@@ -389,16 +399,8 @@
 
           <div class="row">
             <div>
-              <label for="bNumber">Call number</label>
-              <input id="bNumber" type="number" placeholder="1-80">
-            </div>
-            <div>
               <label>&nbsp;</label>
-              <button id="bCall">Call</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="bRoll">Roll random</button>
+              <button id="bRoll">Pull random number</button>
             </div>
             <div>
               <label>&nbsp;</label>
@@ -468,6 +470,12 @@
           <div class="bingo-card" id="bCard">
             <div class="bingo-header" id="bCardHeader"></div>
             <div class="bingo-grid" id="bCardGrid"></div>
+          </div>
+          <div class="row links">
+            <div>
+              <span class="pill">End-user view</span>
+              <div id="bEndUserLink">No card loaded.</div>
+            </div>
           </div>
         </section>
 
@@ -575,6 +583,7 @@
       let currentCard = null;
       let currentGame = null;
       let lastCalledCount = 0;
+      let currentOwner = "";
 
       function setStatus(msg, kind){
         statusEl.textContent = msg;
@@ -655,6 +664,7 @@
         });
         if (!card || !Array.isArray(card.numbers)){
           gridEl.innerHTML = "<div style='grid-column:1/-1;color:#8fa3c7'>No card loaded.</div>";
+          $("bEndUserLink").textContent = "No card loaded.";
           return;
         }
         const calledSet = new Set(Array.isArray(called) ? called : []);
@@ -671,6 +681,9 @@
             gridEl.appendChild(cell);
           }
         }
+        const base = baseUrlEl.value.trim() || window.location.origin;
+        const url = new URL("/bingo/play?game=" + encodeURIComponent($("bGameId").value.trim()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
+        $("bEndUserLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
       }
 
       function renderCalledGrid(called){
@@ -761,11 +774,110 @@
         });
       }
 
+      function renderOwnersList(owners){
+        const el = $("bOwners");
+        if (!Array.isArray(owners) || owners.length === 0){
+          el.textContent = "No players found.";
+          return;
+        }
+        el.innerHTML = "";
+        owners.forEach(o => {
+          const item = document.createElement("div");
+          item.style.padding = "8px 6px";
+          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          item.style.cursor = "pointer";
+          item.innerHTML = `<strong>${o.owner_name}</strong> · ${o.cards} cards`;
+          item.onclick = () => {
+            $("bOwner").value = o.owner_name || "";
+            loadOwnerCards(o.owner_name || "");
+          };
+          el.appendChild(item);
+        });
+      }
+
+      function renderOwnerCards(owner, cards, called, header){
+        const el = $("bOwnerCards");
+        if (!Array.isArray(cards) || cards.length === 0){
+          el.textContent = "No tickets for this player.";
+          return;
+        }
+        el.innerHTML = "";
+        cards.forEach(card => {
+          const wrap = document.createElement("div");
+          wrap.style.margin = "10px 0";
+          wrap.style.padding = "8px";
+          wrap.style.border = "1px solid rgba(255,255,255,0.08)";
+          wrap.style.borderRadius = "10px";
+          const title = document.createElement("div");
+          title.style.fontSize = "12px";
+          title.style.color = "var(--muted)";
+          title.innerHTML = `Card <code>${card.card_id}</code>`;
+          wrap.appendChild(title);
+          const grid = document.createElement("div");
+          grid.className = "bingo-grid";
+          const calledSet = new Set(Array.isArray(called) ? called : []);
+          (card.numbers || []).forEach((row, r) => {
+            (row || []).forEach((value, c) => {
+              const cell = document.createElement("div");
+              cell.className = "bingo-cell";
+              const marked = (card.marks && card.marks[r] && card.marks[r][c]) || calledSet.has(value);
+              if (marked) cell.classList.add("marked");
+              cell.textContent = value;
+              cell.onclick = () => {
+                $("bCardId").value = card.card_id;
+                renderCard(card, called, header);
+              };
+              grid.appendChild(cell);
+            });
+          });
+          wrap.appendChild(grid);
+          const endUser = document.createElement("div");
+          endUser.style.marginTop = "6px";
+          const base = baseUrlEl.value.trim() || window.location.origin;
+          const url = new URL("/bingo/play?game=" + encodeURIComponent($("bGameId").value.trim()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
+          endUser.innerHTML = `<a href="${url}" target="_blank" rel="noreferrer">Open end-user view</a>`;
+          wrap.appendChild(endUser);
+          el.appendChild(wrap);
+        });
+      }
+
       $("bLoadGames").addEventListener("click", async () => {
         try{
           const data = await jsonFetch("/bingo/games", {method:"GET"});
           renderGamesList(data.games || []);
           setStatus("Game list updated.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      async function loadOwnerCards(ownerName){
+        const gid = $("bGameId").value.trim();
+        if (!gid || !ownerName){
+          setStatus("Enter game id and owner name.", "err");
+          return;
+        }
+        try{
+          const state = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/cards", {method:"GET"}, false);
+          renderBingoState(state);
+          renderOwnerCards(ownerName, data.cards || [], state.game && state.game.called, state.game && state.game.header);
+          setStatus("Tickets loaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("bLoadOwners").addEventListener("click", async () => {
+        const gid = $("bGameId").value.trim();
+        if (!gid){
+          setStatus("Enter a game id.", "err");
+          return;
+        }
+        try{
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners", {method:"GET"});
+          renderOwnersList(data.owners || []);
+          setStatus("Players loaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -848,22 +960,6 @@
         }
       });
 
-      $("bCall").addEventListener("click", async () => {
-        try{
-          const num = $("bNumber").value;
-          const payload = {game_id: $("bGameId").value.trim(), number: Number(num)};
-          await jsonFetch("/bingo/call", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(payload)
-          });
-          setStatus("Number called.", "ok");
-          await refreshBingo();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
       $("bRoll").addEventListener("click", async () => {
         try{
           await jsonFetch("/bingo/roll", {
@@ -871,7 +967,7 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({game_id: $("bGameId").value.trim()})
           });
-          setStatus("Rolled random number.", "ok");
+          setStatus("Pulled random number.", "ok");
           await refreshBingo();
         }catch(err){
           setStatus(err.message, "err");
@@ -948,6 +1044,7 @@
           setStatus("Enter game id and owner name.", "err");
           return;
         }
+        currentOwner = owner;
         const base = baseUrlEl.value.trim() || window.location.origin;
         const url = new URL("/bingo/owner?game=" + encodeURIComponent(gid) + "&owner=" + encodeURIComponent(owner), base).toString();
         window.open(url, "_blank");

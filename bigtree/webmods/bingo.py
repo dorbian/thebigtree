@@ -157,6 +157,16 @@ async def bingo_list_games(_req: web.Request):
     if not ok: return web.json_response({"ok": False, "error": value}, status=501)
     return web.json_response({"ok": True, "games": value})
 
+
+@route("GET", "/bingo/{game_id}/owners", scopes=["bingo:admin"])
+async def bingo_list_owners(req: web.Request):
+    game_id = req.match_info["game_id"]
+    try:
+        owners = bingo.list_owners(game_id)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
+    return web.json_response({"ok": True, "owners": owners})
+
 @route("PATCH", "/bingo/{game_id}", scopes=["bingo:admin"])
 async def bingo_update(req: web.Request):
     game_id = req.match_info["game_id"]

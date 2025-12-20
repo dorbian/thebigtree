@@ -428,6 +428,24 @@ def list_games() -> List[Dict[str, Any]]:
     return games
 
 
+def list_owners(game_id: str) -> List[Dict[str, Any]]:
+    g = get_game(game_id)
+    if not g:
+        return []
+    db = _open(game_id)
+    Card = Query()
+    cards = db.search((Card._type == "card") & (Card.game_id == game_id))
+    owners: Dict[str, Dict[str, Any]] = {}
+    for c in cards:
+        name = c.get("owner_name") or "Unknown"
+        entry = owners.setdefault(name, {"owner_name": name, "cards": 0, "last_purchase": 0})
+        entry["cards"] += 1
+        entry["last_purchase"] = max(entry["last_purchase"], int(c.get("purchased_at") or 0))
+    out = list(owners.values())
+    out.sort(key=lambda x: (x["cards"], x["owner_name"]), reverse=True)
+    return out
+
+
 def update_game(game_id: str, **fields) -> Dict[str, Any]:
     g = get_game(game_id)
     if not g:
