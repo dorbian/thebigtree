@@ -187,6 +187,12 @@ async def bingo_claim_approve(req: web.Request):
     ok, msg = bingo.approve_public_claim(str(b.get("game_id")), str(b.get("card_id")))
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
+@route("POST", "/bingo/claim-deny", scopes=["bingo:admin"])
+async def bingo_claim_deny(req: web.Request):
+    b = await req.json()
+    ok, msg = bingo.deny_public_claim(str(b.get("game_id")), str(b.get("card_id")))
+    return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
+
 
 @route("POST", "/bingo/claim-public", allow_public=True)
 async def bingo_claim_public(req: web.Request):

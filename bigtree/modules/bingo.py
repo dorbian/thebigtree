@@ -313,6 +313,7 @@ def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -
         "owner_name": name,
         "stage": g.get("stage", "single"),
         "pending": True,
+        "denied": False,
         "source": "public",
     }
     g.setdefault("claims", []).append(claim)
@@ -340,12 +341,31 @@ def approve_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
     for c in g.get("claims", []):
         if c.get("card_id") == card_id and c.get("pending"):
             c["pending"] = False
+            c["denied"] = False
             c["approved_at"] = _now()
             updated = True
             break
     if updated:
         db.update(g, doc_ids=[g.doc_id])
     logger.info(f"[bingo] Approved public claim on card {card_id} in game {game_id}")
+    return True, "OK"
+
+def deny_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    updated = False
+    for c in g.get("claims", []):
+        if c.get("card_id") == card_id and c.get("pending"):
+            c["pending"] = False
+            c["denied"] = True
+            updated = True
+            break
+    if not updated:
+        return False, "Claim not found."
+    db = _open(game_id)
+    db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Denied public claim on card {card_id} in game {game_id}")
     return True, "OK"
 
 def _payouts(pot: int) -> Dict[str, int]:
@@ -493,6 +513,7 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
             "card_id": c.get("card_id"),
             "stage": c.get("stage"),
             "pending": c.get("pending", False),
+            "denied": c.get("denied", False),
             "source": c.get("source", "admin"),
         })
     return {

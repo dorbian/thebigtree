@@ -88,6 +88,10 @@
     <div class="panel-title">Pot</div>
     <div id="potValue">-</div>
   </div>
+  <div class="panel" id="stagePanel">
+    <div class="panel-title">Stage</div>
+    <div id="stageValue">-</div>
+  </div>
   <div class="panel" style="flex:1 1 280px">
     <div class="panel-title">Payouts</div>
     <div class="payouts">
@@ -120,6 +124,7 @@
   const summary = document.getElementById('summary');
   const calledEl = document.getElementById('called');
   const potValue = document.getElementById('potValue');
+  const stageValue = document.getElementById('stageValue');
   const payoutSingle = document.getElementById('payoutSingle');
   const payoutDouble = document.getElementById('payoutDouble');
   const payoutFull = document.getElementById('payoutFull');
@@ -193,6 +198,7 @@
     payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${g.payouts.single} ${g.currency || ""}`.trim() : "-";
     payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
     payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
+    stageValue.textContent = g.stage || "-";
     if (!selectedCardId && cards.length){
       selectedCardId = cards[0].card_id;
     }
@@ -203,7 +209,12 @@
     }
     const claims = Array.isArray(g.claims) ? g.claims : [];
     const hasPending = claims.some(c => c.pending);
-    if (!hasPending){
+    const ownerClaims = claims.filter(c => (c.owner_name || "") === owner);
+    const deniedClaim = ownerClaims.find(c => !c.pending && c.denied);
+    if (deniedClaim){
+      claimMsg.textContent = "Claim denied.";
+      localBingoPressed = false;
+    } else if (!hasPending){
       localBingoPressed = false;
     }
     bingoOverlay.classList.toggle("show", hasPending || localBingoPressed);

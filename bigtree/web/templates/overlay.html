@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -480,6 +480,10 @@
               <label>&nbsp;</label>
               <button class="btn-ghost" id="bRefresh">Refresh</button>
             </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bCloseGame">Close game</button>
+            </div>
           </div>
 
 
@@ -822,8 +826,8 @@
           const row = document.createElement("div");
           row.style.padding = "8px 6px";
           row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
-          const pending = c.pending ? "pending" : "approved";
-          const label = `${c.owner_name || "Unknown"} ┬╖ ${c.card_id || ""} ┬╖ ${c.stage || ""} ┬╖ ${pending}`;
+          const status = c.pending ? "pending" : (c.denied ? "denied" : "approved");
+          const label = `${c.owner_name || "Unknown"} - ${c.card_id || ""} - ${c.stage || ""} - ${status}`;
           const wrap = document.createElement("div");
           wrap.style.display = "flex";
           wrap.style.alignItems = "center";
@@ -833,6 +837,9 @@
           text.textContent = label;
           wrap.appendChild(text);
           if (c.pending){
+            const btnWrap = document.createElement("div");
+            btnWrap.style.display = "flex";
+            btnWrap.style.gap = "8px";
             const btn = document.createElement("button");
             btn.textContent = "Confirm + Advance";
             btn.style.maxWidth = "160px";
@@ -854,7 +861,26 @@
                 setStatus(err.message, "err");
               }
             };
-            wrap.appendChild(btn);
+            const deny = document.createElement("button");
+            deny.textContent = "Deny";
+            deny.className = "btn-ghost";
+            deny.style.maxWidth = "90px";
+            deny.onclick = async () => {
+              try{
+                await jsonFetch("/bingo/claim-deny", {
+                  method:"POST",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                });
+                setStatus("Claim denied.", "ok");
+                await refreshBingo();
+              }catch(err){
+                setStatus(err.message, "err");
+              }
+            };
+            btnWrap.appendChild(btn);
+            btnWrap.appendChild(deny);
+            wrap.appendChild(btnWrap);
           }
           row.appendChild(wrap);
           el.appendChild(row);
@@ -1315,6 +1341,36 @@
         }
       });
 
+      $("bCloseGame").addEventListener("click", async () => {
+        const gid = getGameId();
+        if (!gid){
+          setStatus("Select a game first.", "err");
+          return;
+        }
+        if (!confirm("Close and delete this game? This cannot be undone.")){
+          return;
+        }
+        try{
+          await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"DELETE"});
+          setGameId("");
+          currentGame = null;
+          $("bOwners").textContent = "No players loaded.";
+          $("bClaims").textContent = "No claims yet.";
+          $("bTitleVal").textContent = "-";
+          $("bHeaderVal").textContent = "-";
+          $("bStageVal").textContent = "-";
+          $("bPotVal").textContent = "-";
+          $("bCalled").textContent = "Called numbers: -";
+          $("bCalledGrid").innerHTML = "";
+          $("bCardHeader").innerHTML = "";
+          $("bCardGrid").innerHTML = "";
+          setStatus("Game deleted.", "ok");
+          await loadGamesMenu();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
 
       $("bBuy").addEventListener("click", async () => {
         try{
@@ -1497,6 +1553,8 @@
     </script>
   </body>
 </html>
+
+
 
 
 
