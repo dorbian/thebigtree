@@ -426,6 +426,15 @@
         <div class="list" id="bOwners">No players loaded.</div>
         <div class="list" id="bOwnerCards">No tickets loaded.</div>
 
+        <h3>Claims</h3>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="bAdvanceStage">Advance stage</button>
+          </div>
+        </div>
+        <div class="list" id="bClaims">No claims yet.</div>
+
           <h3>Active game</h3>
           <div class="row">
             <div>
@@ -661,6 +670,14 @@
             <input id="bCreatedBy" placeholder="0">
           </div>
           <div>
+            <label for="bTheme">Theme color</label>
+            <input id="bTheme" type="color" value="#9de07d">
+          </div>
+          <div>
+            <label for="bCreateBgFile">Background image</label>
+            <input id="bCreateBgFile" type="file" accept="image/*">
+          </div>
+          <div>
             <label>&nbsp;</label>
             <button id="bCreate">Create</button>
           </div>
@@ -688,6 +705,25 @@
       function setStatus(msg, kind){
         statusEl.textContent = msg;
         statusEl.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function applyTheme(color){
+        if (!color) return;
+        const root = document.documentElement;
+        const hex = color.startsWith("#") ? color.slice(1) : color;
+        if (hex.length !== 6) return;
+        const r = parseInt(hex.slice(0,2), 16);
+        const g = parseInt(hex.slice(2,4), 16);
+        const b = parseInt(hex.slice(4,6), 16);
+        const mix = (c, t, p) => Math.round(c + (t - c) * p);
+        const toHex = (v) => v.toString(16).padStart(2, "0");
+        const dark = `#${toHex(mix(r, 0, 0.6))}${toHex(mix(g, 0, 0.6))}${toHex(mix(b, 0, 0.6))}`;
+        const darker = `#${toHex(mix(r, 0, 0.8))}${toHex(mix(g, 0, 0.8))}${toHex(mix(b, 0, 0.8))}`;
+        const light = `#${toHex(mix(r, 255, 0.35))}${toHex(mix(g, 255, 0.35))}${toHex(mix(b, 255, 0.35))}`;
+        root.style.setProperty("--accent", light);
+        root.style.setProperty("--accent-2", `#${hex}`);
+        root.style.setProperty("--line", dark);
+        root.style.setProperty("--panel", darker);
       }
 
       function loadSettings(){
@@ -729,6 +765,7 @@
       function renderBingoState(data){
         const game = (data && data.game) || {};
         currentGame = game;
+        applyTheme(game.theme_color || null);
         const gid = $("bGameId").value.trim();
         if (gid !== activeGameId){
           activeGameId = gid;
@@ -751,6 +788,58 @@
           lastCalloutNumber = last;
         }
         lastCalledCount = called.length;
+        renderClaims(game);
+      }
+
+      function renderClaims(game){
+        const el = $("bClaims");
+        const claims = (game && Array.isArray(game.claims)) ? game.claims : [];
+        if (!claims.length){
+          el.textContent = "No claims yet.";
+          return;
+        }
+        el.innerHTML = "";
+        claims.slice().reverse().forEach(c => {
+          const row = document.createElement("div");
+          row.style.padding = "8px 6px";
+          row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          const pending = c.pending ? "pending" : "approved";
+          const label = `${c.owner_name || "Unknown"} · ${c.card_id || ""} · ${c.stage || ""} · ${pending}`;
+          const wrap = document.createElement("div");
+          wrap.style.display = "flex";
+          wrap.style.alignItems = "center";
+          wrap.style.justifyContent = "space-between";
+          wrap.style.gap = "10px";
+          const text = document.createElement("div");
+          text.textContent = label;
+          wrap.appendChild(text);
+          if (c.pending){
+            const btn = document.createElement("button");
+            btn.textContent = "Confirm + Advance";
+            btn.style.maxWidth = "160px";
+            btn.onclick = async () => {
+              try{
+                await jsonFetch("/bingo/claim-approve", {
+                  method:"POST",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                });
+                const adv = await jsonFetch("/bingo/advance-stage", {
+                  method:"POST",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({game_id: game.game_id})
+                });
+                setStatus(adv.ended ? "Claim approved. Game ended." : "Claim approved. Stage advanced.", "ok");
+                await refreshBingo();
+              }catch(err){
+                setStatus(err.message, "err");
+              }
+            };
+            wrap.appendChild(btn);
+          }
+          row.appendChild(wrap);
+          el.appendChild(row);
+        });
       }
 
       function renderCard(card, called, header){
@@ -888,7 +977,8 @@
             list.forEach(g => {
               const row = document.createElement("div");
               row.className = "menu-game";
-              row.textContent = g.title ? `${g.title} (${g.game_id})` : g.game_id;
+              const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
+              row.textContent = g.title ? `${g.title} · ${created}` : created;
               row.onclick = () => {
                 $("bGameId").value = g.game_id || "";
                 $("bStage").value = g.stage || "single";
@@ -1064,13 +1154,21 @@
             currency: $("bCurrency").value || "gil",
             max_cards_per_player: Number($("bMaxCards").value || 10),
             channel_id: Number($("bChannel").value || 0),
-            created_by: Number($("bCreatedBy").value || 0)
+            created_by: Number($("bCreatedBy").value || 0),
+            theme_color: $("bTheme").value || ""
           };
           const data = await jsonFetch("/bingo/create", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
           });
+          const bgFile = $("bCreateBgFile").files[0];
+          if (bgFile && data && data.game && data.game.game_id){
+            const fd = new FormData();
+            fd.append("game_id", data.game.game_id);
+            fd.append("file", bgFile);
+            await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
+          }
           $("bGameId").value = data.game.game_id || "";
           $("bCreateModal").classList.remove("show");
           setStatus("Bingo game created.", "ok");
@@ -1106,6 +1204,20 @@
             body: JSON.stringify({game_id: $("bGameId").value.trim(), stage: $("bStage").value})
           });
           setStatus("Stage updated.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bAdvanceStage").addEventListener("click", async () => {
+        try{
+          const data = await jsonFetch("/bingo/advance-stage", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: $("bGameId").value.trim()})
+          });
+          setStatus(data.ended ? "Game ended." : "Stage advanced.", "ok");
           await refreshBingo();
         }catch(err){
           setStatus(err.message, "err");

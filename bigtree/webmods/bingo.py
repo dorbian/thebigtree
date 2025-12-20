@@ -113,6 +113,7 @@ async def bingo_create(req: web.Request):
         currency=str(body.get("currency") or "gil"),
         max_cards_per_player=int(body.get("max_cards_per_player") or 10),
         created_by=int(body.get("created_by") or 0),
+        theme_color=str(body.get("theme_color") or "").strip() or None,
         **{k: v for k, v in {
             "size": body.get("size"),
             "free_center": body.get("free_center"),
@@ -169,6 +170,12 @@ async def bingo_mark(req: web.Request):
 async def bingo_claim(req: web.Request):
     b = await req.json()
     ok, msg = bingo.claim_bingo(str(b.get("game_id")), str(b.get("card_id")))
+    return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
+
+@route("POST", "/bingo/claim-approve", scopes=["bingo:admin"])
+async def bingo_claim_approve(req: web.Request):
+    b = await req.json()
+    ok, msg = bingo.approve_public_claim(str(b.get("game_id")), str(b.get("card_id")))
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
 
@@ -239,6 +246,15 @@ async def bingo_set_stage(req: web.Request):
     if not ok:
         return web.json_response({"ok": False, "error": msg}, status=400)
     return web.json_response({"ok": True})
+
+@route("POST", "/bingo/advance-stage", scopes=["bingo:admin"])
+async def bingo_advance_stage(req: web.Request):
+    body = await req.json()
+    g = str(body.get("game_id") or "")
+    ok, msg, stage, ended = bingo.advance_stage(g)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True, "stage": stage, "ended": ended})
 
 
 @route("POST", "/bingo/end", scopes=["bingo:admin"])

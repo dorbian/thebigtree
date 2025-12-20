@@ -54,6 +54,26 @@
   .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
   .cell.marked{background:rgba(60,207,142,.2);border-color:rgba(60,207,142,.7);color:#d6ffe9}
   .called{font-size:12px;color:var(--muted);margin:10px 0;padding:8px;border:1px dashed rgba(255,255,255,.12);border-radius:10px}
+  .bingo-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.78);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:48px;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--accent);
+    z-index:50;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease;
+  }
+  .bingo-overlay.show{
+    opacity:1;
+    pointer-events:auto;
+  }
 </style>
 
 <!--
@@ -89,6 +109,7 @@
 <div class="summary" id="summary"></div>
 <div class="called" id="called">Called numbers: -</div>
 <div id="list" class="grid"></div>
+<div class="bingo-overlay" id="bingoOverlay">BINGO</div>
 
 <script>
   const params = new URLSearchParams(location.search);
@@ -107,7 +128,9 @@
   const claimMsg = document.getElementById('claimMsg');
   const autoMarkBtn = document.getElementById('autoMarkBtn');
   const autoDabEl = document.getElementById('autoDab');
+  const bingoOverlay = document.getElementById('bingoOverlay');
   let selectedCardId = '';
+  let localBingoPressed = false;
 
   function marksKey(cardId){
     return `bingo_marks_${resolvedGame}_${cardId}`;
@@ -164,6 +187,7 @@
     document.body.style.backgroundImage = bg
       ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
       : "";
+    applyTheme(g.theme_color || null);
     owner = data.owner || owner;
     resolvedGame = (g.game_id || resolvedGame);
     summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
@@ -176,6 +200,12 @@
     if (!gameActive){
       claimMsg.textContent = "Game ended.";
     }
+    const claims = Array.isArray(g.claims) ? g.claims : [];
+    const hasPending = claims.some(c => c.pending && (c.owner_name || "") === owner);
+    if (!hasPending){
+      localBingoPressed = false;
+    }
+    bingoOverlay.classList.toggle("show", hasPending || localBingoPressed);
     calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
     grid.innerHTML = '';
     const header = (g.header || "BING").slice(0,4).split("");
@@ -234,6 +264,8 @@
       });
       const j = await r.json();
       claimMsg.textContent = j.message || (j.ok ? 'Claim sent.' : 'Claim failed.');
+      localBingoPressed = true;
+      bingoOverlay.classList.add("show");
     }catch(e){
       claimMsg.textContent = 'Claim failed.';
     }
@@ -260,6 +292,25 @@
       render(data, state);
     }
   });
+
+  function applyTheme(color){
+    if (!color) return;
+    const root = document.documentElement;
+    const hex = color.startsWith("#") ? color.slice(1) : color;
+    if (hex.length !== 6) return;
+    const r = parseInt(hex.slice(0,2), 16);
+    const g = parseInt(hex.slice(2,4), 16);
+    const b = parseInt(hex.slice(4,6), 16);
+    const mix = (c, t, p) => Math.round(c + (t - c) * p);
+    const toHex = (v) => v.toString(16).padStart(2, "0");
+    const dark = `#${toHex(mix(r, 0, 0.6))}${toHex(mix(g, 0, 0.6))}${toHex(mix(b, 0, 0.6))}`;
+    const darker = `#${toHex(mix(r, 0, 0.8))}${toHex(mix(g, 0, 0.8))}${toHex(mix(b, 0, 0.8))}`;
+    const light = `#${toHex(mix(r, 255, 0.35))}${toHex(mix(g, 255, 0.35))}${toHex(mix(b, 255, 0.35))}`;
+    root.style.setProperty("--accent", light);
+    root.style.setProperty("--accent-2", `#${hex}`);
+    root.style.setProperty("--line", dark);
+    root.style.setProperty("--panel", darker);
+  }
   async function tick(){
     const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
     if (token && data && data.game){

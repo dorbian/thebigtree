@@ -82,6 +82,7 @@
     document.body.style.backgroundImage = bg
       ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
       : "";
+    applyTheme(state.game && state.game.theme_color ? state.game.theme_color : null);
     const header = (state.game && state.game.header) || "BING";
     const nums = card.numbers || [];
     const localMarks = loadLocalMarks();
@@ -136,4 +137,23 @@
   }
   setInterval(tick, 1500);
   tick();
+
+  function applyTheme(color){
+    if (!color) return;
+    const root = document.documentElement;
+    const hex = color.startsWith("#") ? color.slice(1) : color;
+    if (hex.length !== 6) return;
+    const r = parseInt(hex.slice(0,2), 16);
+    const g = parseInt(hex.slice(2,4), 16);
+    const b = parseInt(hex.slice(4,6), 16);
+    const mix = (c, t, p) => Math.round(c + (t - c) * p);
+    const toHex = (v) => v.toString(16).padStart(2, "0");
+    const dark = `#${toHex(mix(r, 0, 0.6))}${toHex(mix(g, 0, 0.6))}${toHex(mix(b, 0, 0.6))}`;
+    const darker = `#${toHex(mix(r, 0, 0.8))}${toHex(mix(g, 0, 0.8))}${toHex(mix(b, 0, 0.8))}`;
+    const light = `#${toHex(mix(r, 255, 0.35))}${toHex(mix(g, 255, 0.35))}${toHex(mix(b, 255, 0.35))}`;
+    root.style.setProperty("--accent", light);
+    root.style.setProperty("--accent-2", `#${hex}`);
+    root.style.setProperty("--line", dark);
+    root.style.setProperty("--panel", darker);
+  }
 </script>

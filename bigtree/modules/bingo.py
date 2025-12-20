@@ -24,30 +24,41 @@ _INDEX: Optional[str] = None
 
 # -------- stages --------
 STAGES = ("single", "double", "full")  # single line, double line, whole card
+STAGE_ORDER = {"single": 0, "double": 1, "full": 2}
 
 def _now() -> float:
     return time.time()
 
 def _get_workingdir() -> str:
     """Resolve BigTree working dir without importing bigtree at import time."""
+    env_data = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
+    if env_data:
+        return os.path.join(env_data, "bingo")
     env = os.getenv("BIGTREE_WORKDIR")
     if env:
-        return env
+        return os.path.join(env, "bingo")
     try:
         import bigtree  # local import once package is fully ready
+        try:
+            settings = getattr(bigtree, "settings", None)
+            data_dir = settings.get("BOT.DATA_DIR", None, str) if settings else None
+            if data_dir:
+                return os.path.join(data_dir, "bingo")
+        except Exception:
+            pass
         wd = getattr(bigtree, "workingdir", None)
         if wd:
-            return wd
+            return os.path.join(wd, "bingo")
     except Exception:
         pass
-    return os.path.join(os.getcwd(), ".bigtree")
+    return os.path.join(os.getcwd(), ".bigtree", "bingo")
 
 def _ensure_dirs():
     """Initialize bingo directories the first time they're needed."""
     global _BINGO_DIR, _DB_DIR, _ASSETS, _INDEX
     if _BINGO_DIR is not None:
         return
-    base = os.path.join(_get_workingdir(), "bingo")
+    base = _get_workingdir()
     db = os.path.join(base, "db")
     assets = os.path.join(base, "assets")
     os.makedirs(db, exist_ok=True)
@@ -161,7 +172,8 @@ def create_game(
     currency: str,
     max_cards_per_player: int,
     created_by: int,
-    header_text: Optional[str] = None,  # NEW
+    header_text: Optional[str] = None,
+    theme_color: Optional[str] = None,
 ) -> Dict[str, Any]:
     _ensure_dirs()
     game_id = _new_game_id()
@@ -181,6 +193,7 @@ def create_game(
         "stage": "single",  # NEW
         "active": True,
         "background_path": None,  # file path under assets
+        "theme_color": (theme_color or "").strip() or None,
         "claims": [],
     }
     db = _open(game_id)
@@ -256,6 +269,23 @@ def claim_bingo(game_id: str, card_id: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Claim by {claim['owner_name']} on card {card_id} (stage={claim['stage']}) in game {game_id}")
     return True, "OK"
 
+def advance_stage(game_id: str) -> Tuple[bool, str, Optional[str], bool]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found.", None, False
+    current = str(g.get("stage") or "single")
+    idx = STAGE_ORDER.get(current, 0)
+    if idx < len(STAGES) - 1:
+        next_stage = STAGES[idx + 1]
+        ok, msg = set_stage(game_id, next_stage)
+        return ok, msg, next_stage if ok else None, False
+    # already at final stage; end the game
+    g["active"] = False
+    db = _open(game_id)
+    db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Game {game_id} ended after final stage.")
+    return True, "ended", current, True
+
 
 def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -> Tuple[bool, str]:
     g = get_game(game_id)
@@ -287,6 +317,34 @@ def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -
     g.setdefault("claims", []).append(claim)
     db.update(g, doc_ids=[g.doc_id])
     logger.info(f"[bingo] Public claim by {name} on card {card_id} (stage={claim['stage']}) in game {game_id}")
+    return True, "OK"
+
+def approve_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    db = _open(game_id)
+    Card = Query()
+    rows = db.search((Card._type == "card") & (Card.card_id == card_id))
+    if not rows:
+        return False, "Card not found."
+    card = rows[-1]
+    if card.get("claimed"):
+        return True, "Already claimed."
+    # mark claimed
+    card["claimed"] = True
+    db.update(card, doc_ids=[card.doc_id])
+    # update claim entry
+    updated = False
+    for c in g.get("claims", []):
+        if c.get("card_id") == card_id and c.get("pending"):
+            c["pending"] = False
+            c["approved_at"] = _now()
+            updated = True
+            break
+    if updated:
+        db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Approved public claim on card {card_id} in game {game_id}")
     return True, "OK"
 
 def _payouts(pot: int) -> Dict[str, int]:
@@ -435,6 +493,7 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
             "stage": g.get("stage", "single"),
             "payouts": pays,
             "background": (f"/bingo/assets/{g['game_id']}" if g.get("background_path") else None),
+            "theme_color": g.get("theme_color"),
             "active": bool(g.get("active", True)),
             "claims": claims,                      # NEW
         },
@@ -551,6 +610,10 @@ def update_game(game_id: str, **fields) -> Dict[str, Any]:
         updated = True
     if "background_path" in fields:
         g["background_path"] = fields["background_path"]
+        updated = True
+    if "theme_color" in fields:
+        val = str(fields["theme_color"] or "").strip()
+        g["theme_color"] = val if val else None
         updated = True
     if "stage" in fields:
         ok, msg = set_stage(game_id, str(fields["stage"]))
