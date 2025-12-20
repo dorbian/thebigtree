@@ -5,7 +5,6 @@ FROM python:3.11-slim
 
 # System deps (Pillow build + tools for uv install)
 RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
     apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
