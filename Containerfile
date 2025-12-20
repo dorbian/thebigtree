@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
       git \
+      build-essential \
       zlib1g-dev \
       libjpeg62-turbo-dev \
       libpng-dev \
