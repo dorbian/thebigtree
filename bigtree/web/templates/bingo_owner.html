@@ -202,7 +202,7 @@
       claimMsg.textContent = "Game ended.";
     }
     const claims = Array.isArray(g.claims) ? g.claims : [];
-    const hasPending = claims.some(c => c.pending && (c.owner_name || "") === owner);
+    const hasPending = claims.some(c => c.pending);
     if (!hasPending){
       localBingoPressed = false;
     }

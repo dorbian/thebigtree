@@ -1053,6 +1053,23 @@
       });
       $("menuTarot").addEventListener("click", () => showPanel("tarot"));
 
+      let bingoRefreshTimer = null;
+      function ensureBingoPolling(){
+        if (bingoRefreshTimer){
+          return;
+        }
+        bingoRefreshTimer = setInterval(() => {
+          const gid = getGameId();
+          if (!gid){
+            return;
+          }
+          if ($("bingoPanel").classList.contains("hidden")){
+            return;
+          }
+          refreshBingo();
+        }, 3000);
+      }
+
       function renderOwnersList(owners){
         const el = $("bOwners");
         if (!Array.isArray(owners) || owners.length === 0){
@@ -1187,6 +1204,7 @@
         setStatus("Welcome to Bingo Control.", "ok");
         loadGamesMenu();
         showPanel("bingo");
+        ensureBingoPolling();
       });
       overlayToggle.addEventListener("change", () => {
         document.body.classList.toggle("overlay", overlayToggle.checked);
@@ -1473,6 +1491,7 @@
         document.getElementById("appView").classList.remove("hidden");
         loadGamesMenu();
         showPanel("bingo");
+        ensureBingoPolling();
       }
       renderCard(null, [], "BING");
     </script>
