@@ -84,6 +84,23 @@ async def bingo_owner_cards(req: web.Request):
         "cards": [{"card_id": c["card_id"], "numbers": c["numbers"], "marks": c["marks"]} for c in cards],
     })
 
+@route("GET", "/bingo/owner-token/{token}", allow_public=True)
+async def bingo_owner_token_cards(req: web.Request):
+    token = req.match_info["token"]
+    info = bingo.resolve_owner_token(token)
+    if not info:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    g = info.get("game_id") or ""
+    owner = info.get("owner_name") or ""
+    cards = bingo.get_owner_cards(g, owner_name=owner)
+    st = bingo.get_public_state(g)
+    return web.json_response({
+        "ok": True,
+        "game": st.get("game", {"game_id": g, "called": []}),
+        "owner": owner,
+        "cards": [{"card_id": c["card_id"], "numbers": c["numbers"], "marks": c["marks"]} for c in cards],
+    })
+
 # ---------- Admin JSON (key+scope auth) ----------
 # Require WEB.api_keys[] and WEB.api_key_scopes["YOURKEY"]="bingo:admin" (or leave scopes map empty = full power)
 @route("POST", "/bingo/create", scopes=["bingo:admin"])
@@ -180,6 +197,16 @@ async def bingo_list_owners(req: web.Request):
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400)
     return web.json_response({"ok": True, "owners": owners})
+
+@route("GET", "/bingo/{game_id}/owner/{owner}/token", scopes=["bingo:admin"])
+async def bingo_owner_token(req: web.Request):
+    game_id = req.match_info["game_id"]
+    owner = req.match_info["owner"]
+    try:
+        token = bingo.get_owner_token(game_id, owner)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
+    return web.json_response({"ok": True, "token": token, "game_id": game_id, "owner": owner})
 
 @route("PATCH", "/bingo/{game_id}", scopes=["bingo:admin"])
 async def bingo_update(req: web.Request):

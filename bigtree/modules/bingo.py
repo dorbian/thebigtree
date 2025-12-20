@@ -99,10 +99,19 @@ def _read_index() -> Dict[str, Any]:
         import json
         if os.path.exists(_INDEX):
             with open(_INDEX, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    data.setdefault("active_by_channel", {})
+                    data.setdefault("owner_tokens", {})
+                    data.setdefault("owner_keys", {})
+                    return data
     except Exception:
         pass
-    return {"active_by_channel": {}}  # channel_id(str) -> game_id
+    return {
+        "active_by_channel": {},  # channel_id(str) -> game_id
+        "owner_tokens": {},       # token -> {game_id, owner_name}
+        "owner_keys": {},         # game_id -> {owner_name: token}
+    }
 
 def _write_index(idx: Dict[str, Any]):
     _ensure_dirs()
@@ -117,6 +126,32 @@ def set_active_for_channel(channel_id: int, game_id: str):
 
 def get_active_for_channel(channel_id: int) -> Optional[str]:
     return _read_index()["active_by_channel"].get(str(channel_id))
+
+# -------- owner tokens (public links) --------
+def get_owner_token(game_id: str, owner_name: str) -> str:
+    import secrets
+    owner_name = (owner_name or "").strip()
+    if not owner_name:
+        raise ValueError("Owner name required.")
+    idx = _read_index()
+    game_map = idx.setdefault("owner_keys", {}).setdefault(str(game_id), {})
+    token = game_map.get(owner_name)
+    if token and token in idx.get("owner_tokens", {}):
+        return token
+    token = secrets.token_urlsafe(10)
+    game_map[owner_name] = token
+    idx.setdefault("owner_tokens", {})[token] = {
+        "game_id": str(game_id),
+        "owner_name": owner_name,
+    }
+    _write_index(idx)
+    return token
+
+def resolve_owner_token(token: str) -> Optional[Dict[str, str]]:
+    if not token:
+        return None
+    idx = _read_index()
+    return idx.get("owner_tokens", {}).get(str(token))
 
 # ----------------- Game lifecycle -----------------
 def create_game(
@@ -547,5 +582,13 @@ def delete_game(game_id: str) -> bool:
     idx = _read_index()
     active = idx.get("active_by_channel", {})
     idx["active_by_channel"] = {k: v for k, v in active.items() if v != game_id}
+    owner_keys = idx.get("owner_keys", {})
+    owner_map = owner_keys.pop(str(game_id), None)
+    if owner_map:
+        tokens = idx.get("owner_tokens", {})
+        for token in list(owner_map.values()):
+            tokens.pop(token, None)
+        idx["owner_tokens"] = tokens
+    idx["owner_keys"] = owner_keys
     _write_index(idx)
     return True

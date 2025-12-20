@@ -26,6 +26,10 @@
   .card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)}
   .muted{opacity:.7}
   .summary{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .topbar{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
+  .panel{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel)}
+  .panel-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .payouts{display:grid;grid-template-columns:repeat(3, minmax(120px, 1fr));gap:8px;font-size:13px}
   .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
   .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
   .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
@@ -35,11 +39,26 @@
 
 <!--
   Expected query params:
-    ?game=<id>&owner=<url-encoded name>
+    ?token=<public-token>
+    or ?game=<id>&owner=<url-encoded name>
   This view stores local marks in localStorage.
 -->
 <h1>Bingo — My Cards</h1>
-<p class="muted">Use ?game=&amp;owner= in the URL to bind this view.</p>
+<p class="muted">Use ?token= or ?game=&amp;owner= in the URL to bind this view.</p>
+<div class="topbar">
+  <div class="panel" id="potPanel">
+    <div class="panel-title">Pot</div>
+    <div id="potValue">-</div>
+  </div>
+  <div class="panel" style="flex:1 1 280px">
+    <div class="panel-title">Payouts</div>
+    <div class="payouts">
+      <div>Single: <span id="payoutSingle">-</span></div>
+      <div>Double: <span id="payoutDouble">-</span></div>
+      <div>Full: <span id="payoutFull">-</span></div>
+    </div>
+  </div>
+</div>
 <div class="summary" id="summary"></div>
 <div class="called" id="called">Called numbers: -</div>
 <div id="list" class="grid"></div>
@@ -47,13 +66,19 @@
 <script>
   const params = new URLSearchParams(location.search);
   const game = params.get('game') || '';
-  const owner = params.get('owner') || '';
+  let resolvedGame = game;
+  let owner = params.get('owner') || '';
+  const token = params.get('token') || '';
   const grid = document.getElementById('list');
   const summary = document.getElementById('summary');
   const calledEl = document.getElementById('called');
+  const potValue = document.getElementById('potValue');
+  const payoutSingle = document.getElementById('payoutSingle');
+  const payoutDouble = document.getElementById('payoutDouble');
+  const payoutFull = document.getElementById('payoutFull');
 
   function marksKey(cardId){
-    return `bingo_marks_${game}_${cardId}`;
+    return `bingo_marks_${resolvedGame}_${cardId}`;
   }
 
   function loadLocalMarks(cardId){
@@ -70,11 +95,18 @@
   }
 
   async function fetchOwnerCards(){
+    if (token){
+      const r = await fetch(`/bingo/owner-token/${encodeURIComponent(token)}`);
+      return r.ok ? await r.json() : null;
+    }
     const r = await fetch(`/bingo/${encodeURIComponent(game)}/owner/${encodeURIComponent(owner)}/cards`);
     return r.ok ? await r.json() : null;
   }
 
   async function fetchState(){
+    if (token){
+      return null;
+    }
     const r = await fetch(`/bingo/${encodeURIComponent(game)}`);
     return r.ok ? await r.json() : null;
   }
@@ -88,7 +120,13 @@
     document.body.style.backgroundImage = bg
       ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
       : "";
+    owner = data.owner || owner;
+    resolvedGame = (g.game_id || resolvedGame);
     summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
+    potValue.textContent = `${g.pot != null ? g.pot : 0} ${g.currency || ""}`.trim();
+    payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${g.payouts.single} ${g.currency || ""}`.trim() : "-";
+    payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
+    payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
     calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
     grid.innerHTML = '';
     const header = (g.header || "BING").slice(0,4).split("");
@@ -147,7 +185,11 @@
 
   async function tick(){
     const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
-    render(data, state);
+    if (token && data && data.game){
+      render(data, {game: data.game});
+    }else{
+      render(data, state);
+    }
   }
   setInterval(tick, 2000);
   tick();
