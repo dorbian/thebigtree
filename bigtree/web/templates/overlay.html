@@ -82,6 +82,9 @@
         border-right:1px solid var(--line);
         padding:20px 16px;
       }
+      .sidebar .status{
+        margin-top:12px;
+      }
       .sidebar h3{
         margin:16px 0 8px;
         font-size:12px;
@@ -196,6 +199,27 @@
         text-transform:uppercase;
         letter-spacing:.08em;
         color:var(--muted);
+      }
+      .muted{color:var(--muted)}
+      .owner-meta{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        font-size:12px;
+        color:var(--muted);
+      }
+      .owner-meta .owner-cards{font-weight:500}
+      .owner-meta .owner-link{
+        color:var(--accent);
+        text-decoration:none;
+        font-weight:500;
+      }
+      .owner-meta .owner-link:hover{text-decoration:underline}
+      .owner-meta .owner-copy{
+        max-width:110px;
+        padding:4px 8px;
+        font-size:12px;
+        font-weight:500;
       }
       .row{
         display:grid;
@@ -433,17 +457,13 @@
         <div class="menu-sub" id="menuGames"></div>
         <button class="menu-refresh" id="menuCreateGame" title="Create game">+ New</button>
         <div class="menu-item" id="menuTarot">Tarot</div>
+        <label class="toggle" style="margin-top:12px">
+          <input type="checkbox" id="overlayMode">
+          Overlay mode
+        </label>
+        <div class="status" id="status">Ready.</div>
       </aside>
       <main class="content">
-        <header class="top">
-          <div class="brand">Bingo Control</div>
-          <label class="toggle">
-            <input type="checkbox" id="overlayMode">
-            Overlay mode
-          </label>
-        </header>
-        <div class="status" id="status">Ready.</div>
-
       <div class="grid">
       <section class="panel" style="animation-delay:.05s" id="bingoPanel">
         <h2>Bingo Control</h2>
@@ -1110,9 +1130,9 @@
           item.style.cursor = "pointer";
           const token = o.token || "";
           const link = token ? `${getBase()}/bingo/owner?token=${encodeURIComponent(token)}` : "";
-          const linkHtml = link ? `<a href="${link}" target="_blank" rel="noreferrer">Open</a>` : "";
-          const copyBtn = link ? `<button data-copy="${link}" class="btn-ghost" style="max-width:110px">Copy link</button>` : "";
-          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${o.owner_name}</strong></div>\n              <div style="display:flex;align-items:center;gap:10px">\n                <span class="muted">${o.cards} cards</span>\n                ${linkHtml}\n                ${copyBtn}\n              </div>\n            </div>`;
+          const linkHtml = link ? `<a href="${link}" class="owner-link" target="_blank" rel="noreferrer">Open</a>` : "";
+          const copyBtn = link ? `<button data-copy="${link}" class="btn-ghost owner-copy">Copy link</button>` : "";
+          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${o.owner_name}</strong></div>\n              <div class="owner-meta">\n                <span class="owner-cards">${o.cards} cards</span>\n                ${linkHtml}\n                ${copyBtn}\n              </div>\n            </div>`;
           item.onclick = () => {
             $("bOwner").value = o.owner_name || "";
             loadOwnerCards(o.owner_name || "");
