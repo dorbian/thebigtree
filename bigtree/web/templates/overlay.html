@@ -183,6 +183,99 @@
         text-decoration:none;
       }
       .links a:hover{text-decoration:underline}
+      .bingo-summary{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+        gap:10px;
+        font-size:13px;
+        color:var(--muted);
+      }
+      .bingo-card{
+        margin-top:12px;
+        border:1px solid var(--line);
+        border-radius:14px;
+        background:rgba(9,13,22,.7);
+        padding:10px;
+      }
+      .bingo-header, .bingo-grid{
+        display:grid;
+        grid-template-columns:repeat(4,1fr);
+        gap:6px;
+        text-align:center;
+      }
+      .bingo-header div{
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--accent);
+        padding:6px 0;
+      }
+      .bingo-cell{
+        padding:10px 0;
+        border-radius:8px;
+        background:rgba(12,18,32,.9);
+        border:1px solid rgba(255,255,255,.05);
+        color:var(--ink);
+      }
+      .bingo-cell.marked{
+        background:rgba(98,198,255,.18);
+        border-color:rgba(98,198,255,.6);
+        color:#d8f2ff;
+      }
+      .bingo-called{
+        font-size:12px;
+        color:var(--muted);
+        max-height:90px;
+        overflow:auto;
+        border:1px dashed rgba(255,255,255,.12);
+        border-radius:10px;
+        padding:8px;
+      }
+      .bingo-called-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(34px,1fr));
+        gap:6px;
+        margin-top:8px;
+      }
+      .bingo-call-btn{
+        border-radius:8px;
+        padding:6px 0;
+        background:rgba(12,18,32,.9);
+        border:1px solid rgba(255,255,255,.08);
+        color:var(--ink);
+        font-size:12px;
+        cursor:pointer;
+      }
+      .bingo-call-btn.active{
+        background:rgba(255,179,71,.2);
+        border-color:rgba(255,179,71,.6);
+        color:#ffe2b6;
+      }
+      .bingo-callout{
+        position:fixed;
+        right:24px;
+        bottom:24px;
+        background:rgba(8,12,20,.9);
+        border:1px solid rgba(255,179,71,.5);
+        border-radius:14px;
+        padding:12px 16px;
+        font-weight:700;
+        letter-spacing:.06em;
+        color:#ffe2b6;
+        box-shadow:var(--shadow);
+        opacity:0;
+        transform:translateY(10px);
+        transition:opacity .2s ease, transform .2s ease;
+        pointer-events:none;
+      }
+      .bingo-callout.show{
+        opacity:1;
+        transform:translateY(0);
+      }
+      .bingo-card{
+        background-size:cover;
+        background-position:center;
+      }
       @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
       @media (max-width:720px){
@@ -313,6 +406,32 @@
             </div>
           </div>
 
+          <div class="row">
+            <div>
+              <label for="bBgFile">Background image</label>
+              <input id="bBgFile" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bUploadBg">Upload background</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="bCardId">View card ID</label>
+              <input id="bCardId" placeholder="card id">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bLoadCard">Load card</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bViewOwner">View tickets</button>
+            </div>
+          </div>
+
           <h3>Buy cards</h3>
           <div class="row">
             <div>
@@ -338,7 +457,18 @@
               <span class="pill">Game state</span>
             </div>
           </div>
-          <div class="list" id="bState">No game loaded.</div>
+          <div class="bingo-summary" id="bSummary">
+            <div>Title: <span id="bTitleVal">-</span></div>
+            <div>Header: <span id="bHeaderVal">-</span></div>
+            <div>Stage: <span id="bStageVal">-</span></div>
+            <div>Pot: <span id="bPotVal">-</span></div>
+          </div>
+          <div class="bingo-called" id="bCalled">Called numbers: -</div>
+          <div class="bingo-called-grid" id="bCalledGrid"></div>
+          <div class="bingo-card" id="bCard">
+            <div class="bingo-header" id="bCardHeader"></div>
+            <div class="bingo-grid" id="bCardGrid"></div>
+          </div>
         </section>
 
         <section class="panel" style="animation-delay:.1s">
@@ -442,6 +572,9 @@
       const apiKeyEl = $("apiKey");
       const overlayToggle = $("overlayMode");
       const storage = window.localStorage;
+      let currentCard = null;
+      let currentGame = null;
+      let lastCalledCount = 0;
 
       function setStatus(msg, kind){
         statusEl.textContent = msg;
@@ -485,6 +618,122 @@
 
       function showList(el, data){
         el.textContent = JSON.stringify(data, null, 2);
+      }
+
+      function renderBingoState(data){
+        const game = (data && data.game) || {};
+        currentGame = game;
+        $("bTitleVal").textContent = game.title || "-";
+        $("bHeaderVal").textContent = game.header || "BING";
+        $("bStageVal").textContent = game.stage || "-";
+        $("bPotVal").textContent = (game.pot != null ? `${game.pot} ${game.currency || ""}` : "-");
+        const called = Array.isArray(game.called) ? game.called : [];
+        $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
+        renderCalledGrid(called);
+        const bgPath = game.background ? new URL(game.background, baseUrlEl.value.trim() || window.location.origin).toString() : "";
+        const cardWrap = $("bCard");
+        cardWrap.style.backgroundImage = bgPath ? `linear-gradient(180deg, rgba(6,10,18,.85), rgba(6,10,18,.6)), url('${bgPath}')` : "";
+        if (called.length > lastCalledCount){
+          const last = called[called.length - 1];
+          showCallout(`Called ${last}`);
+          lastCalledCount = called.length;
+        }
+      }
+
+      function renderCard(card, called, header){
+        currentCard = card;
+        const headerEl = $("bCardHeader");
+        const gridEl = $("bCardGrid");
+        headerEl.innerHTML = "";
+        gridEl.innerHTML = "";
+        const letters = (header || "BING").slice(0,4).split("");
+        while (letters.length < 4) letters.push(" ");
+        letters.forEach(l => {
+          const h = document.createElement("div");
+          h.textContent = l;
+          headerEl.appendChild(h);
+        });
+        if (!card || !Array.isArray(card.numbers)){
+          gridEl.innerHTML = "<div style='grid-column:1/-1;color:#8fa3c7'>No card loaded.</div>";
+          return;
+        }
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        const nums = card.numbers || [];
+        const marks = card.marks || [];
+        for (let r = 0; r < nums.length; r++){
+          for (let c = 0; c < nums[r].length; c++){
+            const cell = document.createElement("div");
+            cell.className = "bingo-cell";
+            const value = nums[r][c];
+            const marked = (marks[r] && marks[r][c]) || calledSet.has(value);
+            if (marked) cell.classList.add("marked");
+            cell.textContent = value;
+            gridEl.appendChild(cell);
+          }
+        }
+      }
+
+      function renderCalledGrid(called){
+        const grid = $("bCalledGrid");
+        grid.innerHTML = "";
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        for (let i = 1; i <= 80; i++){
+          const btn = document.createElement("button");
+          btn.className = "bingo-call-btn" + (calledSet.has(i) ? " active" : "");
+          btn.textContent = i;
+          btn.disabled = !calledSet.has(i);
+          btn.onclick = () => markNumber(i);
+          grid.appendChild(btn);
+        }
+      }
+
+      function showCallout(text){
+        let el = document.getElementById("bCallout");
+        if (!el){
+          el = document.createElement("div");
+          el.id = "bCallout";
+          el.className = "bingo-callout";
+          document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.classList.add("show");
+        setTimeout(() => el.classList.remove("show"), 2200);
+      }
+
+      async function markNumber(num){
+        const gid = $("bGameId").value.trim();
+        if (!gid || !currentCard || !Array.isArray(currentCard.numbers)){
+          setStatus("Load a card first.", "err");
+          return;
+        }
+        const marks = [];
+        for (let r = 0; r < currentCard.numbers.length; r++){
+          for (let c = 0; c < currentCard.numbers[r].length; c++){
+            if (currentCard.numbers[r][c] === num){
+              marks.push({row: r, col: c});
+            }
+          }
+        }
+        if (marks.length === 0){
+          setStatus("Number not on this card.", "err");
+          return;
+        }
+        try{
+          for (const m of marks){
+            await jsonFetch("/bingo/mark", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({game_id: gid, card_id: currentCard.card_id, row: m.row, col: m.col})
+            });
+            if (currentCard.marks && currentCard.marks[m.row]){
+              currentCard.marks[m.row][m.col] = true;
+            }
+          }
+          renderCard(currentCard, currentGame && currentGame.called, currentGame && currentGame.header);
+          setStatus("Marked card.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       }
 
       function renderGamesList(games){
@@ -563,7 +812,7 @@
         }
         try{
           const data = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
-          showList($("bState"), data);
+          renderBingoState(data);
           setStatus("Bingo state updated.", "ok");
         }catch(err){
           setStatus(err.message, "err");
@@ -629,6 +878,29 @@
         }
       });
 
+      $("bUploadBg").addEventListener("click", async () => {
+        const gid = $("bGameId").value.trim();
+        const file = $("bBgFile").files[0];
+        if (!gid || !file){
+          setStatus("Select a game and image.", "err");
+          return;
+        }
+        const fd = new FormData();
+        fd.append("game_id", gid);
+        fd.append("file", file);
+        try{
+          const res = await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
+          if (!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Upload failed");
+          }
+          setStatus("Background uploaded.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
       $("bBuy").addEventListener("click", async () => {
         try{
           const body = {
@@ -643,10 +915,42 @@
             body: JSON.stringify(body)
           });
           setStatus("Cards bought.", "ok");
-          showList($("bState"), data);
+          if (data && data.cards && data.cards[0] && data.cards[0].card_id){
+            $("bCardId").value = data.cards[0].card_id;
+          }
         }catch(err){
           setStatus(err.message, "err");
         }
+      });
+
+      $("bLoadCard").addEventListener("click", async () => {
+        const gid = $("bGameId").value.trim();
+        const cardId = $("bCardId").value.trim();
+        if (!gid || !cardId){
+          setStatus("Enter game id and card id.", "err");
+          return;
+        }
+        try{
+          const state = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
+          const cardData = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/card/" + encodeURIComponent(cardId), {method:"GET"}, false);
+          renderBingoState(state);
+          renderCard(cardData.card, state.game && state.game.called, state.game && state.game.header);
+          setStatus("Card loaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bViewOwner").addEventListener("click", () => {
+        const gid = $("bGameId").value.trim();
+        const owner = $("bOwner").value.trim();
+        if (!gid || !owner){
+          setStatus("Enter game id and owner name.", "err");
+          return;
+        }
+        const base = baseUrlEl.value.trim() || window.location.origin;
+        const url = new URL("/bingo/owner?game=" + encodeURIComponent(gid) + "&owner=" + encodeURIComponent(owner), base).toString();
+        window.open(url, "_blank");
       });
 
       $("tLoadDeck").addEventListener("click", async () => {
@@ -783,6 +1087,7 @@
       });
 
       loadSettings();
+      renderCard(null, [], "BING");
     </script>
   </body>
 </html>

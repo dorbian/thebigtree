@@ -1,9 +1,12 @@
+# syntax=docker/dockerfile:1.6
 # TheBigTree container using uv for dependency installation
 
 FROM python:3.11-slim
 
 # System deps (Pillow build + tools for uv install)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
       build-essential \
@@ -24,7 +27,8 @@ COPY requirements.txt .
 
 # Install deps into the system Python environment using uv
 # (so we can keep CMD as `python thebigtree.py`)
-RUN uv pip install --system --no-cache -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --no-cache -r requirements.txt
 
 # Now copy the actual application code
 COPY . .
