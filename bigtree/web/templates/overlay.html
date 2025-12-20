@@ -427,10 +427,11 @@
         <h3>Menu</h3>
         <div class="menu-item active" id="menuBingo">
           <span>Bingo</span>
-          <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games">Γå╗</button>
+          <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games">R</button>
         </div>
         <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
         <div class="menu-sub" id="menuGames"></div>
+        <button class="menu-refresh" id="menuCreateGame" title="Create game">+ New</button>
         <div class="menu-item" id="menuTarot">Tarot</div>
       </aside>
       <main class="content">
@@ -1034,6 +1035,10 @@
         ev.stopPropagation();
         loadGamesMenu();
       });
+      $("menuCreateGame").addEventListener("click", () => {
+        $("bCreateModal").classList.add("show");
+        $("bTitle").focus();
+      });
       $("menuTarot").addEventListener("click", () => showPanel("tarot"));
 
       function renderOwnersList(owners){
@@ -1445,6 +1450,7 @@
     </script>
   </body>
 </html>
+
 
 
 
