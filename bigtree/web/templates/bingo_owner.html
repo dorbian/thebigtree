@@ -193,6 +193,9 @@
     payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${g.payouts.single} ${g.currency || ""}`.trim() : "-";
     payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
     payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
+    if (!selectedCardId && cards.length){
+      selectedCardId = cards[0].card_id;
+    }
     const gameActive = g.active !== false;
     claimBtn.disabled = !(gameActive && selectedCardId);
     if (!gameActive){
@@ -252,7 +255,12 @@
 
   claimBtn.addEventListener('click', async () => {
     if (!selectedCardId){
-      return;
+      const data = await fetchOwnerCards();
+      if (data && Array.isArray(data.cards) && data.cards.length){
+        selectedCardId = data.cards[0].card_id;
+      }else{
+        return;
+      }
     }
     try{
       const r = await fetch('/bingo/claim-public', {
