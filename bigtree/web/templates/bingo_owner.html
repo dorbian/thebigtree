@@ -24,12 +24,31 @@
   }
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
   .card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)}
+  .card.selected{border-color:rgba(157,224,125,.7);box-shadow:0 0 0 2px rgba(157,224,125,.2) inset}
   .muted{opacity:.7}
   .summary{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px}
   .topbar{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
   .panel{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel)}
   .panel-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .payouts{display:grid;grid-template-columns:repeat(3, minmax(120px, 1fr));gap:8px;font-size:13px}
+  button{
+    width:100%;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:linear-gradient(135deg, rgba(157,224,125,.9), rgba(60,207,142,.75));
+    color:#0a1510;
+    padding:8px 10px;
+    font-family:"Palatino Linotype","Book Antiqua",serif;
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.04em;
+    cursor:pointer;
+  }
+  .btn-ghost{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--ink);
+  }
   .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
   .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
   .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
@@ -44,7 +63,6 @@
   This view stores local marks in localStorage.
 -->
 <h1>Bingo — My Cards</h1>
-<p class="muted">Use ?token= or ?game=&amp;owner= in the URL to bind this view.</p>
 <div class="topbar">
   <div class="panel" id="potPanel">
     <div class="panel-title">Pot</div>
@@ -57,6 +75,15 @@
       <div>Double: <span id="payoutDouble">-</span></div>
       <div>Full: <span id="payoutFull">-</span></div>
     </div>
+  </div>
+  <div class="panel" style="min-width:200px">
+    <div class="panel-title">Actions</div>
+    <button id="claimBtn">I have BINGO!</button>
+    <div class="muted" id="claimMsg" style="margin-top:6px;font-size:12px"></div>
+    <button class="btn-ghost" id="autoMarkBtn" style="margin-top:10px">Auto mark called</button>
+    <label class="muted" style="display:block;margin-top:8px;font-size:12px">
+      <input type="checkbox" id="autoDab" checked> Auto-daub called
+    </label>
   </div>
 </div>
 <div class="summary" id="summary"></div>
@@ -76,6 +103,11 @@
   const payoutSingle = document.getElementById('payoutSingle');
   const payoutDouble = document.getElementById('payoutDouble');
   const payoutFull = document.getElementById('payoutFull');
+  const claimBtn = document.getElementById('claimBtn');
+  const claimMsg = document.getElementById('claimMsg');
+  const autoMarkBtn = document.getElementById('autoMarkBtn');
+  const autoDabEl = document.getElementById('autoDab');
+  let selectedCardId = '';
 
   function marksKey(cardId){
     return `bingo_marks_${resolvedGame}_${cardId}`;
@@ -92,6 +124,18 @@
     try{
       localStorage.setItem(marksKey(cardId), JSON.stringify(marks));
     }catch(e){}
+  }
+
+  function buildMarksForCard(card, calledSet){
+    const nums = card.numbers || [];
+    const marks = [];
+    for(let r=0;r<nums.length;r++){
+      marks[r] = [];
+      for(let c=0;c<nums[r].length;c++){
+        marks[r][c] = calledSet.has(nums[r][c]);
+      }
+    }
+    return marks;
   }
 
   async function fetchOwnerCards(){
@@ -127,16 +171,20 @@
     payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${g.payouts.single} ${g.currency || ""}`.trim() : "-";
     payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
     payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
+    const gameActive = g.active !== false;
+    claimBtn.disabled = !(gameActive && selectedCardId);
+    if (!gameActive){
+      claimMsg.textContent = "Game ended.";
+    }
     calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
     grid.innerHTML = '';
     const header = (g.header || "BING").slice(0,4).split("");
     while(header.length < 4) header.push(" ");
     cards.forEach(card=>{
       const el = document.createElement('div'); el.className='card';
-      const claimRow = document.createElement('div');
-      claimRow.style.marginBottom = "6px";
-      claimRow.innerHTML = `<button data-card="${card.card_id}">I have BINGO!</button> <span class="muted" id="claim_${card.card_id}"></span>`;
-      el.appendChild(claimRow);
+      if (card.card_id === selectedCardId){
+        el.classList.add('selected');
+      }
       const nums = card.numbers || [];
       const localMarks = loadLocalMarks(card.card_id);
       const headerRow = document.createElement('div');
@@ -147,11 +195,12 @@
       el.appendChild(headerRow);
       const gridEl = document.createElement('div'); gridEl.className = 'bingo-grid';
       const calledSet = new Set(called);
+      const displayCalledSet = autoDabEl.checked ? calledSet : new Set();
       for(let r=0;r<nums.length;r++){
         for(let c=0;c<nums[r].length;c++){
           const n = nums[r][c];
           const cell = document.createElement('div'); cell.className='cell';
-          const isMarked = (localMarks[r] && localMarks[r][c]) || calledSet.has(n);
+          const isMarked = (localMarks[r] && localMarks[r][c]) || displayCalledSet.has(n);
           if (isMarked) cell.classList.add('marked');
           cell.textContent = n;
           cell.onclick = () => {
@@ -164,25 +213,53 @@
         }
       }
       el.appendChild(gridEl);
-      grid.appendChild(el);
-      claimRow.querySelector('button').onclick = async () => {
-        try{
-          const r = await fetch('/bingo/claim-public', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({game_id: game, card_id: card.card_id, owner_name: owner})
-          });
-          const j = await r.json();
-          const msg = document.getElementById(`claim_${card.card_id}`);
-          msg.textContent = j.message || (j.ok ? 'Claim sent.' : 'Claim failed.');
-        }catch(e){
-          const msg = document.getElementById(`claim_${card.card_id}`);
-          msg.textContent = 'Claim failed.';
-        }
+      el.onclick = () => {
+        selectedCardId = card.card_id;
+        claimMsg.textContent = "";
+        render(data, state);
       };
+      grid.appendChild(el);
     });
   }
 
+  claimBtn.addEventListener('click', async () => {
+    if (!selectedCardId){
+      return;
+    }
+    try{
+      const r = await fetch('/bingo/claim-public', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({game_id: resolvedGame, card_id: selectedCardId, owner_name: owner})
+      });
+      const j = await r.json();
+      claimMsg.textContent = j.message || (j.ok ? 'Claim sent.' : 'Claim failed.');
+    }catch(e){
+      claimMsg.textContent = 'Claim failed.';
+    }
+  });
+
+  autoMarkBtn.addEventListener('click', async () => {
+    const data = await fetchOwnerCards();
+    const state = token ? (data && data.game ? {game: data.game} : null) : await fetchState();
+    if (!data || !state || !state.game) return;
+    const called = Array.isArray(state.game.called) ? state.game.called : [];
+    const calledSet = new Set(called);
+    (data.cards || []).forEach(card => {
+      const marks = buildMarksForCard(card, calledSet);
+      saveLocalMarks(card.card_id, marks);
+    });
+    render(data, state);
+  });
+
+  autoDabEl.addEventListener('change', async () => {
+    const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
+    if (token && data && data.game){
+      render(data, {game: data.game});
+    }else{
+      render(data, state);
+    }
+  });
   async function tick(){
     const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
     if (token && data && data.game){

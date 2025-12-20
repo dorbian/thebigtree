@@ -369,6 +369,7 @@ def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Op
 
     called.add(n)
     g["called"] = sorted(list(called))
+    g["last_called"] = n
     db = _open(game_id)
     db.update(g, doc_ids=[g.doc_id])
     logger.info(f"[bingo] Called number {n} in game {game_id}")
@@ -430,9 +431,11 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
             "max_cards_per_player": g["max_cards_per_player"],
             "pot": pot,
             "called": g["called"],
+            "last_called": g.get("last_called"),
             "stage": g.get("stage", "single"),
             "payouts": pays,
             "background": (f"/bingo/assets/{g['game_id']}" if g.get("background_path") else None),
+            "active": bool(g.get("active", True)),
             "claims": claims,                      # NEW
         },
         "stats": {
