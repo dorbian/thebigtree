@@ -377,6 +377,8 @@ def buy_cards(game_id: str, owner_name: str, count: int, owner_user_id: Optional
         return [], "Game not found."
     if not g.get("active"):
         return [], "Game is not active."
+    if g.get("called"):
+        return [], "Game already started."
     owner_name = (owner_name or "").strip()
     if not owner_name:
         return [], "Owner name required."
@@ -534,6 +536,10 @@ def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
         return False, "Game not found."
+    if g.get("background_path"):
+        return False, "Background already set."
+    if g.get("called"):
+        return False, "Game already started."
     ext = os.path.splitext(src_path)[1].lower() or ".png"
     dest = os.path.join(_ASSETS, f"{game_id}{ext}")
     try:

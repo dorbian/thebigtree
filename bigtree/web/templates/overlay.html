@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -32,6 +32,18 @@
       }
       body.overlay{
         background:transparent;
+      }
+      body.overlay .sidebar{
+        display:none;
+      }
+      body.overlay .top{
+        display:none;
+      }
+      body.overlay .app-shell{
+        grid-template-columns:1fr;
+      }
+      body.overlay .content{
+        padding:12px;
       }
       .hidden{display:none !important}
       .login-screen{
@@ -415,7 +427,7 @@
         <h3>Menu</h3>
         <div class="menu-item active" id="menuBingo">
           <span>Bingo</span>
-          <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games">↻</button>
+          <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games">Γå╗</button>
         </div>
         <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
         <div class="menu-sub" id="menuGames"></div>
@@ -423,7 +435,7 @@
       </aside>
       <main class="content">
         <header class="top">
-          <div class="brand">Forest Management</div>
+          <div class="brand">Bingo Control</div>
           <label class="toggle">
             <input type="checkbox" id="overlayMode">
             Overlay mode
@@ -435,7 +447,7 @@
       <section class="panel" style="animation-delay:.05s" id="bingoPanel">
         <h2>Bingo Control</h2>
         <h3>Games</h3>
-        <div class="list" id="bGames">No games loaded.</div>
+        <div class="list" id="bGames">No active games. Create one in Discord.</div>
 
         <h3>Players</h3>
         <div class="list" id="bOwners">No players loaded.</div>
@@ -453,23 +465,7 @@
           <div class="row">
             <div>
               <label for="bGameId">Game ID</label>
-              <input id="bGameId" placeholder="game id">
-            </div>
-            <div>
-              <label for="bStage">Stage</label>
-              <select id="bStage">
-                <option value="single">Single</option>
-                <option value="double">Double</option>
-                <option value="full">Full</option>
-              </select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="bSetStage">Set stage</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="bEnd">End game</button>
+              <div id="bGameId" class="status">No game selected.</div>
             </div>
           </div>
 
@@ -484,16 +480,6 @@
             </div>
           </div>
 
-          <div class="row">
-            <div>
-              <label for="bBgFile">Background image</label>
-              <input id="bBgFile" type="file" accept="image/*">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="bUploadBg">Upload background</button>
-            </div>
-          </div>
 
           <div class="row">
             <div>
@@ -725,6 +711,16 @@
         return window.location.origin;
       }
 
+      function getGameId(){
+        return ($("bGameId").dataset.gameId || "").trim();
+      }
+
+      function setGameId(id){
+        const gid = (id || "").trim();
+        $("bGameId").dataset.gameId = gid;
+        $("bGameId").textContent = gid ? gid : "No game selected.";
+      }
+
       function setStatus(msg, kind){
         statusEl.textContent = msg;
         statusEl.className = "status" + (kind ? " " + kind : "");
@@ -789,7 +785,7 @@
         const game = (data && data.game) || {};
         currentGame = game;
         applyTheme(game.theme_color || null);
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         if (gid !== activeGameId){
           activeGameId = gid;
           lastCalledCount = 0;
@@ -801,6 +797,10 @@
         $("bPotVal").textContent = (game.pot != null ? `${game.pot} ${game.currency || ""}` : "-");
         const called = Array.isArray(game.called) ? game.called : [];
         $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
+        const buyBtn = $("bBuy");
+        if (buyBtn){
+          buyBtn.disabled = !(game.active !== false && called.length === 0);
+        }
         renderCalledGrid(called);
         const bgPath = game.background ? new URL(game.background, getBase()).toString() : "";
         const cardWrap = $("bCard");
@@ -827,7 +827,7 @@
           row.style.padding = "8px 6px";
           row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const pending = c.pending ? "pending" : "approved";
-          const label = `${c.owner_name || "Unknown"} · ${c.card_id || ""} · ${c.stage || ""} · ${pending}`;
+          const label = `${c.owner_name || "Unknown"} ┬╖ ${c.card_id || ""} ┬╖ ${c.stage || ""} ┬╖ ${pending}`;
           const wrap = document.createElement("div");
           wrap.style.display = "flex";
           wrap.style.alignItems = "center";
@@ -898,7 +898,7 @@
           }
         }
         const base = getBase();
-        const url = new URL("/bingo/play?game=" + encodeURIComponent($("bGameId").value.trim()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
+        const url = new URL("/bingo/play?game=" + encodeURIComponent(getGameId()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
         $("bEndUserLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
       }
 
@@ -930,7 +930,7 @@
       }
 
       async function markNumber(num){
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         if (!gid || !currentCard || !Array.isArray(currentCard.numbers)){
           setStatus("Load a card first.", "err");
           return;
@@ -968,7 +968,7 @@
       function renderGamesList(games){
         const el = $("bGames");
         if (!Array.isArray(games) || games.length === 0){
-          el.textContent = "No games found.";
+          el.textContent = "No active games. Create one in Discord.";
           return;
         }
         el.innerHTML = "";
@@ -977,13 +977,11 @@
           item.style.padding = "8px 6px";
           item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const title = g.title || "Bingo";
-          const stage = g.stage || "single";
-          const active = g.active ? "active" : "ended";
-          item.innerHTML = `<strong>${title}</strong> · ${active} · ${stage} · <code>${g.game_id}</code>`;
+          const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
+          item.innerHTML = `<strong>${title}</strong> · ${created}`;
           item.style.cursor = "pointer";
           item.onclick = () => {
-            $("bGameId").value = g.game_id || "";
-            $("bStage").value = g.stage || "single";
+            setGameId(g.game_id || "");
             refreshBingo();
             loadOwnersForGame();
           };
@@ -1002,18 +1000,18 @@
               const row = document.createElement("div");
               row.className = "menu-game";
               const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-              row.textContent = g.title ? `${g.title} · ${created}` : created;
+          item.innerHTML = `<strong>${title}</strong> · ${created}`;
+              row.textContent = g.title ? `${g.title} ┬╖ ${created}` : created;
               row.onclick = () => {
-                $("bGameId").value = g.game_id || "";
-                $("bStage").value = g.stage || "single";
+                setGameId(g.game_id || "");
                 showPanel("bingo");
                 refreshBingo();
                 loadOwnersForGame();
-                $("menuSelectedGame").textContent = g.title ? `${g.title} Aú ${created}` : created;
+                $("menuSelectedGame").textContent = g.title ? `${g.title} · ${created}` : created;
               };
               menu.appendChild(row);
-              if (g.game_id && g.game_id === $("bGameId").value.trim()){
-                currentLabel = g.title ? `${g.title} Aú ${created}` : created;
+              if (g.game_id && g.game_id === getGameId()){
+                currentLabel = g.title ? `${g.title} · ${created}` : created;
               }
             });
             if (!list.length){
@@ -1050,7 +1048,7 @@
           item.style.padding = "8px 6px";
           item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           item.style.cursor = "pointer";
-          item.innerHTML = `<strong>${o.owner_name}</strong> · ${o.cards} cards`;
+          item.innerHTML = `<strong>${o.owner_name}</strong> ┬╖ ${o.cards} cards`;
           item.onclick = () => {
             $("bOwner").value = o.owner_name || "";
             loadOwnerCards(o.owner_name || "");
@@ -1061,7 +1059,7 @@
       }
 
       async function loadOwnersForGame(){
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         $("bOwnerCards").textContent = "No tickets loaded.";
         if (!gid){
           $("bOwners").textContent = "No players loaded.";
@@ -1114,7 +1112,7 @@
           const endUser = document.createElement("div");
           endUser.style.marginTop = "6px";
           const base = getBase();
-          const url = new URL("/bingo/play?game=" + encodeURIComponent($("bGameId").value.trim()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
+          const url = new URL("/bingo/play?game=" + encodeURIComponent(getGameId()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
           endUser.innerHTML = `<a href="${url}" target="_blank" rel="noreferrer">Open end-user view</a>`;
           wrap.appendChild(endUser);
           el.appendChild(wrap);
@@ -1122,7 +1120,7 @@
       }
 
       async function loadOwnerCards(ownerName){
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         if (!gid || !ownerName){
           setStatus("Enter game id and owner name.", "err");
           return;
@@ -1156,7 +1154,7 @@
         saveSettings();
         document.getElementById("loginView").classList.add("hidden");
         document.getElementById("appView").classList.remove("hidden");
-        setStatus("Welcome to Forest Management.", "ok");
+        setStatus("Welcome to Bingo Control.", "ok");
         loadGamesMenu();
         showPanel("bingo");
       });
@@ -1188,7 +1186,7 @@
             fd.append("file", bgFile);
             await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
           }
-          $("bGameId").value = data.game.game_id || "";
+          setGameId(data.game.game_id || "");
           $("bCreateModal").classList.remove("show");
           setStatus("Bingo game created.", "ok");
           renderBingoState({game: data.game});
@@ -1200,7 +1198,7 @@
       });
 
       async function refreshBingo(){
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         if (!gid){
           setStatus("Enter a game id.", "err");
           return;
@@ -1215,26 +1213,13 @@
       }
 
       $("bRefresh").addEventListener("click", refreshBingo);
-      $("bSetStage").addEventListener("click", async () => {
-        try{
-          const data = await jsonFetch("/bingo/stage", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({game_id: $("bGameId").value.trim(), stage: $("bStage").value})
-          });
-          setStatus("Stage updated.", "ok");
-          await refreshBingo();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
 
       $("bAdvanceStage").addEventListener("click", async () => {
         try{
           const data = await jsonFetch("/bingo/advance-stage", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({game_id: $("bGameId").value.trim()})
+            body: JSON.stringify({game_id: getGameId()})
           });
           setStatus(data.ended ? "Game ended." : "Stage advanced.", "ok");
           await refreshBingo();
@@ -1243,26 +1228,13 @@
         }
       });
 
-      $("bEnd").addEventListener("click", async () => {
-        try{
-          await jsonFetch("/bingo/end", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({game_id: $("bGameId").value.trim()})
-          });
-          setStatus("Game ended.", "ok");
-          await refreshBingo();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
 
       $("bRoll").addEventListener("click", async () => {
         try{
           await jsonFetch("/bingo/roll", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({game_id: $("bGameId").value.trim()})
+            body: JSON.stringify({game_id: getGameId()})
           });
           setStatus("Pulled random number.", "ok");
           await refreshBingo();
@@ -1271,33 +1243,11 @@
         }
       });
 
-      $("bUploadBg").addEventListener("click", async () => {
-        const gid = $("bGameId").value.trim();
-        const file = $("bBgFile").files[0];
-        if (!gid || !file){
-          setStatus("Select a game and image.", "err");
-          return;
-        }
-        const fd = new FormData();
-        fd.append("game_id", gid);
-        fd.append("file", file);
-        try{
-          const res = await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
-          if (!res.ok){
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || "Upload failed");
-          }
-          setStatus("Background uploaded.", "ok");
-          await refreshBingo();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
 
       $("bBuy").addEventListener("click", async () => {
         try{
           const body = {
-            game_id: $("bGameId").value.trim(),
+            game_id: getGameId(),
             owner_name: $("bOwner").value.trim(),
             owner_user_id: $("bOwnerId").value.trim() || null,
             quantity: Number($("bQty").value || 1)
@@ -1317,7 +1267,7 @@
       });
 
       $("bLoadCard").addEventListener("click", async () => {
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         const cardId = $("bCardId").value.trim();
         if (!gid || !cardId){
           setStatus("Enter game id and card id.", "err");
@@ -1335,7 +1285,7 @@
       });
 
       $("bViewOwner").addEventListener("click", () => {
-        const gid = $("bGameId").value.trim();
+        const gid = getGameId();
         const owner = $("bOwner").value.trim();
         if (!gid || !owner){
           setStatus("Enter game id and owner name.", "err");
@@ -1495,3 +1445,14 @@
     </script>
   </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
