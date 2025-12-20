@@ -1,21 +1,38 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bingo – Owner Cards</title>
+<title>Bingo — My Cards</title>
 <style>
-  body{font-family:sans-serif;margin:0;padding:16px;background:#0b0f0c;color:#e5f4ea}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
-  .card{border:1px solid #335;border-radius:12px;padding:12px;background:#10161a}
+  :root{
+    --bg:#0b1611;
+    --panel:#0f1e16;
+    --line:#1f3a2b;
+    --ink:#e8f7ef;
+    --muted:#9bb6a7;
+    --accent:#9de07d;
+    --accent-2:#3ccf8e;
+  }
+  body{font-family:"Palatino Linotype","Book Antiqua",serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)}
   .muted{opacity:.7}
+  .summary{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+  .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
+  .cell.marked{background:rgba(60,207,142,.2);border-color:rgba(60,207,142,.7);color:#d6ffe9}
+  .called{font-size:12px;color:var(--muted);margin:10px 0;padding:8px;border:1px dashed rgba(255,255,255,.12);border-radius:10px}
 </style>
 
 <!--
   Expected query params:
     ?game=<id>&owner=<url-encoded name>
+  This view stores local marks in localStorage.
 -->
-<h1>Bingo – Owner Cards</h1>
+<h1>Bingo — My Cards</h1>
 <p class="muted">Use ?game=&amp;owner= in the URL to bind this view.</p>
-
+<div class="summary" id="summary"></div>
+<div class="called" id="called">Called numbers: -</div>
 <div id="list" class="grid"></div>
 
 <script>
@@ -23,37 +40,82 @@
   const game = params.get('game') || '';
   const owner = params.get('owner') || '';
   const grid = document.getElementById('list');
+  const summary = document.getElementById('summary');
+  const calledEl = document.getElementById('called');
+
+  function marksKey(cardId){
+    return `bingo_marks_${game}_${cardId}`;
+  }
+
+  function loadLocalMarks(cardId){
+    try{
+      const raw = localStorage.getItem(marksKey(cardId));
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+
+  function saveLocalMarks(cardId, marks){
+    try{
+      localStorage.setItem(marksKey(cardId), JSON.stringify(marks));
+    }catch(e){}
+  }
 
   async function fetchOwnerCards(){
     const r = await fetch(`/bingo/${encodeURIComponent(game)}/owner/${encodeURIComponent(owner)}/cards`);
     return r.ok ? await r.json() : null;
   }
 
-  function render(data){
-    if(!data){ grid.innerHTML = '<p>Missing or invalid query parameters.</p>'; return; }
+  async function fetchState(){
+    const r = await fetch(`/bingo/${encodeURIComponent(game)}`);
+    return r.ok ? await r.json() : null;
+  }
+
+  function render(data, state){
+    if(!data || !state){ grid.innerHTML = '<p>Missing or invalid query parameters.</p>'; return; }
     const cards = data.cards || [];
+    const g = state.game || {};
+    const called = Array.isArray(g.called) ? g.called : [];
+    summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
+    calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
     grid.innerHTML = '';
+    const header = (g.header || "BING").slice(0,4).split("");
+    while(header.length < 4) header.push(" ");
     cards.forEach(card=>{
       const el = document.createElement('div'); el.className='card';
       const nums = card.numbers || [];
-      let html = `<div><strong>${data.owner}</strong> — Card ${card.card_id}</div>`;
-      html += '<table style="border-collapse:collapse;margin-top:8px">';
+      const localMarks = loadLocalMarks(card.card_id);
+      const headerRow = document.createElement('div');
+      headerRow.className = 'header';
+      header.forEach(h=>{
+        const d = document.createElement('div'); d.textContent = h; headerRow.appendChild(d);
+      });
+      el.appendChild(headerRow);
+      const gridEl = document.createElement('div'); gridEl.className = 'bingo-grid';
+      const calledSet = new Set(called);
       for(let r=0;r<nums.length;r++){
-        html += '<tr>';
         for(let c=0;c<nums[r].length;c++){
           const n = nums[r][c];
-          html += `<td style="border:1px solid #335;padding:6px">${n}</td>`;
+          const cell = document.createElement('div'); cell.className='cell';
+          const isMarked = (localMarks[r] && localMarks[r][c]) || calledSet.has(n);
+          if (isMarked) cell.classList.add('marked');
+          cell.textContent = n;
+          cell.onclick = () => {
+            localMarks[r] = localMarks[r] || [];
+            localMarks[r][c] = !localMarks[r][c];
+            saveLocalMarks(card.card_id, localMarks);
+            render(data, state);
+          };
+          gridEl.appendChild(cell);
         }
-        html += '</tr>';
       }
-      html += '</table>';
-      el.innerHTML = html;
+      el.appendChild(gridEl);
       grid.appendChild(el);
     });
   }
 
   async function tick(){
-    render(await fetchOwnerCards());
+    const [data, state] = await Promise.all([fetchOwnerCards(), fetchState()]);
+    render(data, state);
   }
   setInterval(tick, 2000);
   tick();

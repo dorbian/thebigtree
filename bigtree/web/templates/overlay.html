@@ -183,6 +183,36 @@
         text-decoration:none;
       }
       .links a:hover{text-decoration:underline}
+      .modal{
+        position:fixed;
+        inset:0;
+        background:rgba(6,12,9,.7);
+        display:none;
+        align-items:center;
+        justify-content:center;
+        z-index:20;
+      }
+      .modal.show{display:flex}
+      .modal-card{
+        width:min(720px,92vw);
+        background:var(--panel);
+        border:1px solid var(--line);
+        border-radius:20px;
+        padding:18px;
+        box-shadow:var(--shadow);
+      }
+      .modal-header{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom:10px;
+      }
+      .modal-title{
+        font-size:16px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--accent-2);
+      }
       .bingo-summary{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
@@ -324,7 +354,7 @@
           </div>
           <div>
             <label>&nbsp;</label>
-            <button class="btn-ghost" id="bNewGame">Add new game</button>
+            <button class="btn-ghost" id="bNewGame">Create game</button>
           </div>
         </div>
         <div class="list" id="bGames">No games loaded.</div>
@@ -338,40 +368,6 @@
         </div>
         <div class="list" id="bOwners">No players loaded.</div>
         <div class="list" id="bOwnerCards">No tickets loaded.</div>
-
-        <h3>Create game</h3>
-        <div class="row">
-          <div>
-            <label for="bTitle">Title</label>
-            <input id="bTitle" placeholder="Bingo Night">
-            </div>
-            <div>
-              <label for="bPrice">Price</label>
-              <input id="bPrice" type="number" value="1000">
-            </div>
-            <div>
-              <label for="bCurrency">Currency</label>
-              <input id="bCurrency" value="gil">
-            </div>
-            <div>
-              <label for="bMaxCards">Max cards</label>
-              <input id="bMaxCards" type="number" value="10">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="bChannel">Channel ID</label>
-              <input id="bChannel" placeholder="0">
-            </div>
-            <div>
-              <label for="bCreatedBy">Created by</label>
-              <input id="bCreatedBy" placeholder="0">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="bCreate">Create</button>
-            </div>
-          </div>
 
           <h3>Active game</h3>
           <div class="row">
@@ -573,6 +569,46 @@
         </section>
       </div>
     </div>
+    <div class="modal" id="bCreateModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Create Bingo Game</div>
+          <button class="btn-ghost" id="bCloseCreate">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="bTitle">Title</label>
+            <input id="bTitle" placeholder="Bingo Night">
+          </div>
+          <div>
+            <label for="bPrice">Price</label>
+            <input id="bPrice" type="number" value="1000">
+          </div>
+          <div>
+            <label for="bCurrency">Currency</label>
+            <input id="bCurrency" value="gil">
+          </div>
+          <div>
+            <label for="bMaxCards">Max cards</label>
+            <input id="bMaxCards" type="number" value="10">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="bChannel">Channel ID</label>
+            <input id="bChannel" placeholder="0">
+          </div>
+          <div>
+            <label for="bCreatedBy">Created by</label>
+            <input id="bCreatedBy" placeholder="0">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="bCreate">Create</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -663,7 +699,7 @@
           headerEl.appendChild(h);
         });
         if (!card || !Array.isArray(card.numbers)){
-          gridEl.innerHTML = "<div style='grid-column:1/-1;color:#8fa3c7'>No card loaded.</div>";
+          gridEl.innerHTML = "<div style='grid-column:1/-1;color:var(--muted)'>No card loaded.</div>";
           $("bEndUserLink").textContent = "No card loaded.";
           return;
         }
@@ -884,7 +920,11 @@
       });
 
       $("bNewGame").addEventListener("click", () => {
+        $("bCreateModal").classList.add("show");
         $("bTitle").focus();
+      });
+      $("bCloseCreate").addEventListener("click", () => {
+        $("bCreateModal").classList.remove("show");
       });
 
       $("saveConn").addEventListener("click", saveSettings);
@@ -909,8 +949,9 @@
             body: JSON.stringify(body)
           });
           $("bGameId").value = data.game.game_id || "";
+          $("bCreateModal").classList.remove("show");
           setStatus("Bingo game created.", "ok");
-          showList($("bState"), data.game);
+          renderBingoState({game: data.game});
         }catch(err){
           setStatus(err.message, "err");
         }

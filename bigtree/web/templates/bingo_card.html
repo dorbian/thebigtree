@@ -1,10 +1,24 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bingo – Play</title>
+<title>Bingo – Card</title>
 <style>
-  body{font-family:sans-serif;margin:0;padding:16px;background:#0b0f0c;color:#e5f4ea}
+  :root{
+    --bg:#0b1611;
+    --panel:#0f1e16;
+    --line:#1f3a2b;
+    --ink:#e8f7ef;
+    --muted:#9bb6a7;
+    --accent:#9de07d;
+    --accent-2:#3ccf8e;
+  }
+  body{font-family:"Palatino Linotype","Book Antiqua",serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
   .muted{opacity:.7}
+  .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+  .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
+  .cell.marked{background:rgba(60,207,142,.2);border-color:rgba(60,207,142,.7);color:#d6ffe9}
+  .called{font-size:12px;color:var(--muted);margin:10px 0;padding:8px;border:1px dashed rgba(255,255,255,.12);border-radius:10px}
 </style>
 <!--
   Expected query params:
@@ -35,24 +49,56 @@
     return r.ok ? await r.json() : null;
   }
 
+  function marksKey(){
+    return `bingo_marks_${game}_${cardId}`;
+  }
+
+  function loadLocalMarks(){
+    try{
+      const raw = localStorage.getItem(marksKey());
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+
+  function saveLocalMarks(marks){
+    try{
+      localStorage.setItem(marksKey(), JSON.stringify(marks));
+    }catch(e){}
+  }
+
   function render(card, state){
     if(!card || !state){ app.innerHTML = '<p>Missing or invalid game/card parameters.</p>'; return; }
     const called = (state.game && state.game.called) || [];
+    const header = (state.game && state.game.header) || "BING";
     const nums = card.numbers || [];
-    const marks = card.marks || [];
+    const localMarks = loadLocalMarks();
     let html = `<div><strong>Owner:</strong> ${card.owner_name || ''}</div>`;
-    html += '<table style="border-collapse:collapse;margin-top:12px">';
+    html += `<div class="called">${called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -"}</div>`;
+    html += '<div class="header">';
+    const letters = header.slice(0,4).split("");
+    while(letters.length < 4) letters.push(" ");
+    letters.forEach(l => { html += `<div>${l}</div>`; });
+    html += '</div>';
+    html += '<div class="bingo-grid">';
     for(let r=0;r<nums.length;r++){
-      html += '<tr>';
       for(let c=0;c<nums[r].length;c++){
         const n = nums[r][c];
-        const marked = marks.some(m=>m[0]===r && m[1]===c) || called.includes(n);
-        html += `<td style="border:1px solid #335;padding:8px;${marked?'background:#143;':''}">${n}</td>`;
+        const marked = (localMarks[r] && localMarks[r][c]) || called.includes(n);
+        html += `<div class="cell ${marked?'marked':''}" data-r="${r}" data-c="${c}">${n}</div>`;
       }
-      html += '</tr>';
     }
-    html += '</table>';
+    html += '</div>';
     app.innerHTML = html;
+    app.querySelectorAll('.cell').forEach(el=>{
+      el.addEventListener('click', () => {
+        const r = Number(el.dataset.r);
+        const c = Number(el.dataset.c);
+        localMarks[r] = localMarks[r] || [];
+        localMarks[r][c] = !localMarks[r][c];
+        saveLocalMarks(localMarks);
+        render(card, state);
+      });
+    });
   }
 
   async function tick(){
