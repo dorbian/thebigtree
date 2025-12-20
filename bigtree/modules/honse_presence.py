@@ -15,7 +15,14 @@ def _extract_count(entries: List[Dict[str, Any]], hosts: List[str]) -> Optional[
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        hostname = str(entry.get("hostname") or "").lower()
+        hostname = str(entry.get("hostname") or "").lower().strip()
+        if not hostname:
+            continue
+        if "://" in hostname:
+            parsed = urlparse(hostname)
+            hostname = (parsed.hostname or "").lower().strip()
+        if ":" in hostname:
+            hostname = hostname.split(":", 1)[0].strip()
         if not hostname:
             continue
         if any(hostname == h or hostname.endswith(h) for h in hosts):
