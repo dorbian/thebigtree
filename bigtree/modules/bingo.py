@@ -182,7 +182,8 @@ def create_game(
         "game_id": game_id,
         "channel_id": int(channel_id),
         "title": (title or "").strip() or "Bingo",
-        "header": _normalize_header(header_text),  # NEW
+        "header": _normalize_header(header_text),
+        "header_text": (header_text or "").strip() or None,
         "price": int(price),
         "currency": (currency or "").strip() or "gil",
         "max_cards_per_player": int(max_cards_per_player),
@@ -523,6 +524,7 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
             "channel_id": g["channel_id"],
             "title": g["title"],
             "header": g.get("header", "BING"),
+            "header_text": g.get("header_text") or g.get("header", "BING"),
             "price": g["price"],
             "currency": g["currency"],
             "max_cards_per_player": g["max_cards_per_player"],

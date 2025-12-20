@@ -83,12 +83,13 @@
       ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
       : "";
     applyTheme(state.game && state.game.theme_color ? state.game.theme_color : null);
-    const header = (state.game && state.game.header) || "BING";
+    const header = (state.game && (state.game.header_text || state.game.header)) || "BING";
     const nums = card.numbers || [];
     const localMarks = loadLocalMarks();
     let html = `<div><strong>Owner:</strong> ${card.owner_name || ''}</div>`;
     html += `<div class="called">${called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -"}</div>`;
     html += `<div style="margin:8px 0"><button id="claimBtn">I have BINGO!</button><span id="claimMsg" class="muted" style="margin-left:8px"></span></div>`;
+    html += `<div class="muted" style="margin-bottom:6px">${header}</div>`;
     html += '<div class="header">';
     const letters = header.slice(0,4).split("");
     while(letters.length < 4) letters.push(" ");

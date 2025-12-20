@@ -808,7 +808,7 @@
           lastCalloutNumber = null;
         }
         $("bTitleVal").textContent = game.title || "-";
-        $("bHeaderVal").textContent = game.header || "BING";
+        $("bHeaderVal").textContent = game.header_text || game.header || "BING";
         $("bStageVal").textContent = game.stage || "-";
         $("bPotVal").textContent = (game.pot != null ? `${game.pot} ${game.currency || ""}` : "-");
         const called = Array.isArray(game.called) ? game.called : [];

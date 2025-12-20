@@ -92,6 +92,10 @@
     <div class="panel-title">Stage</div>
     <div id="stageValue">-</div>
   </div>
+  <div class="panel" id="headerPanel">
+    <div class="panel-title">Header</div>
+    <div id="headerValue">-</div>
+  </div>
   <div class="panel" style="flex:1 1 280px">
     <div class="panel-title">Payouts</div>
     <div class="payouts">
@@ -125,6 +129,7 @@
   const calledEl = document.getElementById('called');
   const potValue = document.getElementById('potValue');
   const stageValue = document.getElementById('stageValue');
+  const headerValue = document.getElementById('headerValue');
   const payoutSingle = document.getElementById('payoutSingle');
   const payoutDouble = document.getElementById('payoutDouble');
   const payoutFull = document.getElementById('payoutFull');
@@ -199,6 +204,7 @@
     payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
     payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
     stageValue.textContent = g.stage || "-";
+    headerValue.textContent = g.header_text || g.header || "BING";
     if (!selectedCardId && cards.length){
       selectedCardId = cards[0].card_id;
     }
