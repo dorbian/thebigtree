@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -8,6 +9,9 @@ import requests
 HONSE_BASE_URL = os.getenv("HONSE_BASE_URL", "https://server.thebigtree.life").rstrip("/")
 HONSE_REFRESH_SECONDS = int(os.getenv("HONSE_REFRESH_SECONDS", "300"))
 HONSE_TIMEOUT_SECONDS = int(os.getenv("HONSE_TIMEOUT_SECONDS", "10"))
+HONSE_DEBUG = os.getenv("HONSE_PRESENCE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+
+logger = logging.getLogger("bigtree")
 
 
 def _extract_count(entries: List[Dict[str, Any]], hosts: List[str]) -> Optional[int]:
@@ -38,10 +42,25 @@ def _get_json(url: str) -> Optional[Any]:
     try:
         resp = requests.get(url, timeout=HONSE_TIMEOUT_SECONDS)
         if not resp.ok:
+            if HONSE_DEBUG:
+                logger.warning("[honse_presence] %s -> %s", url, resp.status_code)
             return None
         return resp.json()
     except Exception:
+        if HONSE_DEBUG:
+            logger.warning("[honse_presence] %s -> request failed", url)
         return None
+
+
+def _extract_entries(data: Any) -> List[Dict[str, Any]]:
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    if isinstance(data, dict):
+        for key in ("servers", "data", "items", "result"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [x for x in val if isinstance(x, dict)]
+    return []
 
 
 def get_online_count() -> Optional[int]:
@@ -59,12 +78,16 @@ def get_online_count() -> Optional[int]:
         hosts.append(base_host.replace("server.", "", 1))
     summary_url = f"{HONSE_BASE_URL}/api/federation/servers/summary"
     data = _get_json(summary_url)
-    if isinstance(data, list):
-        count = _extract_count(data, hosts)
+    entries = _extract_entries(data)
+    if entries:
+        count = _extract_count(entries, hosts)
         if count is not None:
             return count
     details_url = f"{HONSE_BASE_URL}/api/federation/servers"
     data = _get_json(details_url)
-    if isinstance(data, list):
-        return _extract_count(data, hosts)
+    entries = _extract_entries(data)
+    if entries:
+        return _extract_count(entries, hosts)
+    if HONSE_DEBUG:
+        logger.warning("[honse_presence] no entries for %s", base_host)
     return None

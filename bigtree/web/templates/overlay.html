@@ -447,9 +447,6 @@
       <div class="grid">
       <section class="panel" style="animation-delay:.05s" id="bingoPanel">
         <h2>Bingo Control</h2>
-        <h3>Games</h3>
-        <div class="list" id="bGames">No active games. Create one in Discord.</div>
-
         <h3>Players</h3>
         <div class="list" id="bOwners">No players loaded.</div>
 
@@ -487,14 +484,6 @@
 
 
           <div class="row">
-            <div>
-              <label for="bCardId">View card ID</label>
-              <input id="bCardId" placeholder="card id">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="bLoadCard">Load card</button>
-            </div>
             <div>
               <label>&nbsp;</label>
               <button class="btn-ghost" id="bViewOwner">View tickets</button>
@@ -537,12 +526,6 @@
           <div class="bingo-card" id="bCard">
             <div class="bingo-header" id="bCardHeader"></div>
             <div class="bingo-grid" id="bCardGrid"></div>
-          </div>
-          <div class="row links">
-            <div>
-              <span class="pill">End-user view</span>
-              <div id="bEndUserLink">No card loaded.</div>
-            </div>
           </div>
         </section>
 
@@ -893,7 +876,6 @@
         });
         if (!card || !Array.isArray(card.numbers)){
           gridEl.innerHTML = "<div style='grid-column:1/-1;color:var(--muted)'>No card loaded.</div>";
-          $("bEndUserLink").textContent = "No card loaded.";
           return;
         }
         const calledSet = new Set(Array.isArray(called) ? called : []);
@@ -910,9 +892,6 @@
             gridEl.appendChild(cell);
           }
         }
-        const base = getBase();
-        const url = new URL("/bingo/play?game=" + encodeURIComponent(getGameId()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
-        $("bEndUserLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
       }
 
       function renderCalledGrid(called){
@@ -1157,19 +1136,12 @@
               if (marked) cell.classList.add("marked");
               cell.textContent = value;
               cell.onclick = () => {
-                $("bCardId").value = card.card_id;
                 renderCard(card, called, header);
               };
               grid.appendChild(cell);
             });
           });
           wrap.appendChild(grid);
-          const endUser = document.createElement("div");
-          endUser.style.marginTop = "6px";
-          const base = getBase();
-          const url = new URL("/bingo/play?game=" + encodeURIComponent(getGameId()) + "&card=" + encodeURIComponent(card.card_id), base).toString();
-          endUser.innerHTML = `<a href="${url}" target="_blank" rel="noreferrer">Open end-user view</a>`;
-          wrap.appendChild(endUser);
           el.appendChild(wrap);
         });
       }
@@ -1286,12 +1258,21 @@
 
       $("bStart").addEventListener("click", async () => {
         try{
+          const gid = getGameId();
+          if (!gid){
+            setStatus("Select a game first.", "err");
+            return;
+          }
           await jsonFetch("/bingo/start", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({game_id: getGameId()})
+            body: JSON.stringify({game_id: gid})
           });
           setStatus("Game started. Buying disabled.", "ok");
+          if (currentGame && currentGame.game_id === gid){
+            currentGame.started = true;
+            renderBingoState({game: currentGame});
+          }
           await refreshBingo();
         }catch(err){
           setStatus(err.message, "err");
@@ -1322,33 +1303,12 @@
             owner_user_id: $("bOwnerId").value.trim() || null,
             quantity: Number($("bQty").value || 1)
           };
-          const data = await jsonFetch("/bingo/buy", {
+          await jsonFetch("/bingo/buy", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
           });
           setStatus("Cards bought.", "ok");
-          if (data && data.cards && data.cards[0] && data.cards[0].card_id){
-            $("bCardId").value = data.cards[0].card_id;
-          }
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("bLoadCard").addEventListener("click", async () => {
-        const gid = getGameId();
-        const cardId = $("bCardId").value.trim();
-        if (!gid || !cardId){
-          setStatus("Enter game id and card id.", "err");
-          return;
-        }
-        try{
-          const state = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
-          const cardData = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/card/" + encodeURIComponent(cardId), {method:"GET"}, false);
-          renderBingoState(state);
-          renderCard(cardData.card, state.game && state.game.called, state.game && state.game.header);
-          setStatus("Card loaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
         }
