@@ -29,7 +29,23 @@ class _Cfg:
     jwt_algorithms: tuple[str, ...] = ("HS256",)
 
 def _cfg() -> _Cfg:
-    c = bigtree.config.config.get("WEB", {})
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            sec = bigtree.settings.section("WEB")
+            if isinstance(sec, dict):
+                c = sec
+            else:
+                c = {}
+        else:
+            c = {}
+    except Exception:
+        c = {}
+    if not c:
+        try:
+            cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+            c = cfg.get("WEB", {}) or {}
+        except Exception:
+            c = {}
     return _Cfg(
         api_keys=set(c.get("api_keys", []) or []),
         scopes_map=c.get("api_key_scopes", {}) or {},

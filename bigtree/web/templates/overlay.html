@@ -221,13 +221,26 @@
       </section>
 
       <div class="grid">
-        <section class="panel" style="animation-delay:.05s">
-          <h2>Bingo Control</h2>
-          <h3>Create game</h3>
-          <div class="row">
-            <div>
-              <label for="bTitle">Title</label>
-              <input id="bTitle" placeholder="Bingo Night">
+      <section class="panel" style="animation-delay:.05s">
+        <h2>Bingo Control</h2>
+        <h3>Games</h3>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="bLoadGames">Refresh list</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="bNewGame">Add new game</button>
+          </div>
+        </div>
+        <div class="list" id="bGames">No games loaded.</div>
+
+        <h3>Create game</h3>
+        <div class="row">
+          <div>
+            <label for="bTitle">Title</label>
+            <input id="bTitle" placeholder="Bingo Night">
             </div>
             <div>
               <label for="bPrice">Price</label>
@@ -473,6 +486,45 @@
       function showList(el, data){
         el.textContent = JSON.stringify(data, null, 2);
       }
+
+      function renderGamesList(games){
+        const el = $("bGames");
+        if (!Array.isArray(games) || games.length === 0){
+          el.textContent = "No games found.";
+          return;
+        }
+        el.innerHTML = "";
+        games.forEach(g => {
+          const item = document.createElement("div");
+          item.style.padding = "8px 6px";
+          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          const title = g.title || "Bingo";
+          const stage = g.stage || "single";
+          const active = g.active ? "active" : "ended";
+          item.innerHTML = `<strong>${title}</strong> · ${active} · ${stage} · <code>${g.game_id}</code>`;
+          item.style.cursor = "pointer";
+          item.onclick = () => {
+            $("bGameId").value = g.game_id || "";
+            $("bStage").value = g.stage || "single";
+            refreshBingo();
+          };
+          el.appendChild(item);
+        });
+      }
+
+      $("bLoadGames").addEventListener("click", async () => {
+        try{
+          const data = await jsonFetch("/bingo/games", {method:"GET"});
+          renderGamesList(data.games || []);
+          setStatus("Game list updated.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bNewGame").addEventListener("click", () => {
+        $("bTitle").focus();
+      });
 
       $("saveConn").addEventListener("click", saveSettings);
       overlayToggle.addEventListener("change", () => {
