@@ -190,6 +190,7 @@ def create_game(
         "created_at": _now(),
         "pot": 0,
         "called": [],
+        "started": False,
         "stage": "single",  # NEW
         "active": True,
         "background_path": None,  # file path under assets
@@ -377,7 +378,7 @@ def buy_cards(game_id: str, owner_name: str, count: int, owner_user_id: Optional
         return [], "Game not found."
     if not g.get("active"):
         return [], "Game is not active."
-    if g.get("called"):
+    if g.get("started") or g.get("called"):
         return [], "Game already started."
     owner_name = (owner_name or "").strip()
     if not owner_name:
@@ -430,10 +431,25 @@ def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Op
     called.add(n)
     g["called"] = sorted(list(called))
     g["last_called"] = n
+    g["started"] = True
     db = _open(game_id)
     db.update(g, doc_ids=[g.doc_id])
     logger.info(f"[bingo] Called number {n} in game {game_id}")
     return g, None
+
+def start_game(game_id: str) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    if not g.get("active"):
+        return False, "Game is not active."
+    if g.get("started"):
+        return True, "Already started."
+    g["started"] = True
+    db = _open(game_id)
+    db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Game {game_id} started.")
+    return True, "OK"
 
 def call_random_number(game_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     g = get_game(game_id)
@@ -492,6 +508,7 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
             "pot": pot,
             "called": g["called"],
             "last_called": g.get("last_called"),
+            "started": bool(g.get("started")),
             "stage": g.get("stage", "single"),
             "payouts": pays,
             "background": (f"/bingo/assets/{g['game_id']}" if g.get("background_path") else None),

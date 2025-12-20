@@ -160,6 +160,15 @@ async def bingo_roll(req: web.Request):
         return web.json_response({"ok": False, "error": val}, status=501)
     return web.json_response({"ok": True, "called": getattr(val, "get", lambda _k, _d=None: None)("called", val)})
 
+@route("POST", "/bingo/start", scopes=["bingo:admin"])
+async def bingo_start(req: web.Request):
+    body = await req.json()
+    g = str(body.get("game_id") or "")
+    ok, msg = bingo.start_game(g)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True})
+
 @route("POST", "/bingo/mark", scopes=["bingo:admin"])
 async def bingo_mark(req: web.Request):
     b = await req.json()

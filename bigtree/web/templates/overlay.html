@@ -473,6 +473,10 @@
           <div class="row">
             <div>
               <label>&nbsp;</label>
+              <button class="btn-ghost" id="bStart">Start game</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
               <button id="bRoll">Pull random number</button>
             </div>
             <div>
@@ -649,6 +653,10 @@
             <input id="bTitle" placeholder="Bingo Night">
           </div>
           <div>
+            <label for="bHeader">Header</label>
+            <input id="bHeader" placeholder="BING" maxlength="4">
+          </div>
+          <div>
             <label for="bPrice">Price</label>
             <input id="bPrice" type="number" value="1000">
           </div>
@@ -800,7 +808,11 @@
         $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
         const buyBtn = $("bBuy");
         if (buyBtn){
-          buyBtn.disabled = !(game.active !== false && called.length === 0);
+          buyBtn.disabled = !(game.active !== false && !game.started && called.length === 0);
+        }
+        const startBtn = $("bStart");
+        if (startBtn){
+          startBtn.disabled = !(game.active !== false && !game.started);
         }
         renderCalledGrid(called);
         const bgPath = game.background ? new URL(game.background, getBase()).toString() : "";
@@ -979,7 +991,7 @@
           item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const title = g.title || "Bingo";
           const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-          item.innerHTML = `<strong>${title}</strong> · ${created}`;
+          item.innerHTML = `<strong>${title}</strong> - ${created}`;
           item.style.cursor = "pointer";
           item.onclick = () => {
             setGameId(g.game_id || "");
@@ -1001,18 +1013,17 @@
               const row = document.createElement("div");
               row.className = "menu-game";
               const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-          item.innerHTML = `<strong>${title}</strong> · ${created}`;
-              row.textContent = g.title ? `${g.title} ┬╖ ${created}` : created;
+              row.textContent = g.title ? `${g.title} - ${created}` : created;
               row.onclick = () => {
                 setGameId(g.game_id || "");
                 showPanel("bingo");
                 refreshBingo();
                 loadOwnersForGame();
-                $("menuSelectedGame").textContent = g.title ? `${g.title} · ${created}` : created;
+                $("menuSelectedGame").textContent = g.title ? `${g.title} - ${created}` : created;
               };
               menu.appendChild(row);
               if (g.game_id && g.game_id === getGameId()){
-                currentLabel = g.title ? `${g.title} · ${created}` : created;
+                currentLabel = g.title ? `${g.title} - ${created}` : created;
               }
             });
             if (!list.length){
@@ -1172,6 +1183,7 @@
         try{
           const body = {
             title: $("bTitle").value,
+            header_text: $("bHeader").value,
             price: Number($("bPrice").value || 0),
             currency: $("bCurrency").value || "gil",
             max_cards_per_player: Number($("bMaxCards").value || 10),
@@ -1227,6 +1239,20 @@
             body: JSON.stringify({game_id: getGameId()})
           });
           setStatus(data.ended ? "Game ended." : "Stage advanced.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("bStart").addEventListener("click", async () => {
+        try{
+          await jsonFetch("/bingo/start", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: getGameId()})
+          });
+          setStatus("Game started. Buying disabled.", "ok");
           await refreshBingo();
         }catch(err){
           setStatus(err.message, "err");
@@ -1450,6 +1476,8 @@
     </script>
   </body>
 </html>
+
+
 
 
 
