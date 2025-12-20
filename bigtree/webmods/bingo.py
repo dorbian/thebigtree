@@ -210,6 +210,14 @@ async def bingo_list_owners(req: web.Request):
     game_id = req.match_info["game_id"]
     try:
         owners = bingo.list_owners(game_id)
+        for o in owners:
+            name = o.get("owner_name") or ""
+            if not name:
+                continue
+            try:
+                o["token"] = bingo.get_owner_token(game_id, name)
+            except Exception:
+                pass
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400)
     return web.json_response({"ok": True, "owners": owners})

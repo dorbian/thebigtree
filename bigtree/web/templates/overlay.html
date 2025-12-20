@@ -991,13 +991,31 @@
           item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const title = g.title || "Bingo";
           const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-          item.innerHTML = `<strong>${title}</strong> - ${created}`;
+          const status = g.active ? "active" : "ended";
+          const deleteBtn = !g.active ? `<button data-delete="${g.game_id}" class="btn-ghost" style="max-width:90px">Delete</button>` : "";
+          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${title}</strong> - ${created} <span class="muted">(${status})</span></div>\n              ${deleteBtn}\n            </div>`;
           item.style.cursor = "pointer";
           item.onclick = () => {
             setGameId(g.game_id || "");
             refreshBingo();
             loadOwnersForGame();
           };
+          const del = item.querySelector("button[data-delete]");
+          if (del){
+            del.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              if (!confirm("Delete this game? This cannot be undone.")){
+                return;
+              }
+              try{
+                await jsonFetch("/bingo/" + encodeURIComponent(g.game_id), {method:"DELETE"});
+                setStatus("Game deleted.", "ok");
+                await loadGamesMenu();
+              }catch(err){
+                setStatus(err.message, "err");
+              }
+            });
+          }
           el.appendChild(item);
         });
       }
@@ -1006,6 +1024,7 @@
         jsonFetch("/bingo/games", {method:"GET"})
           .then(data => {
             const list = (data.games || []).filter(g => g.active);
+            renderGamesList(data.games || []);
             const menu = $("menuGames");
             menu.innerHTML = "";
             let currentLabel = "No game selected.";
@@ -1064,12 +1083,32 @@
           item.style.padding = "8px 6px";
           item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           item.style.cursor = "pointer";
-          item.innerHTML = `<strong>${o.owner_name}</strong> ┬╖ ${o.cards} cards`;
+          const token = o.token || "";
+          const link = token ? `${getBase()}/bingo/owner?token=${encodeURIComponent(token)}` : "";
+          const linkHtml = link ? `<a href="${link}" target="_blank" rel="noreferrer">Open</a>` : "";
+          const copyBtn = link ? `<button data-copy="${link}" class="btn-ghost" style="max-width:110px">Copy link</button>` : "";
+          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${o.owner_name}</strong></div>\n              <div style="display:flex;align-items:center;gap:10px">\n                <span class="muted">${o.cards} cards</span>\n                ${linkHtml}\n                ${copyBtn}\n              </div>\n            </div>`;
           item.onclick = () => {
             $("bOwner").value = o.owner_name || "";
             loadOwnerCards(o.owner_name || "");
             $("bOwnerModal").classList.add("show");
           };
+          const linkEl = item.querySelector("a");
+          if (linkEl){
+            linkEl.addEventListener("click", (ev) => ev.stopPropagation());
+          }
+          const copy = item.querySelector("button[data-copy]");
+          if (copy){
+            copy.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              try{
+                navigator.clipboard.writeText(copy.getAttribute("data-copy") || "");
+                setStatus("Link copied.", "ok");
+              }catch(err){
+                setStatus("Copy failed.", "err");
+              }
+            });
+          }
           el.appendChild(item);
         });
       }
@@ -1476,6 +1515,10 @@
     </script>
   </body>
 </html>
+
+
+
+
 
 
 
