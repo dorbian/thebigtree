@@ -82,6 +82,10 @@
     while(header.length < 4) header.push(" ");
     cards.forEach(card=>{
       const el = document.createElement('div'); el.className='card';
+      const claimRow = document.createElement('div');
+      claimRow.style.marginBottom = "6px";
+      claimRow.innerHTML = `<button data-card="${card.card_id}">I have BINGO!</button> <span class="muted" id="claim_${card.card_id}"></span>`;
+      el.appendChild(claimRow);
       const nums = card.numbers || [];
       const localMarks = loadLocalMarks(card.card_id);
       const headerRow = document.createElement('div');
@@ -110,6 +114,21 @@
       }
       el.appendChild(gridEl);
       grid.appendChild(el);
+      claimRow.querySelector('button').onclick = async () => {
+        try{
+          const r = await fetch('/bingo/claim-public', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({game_id: game, card_id: card.card_id, owner_name: owner})
+          });
+          const j = await r.json();
+          const msg = document.getElementById(`claim_${card.card_id}`);
+          msg.textContent = j.message || (j.ok ? 'Claim sent.' : 'Claim failed.');
+        }catch(e){
+          const msg = document.getElementById(`claim_${card.card_id}`);
+          msg.textContent = 'Claim failed.';
+        }
+      };
     });
   }
 

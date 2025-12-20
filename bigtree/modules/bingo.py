@@ -221,6 +221,39 @@ def claim_bingo(game_id: str, card_id: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Claim by {claim['owner_name']} on card {card_id} (stage={claim['stage']}) in game {game_id}")
     return True, "OK"
 
+
+def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    if not g.get("active"):
+        return False, "Game is not active."
+    db = _open(game_id)
+    Card = Query()
+    rows = db.search((Card._type == "card") & (Card.card_id == card_id))
+    if not rows:
+        return False, "Card not found."
+    card = rows[-1]
+    name = (owner_name or card.get("owner_name") or "").strip()
+    if not name:
+        return False, "Owner name required."
+    # Avoid duplicate public claims per card
+    for c in g.get("claims", []):
+        if c.get("card_id") == card_id and c.get("source") == "public":
+            return True, "Already claimed."
+    claim = {
+        "ts": _now(),
+        "card_id": card_id,
+        "owner_name": name,
+        "stage": g.get("stage", "single"),
+        "pending": True,
+        "source": "public",
+    }
+    g.setdefault("claims", []).append(claim)
+    db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Public claim by {name} on card {card_id} (stage={claim['stage']}) in game {game_id}")
+    return True, "OK"
+
 def _payouts(pot: int) -> Dict[str, int]:
     # split pot into 6 parts: 1/6, 2/6, 3/6 (last gets remainder)
     p1 = pot // 6
@@ -329,15 +362,16 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
     pot = int(g["pot"])
     pays = _payouts(pot)
     # minimal public claim info
-    claims = [
-        {
+    claims = []
+    for c in g.get("claims", []):
+        claims.append({
             "ts": c.get("ts"),
             "owner_name": c.get("owner_name"),
             "card_id": c.get("card_id"),
             "stage": c.get("stage"),
-        }
-        for c in g.get("claims", [])
-    ]
+            "pending": c.get("pending", False),
+            "source": c.get("source", "admin"),
+        })
     return {
         "active": True,
         "game": {

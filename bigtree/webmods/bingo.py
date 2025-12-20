@@ -151,6 +151,17 @@ async def bingo_claim(req: web.Request):
     ok, msg = bingo.claim_bingo(str(b.get("game_id")), str(b.get("card_id")))
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
+
+@route("POST", "/bingo/claim-public", allow_public=True)
+async def bingo_claim_public(req: web.Request):
+    b = await req.json()
+    ok, msg = bingo.public_claim(
+        str(b.get("game_id")),
+        str(b.get("card_id")),
+        str(b.get("owner_name") or ""),
+    )
+    return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
+
 @route("GET", "/bingo/games", scopes=["bingo:admin"])
 async def bingo_list_games(_req: web.Request):
     ok, value = _list_games()

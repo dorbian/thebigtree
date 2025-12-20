@@ -74,6 +74,7 @@
     const localMarks = loadLocalMarks();
     let html = `<div><strong>Owner:</strong> ${card.owner_name || ''}</div>`;
     html += `<div class="called">${called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -"}</div>`;
+    html += `<div style="margin:8px 0"><button id="claimBtn">I have BINGO!</button><span id="claimMsg" class="muted" style="margin-left:8px"></span></div>`;
     html += '<div class="header">';
     const letters = header.slice(0,4).split("");
     while(letters.length < 4) letters.push(" ");
@@ -89,6 +90,21 @@
     }
     html += '</div>';
     app.innerHTML = html;
+    const claimBtn = document.getElementById('claimBtn');
+    const claimMsg = document.getElementById('claimMsg');
+    claimBtn.addEventListener('click', async () => {
+      try{
+        const r = await fetch('/bingo/claim-public', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({game_id: game, card_id: cardId, owner_name: card.owner_name || ''})
+        });
+        const j = await r.json();
+        claimMsg.textContent = j.message || (j.ok ? 'Claim sent.' : 'Claim failed.');
+      }catch(e){
+        claimMsg.textContent = 'Claim failed.';
+      }
+    });
     app.querySelectorAll('.cell').forEach(el=>{
       el.addEventListener('click', () => {
         const r = Number(el.dataset.r);
