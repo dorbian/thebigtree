@@ -959,6 +959,9 @@
 
       function renderGamesList(games){
         const el = $("bGames");
+        if (!el){
+          return;
+        }
         if (!Array.isArray(games) || games.length === 0){
           el.textContent = "No active games. Create one in Discord.";
           return;
@@ -1002,7 +1005,7 @@
       function loadGamesMenu(){
         jsonFetch("/bingo/games", {method:"GET"})
           .then(data => {
-            const list = (data.games || []).filter(g => g.active);
+            const list = (data.games || []).filter(g => g.active !== false);
             renderGamesList(data.games || []);
             const menu = $("menuGames");
             menu.innerHTML = "";
