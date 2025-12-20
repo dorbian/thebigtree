@@ -963,7 +963,7 @@
         const grid = $("bCalledGrid");
         grid.innerHTML = "";
         const calledSet = new Set(Array.isArray(called) ? called : []);
-        for (let i = 1; i <= 80; i++){
+        for (let i = 1; i <= 40; i++){
           const btn = document.createElement("button");
           btn.className = "bingo-call-btn" + (calledSet.has(i) ? " active" : "");
           btn.textContent = i;

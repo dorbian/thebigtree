@@ -25,6 +25,7 @@ _INDEX: Optional[str] = None
 # -------- stages --------
 STAGES = ("single", "double", "full")  # single line, double line, whole card
 STAGE_ORDER = {"single": 0, "double": 1, "full": 2}
+MAX_NUMBER = 40
 
 def _now() -> float:
     return time.time()
@@ -88,9 +89,9 @@ def _normalize_header(h: Optional[str]) -> str:
     return (h[:4]).ljust(4, " ")
 
 def _column_ranges() -> List[range]:
-    # 4 equal buckets across 1..80
-    # c0: 1-20, c1: 21-40, c2: 41-60, c3: 61-80
-    return [range(1, 21), range(21, 41), range(41, 61), range(61, 81)]
+    # 4 equal buckets across 1..40 (10 numbers per column)
+    # c0: 1-10, c1: 11-20, c2: 21-30, c3: 31-40
+    return [range(1, 11), range(11, 21), range(21, 31), range(31, 41)]
 
 # ------------- Card generation (4x4 respecting column ranges) -------------
 def generate_card_numbers() -> List[List[int]]:
@@ -451,8 +452,8 @@ def buy_cards(game_id: str, owner_name: str, count: int, owner_user_id: Optional
 
 def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     n = int(number)
-    if n < 1 or n > 80:
-        return None, "Number must be between 1 and 80."
+    if n < 1 or n > MAX_NUMBER:
+        return None, f"Number must be between 1 and {MAX_NUMBER}."
     g = get_game(game_id)
     if not g:
         return None, "Game not found."
@@ -489,7 +490,7 @@ def call_random_number(game_id: str) -> Tuple[Optional[Dict[str, Any]], Optional
     if not g:
         return None, "Game not found."
     called = set(g.get("called", []))
-    remaining = [n for n in range(1, 81) if n not in called]
+    remaining = [n for n in range(1, MAX_NUMBER + 1) if n not in called]
     if not remaining:
         return g, "All numbers already called."
     n = random.choice(remaining)
