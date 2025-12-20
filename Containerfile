@@ -1,14 +1,13 @@
 # syntax=docker/dockerfile:1.6
 # TheBigTree container using uv for dependency installation
 
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # System deps (Pillow build + tools for uv install)
 RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
-      build-essential \
       git \
       zlib1g-dev \
       libjpeg62-turbo-dev \
