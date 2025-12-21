@@ -1,0 +1,24 @@
+{
+  "prompts": [
+    "Do your favorite emote.",
+    "Strike a dramatic pose and hold for 5 seconds.",
+    "Use a /shout with a goofy catchphrase.",
+    "Pick a random player and compliment their glam.",
+    "Change minion to something tiny.",
+    "Do a quick 5-second RP line.",
+    "Spin in place three times.",
+    "Swap to your silliest title.",
+    "Use /laugh at the host.",
+    "Do a victory emote for the crowd.",
+    "Make a bad pun about trees.",
+    "Pick a new standing pose."
+  ],
+  "punishments": [
+    "Do a full /grovel to the crowd.",
+    "Sing one line of a song in /say.",
+    "Do 10 seconds of dramatic crying emotes.",
+    "Change to the silliest weapon glam you own.",
+    "Use /slap on the host (politely).",
+    "Do a slow walk to the center and bow."
+  ]
+}

@@ -19,6 +19,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
@@ -1326,6 +1327,16 @@ private void DrawHuntPanel()
     {
         if (glam.Themes.Count > 0) return;
 
+        if (TryLoadGlamDefaults(out var themes))
+        {
+            if (themes.Count > 0)
+            {
+                glam.Themes = themes.Select(t => new GlamTheme { Text = t }).ToList();
+                Plugin.Config.Save();
+                return;
+            }
+        }
+
         glam.Themes = new List<GlamTheme>
         {
             new() { Text = "Skater Prince" },
@@ -1550,6 +1561,16 @@ private void DrawHuntPanel()
     {
         if (wheel.Prompts.Count > 0) return;
 
+        if (TryLoadSpinWheelDefaults(out var prompts, out var punishments))
+        {
+            if (prompts.Count > 0)
+                wheel.Prompts = prompts.Select(p => new WheelPrompt { Text = p, Weight = 1 }).ToList();
+            if (punishments.Count > 0)
+                wheel.PunishmentPrompts = punishments.Select(p => new WheelPrompt { Text = p, Weight = 1 }).ToList();
+            Plugin.Config.Save();
+            return;
+        }
+
         wheel.Prompts = new List<WheelPrompt>
         {
             new() { Text = "Do your favorite emote.", Weight = 2 },
@@ -1575,6 +1596,75 @@ private void DrawHuntPanel()
             new() { Text = "Do a slow walk to the center and bow.", Weight = 2 },
         };
         Plugin.Config.Save();
+    }
+
+    private sealed class SpinWheelDefaults
+    {
+        public List<string>? prompts { get; set; }
+        public List<string>? punishments { get; set; }
+    }
+
+    private sealed class GlamDefaults
+    {
+        public List<string>? themes { get; set; }
+    }
+
+    private bool TryLoadSpinWheelDefaults(out List<string> prompts, out List<string> punishments)
+    {
+        prompts = new List<string>();
+        punishments = new List<string>();
+
+        if (!TryReadDefaultsJson("spin-wheel.json", out var json))
+            return false;
+
+        try
+        {
+            var data = JsonSerializer.Deserialize<SpinWheelDefaults>(json);
+            if (data?.prompts != null) prompts = data.prompts.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            if (data?.punishments != null) punishments = data.punishments.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            return prompts.Count > 0 || punishments.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool TryLoadGlamDefaults(out List<string> themes)
+    {
+        themes = new List<string>();
+        if (!TryReadDefaultsJson("glam-roulette.json", out var json))
+            return false;
+
+        try
+        {
+            var data = JsonSerializer.Deserialize<GlamDefaults>(json);
+            if (data?.themes != null)
+                themes = data.themes.Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+            return themes.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadDefaultsJson(string fileName, out string json)
+    {
+        json = "";
+        var baseDir = Forest.Plugin.PluginInterface.AssemblyLocation.DirectoryName ?? "";
+        var current = new DirectoryInfo(baseDir);
+        for (int i = 0; i < 6 && current != null; i++)
+        {
+            var path = Path.Combine(current.FullName, "defaults", fileName);
+            if (File.Exists(path))
+            {
+                json = File.ReadAllText(path);
+                return true;
+            }
+            current = current.Parent;
+        }
+        return false;
     }
 
     private void SpinWheel()
