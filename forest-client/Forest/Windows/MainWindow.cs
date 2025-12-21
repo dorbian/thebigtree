@@ -798,6 +798,11 @@ private void DrawHuntPanel()
         else
             ImGui.TextColored(new Vector4(1f, 0.55f, 0.55f, 1f), "Not connected");
 
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Load a game, start it, then roll numbers and manage claims. The admin panel controls the active bingo game.");
+        }
+
         ImGui.SameLine();
         if (ImGui.SmallButton("Settings"))
             Plugin.ToggleConfigUI();
@@ -976,6 +981,11 @@ private void DrawHuntPanel()
     private void DrawRafflePanel()
     {
         var raffle = Plugin.Config.Raffle;
+
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Start a raffle, have players join with the join phrase, then close and draw winners.");
+        }
 
         ImGui.TextUnformatted("Forest Raffle Roll");
         ImGui.Separator();
