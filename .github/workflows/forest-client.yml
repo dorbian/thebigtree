@@ -15,8 +15,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      DALAMUD_HOME: ${{ runner.temp }}\\dalamud
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +25,7 @@ jobs:
       - name: Prepare Dalamud
         shell: powershell
         run: |
-          $dalamudHome = "${env:DALAMUD_HOME}"
+          $dalamudHome = Join-Path $env:RUNNER_TEMP "dalamud"
           if (-not (Test-Path $dalamudHome)) { New-Item -ItemType Directory -Path $dalamudHome | Out-Null }
           if (-not (Test-Path (Join-Path $dalamudHome "Dalamud.dll"))) {
             $url = "${{ inputs.dalamud_url }}"
