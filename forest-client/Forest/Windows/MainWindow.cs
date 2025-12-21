@@ -16,6 +16,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 using ImGuiWindowFlags = Dalamud.Bindings.ImGui.ImGuiWindowFlags;
 
@@ -63,6 +64,9 @@ public class MainWindow : Window, IDisposable
     private readonly Dictionary<string, List<CardInfo>> _bingoOwnerCards = new();
     private List<OwnerSummary> _bingoOwners = new();
     private string _bingoManualOwner = "";
+    private const int BingoRandomMax = 40;
+    private bool _bingoAwaitingRandom = false;
+    private int _bingoRollAttempts = 0;
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -114,7 +118,7 @@ public class MainWindow : Window, IDisposable
 
     // ========================= CHAT / TIMER FROM OLD WINDOW =========================
     private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
-    {
+    {\r\n        if (_bingoAwaitingRandom)\r\n        {\r\n            if (TryHandleBingoRandom(message.TextValue))\r\n                return;\r\n        }
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
             return;
 
@@ -1100,96 +1104,88 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 
-    private async Task Bingo_Roll()
+    private Task Bingo_Roll()
     {
-        if (_bingoState is null) return;
+        if (_bingoState is null) return Task.CompletedTask;
         Bingo_EnsureClient();
-        _bingoLoading = true; _bingoStatus = "Rolling.";
-        try
-        {
-            var res = await _bingoApi!.RollAsync(_bingoState.game.game_id);
-            var called = res.called ?? Array.Empty<int>();
-            _bingoState = _bingoState with { game = _bingoState.game with { called = called } };
-            _bingoStatus = called.Length > 0 ? $"Rolled {called[^1]}." : "Rolled.";
-        }
-        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
-        finally { _bingoLoading = false; }
+        _bingoRollAttempts = 0;
+        _bingoAwaitingRandom = true;
+        _bingoStatus = $"Rolling /random {BingoRandomMax}…";
+        Bingo_SendRandomCommand();
+        return Task.CompletedTask;
     }
 
-        private async Task Bingo_Start()
+        private bool TryHandleBingoRandom(string messageText)
     {
-        if (_bingoState is null) return;
-        Bingo_EnsureClient();
-        _bingoLoading = true; _bingoStatus = "Starting.";
-        try
-        {
-            await _bingoApi!.StartGameAsync(_bingoState.game.game_id);
-            _bingoState = await _bingoApi.GetStateAsync(_bingoState.game.game_id);
-            _bingoStatus = "Game started.";
-        }
-        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
-        finally { _bingoLoading = false; }
+        if (!_bingoAwaitingRandom) return false;
+        if (string.IsNullOrWhiteSpace(messageText)) return false;
+        var lower = messageText.ToLowerInvariant();
+        if (!lower.Contains("roll") && !lower.Contains("random")) return false;
+        var matches = Regex.Matches(messageText, "\\d+");
+        if (matches.Count == 0) return false;
+        if (!int.TryParse(matches[0].Value, out var rolled)) return false;
+        _ = Bingo_HandleRandomResult(rolled);
+        return true;
     }
 
-    private async Task Bingo_AdvanceStage()
+    private void Bingo_SendRandomCommand()
     {
-        if (_bingoState is null) return;
-        Bingo_EnsureClient();
-        _bingoLoading = true; _bingoStatus = "Advancing.";
         try
         {
-            await _bingoApi!.AdvanceStageAsync(_bingoState.game.game_id);
-            _bingoState = await _bingoApi.GetStateAsync(_bingoState.game.game_id);
-            _bingoStatus = "Stage advanced.";
-        }
-        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
-        finally { _bingoLoading = false; }
-    }
-
-    private async Task Bingo_ApproveClaim(string? cardId)
-    {
-        if (_bingoState is null || string.IsNullOrWhiteSpace(cardId)) return;
-        Bingo_EnsureClient();
-        _bingoLoading = true; _bingoStatus = "Approving.";
-        try
-        {
-            await _bingoApi!.ApproveClaimAsync(_bingoState.game.game_id, cardId);
-            await _bingoApi.AdvanceStageAsync(_bingoState.game.game_id);
-            _bingoState = await _bingoApi.GetStateAsync(_bingoState.game.game_id);
-            _bingoStatus = "Claim approved.";
-        }
-        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
-        finally { _bingoLoading = false; }
-    }
-
-    private async Task Bingo_DenyClaim(string? cardId)
-    {
-        if (_bingoState is null || string.IsNullOrWhiteSpace(cardId)) return;
-        Bingo_EnsureClient();
-        _bingoLoading = true; _bingoStatus = "Denying.";
-        try
-        {
-            await _bingoApi!.DenyClaimAsync(_bingoState.game.game_id, cardId);
-            _bingoState = await _bingoApi.GetStateAsync(_bingoState.game.game_id);
-            _bingoStatus = "Claim denied.";
-        }
-        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
-        finally { _bingoLoading = false; }
-    }
-
-    private async Task Bingo_LoadOwners()
-    {
-        if (_bingoState is null) return;
-        Bingo_EnsureClient();
-        try
-        {
-            var response = await _bingoApi!.GetOwnersAsync(_bingoState.game.game_id);
-            _bingoOwners = response.owners?.ToList() ?? new List<OwnerSummary>();
+            Plugin.CommandManager.ProcessCommand($"/random {BingoRandomMax}");
         }
         catch (Exception ex)
         {
-            _bingoStatus = $"Owners failed: {ex.Message}";
-            _bingoOwners = new List<OwnerSummary>();
+            _bingoAwaitingRandom = false;
+            _bingoStatus = $"Random failed: {ex.Message}";
+        }
+    }
+
+    private async Task Bingo_HandleRandomResult(int rolled)
+    {
+        if (_bingoState is null)
+        {
+            _bingoAwaitingRandom = false;
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        if (rolled < 1 || rolled > BingoRandomMax) return;
+
+        var called = new HashSet<int>(_bingoState.game.called ?? Array.Empty<int>());
+        if (called.Count >= BingoRandomMax)
+        {
+            _bingoAwaitingRandom = false;
+            _bingoStatus = "All numbers called.";
+            return;
+        }
+
+        if (called.Contains(rolled))
+        {
+            _bingoRollAttempts += 1;
+            if (_bingoRollAttempts > BingoRandomMax * 2)
+            {
+                _bingoAwaitingRandom = false;
+                _bingoStatus = "Too many repeats.";
+                return;
+            }
+            Bingo_SendRandomCommand();
+            return;
+        }
+
+        try
+        {
+            var res = await _bingoApi!.CallNumberAsync(_bingoState.game.game_id, rolled);
+            var newCalled = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
+            _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled } };
+            _bingoStatus = $"Rolled {rolled}.";
+        }
+        catch (Exception ex)
+        {
+            _bingoStatus = $"Failed: {ex.Message}";
+        }
+        finally
+        {
+            _bingoAwaitingRandom = false;
         }
     }
 private Task Bingo_LoadOwnerCardsForOwner(string owner)
@@ -1223,6 +1219,11 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         finally { _bingoLoading = false; }
     }
 }
+
+
+
+
+
 
 
 

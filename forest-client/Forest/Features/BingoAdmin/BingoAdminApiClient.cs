@@ -47,6 +47,9 @@ namespace Forest.Features.BingoAdmin
         public Task<RollResponse> RollAsync(string gameId, CancellationToken ct = default)
             => Post<RollResponse>("bingo/roll", new { game_id = gameId }, ct);
 
+        public Task<RollResponse> CallNumberAsync(string gameId, int number, CancellationToken ct = default)
+            => Post<RollResponse>("bingo/call", new { game_id = gameId, number = number }, ct);
+
         public Task<SimpleResponse> StartGameAsync(string gameId, CancellationToken ct = default)
             => Post<SimpleResponse>("bingo/start", new { game_id = gameId }, ct);
 
