@@ -69,6 +69,8 @@ public class MainWindow : Window, IDisposable
     private const int BingoRandomMax = 40;
     private bool _bingoAwaitingRandom = false;
     private int _bingoRollAttempts = 0;
+    private int _bingoRandomCommandAttempts = 0;
+    private DateTime? _bingoRandomSentAt;
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
 
@@ -158,6 +160,20 @@ public class MainWindow : Window, IDisposable
 
         CheckVotingPeriod();
         CheckCountdownCompletion();
+
+        if (_bingoAwaitingRandom && _bingoRandomSentAt.HasValue)
+        {
+            var elapsed = DateTime.UtcNow - _bingoRandomSentAt.Value;
+            if (_bingoRandomCommandAttempts == 1 && elapsed.TotalSeconds >= 1.0)
+            {
+                Bingo_SendRandomCommand(useSlash: false);
+            }
+            else if (_bingoRandomCommandAttempts >= 2 && elapsed.TotalSeconds >= 3.0)
+            {
+                _bingoAwaitingRandom = false;
+                _bingoStatus = "No /random result received. Try again or roll manually.";
+            }
+        }
 
         if ((DateTime.UtcNow - _lastRefreshTime).TotalSeconds < 10) return;
         _lastRefreshTime = DateTime.UtcNow;
@@ -1257,8 +1273,10 @@ private void DrawHuntPanel()
         Bingo_EnsureClient();
         _bingoRollAttempts = 0;
         _bingoAwaitingRandom = true;
+        _bingoRandomCommandAttempts = 0;
+        _bingoRandomSentAt = null;
         _bingoStatus = $"Rolling /random {BingoRandomMax}…";
-        Bingo_SendRandomCommand();
+        Bingo_SendRandomCommand(useSlash: true);
         return Task.CompletedTask;
     }
 
@@ -1285,13 +1303,16 @@ private void DrawHuntPanel()
         return true;
     }
 
-    private void Bingo_SendRandomCommand()
+    private void Bingo_SendRandomCommand(bool useSlash)
     {
         try
         {
+            var cmd = useSlash ? $"/random {BingoRandomMax}" : $"random {BingoRandomMax}";
+            _bingoRandomCommandAttempts += 1;
+            _bingoRandomSentAt = DateTime.UtcNow;
             Plugin.Framework.RunOnFrameworkThread(() =>
             {
-                Plugin.CommandManager.ProcessCommand($"/random {BingoRandomMax}");
+                Plugin.CommandManager.ProcessCommand(cmd);
             });
         }
         catch (Exception ex)
@@ -1384,6 +1405,10 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         finally { _bingoLoading = false; }
     }
 }
+
+
+
+
 
 
 
