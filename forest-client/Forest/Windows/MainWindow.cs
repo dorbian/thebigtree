@@ -1282,7 +1282,7 @@ private void DrawHuntPanel()
         ImGui.Spacing();
         ImGui.Separator();
 
-        ImGui.BeginChild("GlamThemeBox", new Vector2(240, 84), true);
+        ImGui.BeginChild("GlamThemeBox", new Vector2(360, 84), true);
         ImGui.TextDisabled("Current theme");
         ImGui.SetWindowFontScale(1.8f);
         ImGui.TextWrapped(string.IsNullOrWhiteSpace(glam.CurrentTheme) ? "--" : glam.CurrentTheme);
