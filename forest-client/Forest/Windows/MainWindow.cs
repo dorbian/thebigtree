@@ -198,27 +198,25 @@ public class MainWindow : Window, IDisposable
         {
             if (ImGui.Button("Home")) _view = View.Home;
             ImGui.SameLine();
-            if (ImGui.Button("Hunt")) _view = View.Hunt;
-            ImGui.SameLine();
-            if (ImGui.Button("Murder Mystery")) _view = View.MurderMystery;
-            ImGui.SameLine();
-            if (ImGui.Button("Bingo"))
+            if (ImGui.BeginMenu("Party"))
             {
-                _view = View.Bingo;
-                _ = Bingo_LoadGames();
+                if (ImGui.MenuItem("Hunt")) _view = View.Hunt;
+                if (ImGui.MenuItem("Murder Mystery")) _view = View.MurderMystery;
+                if (ImGui.MenuItem("Glam Competition")) _view = View.Glam;
+                if (ImGui.MenuItem("Spin Wheel")) _view = View.SpinWheel;
+                ImGui.EndMenu();
             }
             ImGui.SameLine();
-            ImGui.ColorButton("##raffle_icon", new Vector4(0.85f, 0.65f, 0.15f, 1.0f), 0, new Vector2(12, 12));
-            ImGui.SameLine();
-            if (ImGui.Button("Raffle")) _view = View.Raffle;
-            ImGui.SameLine();
-            ImGui.ColorButton("##wheel_icon", new Vector4(0.35f, 0.85f, 0.9f, 1.0f), 0, new Vector2(12, 12));
-            ImGui.SameLine();
-            if (ImGui.Button("Spin Wheel")) _view = View.SpinWheel;
-            ImGui.SameLine();
-            ImGui.ColorButton("##glam_icon", new Vector4(0.95f, 0.55f, 0.35f, 1.0f), 0, new Vector2(12, 12));
-            ImGui.SameLine();
-            if (ImGui.Button("Glam")) _view = View.Glam;
+            if (ImGui.BeginMenu("Prizes"))
+            {
+                if (ImGui.MenuItem("Bingo"))
+                {
+                    _view = View.Bingo;
+                    _ = Bingo_LoadGames();
+                }
+                if (ImGui.MenuItem("Raffle")) _view = View.Raffle;
+                ImGui.EndMenu();
+            }
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
@@ -2493,7 +2491,8 @@ private void DrawHuntPanel()
                 Plugin.ChatGui.PrintError("[Forest] Too many repeats while rolling.");
                 return;
             }
-            _ = Bingo_Roll();
+            _bingoStatus = $"Number {rolled} already called.";
+            Plugin.ChatGui.PrintError($"[Forest] Number {rolled} already called.");
             return;
         }
 
