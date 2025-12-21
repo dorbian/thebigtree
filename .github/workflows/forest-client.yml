@@ -89,6 +89,9 @@ jobs:
           $zipUrl = "https://github.com/$repo/releases/download/forest-client-latest/forest-client.zip"
           $path = "forest_repo/plogonmaster.json"
           $json = Get-Content -Raw -Path $path | ConvertFrom-Json
+          if ($json -is [PSCustomObject]) {
+            $json = @($json)
+          }
           foreach ($entry in $json) {
             if ($entry.InternalName -eq "Forest") {
               $entry.DalamudApiLevel = 14
