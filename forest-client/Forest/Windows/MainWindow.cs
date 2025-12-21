@@ -129,7 +129,10 @@ public class MainWindow : Window, IDisposable
     {
         if (_bingoAwaitingRandom)
         {
-            if (TryHandleBingoRandom(message.TextValue))
+            var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
+            if (!string.IsNullOrWhiteSpace(localName) &&
+                string.Equals(sender.TextValue, localName, StringComparison.OrdinalIgnoreCase) &&
+                TryHandleBingoRandom(message.TextValue))
                 return;
         }
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
@@ -1279,7 +1282,10 @@ private void DrawHuntPanel()
     {
         try
         {
-            Plugin.CommandManager.ProcessCommand($"/random {BingoRandomMax}");
+            Plugin.Framework.RunOnFrameworkThread(() =>
+            {
+                Plugin.CommandManager.ProcessCommand($"/random {BingoRandomMax}");
+            });
         }
         catch (Exception ex)
         {
