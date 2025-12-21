@@ -1349,7 +1349,7 @@ private void DrawHuntPanel()
                 _bingoStatus = "Too many repeats.";
                 return;
             }
-            Bingo_SendRandomCommand();
+            Bingo_SendRandomCommand(useSlash: true);
             return;
         }
 
