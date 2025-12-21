@@ -200,7 +200,11 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             if (ImGui.Button("Murder Mystery")) _view = View.MurderMystery;
             ImGui.SameLine();
-            if (ImGui.Button("Bingo")) _view = View.Bingo;
+            if (ImGui.Button("Bingo"))
+            {
+                _view = View.Bingo;
+                _ = Bingo_LoadGames();
+            }
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
@@ -1290,11 +1294,16 @@ private void DrawHuntPanel()
         if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
 
         var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
-        if (!string.IsNullOrWhiteSpace(localName))
+        var localLower = string.IsNullOrWhiteSpace(localName) ? "" : localName.ToLowerInvariant();
+        var messageMatches =
+            lower.Contains("you roll") ||
+            lower.Contains("you rolled") ||
+            lower.StartsWith("you ");
+        if (!string.IsNullOrWhiteSpace(localLower))
         {
             var senderMatches = !string.IsNullOrWhiteSpace(senderText) &&
                                 string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
-            var messageMatches = lower.Contains(localName.ToLowerInvariant()) || lower.StartsWith("you ");
+            messageMatches = messageMatches || lower.Contains(localLower);
             if (!senderMatches && !messageMatches)
                 return false;
         }
