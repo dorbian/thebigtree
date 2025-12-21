@@ -56,6 +56,9 @@ namespace Forest.Features.BingoAdmin
         public Task<SimpleResponse> AdvanceStageAsync(string gameId, CancellationToken ct = default)
             => Post<SimpleResponse>("bingo/advance-stage", new { game_id = gameId }, ct);
 
+        public Task<SimpleResponse> EndGameAsync(string gameId, CancellationToken ct = default)
+            => Post<SimpleResponse>("bingo/end", new { game_id = gameId }, ct);
+
         public Task<SimpleResponse> ApproveClaimAsync(string gameId, string cardId, CancellationToken ct = default)
             => Post<SimpleResponse>("bingo/claim-approve", new { game_id = gameId, card_id = cardId }, ct);
 

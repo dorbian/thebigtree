@@ -67,11 +67,10 @@ public class MainWindow : Window, IDisposable
     private List<OwnerSummary> _bingoOwners = new();
     private string _bingoManualOwner = "";
     private const int BingoRandomMax = 40;
-    private bool _bingoAwaitingRandom = false;
     private int _bingoRollAttempts = 0;
-    private int _bingoRandomCommandAttempts = 0;
-    private DateTime? _bingoRandomSentAt;
-    private bool _bingoRandomTimeoutNotified = false;
+    private bool _bingoShowBuyLink = false;
+    private string _bingoBuyLink = "";
+    private string _bingoBuyOwner = "";
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
 
@@ -130,12 +129,13 @@ public class MainWindow : Window, IDisposable
     // ========================= CHAT / TIMER FROM OLD WINDOW =========================
     private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
     {
-        var allowManualRoll = _view == View.Bingo && _bingoState is not null && Plugin.Config.BingoConnected;
-        if (_bingoAwaitingRandom || allowManualRoll)
-        {
-            if (TryHandleBingoRandom(sender.TextValue, message.TextValue, allowManualRoll))
-                return;
-        }
+        var allowManualRoll = _view == View.Bingo
+            && _bingoState is not null
+            && _bingoState.game.started
+            && _bingoState.game.active
+            && Plugin.Config.BingoConnected;
+        if (allowManualRoll && TryHandleBingoRandom(sender.TextValue, message.TextValue))
+            return;
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
             return;
 
@@ -162,25 +162,6 @@ public class MainWindow : Window, IDisposable
 
         CheckVotingPeriod();
         CheckCountdownCompletion();
-
-        if (_bingoAwaitingRandom && _bingoRandomSentAt.HasValue)
-        {
-            var elapsed = DateTime.UtcNow - _bingoRandomSentAt.Value;
-            if (_bingoRandomCommandAttempts == 1 && elapsed.TotalSeconds >= 1.0)
-            {
-                Bingo_SendRandomCommand(useSlash: false);
-            }
-            else if (_bingoRandomCommandAttempts >= 2 && elapsed.TotalSeconds >= 3.0)
-            {
-                _bingoAwaitingRandom = false;
-                _bingoStatus = "No /random result received. Try again or roll manually.";
-                if (!_bingoRandomTimeoutNotified)
-                {
-                    _bingoRandomTimeoutNotified = true;
-                    Plugin.ChatGui.PrintError("[Forest] No /random result received. Try again or roll manually.");
-                }
-            }
-        }
 
         if ((DateTime.UtcNow - _lastRefreshTime).TotalSeconds < 10) return;
         _lastRefreshTime = DateTime.UtcNow;
@@ -590,6 +571,7 @@ private void DrawHuntPanel()
             ImGui.TextDisabled("No murder mystery game selected. Create or select one on the left.");
             return;
         }
+        NormalizeMurderMysteryData(game);
 
         ImGui.TextDisabled("Murder Mystery Details");
         ImGui.Separator();
@@ -776,6 +758,25 @@ private void DrawHuntPanel()
             return;
         }
 
+        if (_bingoShowBuyLink)
+        {
+            ImGui.OpenPopup("Player link");
+            _bingoShowBuyLink = false;
+        }
+        var showLinkModal = true;
+        if (ImGui.BeginPopupModal("Player link", ref showLinkModal, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted($"Player: {_bingoBuyOwner}");
+            ImGui.SetNextItemWidth(420);
+            ImGui.InputText("Link", ref _bingoBuyLink, 1024, ImGuiInputTextFlags.ReadOnly);
+            if (ImGui.Button("Copy link"))
+                ImGui.SetClipboardText(_bingoBuyLink);
+            ImGui.SameLine();
+            if (ImGui.Button("Close"))
+                showLinkModal = false;
+            ImGui.EndPopup();
+        }
+
         // ====== Game Id + controls ======
         ImGui.Text("Game Id:");
         ImGui.SameLine();
@@ -789,6 +790,8 @@ private void DrawHuntPanel()
         using (var dis = ImRaii.Disabled(!hasGame))
         {
             if (ImGui.Button("Start")) _ = Bingo_Start();
+            ImGui.SameLine();
+            if (ImGui.Button("End")) _ = Bingo_End();
             ImGui.SameLine();
             if (ImGui.Button("Roll")) _ = Bingo_Roll();
             ImGui.SameLine();
@@ -819,6 +822,16 @@ private void DrawHuntPanel()
         ImGui.TextUnformatted($"Pot: {g.pot} {g.currency}");
         ImGui.SameLine();
         ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}");
+        ImGui.SameLine();
+        int? lastCalled = g.last_called;
+        if ((!lastCalled.HasValue || lastCalled.Value == 0) && g.called is { Length: > 0 })
+            lastCalled = g.called[^1];
+        ImGui.BeginChild("LastDrawBox", new Vector2(120, 64), true);
+        ImGui.TextDisabled("Last draw");
+        ImGui.SetWindowFontScale(2.2f);
+        ImGui.TextUnformatted(lastCalled.HasValue ? lastCalled.Value.ToString() : "--");
+        ImGui.SetWindowFontScale(1f);
+        ImGui.EndChild();
         ImGui.Separator();
 
         ImGui.TextUnformatted("Called:");
@@ -894,7 +907,11 @@ private void DrawHuntPanel()
     {
         var game = Plugin.Config.CurrentGame;
         if (game == null) return 0;
+        return GetRequiredWhisperFields(game);
+    }
 
+    private int GetRequiredWhisperFields(MurderMysteryData game)
+    {
         int active = game.ActivePlayers.Count;
         if (active == 0) return 0;
 
@@ -1208,6 +1225,119 @@ private void DrawHuntPanel()
         finally { _bingoLoading = false; }
     }
 
+    private void NormalizeMurderMysteryData(MurderMysteryData game)
+    {
+        bool changed = false;
+        var active = new List<string>();
+        var dead = new List<string>();
+        var imprisoned = new List<string>();
+
+        var seenActive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in game.ActivePlayers ?? new List<string>())
+        {
+            var trimmed = (name ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed)) { changed = true; continue; }
+            if (seenActive.Add(trimmed))
+                active.Add(trimmed);
+            else
+                changed = true;
+        }
+
+        var seenDead = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in game.DeadPlayers ?? new List<string>())
+        {
+            var trimmed = (name ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed)) { changed = true; continue; }
+            if (seenDead.Add(trimmed))
+                dead.Add(trimmed);
+            else
+                changed = true;
+        }
+
+        var seenImprisoned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in game.ImprisonedPlayers ?? new List<string>())
+        {
+            var trimmed = (name ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed)) { changed = true; continue; }
+            if (seenImprisoned.Add(trimmed))
+                imprisoned.Add(trimmed);
+            else
+                changed = true;
+        }
+
+        if (changed)
+        {
+            game.ActivePlayers = active;
+            game.DeadPlayers = dead;
+            game.ImprisonedPlayers = imprisoned;
+        }
+
+        int totalRounds = GetRequiredWhisperFields(game) + 1;
+        changed |= PruneHintDict(game.HintTimes, totalRounds);
+        changed |= PruneHintDict(game.HintTexts, totalRounds);
+        changed |= PruneTimerDict(game.TimerEndTimes, totalRounds);
+        changed |= PruneTimerDict(game.TimerNotified, totalRounds);
+
+        if (changed)
+            Plugin.Config.Save();
+    }
+
+    private static bool PruneHintDict(Dictionary<int, string> dict, int totalRounds)
+    {
+        if (dict.Count == 0) return false;
+        bool changed = false;
+        var remove = new List<int>();
+        foreach (var key in dict.Keys)
+        {
+            if (key < 0 || key >= totalRounds)
+                remove.Add(key);
+        }
+        foreach (var key in remove)
+        {
+            dict.Remove(key);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static bool PruneTimerDict<T>(Dictionary<int, T> dict, int totalRounds)
+    {
+        if (dict.Count == 0) return false;
+        bool changed = false;
+        var remove = new List<int>();
+        foreach (var key in dict.Keys)
+        {
+            if (key < 0 || key >= totalRounds)
+                remove.Add(key);
+        }
+        foreach (var key in remove)
+        {
+            dict.Remove(key);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private async Task Bingo_End()
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Ending game.";
+
+        try
+        {
+            await _bingoApi!.EndGameAsync(_bingoState.game.game_id);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            _bingoStatus = "Game ended.";
+        }
+        catch (Exception ex) { _bingoStatus = $"End failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
     private async Task Bingo_AdvanceStage()
     {
         if (_bingoState is null)
@@ -1278,24 +1408,42 @@ private void DrawHuntPanel()
         finally { _bingoLoading = false; }
     }
 
-    private Task Bingo_Roll()
+    private async Task Bingo_Roll()
     {
-        if (_bingoState is null) return Task.CompletedTask;
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            Plugin.ChatGui.PrintError("[Forest] Load a game first.");
+            return;
+        }
         Bingo_EnsureClient();
         _bingoRollAttempts = 0;
-        _bingoAwaitingRandom = true;
-        _bingoRandomCommandAttempts = 0;
-        _bingoRandomSentAt = null;
-        _bingoRandomTimeoutNotified = false;
-        _bingoStatus = $"Rolling /random {BingoRandomMax}…";
-        Bingo_SendRandomCommand(useSlash: true);
-        return Task.CompletedTask;
+        _bingoLoading = true;
+        _bingoStatus = "Rolling on server.";
+
+        try
+        {
+            var res = await _bingoApi!.RollAsync(_bingoState.game.game_id);
+            var called = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
+            var last = called.Length > 0 ? called[^1] : _bingoState.game.last_called;
+            _bingoState = _bingoState with { game = _bingoState.game with { called = called, last_called = last } };
+            _bingoStatus = last.HasValue ? $"Rolled {last.Value}." : "Rolled.";
+            if (last.HasValue)
+                Plugin.ChatGui.Print($"[Forest] Called number {last.Value}.");
+        }
+        catch (Exception ex)
+        {
+            _bingoStatus = $"Failed: {ex.Message}";
+            Plugin.ChatGui.PrintError($"[Forest] Roll failed: {ex.Message}");
+        }
+        finally
+        {
+            _bingoLoading = false;
+        }
     }
 
-    private bool TryHandleBingoRandom(string senderText, string messageText, bool allowManual)
+    private bool TryHandleBingoRandom(string senderText, string messageText)
     {
-        if (!_bingoAwaitingRandom && !allowManual) return false;
-        if (!_bingoAwaitingRandom && allowManual) _bingoAwaitingRandom = true;
         if (string.IsNullOrWhiteSpace(messageText)) return false;
         var lower = messageText.ToLowerInvariant();
         if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
@@ -1321,31 +1469,10 @@ private void DrawHuntPanel()
         return true;
     }
 
-    private void Bingo_SendRandomCommand(bool useSlash)
-    {
-        try
-        {
-            var cmd = useSlash ? $"/random {BingoRandomMax}" : $"random {BingoRandomMax}";
-            _bingoRandomCommandAttempts += 1;
-            _bingoRandomSentAt = DateTime.UtcNow;
-            Plugin.Framework.RunOnFrameworkThread(() =>
-            {
-                Plugin.CommandManager.ProcessCommand(cmd);
-            });
-        }
-        catch (Exception ex)
-        {
-            _bingoAwaitingRandom = false;
-            _bingoStatus = $"Random failed: {ex.Message}";
-            Plugin.ChatGui.PrintError($"[Forest] Random failed: {ex.Message}");
-        }
-    }
-
     private async Task Bingo_HandleRandomResult(int rolled)
     {
         if (_bingoState is null)
         {
-            _bingoAwaitingRandom = false;
             _bingoStatus = "Load a game first.";
             Plugin.ChatGui.PrintError("[Forest] Load a game first.");
             return;
@@ -1355,7 +1482,6 @@ private void DrawHuntPanel()
         var called = new HashSet<int>(_bingoState.game.called ?? Array.Empty<int>());
         if (called.Count >= BingoRandomMax)
         {
-            _bingoAwaitingRandom = false;
             _bingoStatus = "All numbers called.";
             Plugin.ChatGui.PrintError("[Forest] All numbers called.");
             return;
@@ -1366,12 +1492,11 @@ private void DrawHuntPanel()
             _bingoRollAttempts += 1;
             if (_bingoRollAttempts > BingoRandomMax * 2)
             {
-                _bingoAwaitingRandom = false;
                 _bingoStatus = "Too many repeats.";
                 Plugin.ChatGui.PrintError("[Forest] Too many repeats while rolling.");
                 return;
             }
-            Bingo_SendRandomCommand(useSlash: true);
+            _ = Bingo_Roll();
             return;
         }
 
@@ -1379,7 +1504,7 @@ private void DrawHuntPanel()
         {
             var res = await _bingoApi!.CallNumberAsync(_bingoState.game.game_id, rolled);
             var newCalled = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
-            _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled } };
+            _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled, last_called = rolled } };
             _bingoStatus = $"Rolled {rolled}.";
             Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
         }
@@ -1387,11 +1512,6 @@ private void DrawHuntPanel()
         {
             _bingoStatus = $"Failed: {ex.Message}";
             Plugin.ChatGui.PrintError($"[Forest] Call failed: {ex.Message}");
-        }
-        finally
-        {
-            _bingoAwaitingRandom = false;
-            _bingoRandomTimeoutNotified = false;
         }
     }
 private Task Bingo_LoadOwnerCardsForOwner(string owner)
@@ -1425,11 +1545,26 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
             await Bingo_LoadOwnerCards(owner);
             await Bingo_LoadOwners();
             _bingoStatus = $"Bought {count} for {owner}.";
+
+            var ownerInfo = _bingoOwners.FirstOrDefault(o =>
+                string.Equals(o.owner_name, owner, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(ownerInfo?.token))
+            {
+                var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+                _bingoBuyLink = $"{baseUrl}/bingo/owner-token/{ownerInfo.token}";
+                _bingoBuyOwner = ownerInfo.owner_name;
+                _bingoShowBuyLink = true;
+            }
+            else
+            {
+                _bingoStatus = $"Bought {count} for {owner}, but no link token was found.";
+            }
         }
         catch (Exception ex) { _bingoStatus = $"Buy failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
     }
 }
+
 
 
 
