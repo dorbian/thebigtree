@@ -71,6 +71,7 @@ public class MainWindow : Window, IDisposable
     private int _bingoRollAttempts = 0;
     private int _bingoRandomCommandAttempts = 0;
     private DateTime? _bingoRandomSentAt;
+    private bool _bingoRandomTimeoutNotified = false;
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
 
@@ -173,7 +174,11 @@ public class MainWindow : Window, IDisposable
             {
                 _bingoAwaitingRandom = false;
                 _bingoStatus = "No /random result received. Try again or roll manually.";
-                Plugin.ChatGui.PrintError("[Forest] No /random result received. Try again or roll manually.");
+                if (!_bingoRandomTimeoutNotified)
+                {
+                    _bingoRandomTimeoutNotified = true;
+                    Plugin.ChatGui.PrintError("[Forest] No /random result received. Try again or roll manually.");
+                }
             }
         }
 
@@ -1281,6 +1286,7 @@ private void DrawHuntPanel()
         _bingoAwaitingRandom = true;
         _bingoRandomCommandAttempts = 0;
         _bingoRandomSentAt = null;
+        _bingoRandomTimeoutNotified = false;
         _bingoStatus = $"Rolling /random {BingoRandomMax}…";
         Bingo_SendRandomCommand(useSlash: true);
         return Task.CompletedTask;
@@ -1385,6 +1391,7 @@ private void DrawHuntPanel()
         finally
         {
             _bingoAwaitingRandom = false;
+            _bingoRandomTimeoutNotified = false;
         }
     }
 private Task Bingo_LoadOwnerCardsForOwner(string owner)
