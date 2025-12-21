@@ -12,12 +12,11 @@ on:
       - "forest-client/**"
       - ".github/workflows/forest-client.yml"
 
-env:
-  DALAMUD_HOME: ${{ runner.temp }}\\dalamud
-
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      DALAMUD_HOME: ${{ runner.temp }}\\dalamud
     steps:
       - uses: actions/checkout@v4
 
