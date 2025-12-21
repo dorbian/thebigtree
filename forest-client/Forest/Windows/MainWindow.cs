@@ -805,6 +805,16 @@ private void DrawHuntPanel()
             ImGui.SameLine();
             ImGui.TextDisabled($"[{Plugin.Config.BingoServerInfo}]");
         }
+        if (!string.IsNullOrEmpty(_bingoStatus))
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled(_bingoStatus);
+        }
+        if (_bingoLoading)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled("Loading.");
+        }
 
         ImGui.Separator();
 
@@ -854,15 +864,6 @@ private void DrawHuntPanel()
             if (ImGui.Button("Advance Stage")) _ = Bingo_AdvanceStage();
         }
 
-        if (!string.IsNullOrEmpty(_bingoStatus))
-        {
-            ImGui.SameLine(); ImGui.TextDisabled(_bingoStatus);
-        }
-        if (_bingoLoading)
-        {
-            ImGui.SameLine(); ImGui.TextDisabled("Loading.");
-        }
-
         ImGui.Spacing();
 
         if (_bingoState is null)
@@ -878,27 +879,36 @@ private void DrawHuntPanel()
         ImGui.TextUnformatted($"Pot: {g.pot} {g.currency}");
         ImGui.SameLine();
         ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}");
+        ImGui.Separator();
+
+        ImGui.TextUnformatted("Called:");
         ImGui.SameLine();
         int? lastCalled = g.last_called;
         if ((!lastCalled.HasValue || lastCalled.Value == 0) && g.called is { Length: > 0 })
             lastCalled = g.called[^1];
-        ImGui.BeginChild("LastDrawBox", new Vector2(120, 64), true);
+        ImGui.SetNextItemWidth(120);
+        ImGui.BeginChild("LastDrawBox", new Vector2(120, 64), true, ImGuiWindowFlags.NoScrollbar);
         ImGui.TextDisabled("Last draw");
         ImGui.SetWindowFontScale(2.2f);
         ImGui.TextUnformatted(lastCalled.HasValue ? lastCalled.Value.ToString() : "--");
         ImGui.SetWindowFontScale(1f);
         ImGui.EndChild();
-        ImGui.Separator();
-
-        ImGui.TextUnformatted("Called:");
         foreach (var r in g.called ?? Array.Empty<int>())
         {
             ImGui.SameLine();
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.6f, 1f), r.ToString());
         }
-        ImGui.Separator();
-
-        ImGui.TextUnformatted("Claims:");
+        ImGui.Spacing();
+        ImGui.BeginChild("ClaimsRow", new Vector2(0, 72), false, ImGuiWindowFlags.NoScrollbar);
+        ImGui.BeginChild("LastDrawBoxRow", new Vector2(120, 64), true, ImGuiWindowFlags.NoScrollbar);
+        ImGui.TextDisabled("Last draw");
+        ImGui.SetWindowFontScale(2.2f);
+        ImGui.TextUnformatted(lastCalled.HasValue ? lastCalled.Value.ToString() : "--");
+        ImGui.SetWindowFontScale(1f);
+        ImGui.EndChild();
+        ImGui.SameLine();
+        ImGui.BeginChild("ClaimsBox", new Vector2(0, 64), true, ImGuiWindowFlags.NoScrollbar);
+        ImGui.TextDisabled("Claims");
         var claims = g.claims ?? Array.Empty<Claim>();
         if (claims.Length == 0)
         {
@@ -921,6 +931,8 @@ private void DrawHuntPanel()
                 }
             }
         }
+        ImGui.EndChild();
+        ImGui.EndChild();
         ImGui.Separator();
 
         ImGui.TextUnformatted("Owners:");
