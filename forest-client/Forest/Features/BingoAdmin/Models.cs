@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Forest.Features.BingoAdmin;
 
 public record GameStateEnvelope(

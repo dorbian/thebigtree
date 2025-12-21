@@ -1,15 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "O4U9h2N6+KA=",
+  "dgSpecHash": "a7DgECd+fwk=",
   "success": true,
-  "projectFilePath": "C:\\Users\\dorbi\\Source\\Repos\\forest_client\\Forest\\Forest.csproj",
+  "projectFilePath": "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\dorbi\\.nuget\\packages\\dalamudpackager\\13.0.0\\dalamudpackager.13.0.0.nupkg.sha512",
-    "C:\\Users\\dorbi\\.nuget\\packages\\dotnet.reproduciblebuilds\\1.2.25\\dotnet.reproduciblebuilds.1.2.25.nupkg.sha512",
-    "C:\\Users\\dorbi\\.nuget\\packages\\imgui.net\\1.91.6.1\\imgui.net.1.91.6.1.nupkg.sha512",
-    "C:\\Users\\dorbi\\.nuget\\packages\\system.buffers\\4.5.1\\system.buffers.4.5.1.nupkg.sha512",
-    "C:\\Users\\dorbi\\.nuget\\packages\\system.numerics.vectors\\4.5.0\\system.numerics.vectors.4.5.0.nupkg.sha512",
-    "C:\\Users\\dorbi\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\6.0.0\\system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512"
+    "C:\\Users\\dorbi\\.nuget\\packages\\dalamudpackager\\14.0.0\\dalamudpackager.14.0.0.nupkg.sha512",
+    "C:\\Users\\dorbi\\.nuget\\packages\\dotnet.reproduciblebuilds\\1.2.39\\dotnet.reproduciblebuilds.1.2.39.nupkg.sha512",
+    "C:\\Users\\dorbi\\.nuget\\packages\\imgui.net\\1.91.6.1\\imgui.net.1.91.6.1.nupkg.sha512"
   ],
   "logs": []
 }
