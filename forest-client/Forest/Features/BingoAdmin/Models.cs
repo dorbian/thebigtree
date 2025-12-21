@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Forest.Features.BingoAdmin;
 
@@ -82,7 +83,8 @@ public record ListGamesResponse(
 public record BingoGame(
     string game_id,
     string title,
-    long created_at,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    double? created_at,
     bool active,
     string stage,
     int pot

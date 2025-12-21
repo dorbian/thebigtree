@@ -484,8 +484,8 @@ public class MainWindow : Window, IDisposable
         {
             var id = g.game_id ?? string.Empty;
             var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
-            var created = g.created_at > 0
-                ? DateTimeOffset.FromUnixTimeSeconds(g.created_at).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            var created = (g.created_at.HasValue && g.created_at.Value > 0)
+                ? DateTimeOffset.FromUnixTimeSeconds((long)g.created_at.Value).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                 : "unknown";
             var status = g.active ? "active" : "ended";
 
@@ -1223,6 +1223,7 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         finally { _bingoLoading = false; }
     }
 }
+
 
 
 
