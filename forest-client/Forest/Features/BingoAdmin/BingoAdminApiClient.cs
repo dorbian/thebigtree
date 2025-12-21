@@ -62,8 +62,29 @@ namespace Forest.Features.BingoAdmin
         public Task<SimpleResponse> DenyClaimAsync(string gameId, string cardId, CancellationToken ct = default)
             => Post<SimpleResponse>("bingo/claim-deny", new { game_id = gameId, card_id = cardId }, ct);
 
-        public Task<BuyResponse> BuyAsync(string gameId, string ownerName, int count = 1, CancellationToken ct = default)
-            => Post<BuyResponse>("bingo/buy", new { game_id = gameId, owner_name = ownerName, quantity = count }, ct);
+        public async Task<BuyResponse> BuyAsync(string gameId, string ownerName, int count = 1, CancellationToken ct = default)
+        {
+            var body = new { game_id = gameId, owner_name = ownerName, quantity = count };
+            var content = new StringContent(JsonSerializer.Serialize(body, _json), Encoding.UTF8, "application/json");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "bingo/buy") { Content = content };
+            ApplyAuthHeaders(req);
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            var payload = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var err = JsonSerializer.Deserialize<BuyResponse>(payload, _json);
+                    if (!string.IsNullOrWhiteSpace(err?.error))
+                        throw new InvalidOperationException(err.error);
+                }
+                catch (Exception)
+                {
+                    throw new InvalidOperationException($"Buy failed: {resp.StatusCode}");
+                }
+            }
+            return JsonSerializer.Deserialize<BuyResponse>(payload, _json)!;
+        }
 
         public Task<DeleteResponse> DeleteGameAsync(string gameId, CancellationToken ct = default)
             => Delete<DeleteResponse>($"bingo/{Uri.EscapeDataString(gameId)}", ct);

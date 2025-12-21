@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Utility.Raii;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
@@ -14,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
@@ -27,8 +29,8 @@ public class MainWindow : Window, IDisposable
     private readonly Plugin Plugin;
 
     // ---------- View switch ----------
-    private enum View { Hunt, MurderMystery, Bingo }
-    private View _view = View.MurderMystery;
+    private enum View { Home, Hunt, MurderMystery, Bingo }
+    private View _view = View.Home;
 
     // ---------- Left pane layout ----------
     private float _leftPaneWidth = 360f;   // resize via slider (stable with API 13 Columns)
@@ -67,11 +69,17 @@ public class MainWindow : Window, IDisposable
     private const int BingoRandomMax = 40;
     private bool _bingoAwaitingRandom = false;
     private int _bingoRollAttempts = 0;
+    private ISharedImmediateTexture? _homeIconTexture;
+    private string? _homeIconPath;
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
     {
         Plugin = plugin;
+        var baseDir = Path.GetDirectoryName(Forest.Plugin.PluginInterface.AssemblyLocation) ?? string.Empty;
+        _homeIconPath = Path.Combine(baseDir, "Resources", "icon.png");
+        if (File.Exists(_homeIconPath))
+            _homeIconTexture = Forest.Plugin.TextureProvider.GetFromFile(_homeIconPath);
         _pluginStartTime = DateTime.UtcNow;
 
         SizeConstraints = new WindowSizeConstraints
@@ -163,9 +171,7 @@ public class MainWindow : Window, IDisposable
     public override void Draw()
     {
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
-        if (ImGui.BeginMenuBar())
-        {
-            if (ImGui.Button("Hunt")) _view = View.Hunt;
+        if (ImGui.BeginMenuBar())\r\n        {\r\n            if (ImGui.Button("Home")) _view = View.Home;\r\n            ImGui.SameLine();\r\n            if (ImGui.Button("Hunt")) _view = View.Hunt;
             ImGui.SameLine();
             if (ImGui.Button("Murder Mystery")) _view = View.MurderMystery;
             ImGui.SameLine();
@@ -200,9 +206,7 @@ public class MainWindow : Window, IDisposable
         ImGui.NextColumn();
         ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
         {
-            switch (_view)
-            {
-                case View.Hunt: DrawHuntPanel(); break;
+            switch (_view)\r\n            {\r\n                case View.Home: DrawHomePanel(); break;\r\n                case View.Hunt: DrawHuntPanel(); break;
                 case View.MurderMystery: DrawMurderMysteryPanel(); break;
                 case View.Bingo: DrawBingoAdminPanel(); break;
             }
@@ -509,7 +513,31 @@ public class MainWindow : Window, IDisposable
 
 
     // ========================= RIGHT PANES =========================
-    private void DrawHuntPanel()
+        private void DrawHomePanel()
+    {
+                var iconSize = new Vector2(28, 28);
+        if (_homeIconTexture != null)
+        {
+            var wrap = _homeIconTexture.GetWrapOrDefault();
+            ImGui.Image(wrap.ImGuiHandle, iconSize);
+        }
+        else
+        {
+            ImGui.ColorButton("##home_icon", new Vector4(0.35f, 0.75f, 0.55f, 1f), 0, iconSize);
+        }
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Forest Home");
+        ImGui.Separator();
+        ImGui.TextWrapped("Forest is a lightweight admin console for TheBigTree games.");
+        ImGui.Spacing();
+        ImGui.TextUnformatted("What you can do:");
+        ImGui.BulletText("Manage Bingo games, players, and claims.");
+        ImGui.BulletText("Run Murder Mystery sessions.");
+        ImGui.BulletText("Track nearby players for quick actions.");
+        ImGui.Spacing();
+        ImGui.TextDisabled("Use the tabs above to jump into a mode.");
+    }
+private void DrawHuntPanel()
     {
         ImGui.TextUnformatted("Hunt panel (placeholder).");
     }
@@ -1205,6 +1233,11 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
             _bingoStatus = "Load a game first.";
             return;
         }
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            _bingoStatus = "Owner name required.";
+            return;
+        }
         Bingo_EnsureClient();
         _bingoLoading = true; _bingoStatus = $"Buying {count} card(s) for {owner}.";
 
@@ -1219,6 +1252,16 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         finally { _bingoLoading = false; }
     }
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
