@@ -2407,9 +2407,22 @@ private void DrawHuntPanel()
 
         try
         {
+            var previous = _bingoState.game.called ?? Array.Empty<int>();
+            var prevSet = new HashSet<int>(previous);
+
             var res = await _bingoApi!.RollAsync(_bingoState.game.game_id);
-            var called = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
-            var last = called.Length > 0 ? called[^1] : _bingoState.game.last_called;
+            var called = res.called ?? previous;
+
+            int? last = null;
+            foreach (var num in called)
+            {
+                if (prevSet.Contains(num)) continue;
+                if (!last.HasValue || num > last.Value)
+                    last = num;
+            }
+            if (!last.HasValue && called.Length > 0)
+                last = called[^1];
+
             _bingoState = _bingoState with { game = _bingoState.game with { called = called, last_called = last } };
             _bingoStatus = last.HasValue ? $"Rolled {last.Value}." : "Rolled.";
             if (last.HasValue)
