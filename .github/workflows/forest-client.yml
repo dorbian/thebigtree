@@ -1,0 +1,37 @@
+name: Build Forest Client
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "forest-client/**"
+      - ".github/workflows/forest-client.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build
+        shell: powershell
+        run: |
+          dotnet restore forest-client/Forest/Forest.csproj
+          dotnet build forest-client/Forest/Forest.csproj -c Release -o forest-client/dist
+          Copy-Item forest-client/Forest/Forest.json forest-client/dist -Force
+          Copy-Item forest-client/Forest/instructions.txt forest-client/dist -Force
+
+      - name: Package zip
+        shell: powershell
+        run: |
+          Compress-Archive -Path forest-client/dist/* -DestinationPath forest-client/forest-client.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forest-client
+          path: forest-client/forest-client.zip
