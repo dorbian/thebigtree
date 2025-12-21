@@ -46,6 +46,26 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value ("DALAMUD_HOME=" + $dalamudHome)
           Add-Content -Path $env:GITHUB_ENV -Value ("DALAMUD_LIB_PATH=" + $dalamudHome)
 
+      - name: Set version
+        shell: powershell
+        run: |
+          $prefix = "1.1"
+          $version = "$prefix.${{ github.run_number }}"
+          $csproj = "forest-client/Forest/Forest.csproj"
+          $csprojXml = Get-Content -Raw -Path $csproj
+          if ($csprojXml -match "<Version>.*?</Version>") {
+            $csprojXml = [regex]::Replace($csprojXml, "<Version>.*?</Version>", "<Version>$version</Version>")
+          } else {
+            $csprojXml = $csprojXml -replace "</PropertyGroup>", "  <Version>$version</Version>`r`n  </PropertyGroup>"
+          }
+          Set-Content -Path $csproj -Value $csprojXml -Encoding UTF8
+
+          $manifestPath = "forest-client/Forest/Forest.json"
+          $manifest = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json
+          $manifest.AssemblyVersion = $version
+          $manifest.Version = $version
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath -Encoding UTF8
+
       - name: Build
         shell: powershell
         run: |
@@ -86,15 +106,15 @@ jobs:
         shell: powershell
         run: |
           $repo = "${{ github.repository }}"
+          $version = "1.1.${{ github.run_number }}"
           $zipUrl = "https://github.com/$repo/releases/download/forest-client-latest/forest-client.zip"
           $path = "forest_repo/plogonmaster.json"
           $json = Get-Content -Raw -Path $path | ConvertFrom-Json
-          if ($json -is [PSCustomObject]) {
-            $json = @($json)
-          }
+          $json = @($json)
           foreach ($entry in $json) {
             if ($entry.InternalName -eq "Forest") {
               $entry.DalamudApiLevel = 14
+              $entry.AssemblyVersion = $version
               $entry.DownloadLinkInstall = $zipUrl
               $entry.DownloadLinkTesting = $zipUrl
               $entry.DownloadLinkUpdate = $zipUrl
