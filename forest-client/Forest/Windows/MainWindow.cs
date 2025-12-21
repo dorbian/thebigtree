@@ -129,10 +129,7 @@ public class MainWindow : Window, IDisposable
     {
         if (_bingoAwaitingRandom)
         {
-            var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
-            if (!string.IsNullOrWhiteSpace(localName) &&
-                string.Equals(sender.TextValue, localName, StringComparison.OrdinalIgnoreCase) &&
-                TryHandleBingoRandom(message.TextValue))
+            if (TryHandleBingoRandom(sender.TextValue, message.TextValue))
                 return;
         }
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
@@ -1265,12 +1262,22 @@ private void DrawHuntPanel()
         return Task.CompletedTask;
     }
 
-        private bool TryHandleBingoRandom(string messageText)
+    private bool TryHandleBingoRandom(string senderText, string messageText)
     {
         if (!_bingoAwaitingRandom) return false;
         if (string.IsNullOrWhiteSpace(messageText)) return false;
         var lower = messageText.ToLowerInvariant();
-        if (!lower.Contains("roll") && !lower.Contains("random")) return false;
+        if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
+
+        var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
+        if (!string.IsNullOrWhiteSpace(localName))
+        {
+            var senderMatches = !string.IsNullOrWhiteSpace(senderText) &&
+                                string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
+            var messageMatches = lower.Contains(localName.ToLowerInvariant()) || lower.StartsWith("you ");
+            if (!senderMatches && !messageMatches)
+                return false;
+        }
         var matches = Regex.Matches(messageText, "\\d+");
         if (matches.Count == 0) return false;
         if (!int.TryParse(matches[0].Value, out var rolled)) return false;

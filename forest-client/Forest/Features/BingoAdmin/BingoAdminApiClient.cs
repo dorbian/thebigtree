@@ -80,7 +80,7 @@ namespace Forest.Features.BingoAdmin
                 }
                 catch (Exception)
                 {
-                    throw new InvalidOperationException($"Buy failed: {resp.StatusCode}");
+                    throw new InvalidOperationException($"Buy failed: {resp.StatusCode} {payload}");
                 }
             }
             return JsonSerializer.Deserialize<BuyResponse>(payload, _json)!;
