@@ -129,9 +129,10 @@ public class MainWindow : Window, IDisposable
     // ========================= CHAT / TIMER FROM OLD WINDOW =========================
     private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
     {
-        if (_bingoAwaitingRandom)
+        var allowManualRoll = _view == View.Bingo && _bingoState is not null && Plugin.Config.BingoConnected;
+        if (_bingoAwaitingRandom || allowManualRoll)
         {
-            if (TryHandleBingoRandom(sender.TextValue, message.TextValue))
+            if (TryHandleBingoRandom(sender.TextValue, message.TextValue, allowManualRoll))
                 return;
         }
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
@@ -172,6 +173,7 @@ public class MainWindow : Window, IDisposable
             {
                 _bingoAwaitingRandom = false;
                 _bingoStatus = "No /random result received. Try again or roll manually.";
+                Plugin.ChatGui.PrintError("[Forest] No /random result received. Try again or roll manually.");
             }
         }
 
@@ -1286,9 +1288,10 @@ private void DrawHuntPanel()
         return Task.CompletedTask;
     }
 
-    private bool TryHandleBingoRandom(string senderText, string messageText)
+    private bool TryHandleBingoRandom(string senderText, string messageText, bool allowManual)
     {
-        if (!_bingoAwaitingRandom) return false;
+        if (!_bingoAwaitingRandom && !allowManual) return false;
+        if (!_bingoAwaitingRandom && allowManual) _bingoAwaitingRandom = true;
         if (string.IsNullOrWhiteSpace(messageText)) return false;
         var lower = messageText.ToLowerInvariant();
         if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
@@ -1342,6 +1345,7 @@ private void DrawHuntPanel()
         {
             _bingoAwaitingRandom = false;
             _bingoStatus = "Load a game first.";
+            Plugin.ChatGui.PrintError("[Forest] Load a game first.");
             return;
         }
         if (rolled < 1 || rolled > BingoRandomMax) return;
@@ -1351,6 +1355,7 @@ private void DrawHuntPanel()
         {
             _bingoAwaitingRandom = false;
             _bingoStatus = "All numbers called.";
+            Plugin.ChatGui.PrintError("[Forest] All numbers called.");
             return;
         }
 
@@ -1361,8 +1366,10 @@ private void DrawHuntPanel()
             {
                 _bingoAwaitingRandom = false;
                 _bingoStatus = "Too many repeats.";
+                Plugin.ChatGui.PrintError("[Forest] Too many repeats while rolling.");
                 return;
             }
+            Plugin.ChatGui.Print($"[Forest] Rolled {rolled} again; re-rolling.");
             Bingo_SendRandomCommand(useSlash: true);
             return;
         }
@@ -1373,10 +1380,12 @@ private void DrawHuntPanel()
             var newCalled = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
             _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled } };
             _bingoStatus = $"Rolled {rolled}.";
+            Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
         }
         catch (Exception ex)
         {
             _bingoStatus = $"Failed: {ex.Message}";
+            Plugin.ChatGui.PrintError($"[Forest] Call failed: {ex.Message}");
         }
         finally
         {
