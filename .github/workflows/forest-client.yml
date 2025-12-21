@@ -23,7 +23,6 @@ jobs:
           dotnet restore forest-client/Forest/Forest.csproj
           dotnet build forest-client/Forest/Forest.csproj -c Release -o forest-client/dist
           Copy-Item forest-client/Forest/Forest.json forest-client/dist -Force
-          Copy-Item forest-client/Forest/instructions.txt forest-client/dist -Force
 
       - name: Package zip
         shell: powershell
