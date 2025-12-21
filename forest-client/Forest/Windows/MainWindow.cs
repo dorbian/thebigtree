@@ -16,6 +16,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.IO;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
@@ -29,7 +32,7 @@ public class MainWindow : Window, IDisposable
     private readonly Plugin Plugin;
 
     // ---------- View switch ----------
-    private enum View { Home, Hunt, MurderMystery, Bingo }
+    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam }
     private View _view = View.Home;
 
     // ---------- Left pane layout ----------
@@ -73,6 +76,9 @@ public class MainWindow : Window, IDisposable
     private string _bingoBuyOwner = "";
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
+    private string _raffleStatus = "";
+    private string _wheelStatus = "";
+    private string _glamStatus = "";
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -136,6 +142,12 @@ public class MainWindow : Window, IDisposable
             && Plugin.Config.BingoConnected;
         if (allowManualRoll && TryHandleBingoRandom(sender.TextValue, message.TextValue))
             return;
+
+        if (Raffle_HandleChatJoin(type, sender.TextValue, message.TextValue))
+            return;
+
+        if (Glam_HandleVote(type, sender.TextValue, message.TextValue))
+            return;
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
             return;
 
@@ -166,6 +178,8 @@ public class MainWindow : Window, IDisposable
         if ((DateTime.UtcNow - _lastRefreshTime).TotalSeconds < 10) return;
         _lastRefreshTime = DateTime.UtcNow;
 
+        Raffle_CheckAutoClose();
+
         // nearby players (live)
         _nearbyPlayers = Plugin.ObjectTable
             .Where(o => o is IPlayerCharacter)
@@ -193,6 +207,18 @@ public class MainWindow : Window, IDisposable
                 _view = View.Bingo;
                 _ = Bingo_LoadGames();
             }
+            ImGui.SameLine();
+            ImGui.ColorButton("##raffle_icon", new Vector4(0.85f, 0.65f, 0.15f, 1.0f), 0, new Vector2(12, 12));
+            ImGui.SameLine();
+            if (ImGui.Button("Raffle")) _view = View.Raffle;
+            ImGui.SameLine();
+            ImGui.ColorButton("##wheel_icon", new Vector4(0.35f, 0.85f, 0.9f, 1.0f), 0, new Vector2(12, 12));
+            ImGui.SameLine();
+            if (ImGui.Button("Spin Wheel")) _view = View.SpinWheel;
+            ImGui.SameLine();
+            ImGui.ColorButton("##glam_icon", new Vector4(0.95f, 0.55f, 0.35f, 1.0f), 0, new Vector2(12, 12));
+            ImGui.SameLine();
+            if (ImGui.Button("Glam")) _view = View.Glam;
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
@@ -229,6 +255,9 @@ public class MainWindow : Window, IDisposable
                 case View.Hunt: DrawHuntPanel(); break;
                 case View.MurderMystery: DrawMurderMysteryPanel(); break;
                 case View.Bingo: DrawBingoAdminPanel(); break;
+                case View.Raffle: DrawRafflePanel(); break;
+                case View.SpinWheel: DrawSpinWheelPanel(); break;
+                case View.Glam: DrawGlamRoulettePanel(); break;
             }
         }
         ImGui.EndChild();
@@ -261,9 +290,15 @@ public class MainWindow : Window, IDisposable
 
         ImGui.BeginChild("SavedBottom", new Vector2(0, bottomH), true, 0);
         if (_view == View.Bingo)
-            DrawBingoGamesList();     // <— when Bingo tab is active
+            DrawBingoGamesList();
+        else if (_view == View.Raffle)
+            DrawRaffleEntrantsList();
+        else if (_view == View.SpinWheel)
+            DrawSpinWheelPromptsList();
+        else if (_view == View.Glam)
+            DrawGlamContestantsList();
         else
-            DrawSavedMurderGames();   // <— when Murder tab is active
+            DrawSavedMurderGames();
         ImGui.EndChild();
     }
 
@@ -407,6 +442,28 @@ public class MainWindow : Window, IDisposable
                         _selectedOwner = ownerKey;
                         _ = Bingo_BuyForOwner(ownerKey, 10);
                         _view = View.Bingo;
+                    }
+                    ImGui.EndMenu();
+                }
+
+                // Raffle submenu
+                if (ImGui.BeginMenu("Raffle"))
+                {
+                    if (ImGui.MenuItem("Add to Raffle"))
+                    {
+                        _view = View.Raffle;
+                        Raffle_AddEntry(ownerKey, "manual");
+                    }
+                    ImGui.EndMenu();
+                }
+
+                // Glam Roulette submenu
+                if (ImGui.BeginMenu("Glam Roulette"))
+                {
+                    if (ImGui.MenuItem("Add contestant"))
+                    {
+                        _view = View.Glam;
+                        Glam_AddContestant(ownerKey);
                     }
                     ImGui.EndMenu();
                 }
@@ -908,6 +965,933 @@ private void DrawHuntPanel()
         var game = Plugin.Config.CurrentGame;
         if (game == null) return 0;
         return GetRequiredWhisperFields(game);
+    }
+
+    // ========================= Raffle =========================
+    private void DrawRafflePanel()
+    {
+        var raffle = Plugin.Config.Raffle;
+
+        ImGui.TextUnformatted("Forest Raffle Roll");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        ImGui.SetNextItemWidth(300);
+        string title = raffle.Title ?? "";
+        if (ImGui.InputText("Title", ref title, 128))
+        {
+            raffle.Title = title;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(420);
+        string desc = raffle.Description ?? "";
+        if (ImGui.InputText("Description", ref desc, 256))
+        {
+            raffle.Description = desc;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(120);
+        string join = raffle.JoinPhrase ?? "";
+        if (ImGui.InputText("Join phrase", ref join, 64))
+        {
+            raffle.JoinPhrase = join;
+            Plugin.Config.Save();
+        }
+
+        int minutes = Math.Clamp(raffle.SignupMinutes, 1, 30);
+        if (ImGui.SliderInt("Signup minutes", ref minutes, 1, 30))
+        {
+            raffle.SignupMinutes = minutes;
+            Plugin.Config.Save();
+        }
+
+        int winners = Math.Clamp(raffle.WinnersCount, 1, 10);
+        if (ImGui.SliderInt("Winners", ref winners, 1, 10))
+        {
+            raffle.WinnersCount = winners;
+            Plugin.Config.Save();
+        }
+
+        ImGui.TextUnformatted("Signup channels:");
+        ImGui.SameLine();
+        bool say = raffle.AllowSay;
+        if (ImGui.Checkbox("Say", ref say)) { raffle.AllowSay = say; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool shout = raffle.AllowShout;
+        if (ImGui.Checkbox("Shout", ref shout)) { raffle.AllowShout = shout; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool yell = raffle.AllowYell;
+        if (ImGui.Checkbox("Yell", ref yell)) { raffle.AllowYell = yell; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool party = raffle.AllowParty;
+        if (ImGui.Checkbox("Party", ref party)) { raffle.AllowParty = party; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool tell = raffle.AllowTell;
+        if (ImGui.Checkbox("Tell", ref tell)) { raffle.AllowTell = tell; Plugin.Config.Save(); }
+
+        bool autoDraw = raffle.AutoDrawOnClose;
+        if (ImGui.Checkbox("Auto-draw on close", ref autoDraw))
+        {
+            raffle.AutoDrawOnClose = autoDraw;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(240);
+        string salt = raffle.HostSalt ?? "";
+        if (ImGui.InputText("Seed salt", ref salt, 128))
+        {
+            raffle.HostSalt = salt;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(420);
+        string webhook = raffle.WebhookUrl ?? "";
+        if (ImGui.InputText("Discord webhook", ref webhook, 512))
+        {
+            raffle.WebhookUrl = webhook;
+            Plugin.Config.Save();
+        }
+
+        ImGui.Spacing();
+
+        if (!string.IsNullOrWhiteSpace(_raffleStatus))
+            ImGui.TextDisabled(_raffleStatus);
+
+        ImGui.Spacing();
+
+        using (var dis = ImRaii.Disabled(raffle.IsOpen))
+        {
+            if (ImGui.Button("Start Raffle"))
+                Raffle_Start();
+        }
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(!raffle.IsOpen))
+        {
+            if (ImGui.Button("Close Raffle"))
+                Raffle_Close();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Draw"))
+            Raffle_Draw();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        ImGui.TextUnformatted($"Entrants: {raffle.Entries.Count}");
+        if (raffle.IsOpen && raffle.EndsAtUtc.HasValue)
+        {
+            var remaining = raffle.EndsAtUtc.Value - DateTime.UtcNow;
+            if (remaining.TotalSeconds > 0)
+                ImGui.TextDisabled($"Closes in: {remaining:mm\\:ss}");
+        }
+
+        if (raffle.Winners.Count > 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Winners:");
+            foreach (var w in raffle.Winners)
+                ImGui.BulletText($"{w.Name} (#{w.TicketNumber})");
+        }
+    }
+
+    // ========================= Spin Wheel =========================
+    private void DrawSpinWheelPanel()
+    {
+        var wheel = Plugin.Config.SpinWheel;
+        EnsureWheelDefaults(wheel);
+
+        ImGui.TextUnformatted("Spin the Wheel");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        ImGui.SetNextItemWidth(300);
+        string title = wheel.Title ?? "";
+        if (ImGui.InputText("Title", ref title, 128))
+        {
+            wheel.Title = title;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(420);
+        string template = wheel.AnnouncementTemplate ?? "";
+        if (ImGui.InputText("Announcement", ref template, 256))
+        {
+            wheel.AnnouncementTemplate = template;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(420);
+        string punishTemplate = wheel.PunishmentTemplate ?? "";
+        if (ImGui.InputText("Punishment announce", ref punishTemplate, 256))
+        {
+            wheel.PunishmentTemplate = punishTemplate;
+            Plugin.Config.Save();
+        }
+
+        int cooldown = Math.Clamp(wheel.CooldownSpins, 0, 10);
+        if (ImGui.SliderInt("Cooldown spins", ref cooldown, 0, 10))
+        {
+            wheel.CooldownSpins = cooldown;
+            Plugin.Config.Save();
+        }
+
+        bool announce = wheel.AnnounceInChat;
+        if (ImGui.Checkbox("Announce in chat", ref announce))
+        {
+            wheel.AnnounceInChat = announce;
+            Plugin.Config.Save();
+        }
+        ImGui.SameLine();
+        bool usePunish = wheel.UsePunishments;
+        if (ImGui.Checkbox("Use punishments", ref usePunish))
+        {
+            wheel.UsePunishments = usePunish;
+            Plugin.Config.Save();
+        }
+        ImGui.SameLine();
+        bool punishLoserOnly = wheel.PunishLoserOnly;
+        if (ImGui.Checkbox("Punish loser only", ref punishLoserOnly))
+        {
+            wheel.PunishLoserOnly = punishLoserOnly;
+            Plugin.Config.Save();
+        }
+
+        ImGui.Spacing();
+        if (!string.IsNullOrWhiteSpace(_wheelStatus))
+            ImGui.TextDisabled(_wheelStatus);
+
+        if (ImGui.Button("Spin"))
+            SpinWheel();
+
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(!wheel.UsePunishments))
+        {
+            if (ImGui.Button("Spin punishment"))
+                SpinWheelPunishment();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Reset History"))
+        {
+            foreach (var p in wheel.Prompts)
+                p.LastUsedSpin = -1;
+            foreach (var p in wheel.PunishmentPrompts)
+                p.LastUsedSpin = -1;
+            wheel.SpinCount = 0;
+            wheel.LastPrompt = "";
+            Plugin.Config.Save();
+            _wheelStatus = "History reset.";
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        ImGui.BeginChild("WheelLastPrompt", new Vector2(220, 84), true);
+        ImGui.TextDisabled("Last prompt");
+        ImGui.SetWindowFontScale(1.8f);
+        ImGui.TextWrapped(string.IsNullOrWhiteSpace(wheel.LastPrompt) ? "--" : wheel.LastPrompt);
+        ImGui.SetWindowFontScale(1f);
+        ImGui.EndChild();
+    }
+
+    // ========================= Glam Roulette =========================
+    private void DrawGlamRoulettePanel()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        EnsureGlamDefaults(glam);
+
+        ImGui.TextUnformatted("Glam Roulette");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        ImGui.SetNextItemWidth(300);
+        string title = glam.Title ?? "";
+        if (ImGui.InputText("Title", ref title, 128))
+        {
+            glam.Title = title;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(120);
+        string voteKeyword = glam.VoteKeyword ?? "";
+        if (ImGui.InputText("Vote keyword", ref voteKeyword, 64))
+        {
+            glam.VoteKeyword = voteKeyword;
+            Plugin.Config.Save();
+        }
+
+        int minutes = Math.Clamp(glam.RoundMinutes, 2, 5);
+        if (ImGui.SliderInt("Round minutes", ref minutes, 2, 5))
+        {
+            glam.RoundMinutes = minutes;
+            Plugin.Config.Save();
+        }
+
+        ImGui.TextUnformatted("Vote channels:");
+        ImGui.SameLine();
+        bool say = glam.AllowSay;
+        if (ImGui.Checkbox("Say", ref say)) { glam.AllowSay = say; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool shout = glam.AllowShout;
+        if (ImGui.Checkbox("Shout", ref shout)) { glam.AllowShout = shout; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool yell = glam.AllowYell;
+        if (ImGui.Checkbox("Yell", ref yell)) { glam.AllowYell = yell; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool party = glam.AllowParty;
+        if (ImGui.Checkbox("Party", ref party)) { glam.AllowParty = party; Plugin.Config.Save(); }
+        ImGui.SameLine();
+        bool tell = glam.AllowTell;
+        if (ImGui.Checkbox("Tell", ref tell)) { glam.AllowTell = tell; Plugin.Config.Save(); }
+
+        ImGui.Spacing();
+        if (!string.IsNullOrWhiteSpace(_glamStatus))
+            ImGui.TextDisabled(_glamStatus);
+
+        ImGui.Spacing();
+
+        if (ImGui.Button("Roll Theme"))
+            Glam_RollTheme();
+        ImGui.SameLine();
+        if (ImGui.Button("Start Round"))
+            Glam_StartRound();
+        ImGui.SameLine();
+        if (ImGui.Button("End Round"))
+            Glam_EndRound();
+        ImGui.SameLine();
+        if (ImGui.Button("Toggle Voting"))
+            Glam_ToggleVoting();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        ImGui.BeginChild("GlamThemeBox", new Vector2(240, 84), true);
+        ImGui.TextDisabled("Current theme");
+        ImGui.SetWindowFontScale(1.8f);
+        ImGui.TextWrapped(string.IsNullOrWhiteSpace(glam.CurrentTheme) ? "--" : glam.CurrentTheme);
+        ImGui.SetWindowFontScale(1f);
+        ImGui.EndChild();
+
+        if (glam.RoundActive && glam.EndsAtUtc.HasValue)
+        {
+            var remaining = glam.EndsAtUtc.Value - DateTime.UtcNow;
+            if (remaining.TotalSeconds > 0)
+                ImGui.TextDisabled($"Time left: {remaining:mm\\:ss}");
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        ImGui.TextUnformatted("Vote tally:");
+        foreach (var kv in Glam_GetVoteCounts(glam))
+        {
+            ImGui.BulletText($"{kv.Key}: {kv.Value}");
+        }
+    }
+
+    private void DrawGlamContestantsList()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        EnsureGlamDefaults(glam);
+
+        ImGui.TextDisabled("Glam Contestants");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"[{glam.Contestants.Count}]");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        for (int i = 0; i < glam.Contestants.Count; i++)
+        {
+            var c = glam.Contestants[i];
+            ImGui.TextUnformatted($"{i + 1}. {c.Name}");
+            ImGui.SameLine();
+            ImGui.PushID(i);
+            if (ImGui.SmallButton("Remove"))
+            {
+                glam.Contestants.RemoveAt(i);
+                Plugin.Config.Save();
+            }
+            ImGui.PopID();
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Add contestant"))
+        {
+            glam.Contestants.Add(new GlamContestant { Name = "New contestant", Order = glam.Contestants.Count + 1 });
+            Plugin.Config.Save();
+        }
+    }
+
+    private void EnsureGlamDefaults(GlamRouletteState glam)
+    {
+        if (glam.Themes.Count > 0) return;
+
+        glam.Themes = new List<GlamTheme>
+        {
+            new() { Text = "Skater Prince" },
+            new() { Text = "Forest Bandit Boy" },
+            new() { Text = "Sadboy in Pastel" },
+            new() { Text = "Gridania but make it trashy" },
+            new() { Text = "Starry Night Idol" },
+            new() { Text = "Battle-worn Librarian" },
+            new() { Text = "High Society Rebel" },
+            new() { Text = "Crimson Duelist" },
+            new() { Text = "Rainy Day Tourist" },
+            new() { Text = "Woodland Mage" },
+        };
+        Plugin.Config.Save();
+    }
+
+    private void Glam_AddContestant(string name)
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        var trimmed = (name ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        if (glam.Contestants.Any(c => string.Equals(c.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+            return;
+        glam.Contestants.Add(new GlamContestant { Name = trimmed, Order = glam.Contestants.Count + 1 });
+        Plugin.Config.Save();
+    }
+
+    private void Glam_RollTheme()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        EnsureGlamDefaults(glam);
+        if (glam.Themes.Count == 0)
+        {
+            _glamStatus = "No themes available.";
+            return;
+        }
+        int idx = RandomNumberGenerator.GetInt32(0, glam.Themes.Count);
+        glam.CurrentTheme = glam.Themes[idx].Text;
+        _glamStatus = $"Theme: {glam.CurrentTheme}";
+        Plugin.Config.Save();
+    }
+
+    private void Glam_StartRound()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        if (string.IsNullOrWhiteSpace(glam.CurrentTheme))
+            Glam_RollTheme();
+        glam.RoundActive = true;
+        glam.StartedAtUtc = DateTime.UtcNow;
+        glam.EndsAtUtc = DateTime.UtcNow.AddMinutes(Math.Clamp(glam.RoundMinutes, 2, 5));
+        glam.VotesByVoter.Clear();
+        _glamStatus = "Round started.";
+        Plugin.Config.Save();
+    }
+
+    private void Glam_EndRound()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        glam.RoundActive = false;
+        glam.VotingOpen = false;
+        glam.EndsAtUtc = DateTime.UtcNow;
+        _glamStatus = "Round ended.";
+        Plugin.Config.Save();
+    }
+
+    private void Glam_ToggleVoting()
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        glam.VotingOpen = !glam.VotingOpen;
+        _glamStatus = glam.VotingOpen ? "Voting opened." : "Voting closed.";
+        Plugin.Config.Save();
+    }
+
+    private bool Glam_HandleVote(XivChatType type, string sender, string message)
+    {
+        var glam = Plugin.Config.GlamRoulette;
+        if (!glam.RoundActive || !glam.VotingOpen) return false;
+        if (string.IsNullOrWhiteSpace(glam.VoteKeyword)) return false;
+
+        bool channelOk = type switch
+        {
+            XivChatType.Say => glam.AllowSay,
+            XivChatType.Shout => glam.AllowShout,
+            XivChatType.Yell => glam.AllowYell,
+            XivChatType.Party => glam.AllowParty,
+            XivChatType.TellIncoming => glam.AllowTell,
+            _ => false
+        };
+        if (!channelOk) return false;
+
+        int idx = message.IndexOf(glam.VoteKeyword, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return false;
+
+        var after = message.Substring(idx + glam.VoteKeyword.Length).Trim();
+        if (string.IsNullOrWhiteSpace(after)) return false;
+
+        var match = glam.Contestants.FirstOrDefault(c =>
+            string.Equals(c.Name, after, StringComparison.OrdinalIgnoreCase));
+        if (match == null) return false;
+
+        glam.VotesByVoter[sender] = match.Name;
+        Plugin.Config.Save();
+        return true;
+    }
+
+    private Dictionary<string, int> Glam_GetVoteCounts(GlamRouletteState glam)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in glam.Contestants)
+            counts[c.Name] = 0;
+        foreach (var kv in glam.VotesByVoter)
+        {
+            if (!counts.ContainsKey(kv.Value))
+                counts[kv.Value] = 0;
+            counts[kv.Value] += 1;
+        }
+        return counts;
+    }
+
+    private void DrawSpinWheelPromptsList()
+    {
+        var wheel = Plugin.Config.SpinWheel;
+        EnsureWheelDefaults(wheel);
+
+        ImGui.TextDisabled("Wheel Prompts");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"[{wheel.Prompts.Count}]");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        for (int i = 0; i < wheel.Prompts.Count; i++)
+        {
+            var prompt = wheel.Prompts[i];
+            ImGui.PushID(i);
+
+            ImGui.SetNextItemWidth(200);
+            string text = prompt.Text ?? "";
+            if (ImGui.InputText("##prompt", ref text, 256))
+            {
+                prompt.Text = text;
+                Plugin.Config.Save();
+            }
+
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(60);
+            int weight = Math.Clamp(prompt.Weight, 1, 10);
+            if (ImGui.InputInt("##weight", ref weight))
+            {
+                prompt.Weight = Math.Clamp(weight, 1, 10);
+                Plugin.Config.Save();
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("w");
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Remove"))
+            {
+                wheel.Prompts.RemoveAt(i);
+                Plugin.Config.Save();
+            }
+
+            ImGui.PopID();
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Add prompt"))
+        {
+            wheel.Prompts.Add(new WheelPrompt { Text = "New prompt", Weight = 1 });
+            Plugin.Config.Save();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextDisabled("Punishment Prompts");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"[{wheel.PunishmentPrompts.Count}]");
+        ImGui.Spacing();
+
+        for (int i = 0; i < wheel.PunishmentPrompts.Count; i++)
+        {
+            var prompt = wheel.PunishmentPrompts[i];
+            ImGui.PushID(i + 10000);
+
+            ImGui.SetNextItemWidth(200);
+            string text = prompt.Text ?? "";
+            if (ImGui.InputText("##punish", ref text, 256))
+            {
+                prompt.Text = text;
+                Plugin.Config.Save();
+            }
+
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(60);
+            int weight = Math.Clamp(prompt.Weight, 1, 10);
+            if (ImGui.InputInt("##punishweight", ref weight))
+            {
+                prompt.Weight = Math.Clamp(weight, 1, 10);
+                Plugin.Config.Save();
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("w");
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Remove"))
+            {
+                wheel.PunishmentPrompts.RemoveAt(i);
+                Plugin.Config.Save();
+            }
+
+            ImGui.PopID();
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Add punishment"))
+        {
+            wheel.PunishmentPrompts.Add(new WheelPrompt { Text = "New punishment", Weight = 1 });
+            Plugin.Config.Save();
+        }
+    }
+
+    private void EnsureWheelDefaults(SpinWheelState wheel)
+    {
+        if (wheel.Prompts.Count > 0) return;
+
+        wheel.Prompts = new List<WheelPrompt>
+        {
+            new() { Text = "Do your favorite emote.", Weight = 2 },
+            new() { Text = "Strike a dramatic pose and hold for 5 seconds.", Weight = 2 },
+            new() { Text = "Use a /shout with a goofy catchphrase.", Weight = 1 },
+            new() { Text = "Pick a random player and compliment their glam.", Weight = 2 },
+            new() { Text = "Change minion to something tiny.", Weight = 1 },
+            new() { Text = "Do a quick 5-second RP line.", Weight = 2 },
+            new() { Text = "Spin in place three times.", Weight = 2 },
+            new() { Text = "Swap to your silliest title.", Weight = 1 },
+            new() { Text = "Use /laugh at the host.", Weight = 1 },
+            new() { Text = "Do a victory emote for the crowd.", Weight = 2 },
+            new() { Text = "Make a bad pun about trees.", Weight = 1 },
+            new() { Text = "Pick a new standing pose.", Weight = 1 },
+        };
+        wheel.PunishmentPrompts = new List<WheelPrompt>
+        {
+            new() { Text = "Do a full /grovel to the crowd.", Weight = 2 },
+            new() { Text = "Sing one line of a song in /say.", Weight = 2 },
+            new() { Text = "Do 10 seconds of dramatic crying emotes.", Weight = 2 },
+            new() { Text = "Change to the silliest weapon glam you own.", Weight = 1 },
+            new() { Text = "Use /slap on the host (politely).", Weight = 1 },
+            new() { Text = "Do a slow walk to the center and bow.", Weight = 2 },
+        };
+        Plugin.Config.Save();
+    }
+
+    private void SpinWheel()
+    {
+        var wheel = Plugin.Config.SpinWheel;
+        EnsureWheelDefaults(wheel);
+
+        if (wheel.Prompts.Count == 0)
+        {
+            _wheelStatus = "No prompts available.";
+            return;
+        }
+
+        var picked = SpinWheelPick(wheel.Prompts, wheel);
+        if (picked == null) return;
+
+        wheel.LastPrompt = picked.Text;
+        _wheelStatus = $"Spin #{wheel.SpinCount}: {picked.Text}";
+        Plugin.Config.Save();
+
+        if (wheel.AnnounceInChat)
+        {
+            var msg = (wheel.AnnouncementTemplate ?? "[Wheel] {prompt}")
+                .Replace("{prompt}", picked.Text);
+            Plugin.ChatGui.Print(msg);
+        }
+    }
+
+    private void SpinWheelPunishment()
+    {
+        var wheel = Plugin.Config.SpinWheel;
+        EnsureWheelDefaults(wheel);
+        if (wheel.PunishmentPrompts.Count == 0)
+        {
+            _wheelStatus = "No punishment prompts available.";
+            return;
+        }
+
+        var picked = SpinWheelPick(wheel.PunishmentPrompts, wheel);
+        if (picked == null) return;
+
+        _wheelStatus = $"Punishment #{wheel.SpinCount}: {picked.Text}";
+        Plugin.Config.Save();
+
+        if (wheel.AnnounceInChat)
+        {
+            var msg = (wheel.PunishmentTemplate ?? "[Wheel][Punishment] {prompt}")
+                .Replace("{prompt}", picked.Text);
+            Plugin.ChatGui.Print(msg);
+        }
+    }
+
+    private WheelPrompt? SpinWheelPick(List<WheelPrompt> prompts, SpinWheelState wheel)
+    {
+        var eligible = new List<WheelPrompt>();
+        foreach (var p in prompts)
+        {
+            if (wheel.CooldownSpins <= 0 || p.LastUsedSpin < 0 ||
+                (wheel.SpinCount - p.LastUsedSpin) > wheel.CooldownSpins)
+            {
+                if (!string.IsNullOrWhiteSpace(p.Text))
+                    eligible.Add(p);
+            }
+        }
+        if (eligible.Count == 0)
+        {
+            _wheelStatus = "All prompts are on cooldown.";
+            return null;
+        }
+
+        int totalWeight = 0;
+        foreach (var p in eligible) totalWeight += Math.Max(1, p.Weight);
+        int roll = RandomNumberGenerator.GetInt32(0, totalWeight);
+        WheelPrompt? picked = null;
+        int acc = 0;
+        foreach (var p in eligible)
+        {
+            acc += Math.Max(1, p.Weight);
+            if (roll < acc) { picked = p; break; }
+        }
+        if (picked == null) return null;
+
+        wheel.SpinCount += 1;
+        picked.LastUsedSpin = wheel.SpinCount;
+        return picked;
+    }
+
+    private void DrawRaffleEntrantsList()
+    {
+        var raffle = Plugin.Config.Raffle;
+        ImGui.TextDisabled("Raffle Entrants");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"[{raffle.Entries.Count}]");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        if (raffle.Entries.Count == 0)
+        {
+            ImGui.TextDisabled("No entrants yet.");
+            return;
+        }
+
+        for (int i = raffle.Entries.Count - 1; i >= 0; i--)
+        {
+            var entry = raffle.Entries[i];
+            ImGui.TextUnformatted($"#{entry.TicketNumber} {entry.Name}");
+            ImGui.SameLine();
+            ImGui.PushID(i);
+            if (ImGui.SmallButton("Remove"))
+            {
+                raffle.Entries.RemoveAt(i);
+                Plugin.Config.Save();
+            }
+            ImGui.PopID();
+        }
+    }
+
+    private void Raffle_Start()
+    {
+        var raffle = Plugin.Config.Raffle;
+        raffle.IsOpen = true;
+        raffle.StartedAtUtc = DateTime.UtcNow;
+        raffle.EndsAtUtc = DateTime.UtcNow.AddMinutes(Math.Clamp(raffle.SignupMinutes, 1, 30));
+        raffle.Entries.Clear();
+        raffle.Winners.Clear();
+        raffle.SeedHash = null;
+        raffle.SeedSource = null;
+        raffle.RandomBytes = null;
+        _raffleStatus = "Raffle started.";
+        Plugin.Config.Save();
+    }
+
+    private void Raffle_Close()
+    {
+        var raffle = Plugin.Config.Raffle;
+        raffle.IsOpen = false;
+        raffle.EndsAtUtc = DateTime.UtcNow;
+        _raffleStatus = "Raffle closed.";
+        Plugin.Config.Save();
+
+        if (raffle.AutoDrawOnClose)
+            Raffle_Draw();
+    }
+
+    private void Raffle_Draw()
+    {
+        var raffle = Plugin.Config.Raffle;
+        if (raffle.Entries.Count == 0)
+        {
+            _raffleStatus = "No entrants to draw.";
+            return;
+        }
+
+        int winnersToPick = Math.Clamp(raffle.WinnersCount, 1, 10);
+        if (!raffle.AllowRepeatWinners && winnersToPick > raffle.Entries.Count)
+            winnersToPick = raffle.Entries.Count;
+
+        var seedSource = Raffle_BuildSeedSource(raffle);
+        var seedHash = Raffle_HashSeed(seedSource);
+        raffle.SeedSource = seedSource;
+        raffle.SeedHash = seedHash;
+
+        var rng = Raffle_CreateRng(seedHash);
+        var pool = new List<RaffleEntry>(raffle.Entries);
+        raffle.Winners.Clear();
+
+        for (int i = 0; i < winnersToPick; i++)
+        {
+            if (pool.Count == 0) break;
+            int idx = rng.Next(pool.Count);
+            var pick = pool[idx];
+            raffle.Winners.Add(new RaffleWinner { Name = pick.Name, TicketNumber = pick.TicketNumber });
+            if (!raffle.AllowRepeatWinners)
+                pool.RemoveAt(idx);
+        }
+
+        _raffleStatus = $"Draw complete ({raffle.Winners.Count} winners).";
+        Plugin.Config.Save();
+
+        Plugin.ChatGui.Print($"[Raffle] Winners: {string.Join(", ", raffle.Winners.Select(w => w.Name))}");
+        _ = Raffle_PostWebhook(raffle);
+    }
+
+    private string Raffle_BuildSeedSource(RaffleState raffle)
+    {
+        if (string.IsNullOrWhiteSpace(raffle.RandomBytes))
+        {
+            var bytes = RandomNumberGenerator.GetBytes(8);
+            raffle.RandomBytes = Convert.ToBase64String(bytes);
+        }
+        long roundedTime = raffle.StartedAtUtc.HasValue
+            ? (long)raffle.StartedAtUtc.Value.ToUniversalTime().Subtract(DateTime.UnixEpoch).TotalSeconds
+            : (long)DateTime.UtcNow.Subtract(DateTime.UnixEpoch).TotalSeconds;
+        return $"{raffle.HostSalt}|{roundedTime}|{raffle.Entries.Count}|{raffle.RandomBytes}";
+    }
+
+    private static string Raffle_HashSeed(string seedSource)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(seedSource));
+        var sb = new StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes) sb.Append(b.ToString("x2"));
+        return sb.ToString();
+    }
+
+    private static Random Raffle_CreateRng(string seedHash)
+    {
+        int seed = 0;
+        if (!string.IsNullOrWhiteSpace(seedHash) && seedHash.Length >= 8)
+            seed = Convert.ToInt32(seedHash.Substring(0, 8), 16);
+        return new Random(seed);
+    }
+
+    private void Raffle_AddEntry(string name, string source)
+    {
+        var raffle = Plugin.Config.Raffle;
+        if (!raffle.IsOpen)
+        {
+            _raffleStatus = "Raffle is not open.";
+            return;
+        }
+        var trimmed = (name ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+
+        if (!raffle.AllowAlts)
+        {
+            if (raffle.Entries.Any(e => string.Equals(e.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+                return;
+        }
+
+        int ticket = raffle.Entries.Count + 1;
+        raffle.Entries.Add(new RaffleEntry
+        {
+            Name = trimmed,
+            TicketNumber = ticket,
+            Source = source ?? ""
+        });
+        _raffleStatus = $"{trimmed} entered.";
+        Plugin.Config.Save();
+    }
+
+    private bool Raffle_HandleChatJoin(XivChatType type, string sender, string message)
+    {
+        var raffle = Plugin.Config.Raffle;
+        if (!raffle.IsOpen) return false;
+        if (string.IsNullOrWhiteSpace(raffle.JoinPhrase)) return false;
+
+        bool channelOk = type switch
+        {
+            XivChatType.Say => raffle.AllowSay,
+            XivChatType.Shout => raffle.AllowShout,
+            XivChatType.Yell => raffle.AllowYell,
+            XivChatType.Party => raffle.AllowParty,
+            XivChatType.TellIncoming => raffle.AllowTell,
+            _ => false
+        };
+        if (!channelOk) return false;
+
+        if (message.IndexOf(raffle.JoinPhrase, StringComparison.OrdinalIgnoreCase) < 0)
+            return false;
+
+        Raffle_AddEntry(sender, "chat");
+        return true;
+    }
+
+    private void Raffle_CheckAutoClose()
+    {
+        var raffle = Plugin.Config.Raffle;
+        if (!raffle.IsOpen || !raffle.EndsAtUtc.HasValue) return;
+        if (DateTime.UtcNow < raffle.EndsAtUtc.Value) return;
+
+        raffle.IsOpen = false;
+        raffle.EndsAtUtc = DateTime.UtcNow;
+        _raffleStatus = "Raffle closed.";
+        Plugin.Config.Save();
+
+        if (raffle.AutoDrawOnClose)
+            Raffle_Draw();
+    }
+
+    private async Task Raffle_PostWebhook(RaffleState raffle)
+    {
+        if (string.IsNullOrWhiteSpace(raffle.WebhookUrl)) return;
+
+        try
+        {
+            using var http = new HttpClient();
+            var winners = raffle.Winners.Count == 0
+                ? "No winners."
+                : string.Join("\n", raffle.Winners.Select(w => $"{w.Name} (#{w.TicketNumber})"));
+            var payload = new
+            {
+                username = "Forest Raffle",
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = raffle.Title,
+                        description = raffle.Description,
+                        fields = new[]
+                        {
+                            new { name = "Entrants", value = raffle.Entries.Count.ToString(), inline = true },
+                            new { name = "Winners", value = winners, inline = false },
+                            new { name = "Seed", value = raffle.SeedHash ?? "n/a", inline = false },
+                        }
+                    }
+                }
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            await http.PostAsync(raffle.WebhookUrl, content).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _raffleStatus = $"Webhook failed: {ex.Message}";
+        }
     }
 
     private int GetRequiredWhisperFields(MurderMysteryData game)

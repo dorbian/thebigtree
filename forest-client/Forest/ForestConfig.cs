@@ -17,6 +17,9 @@ namespace Forest
 
         // Murder Mystery games list and current game
         public List<MurderMysteryData> MurderMysteryGames { get; set; } = new();
+        public RaffleState Raffle { get; set; } = new();
+        public SpinWheelState SpinWheel { get; set; } = new();
+        public GlamRouletteState GlamRoulette { get; set; } = new();
         public bool BingoConnected { get; set; } = false;
         public string? BingoServerInfo { get; set; } = null;         // e.g., server version or public_url/host
         public DateTime? BingoLastConnectedUtc { get; set; } = null; // last successful connect time (UTC)
