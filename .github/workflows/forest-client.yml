@@ -121,7 +121,11 @@ jobs:
               $entry.DownloadLinkUpdate = $zipUrl
             }
           }
-          $json | ConvertTo-Json -Depth 10 | Set-Content -Path $path -Encoding UTF8
+          $out = $json | ConvertTo-Json -Depth 10
+          if ($out.TrimStart().StartsWith("{")) {
+            $out = "[`r`n$out`r`n]"
+          }
+          Set-Content -Path $path -Value $out -Encoding UTF8
           git -C forest_repo config user.name "thebigtree-bot"
           git -C forest_repo config user.email "thebigtree-bot@users.noreply.github.com"
           git -C forest_repo add plogonmaster.json
