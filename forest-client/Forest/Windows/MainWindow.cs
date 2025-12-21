@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
+ï»¿using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
 using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -76,7 +76,7 @@ public class MainWindow : Window, IDisposable
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
     {
         Plugin = plugin;
-        var baseDir = Path.GetDirectoryName(Forest.Plugin.PluginInterface.AssemblyLocation) ?? string.Empty;
+        var baseDir = Forest.Plugin.PluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         _homeIconPath = Path.Combine(baseDir, "Resources", "icon.png");
         if (File.Exists(_homeIconPath))
             _homeIconTexture = Forest.Plugin.TextureProvider.GetFromFile(_homeIconPath);
@@ -126,7 +126,12 @@ public class MainWindow : Window, IDisposable
 
     // ========================= CHAT / TIMER FROM OLD WINDOW =========================
     private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
-    {\r\n        if (_bingoAwaitingRandom)\r\n        {\r\n            if (TryHandleBingoRandom(message.TextValue))\r\n                return;\r\n        }
+    {
+        if (_bingoAwaitingRandom)
+        {
+            if (TryHandleBingoRandom(message.TextValue))
+                return;
+        }
         if (type != XivChatType.TellIncoming || !_votingStartTime.HasValue || Plugin.Config.CurrentGame == null)
             return;
 
@@ -171,7 +176,11 @@ public class MainWindow : Window, IDisposable
     public override void Draw()
     {
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
-        if (ImGui.BeginMenuBar())\r\n        {\r\n            if (ImGui.Button("Home")) _view = View.Home;\r\n            ImGui.SameLine();\r\n            if (ImGui.Button("Hunt")) _view = View.Hunt;
+        if (ImGui.BeginMenuBar())
+        {
+            if (ImGui.Button("Home")) _view = View.Home;
+            ImGui.SameLine();
+            if (ImGui.Button("Hunt")) _view = View.Hunt;
             ImGui.SameLine();
             if (ImGui.Button("Murder Mystery")) _view = View.MurderMystery;
             ImGui.SameLine();
@@ -206,7 +215,10 @@ public class MainWindow : Window, IDisposable
         ImGui.NextColumn();
         ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
         {
-            switch (_view)\r\n            {\r\n                case View.Home: DrawHomePanel(); break;\r\n                case View.Hunt: DrawHuntPanel(); break;
+            switch (_view)
+            {
+                case View.Home: DrawHomePanel(); break;
+                case View.Hunt: DrawHuntPanel(); break;
                 case View.MurderMystery: DrawMurderMysteryPanel(); break;
                 case View.Bingo: DrawBingoAdminPanel(); break;
             }
@@ -241,9 +253,9 @@ public class MainWindow : Window, IDisposable
 
         ImGui.BeginChild("SavedBottom", new Vector2(0, bottomH), true, 0);
         if (_view == View.Bingo)
-            DrawBingoGamesList();     // <— when Bingo tab is active
+            DrawBingoGamesList();     // <â€” when Bingo tab is active
         else
-            DrawSavedMurderGames();   // <— when Murder tab is active
+            DrawSavedMurderGames();   // <â€” when Murder tab is active
         ImGui.EndChild();
     }
 
@@ -476,7 +488,7 @@ public class MainWindow : Window, IDisposable
         if (_bingoGamesLoading)
         {
             ImGui.SameLine();
-            ImGui.TextDisabled("Loading…");
+            ImGui.TextDisabled("Loadingâ€¦");
         }
 
         ImGui.Separator();
@@ -519,7 +531,7 @@ public class MainWindow : Window, IDisposable
         if (_homeIconTexture != null)
         {
             var wrap = _homeIconTexture.GetWrapOrDefault();
-            ImGui.Image(wrap.ImGuiHandle, iconSize);
+            ImGui.Image(wrap.Handle, iconSize);
         }
         else
         {
@@ -637,7 +649,7 @@ private void DrawHuntPanel()
             else if (isImprisoned) color = new Vector4(0.2f, 0.2f, 1.0f, 1.0f);
             else if (isKiller) color = new Vector4(1.0f, 0.2f, 0.2f, 1.0f);
 
-            string display = $"• {playerName}" +
+            string display = $"â€¢ {playerName}" +
                 (isDead ? " (Dead)" :
                  isImprisoned ? " (Imprisoned)" :
                  isKiller ? " (Killer)" : "");
@@ -1132,13 +1144,120 @@ private void DrawHuntPanel()
         finally { _bingoLoading = false; }
     }
 
+    private async Task Bingo_LoadOwners()
+    {
+        if (_bingoState is null) return;
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Loading owners.";
+        _bingoCts?.Cancel(); _bingoCts = new CancellationTokenSource();
+
+        try
+        {
+            var response = await _bingoApi!.GetOwnersAsync(_bingoState.game.game_id, _bingoCts.Token);
+            _bingoOwners = response.owners?.ToList() ?? new List<OwnerSummary>();
+            _bingoStatus = $"Loaded {_bingoOwners.Count} owner(s).";
+        }
+        catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
+    private async Task Bingo_Start()
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Starting game.";
+
+        try
+        {
+            await _bingoApi!.StartGameAsync(_bingoState.game.game_id);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            _bingoStatus = "Game started.";
+        }
+        catch (Exception ex) { _bingoStatus = $"Start failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
+    private async Task Bingo_AdvanceStage()
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Advancing stage.";
+
+        try
+        {
+            await _bingoApi!.AdvanceStageAsync(_bingoState.game.game_id);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            _bingoStatus = "Stage advanced.";
+        }
+        catch (Exception ex) { _bingoStatus = $"Advance failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
+    private async Task Bingo_ApproveClaim(string cardId)
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            _bingoStatus = "Card id required.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Approving claim.";
+
+        try
+        {
+            await _bingoApi!.ApproveClaimAsync(_bingoState.game.game_id, cardId);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            _bingoStatus = "Claim approved.";
+        }
+        catch (Exception ex) { _bingoStatus = $"Approve failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
+    private async Task Bingo_DenyClaim(string cardId)
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            _bingoStatus = "Card id required.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true; _bingoStatus = "Denying claim.";
+
+        try
+        {
+            await _bingoApi!.DenyClaimAsync(_bingoState.game.game_id, cardId);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            _bingoStatus = "Claim denied.";
+        }
+        catch (Exception ex) { _bingoStatus = $"Deny failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
     private Task Bingo_Roll()
     {
         if (_bingoState is null) return Task.CompletedTask;
         Bingo_EnsureClient();
         _bingoRollAttempts = 0;
         _bingoAwaitingRandom = true;
-        _bingoStatus = $"Rolling /random {BingoRandomMax}…";
+        _bingoStatus = $"Rolling /random {BingoRandomMax}â€¦";
         Bingo_SendRandomCommand();
         return Task.CompletedTask;
     }
@@ -1252,6 +1371,7 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         finally { _bingoLoading = false; }
     }
 }
+
 
 
 
