@@ -41,6 +41,8 @@ jobs:
             Invoke-WebRequest -Uri $url -OutFile $zip
             Expand-Archive -Path $zip -DestinationPath $dalamudHome -Force
           }
+          Add-Content -Path $env:GITHUB_ENV -Value ("DALAMUD_HOME=" + $dalamudHome)
+          Add-Content -Path $env:GITHUB_ENV -Value ("DALAMUD_LIB_PATH=" + $dalamudHome)
 
       - name: Build
         shell: powershell
