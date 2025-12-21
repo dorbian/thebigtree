@@ -57,3 +57,48 @@ jobs:
         with:
           name: forest-client
           path: forest-client/forest-client.zip
+
+      - name: Publish release asset
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: forest-client-latest
+          name: Forest Client (latest)
+          files: forest-client/forest-client.zip
+          prerelease: false
+
+      - name: Checkout forest_repo
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          repository: dorbian/forest_repo
+          token: ${{ secrets.FOREST_REPO_TOKEN }}
+          path: forest_repo
+
+      - name: Update plogonmaster.json
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        shell: powershell
+        run: |
+          $repo = "${{ github.repository }}"
+          $zipUrl = "https://github.com/$repo/releases/download/forest-client-latest/forest-client.zip"
+          $path = "forest_repo/plogonmaster.json"
+          $json = Get-Content -Raw -Path $path | ConvertFrom-Json
+          foreach ($entry in $json) {
+            if ($entry.InternalName -eq "Forest") {
+              $entry.DalamudApiLevel = 14
+              $entry.DownloadLinkInstall = $zipUrl
+              $entry.DownloadLinkTesting = $zipUrl
+              $entry.DownloadLinkUpdate = $zipUrl
+            }
+          }
+          $json | ConvertTo-Json -Depth 10 | Set-Content -Path $path -Encoding UTF8
+          git -C forest_repo config user.name "thebigtree-bot"
+          git -C forest_repo config user.email "thebigtree-bot@users.noreply.github.com"
+          git -C forest_repo add plogonmaster.json
+          $msg = "Update Forest download links (API 14)"
+          if (git -C forest_repo diff --cached --quiet) {
+            Write-Host "No changes to commit."
+          } else {
+            git -C forest_repo commit -m $msg
+            git -C forest_repo push
+          }
