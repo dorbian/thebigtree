@@ -884,17 +884,9 @@ private void DrawHuntPanel()
         ImGui.Separator();
 
         ImGui.TextUnformatted("Called:");
-        ImGui.SameLine();
         int? lastCalled = g.last_called;
         if ((!lastCalled.HasValue || lastCalled.Value == 0) && g.called is { Length: > 0 })
             lastCalled = g.called[^1];
-        ImGui.SetNextItemWidth(120);
-        ImGui.BeginChild("LastDrawBox", new Vector2(120, 64), true, ImGuiWindowFlags.NoScrollbar);
-        ImGui.TextDisabled("Last draw");
-        ImGui.SetWindowFontScale(2.2f);
-        ImGui.TextUnformatted(lastCalled.HasValue ? lastCalled.Value.ToString() : "--");
-        ImGui.SetWindowFontScale(1f);
-        ImGui.EndChild();
         foreach (var r in g.called ?? Array.Empty<int>())
         {
             ImGui.SameLine();
