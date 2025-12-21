@@ -296,8 +296,10 @@ public class MainWindow : Window, IDisposable
             DrawSpinWheelPromptsList();
         else if (_view == View.Glam)
             DrawGlamContestantsList();
-        else
+        else if (_view == View.MurderMystery)
             DrawSavedMurderGames();
+        else
+            ImGui.TextDisabled("Select a game from the menu above.");
         ImGui.EndChild();
     }
 
@@ -948,7 +950,7 @@ private void DrawHuntPanel()
         else
         {
             ImGui.SameLine();
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(320);
             ImGui.InputText("Owner", ref _bingoManualOwner, 128);
             ImGui.SameLine();
             if (ImGui.Button("Fetch Cards") && !string.IsNullOrWhiteSpace(_bingoManualOwner))
@@ -1112,6 +1114,11 @@ private void DrawHuntPanel()
     {
         var wheel = Plugin.Config.SpinWheel;
         EnsureWheelDefaults(wheel);
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Spin a prompt for the party. Everyone does the prompt, or use punishments for the loser.");
+        }
+
 
         ImGui.TextUnformatted("Spin the Wheel");
         ImGui.Separator();
@@ -1212,6 +1219,11 @@ private void DrawHuntPanel()
     {
         var glam = Plugin.Config.GlamRoulette;
         EnsureGlamDefaults(glam);
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Contestants get a random theme and a short timer to build a glam. Open voting and collect chat votes with the keyword.");
+        }
+
 
         ImGui.TextUnformatted("Glam Roulette");
         ImGui.Separator();
@@ -1484,7 +1496,7 @@ private void DrawHuntPanel()
             var prompt = wheel.Prompts[i];
             ImGui.PushID(i);
 
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(320);
             string text = prompt.Text ?? "";
             if (ImGui.InputText("##prompt", ref text, 256))
             {
@@ -1532,7 +1544,7 @@ private void DrawHuntPanel()
             var prompt = wheel.PunishmentPrompts[i];
             ImGui.PushID(i + 10000);
 
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(320);
             string text = prompt.Text ?? "";
             if (ImGui.InputText("##punish", ref text, 256))
             {
