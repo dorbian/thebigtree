@@ -1282,8 +1282,6 @@ private void DrawHuntPanel()
         _bingoRandomCommandAttempts = 0;
         _bingoRandomSentAt = null;
         _bingoStatus = $"Rolling /random {BingoRandomMax}…";
-        Plugin.ChatGui.Print($"[Forest] Rolling /random {BingoRandomMax}.");
-        Plugin.Log?.Information($"[Forest] Rolling /random {BingoRandomMax}.");
         Bingo_SendRandomCommand(useSlash: true);
         return Task.CompletedTask;
     }
@@ -1324,7 +1322,6 @@ private void DrawHuntPanel()
             var cmd = useSlash ? $"/random {BingoRandomMax}" : $"random {BingoRandomMax}";
             _bingoRandomCommandAttempts += 1;
             _bingoRandomSentAt = DateTime.UtcNow;
-            Plugin.Log?.Information($"[Forest] Sending command: {cmd} (attempt {_bingoRandomCommandAttempts}).");
             Plugin.Framework.RunOnFrameworkThread(() =>
             {
                 Plugin.CommandManager.ProcessCommand(cmd);
@@ -1335,7 +1332,6 @@ private void DrawHuntPanel()
             _bingoAwaitingRandom = false;
             _bingoStatus = $"Random failed: {ex.Message}";
             Plugin.ChatGui.PrintError($"[Forest] Random failed: {ex.Message}");
-            Plugin.Log?.Error(ex, "[Forest] Random failed.");
         }
     }
 
@@ -1369,7 +1365,6 @@ private void DrawHuntPanel()
                 Plugin.ChatGui.PrintError("[Forest] Too many repeats while rolling.");
                 return;
             }
-            Plugin.ChatGui.Print($"[Forest] Rolled {rolled} again; re-rolling.");
             Bingo_SendRandomCommand(useSlash: true);
             return;
         }
