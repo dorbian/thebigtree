@@ -2,10 +2,18 @@ name: Build Forest Client
 
 on:
   workflow_dispatch:
+    inputs:
+      dalamud_url:
+        description: "Dalamud dev zip URL"
+        required: false
+        default: "https://goatcorp.github.io/dalamud-distrib/latest.zip"
   push:
     paths:
       - "forest-client/**"
       - ".github/workflows/forest-client.yml"
+
+env:
+  DALAMUD_HOME: ${{ runner.temp }}\\dalamud
 
 jobs:
   build:
@@ -16,6 +24,21 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+
+      - name: Prepare Dalamud
+        shell: powershell
+        run: |
+          $dalamudHome = "${env:DALAMUD_HOME}"
+          if (-not (Test-Path $dalamudHome)) { New-Item -ItemType Directory -Path $dalamudHome | Out-Null }
+          if (-not (Test-Path (Join-Path $dalamudHome "Dalamud.dll"))) {
+            $url = "${{ inputs.dalamud_url }}"
+            if ([string]::IsNullOrWhiteSpace($url)) {
+              throw "Dalamud URL is empty; set the workflow input 'dalamud_url'."
+            }
+            $zip = Join-Path $env:RUNNER_TEMP "dalamud.zip"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath $dalamudHome -Force
+          }
 
       - name: Build
         shell: powershell
