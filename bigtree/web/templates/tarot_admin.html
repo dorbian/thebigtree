@@ -57,12 +57,16 @@
 
   <div class="row">
     <div>
-      <label for="deckId">Deck ID</label>
-      <input id="deckId" value="elf-classic">
+      <label for="deckId">Deck</label>
+      <select id="deckId"></select>
     </div>
     <div>
       <label>&nbsp;</label>
       <button id="loadDeck">Load deck</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="addDeck">Add deck</button>
     </div>
   </div>
 
@@ -167,6 +171,49 @@
   }
 
   document.getElementById("loadDeck").addEventListener("click", loadDeck);
+  document.getElementById("addDeck").addEventListener("click", async () => {
+    const id = prompt("New deck id (e.g. elf-classic)") || "";
+    if (!id.trim()) return;
+    const name = prompt("Deck name (optional)") || "";
+    try{
+      const res = await fetch("/api/tarot/decks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey.value.trim()
+        },
+        body: JSON.stringify({deck_id: id.trim(), name: name.trim() || undefined})
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      await loadDeckList(id.trim());
+      setStatus("Deck created.", true);
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  });
+
+  async function loadDeckList(selectValue){
+    try{
+      const res = await fetch("/api/tarot/decks", {
+        headers: {"X-API-Key": apiKey.value.trim()}
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      deckId.innerHTML = "";
+      const decks = data.decks || [];
+      decks.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d.deck_id;
+        opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+        deckId.appendChild(opt);
+      });
+      const fallback = selectValue || "elf-classic";
+      deckId.value = fallback;
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  }
 
   document.getElementById("saveCard").addEventListener("click", async () => {
     try{
@@ -226,4 +273,6 @@
       setStatus(err.message, false);
     }
   });
+
+  loadDeckList();
 </script>

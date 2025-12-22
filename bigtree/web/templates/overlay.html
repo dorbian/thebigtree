@@ -599,12 +599,16 @@
           <p>Uses your current API key (same login as Bingo).</p>
           <div class="row">
             <div>
-              <label for="taDeck">Deck ID</label>
-              <input id="taDeck" value="elf-classic">
+              <label for="taDeck">Deck</label>
+              <select id="taDeck"></select>
             </div>
             <div>
               <label>&nbsp;</label>
               <button id="taLoadDeck">Load deck</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="taAddDeck">Add deck</button>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -1542,6 +1546,23 @@
         }
       });
 
+      $("taAddDeck").addEventListener("click", async () => {
+        const id = prompt("New deck id (e.g. elf-classic)") || "";
+        if (!id.trim()) return;
+        const name = prompt("Deck name (optional)") || "";
+        try{
+          await jsonFetch("/api/tarot/decks", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({deck_id: id.trim(), name: name.trim() || undefined})
+          }, true);
+          await loadTarotDeckList(id.trim());
+          setStatus("Deck created.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
       $("taSaveCard").addEventListener("click", async () => {
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
@@ -1586,6 +1607,24 @@
         }
       });
 
+      async function loadTarotDeckList(selectValue){
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const select = $("taDeck");
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          select.value = selectValue || "elf-classic";
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
       $("taCardUpload").addEventListener("change", async (ev) => {
         const file = ev.target.files[0];
         if (!file) return;
@@ -1606,6 +1645,8 @@
           setStatus(err.message, "err");
         }
       });
+
+      loadTarotDeckList();
 
       loadSettings();
       if (apiKeyEl.value.trim()){
