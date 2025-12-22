@@ -636,6 +636,12 @@
           </div>
           <div class="row">
             <div>
+              <label for="taCardUpload">Upload image</label>
+              <input id="taCardUpload" type="file" accept="image/*">
+            </div>
+          </div>
+          <div class="row">
+            <div>
               <label for="taCardUpright">Upright</label>
               <textarea id="taCardUpright"></textarea>
             </div>
@@ -1579,6 +1585,27 @@
           $("taArtistArtstation").value = "";
           $("taArtistWebsite").value = "";
           await $("taLoadDeck").click();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("taCardUpload").addEventListener("change", async (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        try{
+          const form = new FormData();
+          form.append("file", file);
+          form.append("card_id", $("taCardId").value.trim());
+          const res = await fetch("/api/tarot/upload-card-image", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: form
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("taCardImage").value = data.url;
+          setStatus("Image uploaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
         }

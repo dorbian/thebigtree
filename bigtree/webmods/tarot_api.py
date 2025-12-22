@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 from aiohttp import web
+import os
+import uuid
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
 
@@ -17,6 +19,31 @@ def _get_view(req: web.Request) -> str:
     if view not in ("priestess", "player", "overlay"):
         return "player"
     return view
+
+def _data_dir() -> str:
+    try:
+        import bigtree
+        settings = getattr(bigtree, "settings", None)
+        if settings:
+            base = settings.get("BOT.DATA_DIR", None)
+            if base:
+                return base
+    except Exception:
+        pass
+    return os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR") or "/data"
+
+def _cards_dir() -> str:
+    base = _data_dir()
+    path = os.path.join(base, "tarot", "cards")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def _safe_name(name: str) -> str:
+    keep = []
+    for ch in (name or ""):
+        if ch.isalnum() or ch in ("-", "_"):
+            keep.append(ch)
+    return "".join(keep)
 
 # ---- Pages ----
 @route("GET", "/tarot/session/{join_code}", allow_public=True)
@@ -45,6 +72,15 @@ async def tarot_admin_page(_req: web.Request):
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("tarot_admin.html", {}) if srv else "<h1>Tarot Admin</h1>"
     return web.Response(text=html, content_type="text/html")
+
+@route("GET", "/tarot/cards/{filename}", allow_public=True)
+async def tarot_card_file(req: web.Request):
+    filename = req.match_info["filename"]
+    base = _cards_dir()
+    path = os.path.join(base, filename)
+    if not os.path.exists(path):
+        return web.Response(status=404)
+    return web.FileResponse(path)
 
 @route("GET", "/overlay/session/{join_code}", allow_public=True)
 async def tarot_overlay_page(req: web.Request):
@@ -279,3 +315,59 @@ async def set_back(req: web.Request):
     if not ok:
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
+
+@route("POST", "/api/tarot/upload-card-image", scopes=["tarot:admin"])
+async def upload_card_image(req: web.Request):
+    reader = await req.multipart()
+    file_part = None
+    card_id = ""
+    while True:
+        part = await reader.next()
+        if part is None:
+            break
+        if part.name == "file":
+            file_part = part
+        elif part.name == "card_id":
+            card_id = (await part.text()).strip()
+    if file_part is None:
+        return _json_error("file required")
+
+    safe_id = _safe_name(card_id) or uuid.uuid4().hex
+    filename = f"{safe_id}.png"
+    dest = os.path.join(_cards_dir(), filename)
+
+    data = bytearray()
+    while True:
+        chunk = await file_part.read_chunk()
+        if not chunk:
+            break
+        data.extend(chunk)
+
+    saved = False
+    try:
+        from PIL import Image
+        from io import BytesIO
+        with Image.open(BytesIO(data)) as img:
+            img = img.convert("RGBA")
+            target_ratio = 3.0 / 4.2
+            w, h = img.size
+            ratio = w / h if h else target_ratio
+            if ratio > target_ratio:
+                new_w = int(h * target_ratio)
+                left = (w - new_w) // 2
+                img = img.crop((left, 0, left + new_w, h))
+            elif ratio < target_ratio:
+                new_h = int(w / target_ratio) if target_ratio else h
+                top = (h - new_h) // 2
+                img = img.crop((0, top, w, top + new_h))
+            img.save(dest, format="PNG")
+            saved = True
+    except Exception:
+        saved = False
+
+    if not saved:
+        with open(dest, "wb") as f:
+            f.write(data)
+
+    url = f"/tarot/cards/{filename}"
+    return web.json_response({"ok": True, "url": url})

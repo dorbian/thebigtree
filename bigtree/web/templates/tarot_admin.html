@@ -91,6 +91,8 @@
       <input id="cardTags" placeholder="mischief,curiosity">
     </div>
   </div>
+  <label for="cardUpload">Upload image</label>
+  <input id="cardUpload" type="file" accept="image/*">
   <label for="cardUpright">Upright</label>
   <textarea id="cardUpright" rows="3"></textarea>
   <label for="cardReversed">Reversed</label>
@@ -194,6 +196,28 @@
       if (!data.ok) throw new Error(data.error || "Failed");
       setStatus("Card saved.", true);
       loadDeck();
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  });
+
+  document.getElementById("cardUpload").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try{
+      const deck = deckId.value.trim() || "elf-classic";
+      const form = new FormData();
+      form.append("file", file);
+      form.append("card_id", document.getElementById("cardId").value.trim());
+      const res = await fetch("/api/tarot/upload-card-image", {
+        method: "POST",
+        headers: {"X-API-Key": apiKey.value.trim()},
+        body: form
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      document.getElementById("cardImage").value = data.url;
+      setStatus("Image uploaded.", true);
     }catch(err){
       setStatus(err.message, false);
     }
