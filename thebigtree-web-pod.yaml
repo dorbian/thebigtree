@@ -5,6 +5,14 @@ metadata:
   name: thebigtree-web
   labels:
     app: thebigtree-web
+    traefik.enable: "true"
+    traefik.http.routers.rites.rule: "Host(`rites.thebigtree.life`) || Host(`rites.thebigtree`)"
+    traefik.http.routers.rites.entrypoints: "websecure"
+    traefik.http.routers.rites.tls: "true"
+    traefik.http.routers.rites.tls.certresolver: "le"
+    traefik.http.routers.rites-http.rule: "Host(`rites.thebigtree.life`) || Host(`rites.thebigtree`)"
+    traefik.http.routers.rites-http.entrypoints: "web"
+    traefik.http.services.rites.loadbalancer.server.port: "8080"
 spec:
   restartPolicy: Always
   containers:
@@ -21,7 +29,10 @@ spec:
       # Adjust entrypoints / TLS if your Traefik setup uses different names.
       labels:
         traefik.enable: "true"
-        traefik.http.routers.rites.rule: "Host(`rites.thebigtree.life`)"
+        traefik.http.routers.rites.rule: "Host(`rites.thebigtree.life`) || Host(`rites.thebigtree`)"
         traefik.http.routers.rites.entrypoints: "websecure"
         traefik.http.routers.rites.tls: "true"
+        traefik.http.routers.rites.tls.certresolver: "le"
+        traefik.http.routers.rites-http.rule: "Host(`rites.thebigtree.life`) || Host(`rites.thebigtree`)"
+        traefik.http.routers.rites-http.entrypoints: "web"
         traefik.http.services.rites.loadbalancer.server.port: "8080"
