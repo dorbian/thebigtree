@@ -10,6 +10,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
 using Forest.Features.BingoAdmin;
+using Forest.Features.HuntStaffed;
 
 using System;
 using System.Collections.Generic;
@@ -80,6 +81,16 @@ public class MainWindow : Window, IDisposable
     private string _raffleStatus = "";
     private string _wheelStatus = "";
     private string _glamStatus = "";
+    private HuntAdminApiClient? _huntApi;
+    private HuntStateResponse? _huntState;
+    private string _huntStatus = "";
+    private string _huntJoinCode = "";
+    private string _huntStaffName = "";
+    private string _huntStaffId = "";
+    private string _huntId = "";
+    private string _huntGroupCode = "";
+    private string _huntSelectedCheckpointId = "";
+    private DateTime _huntLastRefresh = DateTime.MinValue;
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -109,6 +120,7 @@ public class MainWindow : Window, IDisposable
 
         _bingoCts?.Cancel();
         _bingoApi?.Dispose();
+        _huntApi?.Dispose();
     }
 
     // ------------------ Bingo: list/refresh ------------------
@@ -189,6 +201,13 @@ public class MainWindow : Window, IDisposable
             .Distinct()
             .OrderBy(n => n)
             .ToArray();
+
+        if (_view == View.Hunt && _huntState?.hunt != null
+            && (DateTime.UtcNow - _huntLastRefresh).TotalSeconds >= 10)
+        {
+            _huntLastRefresh = DateTime.UtcNow;
+            _ = Hunt_LoadState();
+        }
     }
 
     // ========================= DRAW =========================
@@ -615,9 +634,139 @@ public class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.TextDisabled("Use the tabs above to jump into a mode.");
     }
-private void DrawHuntPanel()
+
+    private void DrawHuntPanel()
     {
-        ImGui.TextUnformatted("Hunt panel (placeholder).");
+        ImGui.TextUnformatted("Staffed Scavenger Hunt");
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Staff members claim checkpoints, confirm group check-ins on-site, and the server tracks progress. Participants do not need the plugin.");
+        }
+
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        if (string.IsNullOrWhiteSpace(_huntStaffName))
+            _huntStaffName = Plugin.ClientState.LocalPlayer?.Name.TextValue ?? "Staff";
+
+        ImGui.InputText("Join code", ref _huntJoinCode, 32);
+        ImGui.InputText("Staff name", ref _huntStaffName, 64);
+        if (ImGui.Button("Join Hunt"))
+            _ = Hunt_JoinByCode();
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Refresh") && !string.IsNullOrWhiteSpace(_huntId))
+            _ = Hunt_LoadState();
+
+        if (!string.IsNullOrWhiteSpace(_huntStatus))
+            ImGui.TextDisabled(_huntStatus);
+
+        if (_huntState?.hunt == null)
+            return;
+
+        var hunt = _huntState.hunt;
+        ImGui.Spacing();
+        ImGui.Text($"Hunt: {hunt.title} ({hunt.hunt_id})");
+        ImGui.Text($"Join code: {hunt.join_code}");
+        ImGui.Text($"Status: {(hunt.active ? (hunt.started ? "Active" : "Ready") : "Ended")}");
+
+        int currentTerritory = (int)Plugin.ClientState.TerritoryType;
+        if (hunt.territory_id > 0)
+        {
+            bool territoryOk = currentTerritory == hunt.territory_id;
+            var tColor = territoryOk ? new Vector4(0.5f, 1f, 0.6f, 1f) : new Vector4(1f, 0.6f, 0.4f, 1f);
+            ImGui.TextColored(tColor, $"Territory: {hunt.territory_id} (you are {currentTerritory})");
+        }
+
+        var staffMe = _huntState.staff?.FirstOrDefault(s => s.staff_id == _huntStaffId);
+        if (!string.IsNullOrWhiteSpace(staffMe?.checkpoint_id))
+            _huntSelectedCheckpointId = staffMe.checkpoint_id!;
+
+        ImGui.Spacing();
+        ImGui.Columns(2, "HuntMain", false);
+        ImGui.SetColumnWidth(0, 360f);
+
+        ImGui.TextDisabled("Checkpoints");
+        ImGui.Separator();
+        ImGui.BeginChild("HuntCheckpoints", new Vector2(0, 220), true, 0);
+        var checkpoints = _huntState.checkpoints ?? new List<HuntCheckpoint>();
+        if (checkpoints.Count == 0)
+        {
+            ImGui.TextDisabled("No checkpoints yet.");
+        }
+        else
+        {
+            foreach (var cp in checkpoints)
+            {
+                var cpId = cp.checkpoint_id ?? "";
+                if (string.IsNullOrEmpty(cpId)) continue;
+                bool isSelected = cpId == _huntSelectedCheckpointId;
+                if (ImGui.Selectable($"{cp.label}##{cpId}", isSelected))
+                    _huntSelectedCheckpointId = cpId;
+
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"Claim##{cpId}"))
+                    _ = Hunt_ClaimCheckpoint(cpId);
+
+                bool claimedByMe = !string.IsNullOrWhiteSpace(_huntStaffId)
+                    && (cp.claimed_by?.Contains(_huntStaffId) ?? false);
+                if (claimedByMe)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextDisabled("[yours]");
+                }
+            }
+        }
+        ImGui.EndChild();
+
+        ImGui.NextColumn();
+        ImGui.TextDisabled("Check-in");
+        ImGui.Separator();
+        string checkpointLabel = "(none)";
+        if (!string.IsNullOrWhiteSpace(_huntSelectedCheckpointId))
+        {
+            var cp = checkpoints.FirstOrDefault(c => c.checkpoint_id == _huntSelectedCheckpointId);
+            if (cp?.label != null) checkpointLabel = cp.label;
+        }
+        else if (!string.IsNullOrWhiteSpace(staffMe?.checkpoint_id))
+        {
+            var cp = checkpoints.FirstOrDefault(c => c.checkpoint_id == staffMe.checkpoint_id);
+            if (cp?.label != null) checkpointLabel = cp.label;
+        }
+
+        ImGui.Text($"Checkpoint: {checkpointLabel}");
+        ImGui.InputText("Group code", ref _huntGroupCode, 32);
+        bool canCheckIn = hunt.started && hunt.active
+            && !string.IsNullOrWhiteSpace(_huntStaffId)
+            && (!string.IsNullOrWhiteSpace(_huntSelectedCheckpointId) || !string.IsNullOrWhiteSpace(staffMe?.checkpoint_id))
+            && !string.IsNullOrWhiteSpace(_huntGroupCode);
+
+        using (var dis = ImRaii.Disabled(!canCheckIn))
+        {
+            if (ImGui.Button("Confirm Check-in"))
+                _ = Hunt_CheckIn();
+        }
+
+        ImGui.Columns(1);
+
+        ImGui.Spacing();
+        ImGui.TextDisabled("Last check-ins");
+        ImGui.Separator();
+        var checkins = _huntState.checkins ?? new List<HuntCheckin>();
+        if (checkins.Count == 0)
+        {
+            ImGui.TextDisabled("No check-ins yet.");
+        }
+        else
+        {
+            foreach (var checkin in checkins)
+            {
+                string ts = checkin.ts > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds((long)checkin.ts).ToLocalTime().ToString("HH:mm:ss")
+                    : "--:--:--";
+                ImGui.TextUnformatted($"{ts}  {checkin.group_id} -> {checkin.checkpoint_id} (staff {checkin.staff_id})");
+            }
+        }
     }
 
     private void DrawMurderMysteryPanel()
@@ -2244,6 +2393,141 @@ private void DrawHuntPanel()
             Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443",
             Plugin.Config.BingoApiKey
         );
+    }
+
+    private void Hunt_EnsureClient()
+    {
+        if (_huntApi is not null) return;
+        _huntApi = new HuntAdminApiClient(
+            Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443",
+            Plugin.Config.BingoApiKey
+        );
+    }
+
+    private async Task Hunt_JoinByCode()
+    {
+        if (string.IsNullOrWhiteSpace(_huntJoinCode))
+        {
+            _huntStatus = "Join code required.";
+            return;
+        }
+        Hunt_EnsureClient();
+        _huntStatus = "Joining hunt.";
+        try
+        {
+            var resp = await _huntApi!.JoinByCodeAsync(_huntJoinCode.Trim(), _huntStaffName.Trim(), _huntStaffId);
+            if (!resp.ok)
+            {
+                _huntStatus = resp.error ?? "Join failed.";
+                return;
+            }
+            _huntId = resp.hunt_id ?? "";
+            _huntStaffId = resp.staff_id ?? _huntStaffId;
+            _huntState = resp.state;
+            _huntStatus = "Joined hunt.";
+            _huntLastRefresh = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Join failed: {ex.Message}";
+        }
+    }
+
+    private async Task Hunt_LoadState()
+    {
+        if (string.IsNullOrWhiteSpace(_huntId))
+        {
+            _huntStatus = "Join a hunt first.";
+            return;
+        }
+        Hunt_EnsureClient();
+        _huntStatus = "Refreshing hunt state.";
+        try
+        {
+            _huntState = await _huntApi!.GetStateAsync(_huntId);
+            _huntStatus = "Hunt state updated.";
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Refresh failed: {ex.Message}";
+        }
+    }
+
+    private async Task Hunt_ClaimCheckpoint(string checkpointId)
+    {
+        if (string.IsNullOrWhiteSpace(_huntId) || string.IsNullOrWhiteSpace(_huntStaffId))
+        {
+            _huntStatus = "Join a hunt first.";
+            return;
+        }
+        Hunt_EnsureClient();
+        _huntStatus = "Claiming checkpoint.";
+        try
+        {
+            var resp = await _huntApi!.ClaimCheckpointAsync(_huntId, _huntStaffId, checkpointId);
+            if (!resp.ok)
+            {
+                _huntStatus = resp.error ?? resp.message ?? "Claim failed.";
+                return;
+            }
+            _huntSelectedCheckpointId = checkpointId;
+            await Hunt_LoadState();
+            _huntStatus = "Checkpoint claimed.";
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Claim failed: {ex.Message}";
+        }
+    }
+
+    private async Task Hunt_CheckIn()
+    {
+        if (_huntState?.hunt == null || string.IsNullOrWhiteSpace(_huntId) || string.IsNullOrWhiteSpace(_huntStaffId))
+        {
+            _huntStatus = "Join a hunt first.";
+            return;
+        }
+
+        var checkpointId = !string.IsNullOrWhiteSpace(_huntSelectedCheckpointId)
+            ? _huntSelectedCheckpointId
+            : _huntState.staff?.FirstOrDefault(s => s.staff_id == _huntStaffId)?.checkpoint_id;
+
+        if (string.IsNullOrWhiteSpace(checkpointId))
+        {
+            _huntStatus = "Select a checkpoint first.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_huntGroupCode))
+        {
+            _huntStatus = "Group code required.";
+            return;
+        }
+
+        Hunt_EnsureClient();
+        _huntStatus = "Submitting check-in.";
+        try
+        {
+            var evidence = new
+            {
+                staff_name = _huntStaffName,
+                territory_id = (int)Plugin.ClientState.TerritoryType,
+                nearby_count = _nearbyPlayers.Length,
+                nearby_players = _nearbyPlayers,
+            };
+            var resp = await _huntApi!.CheckInAsync(_huntId, _huntStaffId, _huntGroupCode.Trim(), checkpointId, evidence);
+            if (!resp.ok)
+            {
+                _huntStatus = resp.error ?? "Check-in failed.";
+                return;
+            }
+            _huntStatus = "Check-in recorded.";
+            _huntGroupCode = "";
+            await Hunt_LoadState();
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Check-in failed: {ex.Message}";
+        }
     }
 
 
