@@ -18,7 +18,7 @@ class AddCardModal(discord.ui.Modal, title="Add Tarrot Card"):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("Not allowed.", ephemeral=True); return
         tar.add_card(str(self.deck), str(self.title_field), str(self.meaning), str(self.image))
-        await interaction.response.send_message("Card added ✅", ephemeral=True)
+        await interaction.response.send_message("Card added ?.", ephemeral=True)
 
 class Tarot(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -29,14 +29,17 @@ class Tarot(commands.Cog):
     async def tarot_start(self, interaction: discord.Interaction, follower: discord.Member, deck: str="elf-classic", spread: str="single"):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("You need Priest/ess or Elfministrator role.", ephemeral=True); return
-        sid = tar.new_session(interaction.user.id, deck, spread)
+        s = tar.create_session(interaction.user.id, deck, spread)
         cfg = bigtree.config.config.get("WEB", {})
         base = (cfg.get("base_url") or "http://localhost:8765").rstrip("/")
-        priest_url = f"{base}/tarot/session/{sid}?view=priest"
-        follower_url = f"{base}/tarot/session/{sid}?view=follower"
+        join_code = s["join_code"]
+        token = s["priestess_token"]
+        priest_url = f"{base}/tarot/session/{join_code}?view=priestess&token={token}"
+        follower_url = f"{base}/tarot/session/{join_code}?view=player"
+        overlay_url = f"{base}/overlay/session/{join_code}"
         await ensure_webserver()
         await interaction.response.send_message(
-            f"🔮 Session **{sid}**\n**Priestess:** {priest_url}\n**Follower:** {follower_url}",
+            f"Session **{s['session_id']}**\n**Priestess:** {priest_url}\n**Player:** {follower_url}\n**Overlay:** {overlay_url}",
             ephemeral=True
         )
 
@@ -44,30 +47,33 @@ class Tarot(commands.Cog):
     async def tarot_draw(self, interaction: discord.Interaction, session_id: str, count: Optional[int]=1):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("Not allowed.", ephemeral=True); return
-        drawn = tar.draw_cards(session_id, count or 1)
-        srv = await ensure_webserver()
-        s = tar.get_session(session_id)
-        if s: await srv.broadcast({"type":"tarot_state","sid":session_id,"state": s["state"]})
-        await interaction.response.send_message(f"Drew {len(drawn)} card(s).", ephemeral=True)
+        s = tar.get_session_by_id(session_id)
+        if not s:
+            await interaction.response.send_message("Session not found.", ephemeral=True); return
+        tar.draw_cards(session_id, s.get("priestess_token", ""), count or 1)
+        await interaction.response.send_message("Card(s) drawn.", ephemeral=True)
 
     @app_commands.command(name="tarot_flip", description="Flip a card by index (0-based)")
     async def tarot_flip(self, interaction: discord.Interaction, session_id: str, index: int):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("Not allowed.", ephemeral=True); return
-        s = tar.flip_card(session_id, index)
+        s = tar.get_session_by_id(session_id)
         if not s:
+            await interaction.response.send_message("Session not found.", ephemeral=True); return
+        if index < 0 or index >= len(s.get("draw", [])):
             await interaction.response.send_message("Index out of range.", ephemeral=True); return
-        srv = await ensure_webserver()
-        await srv.broadcast({"type":"tarot_state","sid":session_id,"state": s["state"]})
+        position_id = s["draw"][index]["position_id"]
+        tar.reveal(session_id, s.get("priestess_token", ""), mode="position", position_id=position_id)
         await interaction.response.send_message(f"Flipped card #{index}.", ephemeral=True)
 
     @app_commands.command(name="tarot_end", description="End a session")
     async def tarot_end(self, interaction: discord.Interaction, session_id: str):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("Not allowed.", ephemeral=True); return
-        tar.end_session(session_id)
-        srv = await ensure_webserver()
-        await srv.broadcast({"type":"tarot_state","sid":session_id,"state": {"drawn":[],"flipped":[]}})
+        s = tar.get_session_by_id(session_id)
+        if not s:
+            await interaction.response.send_message("Session not found.", ephemeral=True); return
+        tar.finish_session(session_id, s.get("priestess_token", ""))
         await interaction.response.send_message("Session ended.", ephemeral=True)
 
     @app_commands.command(name="tarot_add_card", description="Add a new card to a deck")

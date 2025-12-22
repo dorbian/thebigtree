@@ -1,0 +1,383 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tarot Priestess</title>
+<style>
+  :root{
+    --bg:#0d1411;
+    --panel:#121b17;
+    --panel-2:#0f1713;
+    --text:#e6f2ea;
+    --muted:#9bb4a4;
+    --accent:#6bd4a2;
+    --accent-2:#d6b26e;
+    --danger:#e07070;
+    --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Cinzel", "Garamond", "Georgia", serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(107,212,162,.18), transparent 60%),
+      radial-gradient(900px 600px at 90% 0%, rgba(214,178,110,.14), transparent 55%),
+      linear-gradient(180deg, #0b120f, #0f1713 40%, #0b120f);
+  }
+  header{
+    padding:18px 22px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  header .sigil{
+    width:36px;height:36px;border-radius:8px;
+    background:linear-gradient(135deg, #234236, #1b2f28);
+    border:1px solid var(--line);
+  }
+  header h1{margin:0;font-size:20px;letter-spacing:.06em}
+  .wrap{
+    display:grid;
+    grid-template-columns: 260px 1fr 320px;
+    gap:16px;
+    padding:16px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px;
+  }
+  .panel h2{
+    margin:0 0 10px 0;
+    font-size:14px;
+    letter-spacing:.08em;
+    color:var(--muted);
+    text-transform:uppercase;
+  }
+  .btn{
+    display:inline-block;
+    margin:4px 0;
+    padding:7px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--text);
+    cursor:pointer;
+    font-size:12px;
+  }
+  .btn.accent{border-color:rgba(107,212,162,.5); color:#dff7ea}
+  .btn.warn{border-color:rgba(214,178,110,.6); color:#f4e3c0}
+  .btn.danger{border-color:rgba(224,112,112,.6); color:#ffdada}
+  .stack{display:flex;flex-direction:column;gap:6px}
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  .muted{color:var(--muted);font-size:12px}
+  .card-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:12px;
+  }
+  .card-slot{
+    background:var(--panel-2);
+    border:1px dashed var(--line);
+    border-radius:14px;
+    padding:10px;
+    min-height:210px;
+    position:relative;
+  }
+  .card-slot .label{
+    font-size:12px;
+    color:var(--muted);
+    letter-spacing:.05em;
+    margin-bottom:8px;
+  }
+  .card{
+    width:100%;
+    aspect-ratio:3/4.2;
+    perspective:1000px;
+  }
+  .card .inner{
+    position:relative;
+    width:100%;height:100%;
+    transform-style:preserve-3d;
+    transition:transform .7s ease;
+  }
+  .card.revealed .inner{transform:rotateY(180deg)}
+  .face{
+    position:absolute;inset:0;
+    backface-visibility:hidden;
+    border-radius:12px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .back{
+    background:
+      radial-gradient(circle at 20% 20%, rgba(214,178,110,.18), transparent 40%),
+      linear-gradient(135deg, #1b2d26, #132018);
+  }
+  .front{
+    transform:rotateY(180deg);
+    background:#0d1411;
+  }
+  .front img{width:100%;height:100%;object-fit:cover}
+  .meaning{
+    font-family:"Spectral","Georgia",serif;
+    font-size:13px;
+    line-height:1.4;
+  }
+  textarea, input{
+    width:100%;
+    padding:6px 8px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:#0c1511;
+    color:var(--text);
+    font-family:inherit;
+    font-size:12px;
+  }
+  .narration{
+    max-height:220px;
+    overflow:auto;
+    border-top:1px solid var(--line);
+    margin-top:10px;
+    padding-top:8px;
+  }
+  .narration .line{font-size:12px;margin-bottom:6px}
+  .chip{
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    font-size:11px;
+    color:var(--muted);
+  }
+</style>
+
+<header>
+  <div class="sigil"></div>
+  <h1>Tarot Priestess</h1>
+  <span class="chip" id="sessionStatus">loading</span>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Session</h2>
+    <div class="stack">
+      <div class="muted">Join code: <span id="joinCode">{JOIN}</span></div>
+      <div class="muted">Session ID: <span id="sessionId">-</span></div>
+      <div class="muted">Deck: <span id="deckId">-</span></div>
+      <div class="muted">Spread: <span id="spreadId">-</span></div>
+    </div>
+    <div style="height:10px"></div>
+    <label class="muted">Priestess token</label>
+    <input id="tokenInput" placeholder="paste priestess token" />
+    <div class="row" style="margin-top:8px">
+      <button class="btn accent" id="btnStart">Start Reading</button>
+      <button class="btn danger" id="btnFinish">Finish</button>
+    </div>
+    <div class="row">
+      <button class="btn warn" id="btnShuffle">Shuffle</button>
+      <button class="btn" id="btnDraw">Draw</button>
+      <button class="btn" id="btnRevealNext">Reveal Next</button>
+      <button class="btn" id="btnRevealAll">Reveal All</button>
+    </div>
+    <div style="height:12px"></div>
+    <h2>Positions</h2>
+    <div id="positionsList" class="stack"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Spread</h2>
+    <div id="cardGrid" class="card-grid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Meaning</h2>
+    <div id="meaningPanel" class="meaning muted">Select a card to see details.</div>
+    <div style="height:10px"></div>
+    <div class="row">
+      <button class="btn" id="btnAddPrompt">Add position prompt</button>
+      <button class="btn" id="btnAddUpright">Add upright meaning</button>
+      <button class="btn" id="btnAddReversed">Add reversed meaning</button>
+    </div>
+    <div style="height:8px"></div>
+    <label class="muted">Custom narration</label>
+    <textarea id="narrationInput" rows="3" placeholder="Write your narration line..."></textarea>
+    <button class="btn accent" id="btnNarrate">Send narration</button>
+    <div class="narration" id="narrationFeed"></div>
+  </div>
+</div>
+
+<script>
+  const joinCode = "{JOIN}";
+  const qs = new URLSearchParams(location.search);
+  const tokenInput = document.getElementById("tokenInput");
+  const storedTokenKey = "tarot_token_" + joinCode;
+  tokenInput.value = qs.get("token") || localStorage.getItem(storedTokenKey) || "";
+  tokenInput.addEventListener("change", () => localStorage.setItem(storedTokenKey, tokenInput.value.trim()));
+
+  const stateEls = {
+    status: document.getElementById("sessionStatus"),
+    sessionId: document.getElementById("sessionId"),
+    deckId: document.getElementById("deckId"),
+    spreadId: document.getElementById("spreadId"),
+    positions: document.getElementById("positionsList"),
+    grid: document.getElementById("cardGrid"),
+    meaning: document.getElementById("meaningPanel"),
+    narration: document.getElementById("narrationFeed"),
+  };
+
+  let currentState = null;
+  let selectedPosition = null;
+
+  function authHeaders(){
+    return {"Content-Type":"application/json", "X-Tarot-Token": tokenInput.value.trim()};
+  }
+
+  async function fetchState(){
+    const res = await fetch(`/api/tarot/sessions/${joinCode}/state?view=priestess`);
+    const data = await res.json();
+    if (!data.ok) return;
+    currentState = data.state;
+    render();
+  }
+
+  function render(){
+    if (!currentState) return;
+    const s = currentState.session;
+    stateEls.status.textContent = s.status || "created";
+    stateEls.sessionId.textContent = s.session_id;
+    stateEls.deckId.textContent = s.deck_id;
+    stateEls.spreadId.textContent = s.spread_id;
+
+    stateEls.positions.innerHTML = "";
+    currentState.spread.positions.forEach(pos => {
+      const draw = currentState.draw.find(d => d.position_id === pos.id);
+      const el = document.createElement("div");
+      el.className = "muted";
+      let label = `${pos.label} — ${pos.prompt || ""}`;
+      if (draw && draw.revealed) label += " (revealed)";
+      else if (draw) label += " (drawn)";
+      el.textContent = label;
+      stateEls.positions.appendChild(el);
+    });
+
+    stateEls.grid.innerHTML = "";
+    currentState.spread.positions.forEach(pos => {
+      const draw = currentState.draw.find(d => d.position_id === pos.id);
+      const slot = document.createElement("div");
+      slot.className = "card-slot";
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = `${pos.label} — ${pos.prompt || ""}`;
+      slot.appendChild(label);
+
+      const cardWrap = document.createElement("div");
+      cardWrap.className = "card" + (draw && draw.revealed ? " revealed" : "");
+      const inner = document.createElement("div");
+      inner.className = "inner";
+      const back = document.createElement("div");
+      back.className = "face back";
+      const front = document.createElement("div");
+      front.className = "face front";
+      if (draw && draw.card && draw.card.image){
+        const img = document.createElement("img");
+        img.src = draw.card.image;
+        front.appendChild(img);
+      } else {
+        front.textContent = draw && draw.card ? draw.card.name : "";
+      }
+      inner.appendChild(back);
+      inner.appendChild(front);
+      cardWrap.appendChild(inner);
+      cardWrap.addEventListener("click", () => selectCard(pos.id));
+      slot.appendChild(cardWrap);
+      stateEls.grid.appendChild(slot);
+    });
+
+    renderNarration();
+    if (selectedPosition) updateMeaning(selectedPosition);
+  }
+
+  function renderNarration(){
+    stateEls.narration.innerHTML = "";
+    (currentState.narration || []).slice().reverse().forEach(n => {
+      const line = document.createElement("div");
+      line.className = "line";
+      line.textContent = n.text;
+      stateEls.narration.appendChild(line);
+    });
+  }
+
+  function selectCard(positionId){
+    selectedPosition = positionId;
+    updateMeaning(positionId);
+  }
+
+  function updateMeaning(positionId){
+    const draw = currentState.draw.find(d => d.position_id === positionId);
+    const pos = currentState.spread.positions.find(p => p.id === positionId);
+    if (!draw || !draw.card){
+      stateEls.meaning.innerHTML = `<div class="muted">${pos ? pos.label : "Card"}: not drawn.</div>`;
+      return;
+    }
+    const card = draw.card;
+    const title = `${card.name}${draw.reversed ? " (reversed)" : ""}`;
+    const upright = card.upright || "";
+    const reversed = card.reversed || "";
+    const house = card.house ? `<div class="muted">House: ${card.house}</div>` : "";
+    const prompt = pos ? `<div class="muted">${pos.label} — ${pos.prompt || ""}</div>` : "";
+    stateEls.meaning.innerHTML = `
+      <div><strong>${title}</strong></div>
+      ${prompt}
+      ${house}
+      <div style="margin-top:6px">${draw.reversed ? reversed : upright}</div>
+    `;
+  }
+
+  async function postControl(path, body){
+    await fetch(path, {method:"POST", headers:authHeaders(), body:JSON.stringify(body || {})});
+  }
+
+  document.getElementById("btnStart").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/start`, {token: tokenInput.value});
+  document.getElementById("btnFinish").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/finish`, {token: tokenInput.value});
+  document.getElementById("btnShuffle").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/shuffle`, {token: tokenInput.value});
+  document.getElementById("btnDraw").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/draw`, {token: tokenInput.value, count: 1});
+  document.getElementById("btnRevealNext").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});
+  document.getElementById("btnRevealAll").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"all"});
+
+  document.getElementById("btnNarrate").onclick = async () => {
+    const text = document.getElementById("narrationInput").value.trim();
+    if (!text) return;
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/narrate`, {token: tokenInput.value, text});
+    document.getElementById("narrationInput").value = "";
+  };
+
+  document.getElementById("btnAddPrompt").onclick = () => {
+    const pos = currentState.spread.positions.find(p => p.id === selectedPosition);
+    if (!pos) return;
+    document.getElementById("narrationInput").value = pos.prompt || pos.label;
+  };
+  document.getElementById("btnAddUpright").onclick = () => {
+    const draw = currentState.draw.find(d => d.position_id === selectedPosition);
+    if (!draw || !draw.card) return;
+    document.getElementById("narrationInput").value = draw.card.upright || "";
+  };
+  document.getElementById("btnAddReversed").onclick = () => {
+    const draw = currentState.draw.find(d => d.position_id === selectedPosition);
+    if (!draw || !draw.card) return;
+    document.getElementById("narrationInput").value = draw.card.reversed || "";
+  };
+
+  function connectSSE(){
+    const src = new EventSource(`/api/tarot/sessions/${joinCode}/stream?view=priestess`);
+    src.onmessage = () => fetchState();
+  }
+
+  fetchState();
+  connectSSE();
+</script>

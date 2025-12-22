@@ -1,0 +1,147 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tarot Overlay</title>
+<style>
+  :root{
+    --bg:rgba(6,10,8,.7);
+    --text:#e7f2ea;
+    --muted:#9fb4a6;
+    --accent:#6bd4a2;
+    --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Cinzel","Garamond","Georgia",serif;
+    color:var(--text);
+    background:transparent;
+  }
+  .frame{
+    margin:14px;
+    padding:12px;
+    border-radius:14px;
+    background:var(--bg);
+    border:1px solid var(--line);
+  }
+  .title{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .title h1{margin:0;font-size:16px;letter-spacing:.06em}
+  .chip{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:10px;
+  }
+  .slot{
+    padding:8px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:rgba(0,0,0,.2);
+  }
+  .label{font-size:10px;color:var(--muted);margin-bottom:6px}
+  .card{
+    width:100%;
+    aspect-ratio:3/4.2;
+    perspective:1000px;
+  }
+  .card .inner{
+    width:100%;height:100%;
+    position:relative;
+    transform-style:preserve-3d;
+    transition:transform .7s ease;
+  }
+  .card.revealed .inner{transform:rotateY(180deg)}
+  .face{
+    position:absolute;inset:0;
+    backface-visibility:hidden;
+    border-radius:10px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .back{
+    background:
+      radial-gradient(circle at 20% 20%, rgba(214,178,110,.2), transparent 40%),
+      linear-gradient(135deg, #1b2d26, #132018);
+  }
+  .front{transform:rotateY(180deg);background:#0d1411}
+  .front img{width:100%;height:100%;object-fit:cover}
+  .caption{font-size:12px;margin-top:8px;color:var(--muted)}
+</style>
+
+<div class="frame">
+  <div class="title">
+    <h1>Tarot Reading</h1>
+    <span class="chip" id="sessionStatus">waiting</span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="caption" id="caption"></div>
+</div>
+
+<script>
+  const joinCode = "{JOIN}";
+  const statusEl = document.getElementById("sessionStatus");
+  const grid = document.getElementById("grid");
+  const caption = document.getElementById("caption");
+  let currentState = null;
+
+  async function fetchState(){
+    const res = await fetch(`/api/tarot/sessions/${joinCode}/state?view=overlay`);
+    const data = await res.json();
+    if (!data.ok) return;
+    currentState = data.state;
+    render();
+  }
+
+  function render(){
+    if (!currentState) return;
+    statusEl.textContent = currentState.session.status || "created";
+    grid.innerHTML = "";
+    currentState.spread.positions.forEach(pos => {
+      const draw = currentState.draw.find(d => d.position_id === pos.id);
+      const slot = document.createElement("div");
+      slot.className = "slot";
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = pos.label;
+      slot.appendChild(label);
+
+      const cardWrap = document.createElement("div");
+      cardWrap.className = "card" + (draw && draw.revealed ? " revealed" : "");
+      const inner = document.createElement("div");
+      inner.className = "inner";
+      const back = document.createElement("div");
+      back.className = "face back";
+      const front = document.createElement("div");
+      front.className = "face front";
+      if (draw && draw.card && draw.card.image){
+        const img = document.createElement("img");
+        img.src = draw.card.image;
+        front.appendChild(img);
+      }
+      inner.appendChild(back);
+      inner.appendChild(front);
+      cardWrap.appendChild(inner);
+      slot.appendChild(cardWrap);
+      grid.appendChild(slot);
+    });
+
+    const lastLine = (currentState.narration || []).slice(-1)[0];
+    caption.textContent = lastLine ? lastLine.text : "";
+  }
+
+  function connectSSE(){
+    const src = new EventSource(`/api/tarot/sessions/${joinCode}/stream?view=overlay`);
+    src.onmessage = () => fetchState();
+  }
+
+  fetchState();
+  connectSSE();
+</script>
