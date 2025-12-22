@@ -109,14 +109,12 @@ def get_online_count() -> Optional[int]:
     if entries:
         count = _extract_count(entries, HONSE_FEDERATION_ENTRY, hosts)
         if count is not None:
-            if HONSE_DEBUG:
-                logger.info("[honse_presence] %s -> %s online", HONSE_FEDERATION_ENTRY, count)
+            logger.warning("[honse_presence] %s -> %s online", HONSE_FEDERATION_ENTRY, count)
             return count
-        if HONSE_DEBUG:
-            sample = []
-            for entry in entries[:5]:
-                sample.append(_entry_candidates(entry))
-            logger.warning("[honse_presence] no match for entry '%s' (hosts=%s, sample=%s)", HONSE_FEDERATION_ENTRY, hosts, sample)
+        sample = []
+        for entry in entries[:3]:
+            sample.append(_entry_candidates(entry))
+        logger.warning("[honse_presence] no match for entry '%s' (hosts=%s, sample=%s)", HONSE_FEDERATION_ENTRY, hosts, sample)
         return None
     if HONSE_DEBUG:
         logger.warning("[honse_presence] no entries for %s", base_host)

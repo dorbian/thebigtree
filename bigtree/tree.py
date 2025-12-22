@@ -61,6 +61,7 @@ class TheBigTree(commands.Bot):
                 else:
                     label = "listening to elves"
                 await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
+                bigtree.loch.logger.warning(f"[presence] updated: {label}")
             except Exception as e:
                 bigtree.loch.logger.warning(f"[presence] update failed: {e}")
             await asyncio.sleep(honse_presence.HONSE_REFRESH_SECONDS)
