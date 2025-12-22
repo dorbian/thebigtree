@@ -31,7 +31,7 @@
   h1{margin:0 0 12px 0;letter-spacing:.05em}
   .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
   label{display:block;margin-top:12px;color:var(--muted);font-size:12px}
-  input, textarea, button{
+  input, textarea, button, select{
     width:100%;
     padding:8px 10px;
     border-radius:10px;
@@ -78,14 +78,17 @@
     </div>
     <div>
       <label for="cardHouse">House</label>
-      <input id="cardHouse" placeholder="whisper">
+      <select id="cardHouse">
+        <option value="">(none)</option>
+        <option value="roots">House of Roots</option>
+        <option value="canopy">House of Canopy</option>
+        <option value="ember">House of Ember</option>
+        <option value="whisper">House of Whisper</option>
+        <option value="crown">Crown of the Tree</option>
+      </select>
     </div>
   </div>
   <div class="row">
-    <div>
-      <label for="cardImage">Image URL</label>
-      <input id="cardImage" placeholder="https://...">
-    </div>
     <div>
       <label for="cardTags">Tags (comma separated)</label>
       <input id="cardTags" placeholder="mischief,curiosity">
@@ -136,6 +139,7 @@
   const status = document.getElementById("status");
   const deckList = document.getElementById("deckList");
   const storageKey = "tarot_admin_key";
+  let uploadedImageUrl = "";
 
   apiKey.value = localStorage.getItem(storageKey) || "";
   apiKey.addEventListener("input", () => localStorage.setItem(storageKey, apiKey.value.trim()));
@@ -172,7 +176,7 @@
         card_id: document.getElementById("cardId").value.trim() || undefined,
         name: document.getElementById("cardName").value.trim(),
         house: document.getElementById("cardHouse").value.trim(),
-        image: document.getElementById("cardImage").value.trim(),
+        image: uploadedImageUrl || undefined,
         tags,
         upright: document.getElementById("cardUpright").value.trim(),
         reversed: document.getElementById("cardReversed").value.trim(),
@@ -216,7 +220,7 @@
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed");
-      document.getElementById("cardImage").value = data.url;
+      uploadedImageUrl = data.url;
       setStatus("Image uploaded.", true);
     }catch(err){
       setStatus(err.message, false);

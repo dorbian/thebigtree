@@ -626,10 +626,6 @@
           </div>
           <div class="row">
             <div>
-              <label for="taCardImage">Image URL</label>
-              <input id="taCardImage" placeholder="https://">
-            </div>
-            <div>
               <label for="taCardTags">Tags</label>
               <input id="taCardTags" placeholder="mischief,curiosity">
             </div>
@@ -1554,7 +1550,7 @@
             card_id: $("taCardId").value.trim() || undefined,
             name: $("taCardName").value.trim(),
             house: $("taCardHouse").value.trim(),
-            image: $("taCardImage").value.trim(),
+            image: window.taUploadedImageUrl || undefined,
             tags,
             upright: $("taCardUpright").value.trim(),
             reversed: $("taCardReversed").value.trim(),
@@ -1575,7 +1571,7 @@
           $("taCardId").value = "";
           $("taCardName").value = "";
           $("taCardHouse").value = "";
-          $("taCardImage").value = "";
+          window.taUploadedImageUrl = "";
           $("taCardTags").value = "";
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
@@ -1604,7 +1600,7 @@
           });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
-          $("taCardImage").value = data.url;
+          window.taUploadedImageUrl = data.url;
           setStatus("Image uploaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
