@@ -15,12 +15,26 @@ HONSE_FEDERATION_ENTRY = os.getenv("HONSE_FEDERATION_ENTRY", "forest").strip().l
 logger = logging.getLogger("bigtree")
 
 
+def _entry_candidates(entry: Dict[str, Any]) -> List[str]:
+    candidates: List[str] = []
+    for field in ("name", "id", "slug", "key", "server", "serverId", "hostname", "host", "domain"):
+        val = entry.get(field)
+        if isinstance(val, str) and val.strip():
+            candidates.append(val.strip().lower())
+    nested = entry.get("server")
+    if isinstance(nested, dict):
+        for field in ("name", "id", "slug", "key", "serverId", "hostname", "host", "domain"):
+            val = nested.get(field)
+            if isinstance(val, str) and val.strip():
+                candidates.append(val.strip().lower())
+    return candidates
+
+
 def _matches_entry(entry: Dict[str, Any], entry_key: str, hosts: List[str]) -> bool:
     entry_key = (entry_key or "").strip().lower()
     if entry_key:
-        for field in ("name", "id", "slug", "key", "server"):
-            val = str(entry.get(field) or "").strip().lower()
-            if val and val == entry_key:
+        for cand in _entry_candidates(entry):
+            if cand == entry_key or entry_key in cand:
                 return True
     hostname = str(entry.get("hostname") or "").lower().strip()
     if hostname and entry_key and entry_key in hostname:
@@ -98,7 +112,10 @@ def get_online_count() -> Optional[int]:
                 logger.info("[honse_presence] %s -> %s online", HONSE_FEDERATION_ENTRY, count)
             return count
         if HONSE_DEBUG:
-            logger.warning("[honse_presence] no match for entry '%s' (hosts=%s)", HONSE_FEDERATION_ENTRY, hosts)
+            sample = []
+            for entry in entries[:5]:
+                sample.append(_entry_candidates(entry))
+            logger.warning("[honse_presence] no match for entry '%s' (hosts=%s, sample=%s)", HONSE_FEDERATION_ENTRY, hosts, sample)
         return None
     if HONSE_DEBUG:
         logger.warning("[honse_presence] no entries for %s", base_host)
