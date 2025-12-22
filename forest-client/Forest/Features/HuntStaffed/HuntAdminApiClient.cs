@@ -31,6 +31,19 @@ namespace Forest.Features.HuntStaffed
         public Task<HuntStateResponse> GetStateAsync(string huntId, CancellationToken ct = default)
             => Get<HuntStateResponse>($"hunts/{Uri.EscapeDataString(huntId)}/state", ct);
 
+        public Task<HuntListResponse> ListHuntsAsync(CancellationToken ct = default)
+            => Get<HuntListResponse>("hunts", ct);
+
+        public Task<HuntCreateResponse> CreateHuntAsync(string title, int territoryId, string? description, string? rules, bool allowImplicitGroups, CancellationToken ct = default)
+            => Post<HuntCreateResponse>("hunts", new
+            {
+                title = title,
+                territory_id = territoryId,
+                description = description,
+                rules = rules,
+                allow_implicit_groups = allowImplicitGroups
+            }, ct);
+
         public Task<HuntJoinResponse> JoinByCodeAsync(string joinCode, string staffName, string? staffId = null, CancellationToken ct = default)
             => Post<HuntJoinResponse>("hunts/join", new { join_code = joinCode, staff_name = staffName, staff_id = staffId }, ct);
 

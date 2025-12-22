@@ -91,6 +91,13 @@ public class MainWindow : Window, IDisposable
     private string _huntGroupCode = "";
     private string _huntSelectedCheckpointId = "";
     private DateTime _huntLastRefresh = DateTime.MinValue;
+    private List<HuntInfo> _huntList = new();
+    private bool _huntLoading = false;
+    private int _huntMode = 0; // 0 = Host, 1 = Staff
+    private string _huntTitle = "";
+    private string _huntDescription = "";
+    private string _huntRules = "";
+    private bool _huntAllowImplicit = true;
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -640,7 +647,7 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted("Staffed Scavenger Hunt");
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.TextWrapped("Staff members claim checkpoints, confirm group check-ins on-site, and the server tracks progress. Participants do not need the plugin.");
+            ImGui.TextWrapped("Host creates the hunt and manages the session. Staff claim checkpoints and confirm group check-ins on-site.");
         }
 
         ImGui.Separator();
@@ -648,6 +655,78 @@ public class MainWindow : Window, IDisposable
 
         if (string.IsNullOrWhiteSpace(_huntStaffName))
             _huntStaffName = Plugin.ClientState.LocalPlayer?.Name.TextValue ?? "Staff";
+
+        string[] modes = { "Host", "Staff" };
+        ImGui.SetNextItemWidth(180f);
+        ImGui.Combo("Mode", ref _huntMode, modes, modes.Length);
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Refresh list"))
+            _ = Hunt_LoadList();
+
+        if (!string.IsNullOrWhiteSpace(_huntStatus))
+            ImGui.TextDisabled(_huntStatus);
+
+        ImGui.Spacing();
+        if (_huntMode == 0)
+        {
+            ImGui.TextDisabled("Host");
+            ImGui.Separator();
+
+            if (_huntList.Count == 0)
+            {
+                ImGui.TextDisabled("No hunts loaded. Click Refresh list.");
+            }
+            else
+            {
+                foreach (var h in _huntList)
+                {
+                    var id = h.hunt_id ?? "";
+                    if (string.IsNullOrEmpty(id)) continue;
+                    bool isActive = string.Equals(_huntId, id, StringComparison.Ordinal);
+                    if (ImGui.Selectable($"{h.title}##{id}", isActive))
+                    {
+                        _huntId = id;
+                        _huntJoinCode = h.join_code ?? _huntJoinCode;
+                        _ = Hunt_LoadState();
+                    }
+                }
+            }
+
+            ImGui.Spacing();
+            ImGui.TextDisabled("Create new hunt");
+            ImGui.InputText("Title", ref _huntTitle, 64);
+            ImGui.InputTextMultiline("Description", ref _huntDescription, 512, new Vector2(ImGui.GetContentRegionAvail().X, 60));
+            ImGui.InputTextMultiline("Rules", ref _huntRules, 512, new Vector2(ImGui.GetContentRegionAvail().X, 60));
+            ImGui.Checkbox("Allow implicit groups", ref _huntAllowImplicit);
+
+            using (var dis = ImRaii.Disabled(_huntLoading))
+            {
+                if (ImGui.Button("Create Hunt"))
+                    _ = Hunt_Create();
+            }
+
+            if (_huntState?.hunt != null)
+            {
+                var hunt = _huntState.hunt;
+                ImGui.Spacing();
+                ImGui.Text($"Hunt: {hunt.title} ({hunt.hunt_id})");
+                ImGui.Text($"Join code: {hunt.join_code}");
+                ImGui.Text($"Status: {(hunt.active ? (hunt.started ? "Active" : "Ready") : "Ended")}");
+
+                using (var dis = ImRaii.Disabled(_huntLoading))
+                {
+                    if (ImGui.Button("Start"))
+                        _ = Hunt_Start();
+                    ImGui.SameLine();
+                    if (ImGui.Button("End"))
+                        _ = Hunt_End();
+                }
+            }
+            return;
+        }
+
+        ImGui.TextDisabled("Staff");
+        ImGui.Separator();
 
         ImGui.InputText("Join code", ref _huntJoinCode, 32);
         ImGui.InputText("Staff name", ref _huntStaffName, 64);
@@ -658,24 +737,21 @@ public class MainWindow : Window, IDisposable
         if (ImGui.SmallButton("Refresh") && !string.IsNullOrWhiteSpace(_huntId))
             _ = Hunt_LoadState();
 
-        if (!string.IsNullOrWhiteSpace(_huntStatus))
-            ImGui.TextDisabled(_huntStatus);
-
         if (_huntState?.hunt == null)
             return;
 
-        var hunt = _huntState.hunt;
+        var staffHunt = _huntState.hunt;
         ImGui.Spacing();
-        ImGui.Text($"Hunt: {hunt.title} ({hunt.hunt_id})");
-        ImGui.Text($"Join code: {hunt.join_code}");
-        ImGui.Text($"Status: {(hunt.active ? (hunt.started ? "Active" : "Ready") : "Ended")}");
+        ImGui.Text($"Hunt: {staffHunt.title} ({staffHunt.hunt_id})");
+        ImGui.Text($"Join code: {staffHunt.join_code}");
+        ImGui.Text($"Status: {(staffHunt.active ? (staffHunt.started ? "Active" : "Ready") : "Ended")}");
 
         int currentTerritory = (int)Plugin.ClientState.TerritoryType;
-        if (hunt.territory_id > 0)
+        if (staffHunt.territory_id > 0)
         {
-            bool territoryOk = currentTerritory == hunt.territory_id;
+            bool territoryOk = currentTerritory == staffHunt.territory_id;
             var tColor = territoryOk ? new Vector4(0.5f, 1f, 0.6f, 1f) : new Vector4(1f, 0.6f, 0.4f, 1f);
-            ImGui.TextColored(tColor, $"Territory: {hunt.territory_id} (you are {currentTerritory})");
+            ImGui.TextColored(tColor, $"Territory: {staffHunt.territory_id} (you are {currentTerritory})");
         }
 
         var staffMe = _huntState.staff?.FirstOrDefault(s => s.staff_id == _huntStaffId);
@@ -736,7 +812,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Text($"Checkpoint: {checkpointLabel}");
         ImGui.InputText("Group code", ref _huntGroupCode, 32);
-        bool canCheckIn = hunt.started && hunt.active
+        bool canCheckIn = staffHunt.started && staffHunt.active
             && !string.IsNullOrWhiteSpace(_huntStaffId)
             && (!string.IsNullOrWhiteSpace(_huntSelectedCheckpointId) || !string.IsNullOrWhiteSpace(staffMe?.checkpoint_id))
             && !string.IsNullOrWhiteSpace(_huntGroupCode);
@@ -2450,6 +2526,112 @@ public class MainWindow : Window, IDisposable
         catch (Exception ex)
         {
             _huntStatus = $"Refresh failed: {ex.Message}";
+        }
+    }
+
+    private async Task Hunt_LoadList()
+    {
+        Hunt_EnsureClient();
+        _huntLoading = true;
+        try
+        {
+            var resp = await _huntApi!.ListHuntsAsync();
+            _huntList = resp.hunts ?? new List<HuntInfo>();
+            _huntStatus = $"Loaded {_huntList.Count} hunt(s).";
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Failed to load hunts: {ex.Message}";
+            _huntList = new List<HuntInfo>();
+        }
+        finally
+        {
+            _huntLoading = false;
+        }
+    }
+
+    private async Task Hunt_Create()
+    {
+        Hunt_EnsureClient();
+        _huntLoading = true;
+        try
+        {
+            int territoryId = (int)Plugin.ClientState.TerritoryType;
+            var resp = await _huntApi!.CreateHuntAsync(
+                _huntTitle.Trim(),
+                territoryId,
+                _huntDescription.Trim(),
+                _huntRules.Trim(),
+                _huntAllowImplicit
+            );
+            if (!resp.ok || resp.hunt == null)
+            {
+                _huntStatus = resp.error ?? "Failed to create hunt.";
+                return;
+            }
+            _huntId = resp.hunt.hunt_id ?? "";
+            _huntJoinCode = resp.hunt.join_code ?? "";
+            _huntStatus = $"Created hunt '{resp.hunt.title}'.";
+            await Hunt_LoadState();
+            await Hunt_LoadList();
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Create failed: {ex.Message}";
+        }
+        finally
+        {
+            _huntLoading = false;
+        }
+    }
+
+    private async Task Hunt_Start()
+    {
+        if (string.IsNullOrWhiteSpace(_huntId))
+        {
+            _huntStatus = "Select a hunt first.";
+            return;
+        }
+        Hunt_EnsureClient();
+        _huntLoading = true;
+        try
+        {
+            await _huntApi!.StartAsync(_huntId);
+            await Hunt_LoadState();
+            _huntStatus = "Hunt started.";
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"Start failed: {ex.Message}";
+        }
+        finally
+        {
+            _huntLoading = false;
+        }
+    }
+
+    private async Task Hunt_End()
+    {
+        if (string.IsNullOrWhiteSpace(_huntId))
+        {
+            _huntStatus = "Select a hunt first.";
+            return;
+        }
+        Hunt_EnsureClient();
+        _huntLoading = true;
+        try
+        {
+            await _huntApi!.EndAsync(_huntId);
+            await Hunt_LoadState();
+            _huntStatus = "Hunt ended.";
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"End failed: {ex.Message}";
+        }
+        finally
+        {
+            _huntLoading = false;
         }
     }
 

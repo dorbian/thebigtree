@@ -97,6 +97,13 @@ namespace Forest.Features.HuntStaffed
         public List<HuntInfo>? hunts { get; set; }
     }
 
+    public sealed class HuntCreateResponse
+    {
+        public bool ok { get; set; }
+        public string? error { get; set; }
+        public HuntInfo? hunt { get; set; }
+    }
+
     public sealed class HuntStaffJoinResponse
     {
         public bool ok { get; set; }
