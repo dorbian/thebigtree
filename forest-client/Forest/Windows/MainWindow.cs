@@ -856,13 +856,19 @@ public class MainWindow : Window, IDisposable
         }
         NormalizeMurderMysteryData(game);
 
+        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextWrapped("Use the left player list to add/remove participants. Pick the killer, start the 5-minute voting window, and capture whispers. Timers below control the hint cadence.");
+        }
+
         ImGui.TextDisabled("Murder Mystery Details");
         ImGui.Separator();
         ImGui.Spacing();
 
         // Title
         string title = game.Title ?? "";
-        if (ImGui.InputText("Title", ref title, 256))
+        ImGui.TextUnformatted("Title");
+        if (ImGui.InputText("##mm-title", ref title, 256))
         {
             game.Title = title;
             Plugin.Config.Save();
