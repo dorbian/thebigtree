@@ -476,6 +476,7 @@
         <div class="menu-sub" id="menuGames"></div>
         <button class="menu-refresh" id="menuCreateGame" title="Create game">+ New</button>
         <div class="menu-item" id="menuTarot">Tarot</div>
+        <div class="menu-item" id="menuTarotAdmin">Tarot Admin</div>
         <label class="toggle" style="margin-top:12px">
           <input type="checkbox" id="overlayMode">
           Overlay mode
@@ -589,6 +590,90 @@
             <div>
               <span class="pill">Overlay link</span>
               <div id="tLink">No join code entered.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="tarotAdminPanel">
+          <h2>Tarot Admin</h2>
+          <p>Uses your current API key (same login as Bingo).</p>
+          <div class="row">
+            <div>
+              <label for="taDeck">Deck ID</label>
+              <input id="taDeck" value="elf-classic">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="taLoadDeck">Load deck</button>
+            </div>
+          </div>
+          <div class="list" id="taDeckList">No deck loaded.</div>
+
+          <h3>Add / Update Card</h3>
+          <div class="row">
+            <div>
+              <label for="taCardId">Card ID</label>
+              <input id="taCardId" placeholder="candlecap_sprite">
+            </div>
+            <div>
+              <label for="taCardName">Name</label>
+              <input id="taCardName" placeholder="Candlecap Sprite">
+            </div>
+            <div>
+              <label for="taCardHouse">House</label>
+              <input id="taCardHouse" placeholder="whisper">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="taCardImage">Image URL</label>
+              <input id="taCardImage" placeholder="https://">
+            </div>
+            <div>
+              <label for="taCardTags">Tags</label>
+              <input id="taCardTags" placeholder="mischief,curiosity">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="taCardUpright">Upright</label>
+              <textarea id="taCardUpright"></textarea>
+            </div>
+            <div>
+              <label for="taCardReversed">Reversed</label>
+              <textarea id="taCardReversed"></textarea>
+            </div>
+          </div>
+
+          <h3>Artist Links</h3>
+          <div class="row">
+            <div>
+              <label for="taArtistInstagram">Instagram</label>
+              <input id="taArtistInstagram" placeholder="https://instagram.com/...">
+            </div>
+            <div>
+              <label for="taArtistBluesky">Bluesky</label>
+              <input id="taArtistBluesky" placeholder="https://bsky.app/profile/...">
+            </div>
+            <div>
+              <label for="taArtistX">X / Twitter</label>
+              <input id="taArtistX" placeholder="https://x.com/...">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="taArtistArtstation">ArtStation</label>
+              <input id="taArtistArtstation" placeholder="https://artstation.com/...">
+            </div>
+            <div>
+              <label for="taArtistWebsite">Website</label>
+              <input id="taArtistWebsite" placeholder="https://...">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button id="taSaveCard">Save card</button>
             </div>
           </div>
         </section>
@@ -1050,8 +1135,10 @@
       function showPanel(which){
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarot").classList.toggle("active", which === "tarot");
+        $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotPanel").classList.toggle("hidden", which !== "tarot");
+        $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
       }
 
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
@@ -1064,6 +1151,7 @@
         $("bTitle").focus();
       });
       $("menuTarot").addEventListener("click", () => showPanel("tarot"));
+      $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -1439,6 +1527,61 @@
         const url = getOverlayUrl(code);
         $("tLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
         window.open(url, "_blank");
+      });
+
+      $("taLoadDeck").addEventListener("click", async () => {
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
+          showList($("taDeckList"), data);
+          setStatus("Deck loaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("taSaveCard").addEventListener("click", async () => {
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const tags = $("taCardTags").value.split(",").map(t => t.trim()).filter(Boolean);
+          const body = {
+            card_id: $("taCardId").value.trim() || undefined,
+            name: $("taCardName").value.trim(),
+            house: $("taCardHouse").value.trim(),
+            image: $("taCardImage").value.trim(),
+            tags,
+            upright: $("taCardUpright").value.trim(),
+            reversed: $("taCardReversed").value.trim(),
+            artist_links: {
+              instagram: $("taArtistInstagram").value.trim(),
+              bluesky: $("taArtistBluesky").value.trim(),
+              x: $("taArtistX").value.trim(),
+              artstation: $("taArtistArtstation").value.trim(),
+              website: $("taArtistWebsite").value.trim()
+            }
+          };
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          setStatus("Card saved.", "ok");
+          $("taCardId").value = "";
+          $("taCardName").value = "";
+          $("taCardHouse").value = "";
+          $("taCardImage").value = "";
+          $("taCardTags").value = "";
+          $("taCardUpright").value = "";
+          $("taCardReversed").value = "";
+          $("taArtistInstagram").value = "";
+          $("taArtistBluesky").value = "";
+          $("taArtistX").value = "";
+          $("taArtistArtstation").value = "";
+          $("taArtistWebsite").value = "";
+          await $("taLoadDeck").click();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       });
 
       loadSettings();
