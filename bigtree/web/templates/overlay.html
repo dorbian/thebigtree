@@ -554,96 +554,24 @@
         </section>
 
         <section class="panel" style="animation-delay:.1s" id="tarotPanel">
-          <h2>Tarot Control</h2>
-          <h3>Deck</h3>
+          <h2>Tarot Overlay</h2>
+          <p>Enter a join code to open the new overlay page.</p>
           <div class="row">
             <div>
-              <label for="tDeck">Deck</label>
-              <input id="tDeck" value="elf-classic">
+              <label for="tJoinCode">Join code</label>
+              <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tLoadDeck">Load deck</button>
-            </div>
-          </div>
-          <div class="list" id="tDeckList">No deck loaded.</div>
-
-          <h3>Add card</h3>
-          <div class="row">
-            <div>
-              <label for="tTitle">Title</label>
-              <input id="tTitle">
-            </div>
-            <div>
-              <label for="tImage">Image URL</label>
-              <input id="tImage" placeholder="https://">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tMeaning">Meaning</label>
-              <textarea id="tMeaning"></textarea>
-            </div>
-            <div>
-              <label for="tTags">Tags</label>
-              <textarea id="tTags" placeholder="comma,separated"></textarea>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="tAddCard">Add card</button>
-            </div>
-          </div>
-
-          <h3>Session</h3>
-          <div class="row">
-            <div>
-              <label for="tOwner">Owner ID</label>
-              <input id="tOwner" placeholder="0">
-            </div>
-            <div>
-              <label for="tSpread">Spread</label>
-              <input id="tSpread" value="single">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tCreateSession">Create session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tSessionId">Session ID</label>
-              <input id="tSessionId" placeholder="sid">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="tLoadSession">Load session</button>
-            </div>
-          </div>
-          <div class="subgrid">
-            <div>
-              <label for="tDrawCount">Draw count</label>
-              <input id="tDrawCount" type="number" value="1">
-              <button id="tDraw">Draw</button>
-            </div>
-            <div>
-              <label for="tFlipIndex">Flip index</label>
-              <input id="tFlipIndex" type="number" value="0">
-              <button class="btn-ghost" id="tFlip">Flip</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="tEnd">End session</button>
+              <button id="tOpenOverlay">Open overlay</button>
             </div>
           </div>
           <div class="row links">
             <div>
-              <span class="pill">Viewer link</span>
-              <div id="tLink">No session loaded.</div>
+              <span class="pill">Overlay link</span>
+              <div id="tLink">No join code entered.</div>
             </div>
           </div>
-          <div class="list" id="tState">No session loaded.</div>
         </section>
       </div>
       </main>
@@ -1473,137 +1401,20 @@
           .catch(err => setStatus(err.message, "err"));
       });
 
-      $("tLoadDeck").addEventListener("click", async () => {
-        try{
-          const deck = $("tDeck").value.trim() || "elf-classic";
-          const data = await jsonFetch("/api/tarot/deck/" + encodeURIComponent(deck) + "/cards", {method:"GET"});
-          showList($("tDeckList"), data);
-          setStatus("Deck loaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("tAddCard").addEventListener("click", async () => {
-        try{
-          const deck = $("tDeck").value.trim() || "elf-classic";
-          const tags = $("tTags").value.split(",").map(t => t.trim()).filter(Boolean);
-          const body = {
-            title: $("tTitle").value.trim(),
-            meaning: $("tMeaning").value.trim(),
-            image_url: $("tImage").value.trim(),
-            tags
-          };
-          const data = await jsonFetch("/api/tarot/deck/" + encodeURIComponent(deck) + "/cards", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(body)
-          });
-          setStatus("Card added.", "ok");
-          $("tTitle").value = "";
-          $("tMeaning").value = "";
-          $("tImage").value = "";
-          $("tTags").value = "";
-          await $("tLoadDeck").click();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("tCreateSession").addEventListener("click", async () => {
-        try{
-          const body = {
-            owner_id: Number($("tOwner").value || 0),
-            deck: $("tDeck").value.trim() || "elf-classic",
-            spread: $("tSpread").value.trim() || "single"
-          };
-          const data = await jsonFetch("/api/tarot/session", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(body)
-          });
-          $("tSessionId").value = data.session_id || "";
-          setStatus("Session created.", "ok");
-          renderSession(data.session);
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      async function loadSession(){
-        const sid = $("tSessionId").value.trim();
-        if (!sid){
-          setStatus("Enter a session id.", "err");
-          return;
-        }
-        try{
-          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid), {method:"GET"}, false);
-          renderSession(data.session);
-          setStatus("Session loaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      }
-
-      function renderSession(session){
-        if (!session){
-          $("tState").textContent = "No session loaded.";
-          $("tLink").textContent = "No session loaded.";
-          return;
-        }
-        showList($("tState"), session);
+      function getOverlayUrl(code){
         const base = getBase();
-        const url = new URL("/tarot/session/" + session.sid, base).toString();
-        $("tLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
+        return new URL("/overlay/session/" + encodeURIComponent(code), base).toString();
       }
 
-      $("tLoadSession").addEventListener("click", loadSession);
-
-      $("tDraw").addEventListener("click", async () => {
-        try{
-          const sid = $("tSessionId").value.trim();
-          const body = {count: Number($("tDrawCount").value || 1)};
-          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/draw", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(body)
-          });
-          renderSession(data.session);
-          setStatus("Cards drawn.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
+      $("tOpenOverlay").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
         }
-      });
-
-      $("tFlip").addEventListener("click", async () => {
-        try{
-          const sid = $("tSessionId").value.trim();
-          const body = {index: Number($("tFlipIndex").value || 0)};
-          const data = await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/flip", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(body)
-          });
-          renderSession(data.session);
-          setStatus("Card flipped.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("tEnd").addEventListener("click", async () => {
-        try{
-          const sid = $("tSessionId").value.trim();
-          await jsonFetch("/api/tarot/session/" + encodeURIComponent(sid) + "/end", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: "{}"
-          });
-          setStatus("Session ended.", "ok");
-          await loadSession();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
+        const url = getOverlayUrl(code);
+        $("tLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
+        window.open(url, "_blank");
       });
 
       loadSettings();
