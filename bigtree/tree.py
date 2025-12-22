@@ -19,7 +19,7 @@ class TheBigTree(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned_or('/'), intents=intents)
         
     async def on_ready(self):
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="elves"))
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="listening to elves"))
         bigtree.loch.logger.info(f'Logged in as {self.user} (ID: {bigtree.bot.user.id})')
         guild = discord.Object(id=bigtree.guildid)
         # Add awesomeies to the server
@@ -44,7 +44,7 @@ class TheBigTree(commands.Bot):
                 if count is not None and count > 0:
                     label = f"Channeling {count} Elf" if count == 1 else f"Channeling {count} Elves"
                 else:
-                    label = "elves"
+                    label = "listening to elves"
                 await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
             except Exception as e:
                 bigtree.loch.logger.warning(f"[presence] update failed: {e}")
