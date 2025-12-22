@@ -45,6 +45,24 @@
       body.overlay .content{
         padding:12px;
       }
+      .overlay-exit{
+        position:fixed;
+        top:12px;
+        right:12px;
+        z-index:9999;
+        padding:6px 10px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.2);
+        background:rgba(10,20,16,.8);
+        color:var(--ink);
+        cursor:pointer;
+        display:none;
+      }
+      body.overlay .overlay-exit{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+      }
       .hidden{display:none !important}
       .login-screen{
         min-height:100vh;
@@ -434,6 +452,7 @@
     </style>
   </head>
   <body>
+    <button class="overlay-exit" id="overlayExit">Exit overlay</button>
     <div class="login-screen" id="loginView">
       <div class="login-card">
         <div class="login-title">Forest Management</div>
@@ -1216,6 +1235,11 @@
       });
       overlayToggle.addEventListener("change", () => {
         document.body.classList.toggle("overlay", overlayToggle.checked);
+        saveSettings();
+      });
+      $("overlayExit").addEventListener("click", () => {
+        overlayToggle.checked = false;
+        document.body.classList.remove("overlay");
         saveSettings();
       });
 
