@@ -4,6 +4,7 @@ import asyncio, importlib, pkgutil, logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Any, List, Set, Optional
 from aiohttp import web, WSMsgType
+from aiohttp.http_exceptions import InvalidURLError
 from importlib.resources import files as pkg_files, as_file
 import bigtree
 from bigtree.inc.auth import auth_middleware  # <-- NEW
@@ -121,7 +122,10 @@ class DynamicWebServer:
         if request.method == "OPTIONS":
             resp = web.Response()
         else:
-            resp = await handler(request)
+            try:
+                resp = await handler(request)
+            except InvalidURLError:
+                return web.Response(status=400, text="bad request")
         resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key, X-Bigtree-Key, Authorization"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
