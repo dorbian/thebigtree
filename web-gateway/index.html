@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TheBigTree Tarot Gateway</title>
+<style>
+  :root{
+    --bg:#0b1310;
+    --panel:#101a15;
+    --text:#e7f2ea;
+    --muted:#9fb4a6;
+    --accent:#6bd4a2;
+    --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Spectral","Georgia",serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(107,212,162,.18), transparent 60%),
+      linear-gradient(180deg, #0a120f, #0f1713 40%, #0a120f);
+  }
+  main{
+    max-width:760px;
+    margin:40px auto;
+    padding:24px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+  }
+  h1{margin:0 0 8px 0;letter-spacing:.05em}
+  p{color:var(--muted)}
+  label{display:block;margin-top:16px;color:var(--muted);font-size:12px}
+  input, button{
+    width:100%;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0c1511;
+    color:var(--text);
+    font-family:inherit;
+    font-size:14px;
+  }
+  button{
+    margin-top:10px;
+    background:#122019;
+    border-color:rgba(107,212,162,.4);
+    cursor:pointer;
+  }
+  .links{
+    margin-top:20px;
+    display:grid;
+    gap:8px;
+  }
+  a{color:var(--accent);text-decoration:none}
+  .note{font-size:12px;color:var(--muted)}
+</style>
+<main>
+  <h1>Tarot Gateway</h1>
+  <p>Enter a join code to open the session. This gateway proxies the main BigTree server and caches lightweight state for smoother overlays.</p>
+  <label for="code">Join code</label>
+  <input id="code" placeholder="e.g. AB12CD" />
+  <button id="openPlayer">Open Player View</button>
+  <div class="links">
+    <a id="openPriestess" href="#">Open Priestess View</a>
+    <a id="openOverlay" href="#">Open Overlay View</a>
+  </div>
+  <p class="note">Images and full data still come from the main server on port 8443.</p>
+</main>
+<script>
+  const code = document.getElementById("code");
+  const openPlayer = document.getElementById("openPlayer");
+  const openPriestess = document.getElementById("openPriestess");
+  const openOverlay = document.getElementById("openOverlay");
+
+  function joinCode(){
+    return code.value.trim();
+  }
+  function updateLinks(){
+    const c = joinCode();
+    if (!c) return;
+    openPriestess.href = `/tarot/session/${encodeURIComponent(c)}?view=priestess`;
+    openOverlay.href = `/overlay/session/${encodeURIComponent(c)}`;
+  }
+  code.addEventListener("input", updateLinks);
+  openPlayer.addEventListener("click", () => {
+    const c = joinCode();
+    if (!c) return;
+    location.href = `/tarot/session/${encodeURIComponent(c)}?view=player`;
+  });
+</script>

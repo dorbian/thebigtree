@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1.6
+# Lightweight web gateway for TheBigTree (reverse proxy + caching)
+
+FROM nginx:1.27-alpine
+
+WORKDIR /usr/share/nginx/html
+
+COPY web-gateway/index.html /usr/share/nginx/html/index.html
+COPY web-gateway/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
+

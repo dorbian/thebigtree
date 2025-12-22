@@ -63,6 +63,14 @@ spec:
         - name: thebigtree-config
           mountPath: /opt/thebigtree/bigtree.ini
           subPath: bigtree.ini
+    - name: thebigtree-web
+      # Web gateway container (reverse proxy + cache)
+      image: ghcr.io/YOURORG/YOURREPO/thebigtree-web:latest
+      imagePullPolicy: Always
+      ports:
+        - containerPort: 8080
+          hostPort: 8080   # change if it conflicts on the host
+          protocol: TCP
   volumes:
     - name: thebigtree-data
       hostPath:
