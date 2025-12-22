@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 
-HONSE_BASE_URL = os.getenv("HONSE_BASE_URL", "https://server.thebigtree.life").rstrip("/")
+HONSE_BASE_URL = os.getenv("HONSE_BASE_URL", "https://public-beta.honse.farm").rstrip("/")
 HONSE_REFRESH_SECONDS = int(os.getenv("HONSE_REFRESH_SECONDS", "300"))
 HONSE_TIMEOUT_SECONDS = int(os.getenv("HONSE_TIMEOUT_SECONDS", "10"))
 HONSE_DEBUG = os.getenv("HONSE_PRESENCE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
