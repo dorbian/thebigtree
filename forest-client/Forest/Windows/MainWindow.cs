@@ -179,7 +179,7 @@ public class MainWindow : Window, IDisposable
         Plugin.Log?.Information($"[MurderMystery] Captured whisper from {senderName}: {messageText}");
     }
 
-    private void OnFrameworkUpdate(IFramework _)
+    private void OnFrameworkUpdate(IFramework framework)
     {
         // warmup
         if ((DateTime.UtcNow - _pluginStartTime).TotalSeconds < 5) return;
