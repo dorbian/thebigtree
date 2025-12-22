@@ -92,7 +92,14 @@ def get_online_count() -> Optional[int]:
     data = _get_json(details_url)
     entries = _extract_entries(data)
     if entries:
-        return _extract_count(entries, HONSE_FEDERATION_ENTRY, hosts)
+        count = _extract_count(entries, HONSE_FEDERATION_ENTRY, hosts)
+        if count is not None:
+            if HONSE_DEBUG:
+                logger.info("[honse_presence] %s -> %s online", HONSE_FEDERATION_ENTRY, count)
+            return count
+        if HONSE_DEBUG:
+            logger.warning("[honse_presence] no match for entry '%s' (hosts=%s)", HONSE_FEDERATION_ENTRY, hosts)
+        return None
     if HONSE_DEBUG:
         logger.warning("[honse_presence] no entries for %s", base_host)
     return None
