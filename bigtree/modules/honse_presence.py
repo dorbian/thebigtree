@@ -10,31 +10,43 @@ HONSE_BASE_URL = os.getenv("HONSE_BASE_URL", "https://server.thebigtree.life").r
 HONSE_REFRESH_SECONDS = int(os.getenv("HONSE_REFRESH_SECONDS", "300"))
 HONSE_TIMEOUT_SECONDS = int(os.getenv("HONSE_TIMEOUT_SECONDS", "10"))
 HONSE_DEBUG = os.getenv("HONSE_PRESENCE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+HONSE_FEDERATION_ENTRY = os.getenv("HONSE_FEDERATION_ENTRY", "forest").strip().lower()
 
 logger = logging.getLogger("bigtree")
 
 
-def _extract_count(entries: List[Dict[str, Any]], hosts: List[str]) -> Optional[int]:
+def _matches_entry(entry: Dict[str, Any], entry_key: str, hosts: List[str]) -> bool:
+    entry_key = (entry_key or "").strip().lower()
+    if entry_key:
+        for field in ("name", "id", "slug", "key", "server"):
+            val = str(entry.get(field) or "").strip().lower()
+            if val and val == entry_key:
+                return True
+    hostname = str(entry.get("hostname") or "").lower().strip()
+    if hostname and entry_key and entry_key in hostname:
+        return True
+    if "://" in hostname:
+        parsed = urlparse(hostname)
+        hostname = (parsed.hostname or "").lower().strip()
+    if ":" in hostname:
+        hostname = hostname.split(":", 1)[0].strip()
+    if hostname and any(hostname == h or hostname.endswith(h) for h in hosts):
+        return True
+    return False
+
+
+def _extract_count(entries: List[Dict[str, Any]], entry_key: str, hosts: List[str]) -> Optional[int]:
     hosts = [h.lower().strip() for h in hosts if h]
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        hostname = str(entry.get("hostname") or "").lower().strip()
-        if not hostname:
+        if not _matches_entry(entry, entry_key, hosts):
             continue
-        if "://" in hostname:
-            parsed = urlparse(hostname)
-            hostname = (parsed.hostname or "").lower().strip()
-        if ":" in hostname:
-            hostname = hostname.split(":", 1)[0].strip()
-        if not hostname:
-            continue
-        if any(hostname == h or hostname.endswith(h) for h in hosts):
-            raw = entry.get("usersOnlineCount")
-            try:
-                return int(raw)
-            except Exception:
-                return None
+        raw = entry.get("usersOnlineCount")
+        try:
+            return int(raw)
+        except Exception:
+            return None
     return None
 
 
@@ -76,18 +88,11 @@ def get_online_count() -> Optional[int]:
     hosts = [base_host]
     if base_host.startswith("server."):
         hosts.append(base_host.replace("server.", "", 1))
-    summary_url = f"{HONSE_BASE_URL}/api/federation/servers/summary"
-    data = _get_json(summary_url)
-    entries = _extract_entries(data)
-    if entries:
-        count = _extract_count(entries, hosts)
-        if count is not None:
-            return count
     details_url = f"{HONSE_BASE_URL}/api/federation/servers"
     data = _get_json(details_url)
     entries = _extract_entries(data)
     if entries:
-        return _extract_count(entries, hosts)
+        return _extract_count(entries, HONSE_FEDERATION_ENTRY, hosts)
     if HONSE_DEBUG:
         logger.warning("[honse_presence] no entries for %s", base_host)
     return None
