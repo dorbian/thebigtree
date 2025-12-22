@@ -36,6 +36,21 @@ class TheBigTree(commands.Bot):
 
         if not getattr(bigtree.bot, "_presence_task", None):
             bigtree.bot._presence_task = asyncio.create_task(self._presence_loop())
+        # Trigger a presence refresh immediately on startup
+        if not getattr(bigtree.bot, "_presence_warm", False):
+            bigtree.bot._presence_warm = True
+            asyncio.create_task(self._presence_once())
+
+    async def _presence_once(self):
+        try:
+            count = await asyncio.to_thread(honse_presence.get_online_count)
+            if count is not None and count > 0:
+                label = f"Channeling {count} Elf" if count == 1 else f"Channeling {count} Elves"
+            else:
+                label = "listening to elves"
+            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
+        except Exception as e:
+            bigtree.loch.logger.warning(f"[presence] immediate update failed: {e}")
 
     async def _presence_loop(self):
         while True:

@@ -1,0 +1,36 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: watchtower
+  labels:
+    app: watchtower
+spec:
+  restartPolicy: Always
+  containers:
+    - name: watchtower
+      image: ghcr.io/nicholas-fedor/watchtower:latest-dev
+      imagePullPolicy: Always
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        privileged: true
+      env:
+        - name: WATCHTOWER_POLL_INTERVAL
+          value: "300"
+        - name: WATCHTOWER_CLEANUP
+          value: "true"
+        - name: WATCHTOWER_INCLUDE_STOPPED
+          value: "true"
+        - name: WATCHTOWER_LABEL_ENABLE
+          value: "true"
+        - name: DOCKER_HOST
+          value: "unix:///run/podman/podman.sock"
+      volumeMounts:
+        - name: podman-sock
+          mountPath: /run/podman/podman.sock
+  volumes:
+    - name: podman-sock
+      hostPath:
+        path: /run/user/1000/podman/podman.sock
+        type: Socket

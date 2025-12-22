@@ -94,7 +94,7 @@ def get_online_count() -> Optional[int]:
     Return online user count for the configured federation server.
     Falls back to None if data cannot be retrieved.
     """
-    logger.info("[honse_presence] fetching %s for entry '%s'", HONSE_BASE_URL, HONSE_FEDERATION_ENTRY)
+    logger.warning("[honse_presence] fetching %s for entry '%s'", HONSE_BASE_URL, HONSE_FEDERATION_ENTRY)
     base_url = HONSE_BASE_URL
     if "://" not in base_url:
         base_url = f"https://{base_url}"
