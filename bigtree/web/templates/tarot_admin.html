@@ -1,0 +1,201 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tarot Deck Admin</title>
+<style>
+  :root{
+    --bg:#0b1310;
+    --panel:#101a15;
+    --text:#e7f2ea;
+    --muted:#9fb4a6;
+    --accent:#6bd4a2;
+    --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Spectral","Georgia",serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(107,212,162,.18), transparent 60%),
+      linear-gradient(180deg, #0a120f, #0f1713 40%, #0a120f);
+  }
+  main{
+    max-width:960px;
+    margin:30px auto;
+    padding:24px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+  }
+  h1{margin:0 0 12px 0;letter-spacing:.05em}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  label{display:block;margin-top:12px;color:var(--muted);font-size:12px}
+  input, textarea, button{
+    width:100%;
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0c1511;
+    color:var(--text);
+    font-family:inherit;
+    font-size:14px;
+  }
+  button{background:#122019;border-color:rgba(107,212,162,.4);cursor:pointer}
+  .list{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  .card{padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+  .muted{color:var(--muted);font-size:12px}
+  .status{margin-top:10px}
+</style>
+
+<main>
+  <h1>Tarot Deck Admin</h1>
+  <p class="muted">Add or update cards. Requires a `tarot:admin` API key.</p>
+
+  <label for="apiKey">API Key</label>
+  <input id="apiKey" placeholder="X-API-Key">
+
+  <div class="row">
+    <div>
+      <label for="deckId">Deck ID</label>
+      <input id="deckId" value="elf-classic">
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="loadDeck">Load deck</button>
+    </div>
+  </div>
+
+  <h2>Add / Update Card</h2>
+  <div class="row">
+    <div>
+      <label for="cardId">Card ID (optional)</label>
+      <input id="cardId" placeholder="candlecap_sprite">
+    </div>
+    <div>
+      <label for="cardName">Name</label>
+      <input id="cardName" placeholder="Candlecap Sprite">
+    </div>
+    <div>
+      <label for="cardHouse">House</label>
+      <input id="cardHouse" placeholder="whisper">
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="cardImage">Image URL</label>
+      <input id="cardImage" placeholder="https://...">
+    </div>
+    <div>
+      <label for="cardTags">Tags (comma separated)</label>
+      <input id="cardTags" placeholder="mischief,curiosity">
+    </div>
+  </div>
+  <label for="cardUpright">Upright</label>
+  <textarea id="cardUpright" rows="3"></textarea>
+  <label for="cardReversed">Reversed</label>
+  <textarea id="cardReversed" rows="3"></textarea>
+
+  <h3>Artist Links</h3>
+  <div class="row">
+    <div>
+      <label for="artistInstagram">Instagram</label>
+      <input id="artistInstagram" placeholder="https://instagram.com/...">
+    </div>
+    <div>
+      <label for="artistBluesky">Bluesky</label>
+      <input id="artistBluesky" placeholder="https://bsky.app/profile/...">
+    </div>
+    <div>
+      <label for="artistX">X / Twitter</label>
+      <input id="artistX" placeholder="https://x.com/...">
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="artistArtstation">ArtStation</label>
+      <input id="artistArtstation" placeholder="https://artstation.com/...">
+    </div>
+    <div>
+      <label for="artistWebsite">Website</label>
+      <input id="artistWebsite" placeholder="https://...">
+    </div>
+  </div>
+
+  <button id="saveCard">Save card</button>
+  <div class="status" id="status"></div>
+
+  <div class="list" id="deckList"></div>
+</main>
+
+<script>
+  const apiKey = document.getElementById("apiKey");
+  const deckId = document.getElementById("deckId");
+  const status = document.getElementById("status");
+  const deckList = document.getElementById("deckList");
+  const storageKey = "tarot_admin_key";
+
+  apiKey.value = localStorage.getItem(storageKey) || "";
+  apiKey.addEventListener("input", () => localStorage.setItem(storageKey, apiKey.value.trim()));
+
+  function setStatus(msg, ok){
+    status.textContent = msg;
+    status.style.color = ok ? "#6bd4a2" : "#e07a7a";
+  }
+
+  async function loadDeck(){
+    try{
+      const deck = deckId.value.trim() || "elf-classic";
+      const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}`, {
+        headers: {"X-API-Key": apiKey.value.trim()}
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      deckList.innerHTML = data.cards.map(c => {
+        return `<div class="card"><strong>${c.name}</strong> <span class="muted">(${c.card_id})</span><br><span class="muted">${c.house || ""}</span></div>`;
+      }).join("");
+      setStatus("Deck loaded.", true);
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  }
+
+  document.getElementById("loadDeck").addEventListener("click", loadDeck);
+
+  document.getElementById("saveCard").addEventListener("click", async () => {
+    try{
+      const deck = deckId.value.trim() || "elf-classic";
+      const tags = document.getElementById("cardTags").value.split(",").map(t => t.trim()).filter(Boolean);
+      const body = {
+        card_id: document.getElementById("cardId").value.trim() || undefined,
+        name: document.getElementById("cardName").value.trim(),
+        house: document.getElementById("cardHouse").value.trim(),
+        image: document.getElementById("cardImage").value.trim(),
+        tags,
+        upright: document.getElementById("cardUpright").value.trim(),
+        reversed: document.getElementById("cardReversed").value.trim(),
+        artist_links: {
+          instagram: document.getElementById("artistInstagram").value.trim(),
+          bluesky: document.getElementById("artistBluesky").value.trim(),
+          x: document.getElementById("artistX").value.trim(),
+          artstation: document.getElementById("artistArtstation").value.trim(),
+          website: document.getElementById("artistWebsite").value.trim()
+        }
+      };
+      const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/cards`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey.value.trim()
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      setStatus("Card saved.", true);
+      loadDeck();
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  });
+</script>

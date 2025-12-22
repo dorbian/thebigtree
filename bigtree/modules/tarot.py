@@ -133,6 +133,20 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
     if not card_id:
         card_id = name.lower().replace(" ", "_")[:48]
     existing = db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+    artist_links = card.get("artist_links") if isinstance(card.get("artist_links"), dict) else {}
+    if not artist_links:
+        artist_links = {
+            "instagram": card.get("artist_instagram"),
+            "bluesky": card.get("artist_bluesky"),
+            "x": card.get("artist_x") or card.get("artist_twitter"),
+            "artstation": card.get("artist_artstation"),
+            "website": card.get("artist_website"),
+        }
+    cleaned_links = {}
+    for key, val in artist_links.items():
+        if not val:
+            continue
+        cleaned_links[str(key)] = str(val).strip()
     payload = {
         "_type": "card",
         "deck_id": deck_id,
@@ -143,6 +157,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "reversed": (card.get("reversed") or "").strip(),
         "tags": card.get("tags") if isinstance(card.get("tags"), list) else [],
         "image": (card.get("image") or card.get("image_url") or "").strip(),
+        "artist_links": cleaned_links,
         "updated_at": _now(),
     }
     if existing:

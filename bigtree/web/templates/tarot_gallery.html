@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tarot Gallery</title>
+<style>
+  :root{
+    --bg:#0b1310;
+    --panel:#101a15;
+    --text:#e7f2ea;
+    --muted:#9fb4a6;
+    --accent:#6bd4a2;
+    --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Spectral","Georgia",serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(107,212,162,.18), transparent 60%),
+      linear-gradient(180deg, #0a120f, #0f1713 40%, #0a120f);
+  }
+  header{
+    padding:22px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{margin:0 0 6px 0;letter-spacing:.05em}
+  header p{margin:0;color:var(--muted)}
+  main{padding:20px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+  label{color:var(--muted);font-size:12px}
+  input, button{
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0c1511;
+    color:var(--text);
+    font-family:inherit;
+    font-size:14px;
+  }
+  button{background:#122019;border-color:rgba(107,212,162,.4);cursor:pointer}
+  .grid{
+    margin-top:16px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+    gap:14px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px;
+  }
+  .card img{width:100%;border-radius:10px;margin-bottom:8px}
+  .muted{color:var(--muted);font-size:12px}
+  .links a{color:var(--accent);text-decoration:none;margin-right:8px;font-size:12px}
+</style>
+
+<header>
+  <h1>Tarot Gallery</h1>
+  <p>Public art archive with artist credits.</p>
+</header>
+
+<main>
+  <div class="row">
+    <div>
+      <label for="deck">Deck ID</label><br />
+      <input id="deck" value="elf-classic">
+    </div>
+    <div>
+      <button id="load">Load</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</main>
+
+<script>
+  const grid = document.getElementById("grid");
+  const deckInput = document.getElementById("deck");
+
+  function link(label, url){
+    if (!url) return "";
+    return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+  }
+
+  async function load(){
+    const deck = deckInput.value.trim() || "elf-classic";
+    const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/public`);
+    const data = await res.json();
+    if (!data.ok){
+      grid.innerHTML = "<div class='muted'>Deck not found.</div>";
+      return;
+    }
+    grid.innerHTML = data.cards.map(c => {
+      const links = c.artist_links || {};
+      return `
+        <div class="card">
+          ${c.image ? `<img src="${c.image}" alt="${c.name}">` : ""}
+          <div><strong>${c.name || ""}</strong></div>
+          <div class="muted">${c.house || ""}</div>
+          <div class="links">
+            ${link("Instagram", links.instagram)}
+            ${link("Bluesky", links.bluesky)}
+            ${link("X", links.x)}
+            ${link("ArtStation", links.artstation)}
+            ${link("Website", links.website)}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  document.getElementById("load").addEventListener("click", load);
+  load();
+</script>

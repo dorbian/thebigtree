@@ -28,6 +28,24 @@ async def tarot_session_page(req: web.Request):
     html = srv.render_template(tpl, {"JOIN": join_code}) if srv else "<h1>Tarot</h1>"
     return web.Response(text=html, content_type="text/html")
 
+@route("GET", "/", allow_public=True)
+async def tarot_gallery_root(_req: web.Request):
+    srv: DynamicWebServer | None = get_server()
+    html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
+    return web.Response(text=html, content_type="text/html")
+
+@route("GET", "/tarot/gallery", allow_public=True)
+async def tarot_gallery_page(_req: web.Request):
+    srv: DynamicWebServer | None = get_server()
+    html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
+    return web.Response(text=html, content_type="text/html")
+
+@route("GET", "/tarot/admin", allow_public=True)
+async def tarot_admin_page(_req: web.Request):
+    srv: DynamicWebServer | None = get_server()
+    html = srv.render_template("tarot_admin.html", {}) if srv else "<h1>Tarot Admin</h1>"
+    return web.Response(text=html, content_type="text/html")
+
 @route("GET", "/overlay/session/{join_code}", allow_public=True)
 async def tarot_overlay_page(req: web.Request):
     join_code = req.match_info["join_code"]
@@ -220,6 +238,24 @@ async def get_deck(req: web.Request):
     if not deck:
         return _json_error("not found", status=404)
     cards = tar.list_cards(deck_id)
+    return web.json_response({"ok": True, "deck": deck, "cards": cards})
+
+@route("GET", "/api/tarot/decks/{deck_id}/public", allow_public=True)
+async def get_deck_public(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    deck = tar.get_deck(deck_id)
+    if not deck:
+        return _json_error("not found", status=404)
+    cards = []
+    for c in tar.list_cards(deck_id):
+        cards.append({
+            "card_id": c.get("card_id"),
+            "name": c.get("name"),
+            "house": c.get("house"),
+            "tags": c.get("tags", []),
+            "image": c.get("image"),
+            "artist_links": c.get("artist_links", {}),
+        })
     return web.json_response({"ok": True, "deck": deck, "cards": cards})
 
 @route("POST", "/api/tarot/decks/{deck_id}/cards", scopes=["tarot:admin"])
