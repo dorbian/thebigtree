@@ -1664,7 +1664,7 @@
 
       async function loadTarotHouses(){
         try{
-          const data = await jsonFetch("/api/tarot/houses", {method:"GET"}, false);
+          const data = await jsonFetch("/api/tarot/houses", {method:"GET"}, true);
           taHouses = data.houses || [];
           const select = $("taCardHouse");
           select.innerHTML = "";

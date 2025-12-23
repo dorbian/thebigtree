@@ -166,7 +166,10 @@
   let houseData = [];
 
   apiKey.value = localStorage.getItem(storageKey) || "";
-  apiKey.addEventListener("input", () => localStorage.setItem(storageKey, apiKey.value.trim()));
+  apiKey.addEventListener("input", () => {
+    localStorage.setItem(storageKey, apiKey.value.trim());
+    loadHouses();
+  });
 
   function setStatus(msg, ok){
     status.textContent = msg;
@@ -342,7 +345,10 @@
 
   async function loadHouses(){
     try{
-      const res = await fetch("/api/tarot/houses");
+      const headers = {};
+      const key = apiKey.value.trim();
+      if (key) headers["X-API-Key"] = key;
+      const res = await fetch("/api/tarot/houses", {headers});
       const data = await res.json();
       houseData = data.houses || [];
       const select = document.getElementById("cardHouse");
@@ -358,7 +364,7 @@
         select.appendChild(opt);
       });
     }catch(err){
-      setStatus("Failed to load houses.", false);
+      setStatus("Failed to load houses. Check API key.", false);
     }
   }
 
