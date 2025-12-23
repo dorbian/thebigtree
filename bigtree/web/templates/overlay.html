@@ -1547,7 +1547,10 @@
         document.getElementById("appView").classList.remove("hidden");
         setStatus("Welcome to Bingo Control.", "ok");
         loadGamesMenu();
+        loadTarotDeckList();
+        loadTarotSessionDecks();
         loadTarotSessions();
+        loadTarotHouses();
         showPanel("bingo");
         ensureBingoPolling();
       });
@@ -2211,6 +2214,10 @@
         loadGamesMenu();
         showPanel("bingo");
         ensureBingoPolling();
+        loadTarotDeckList();
+        loadTarotSessionDecks();
+        loadTarotSessions();
+        loadTarotHouses();
       }
       renderCard(null, [], "BING");
     </script>
