@@ -23,6 +23,9 @@
       radial-gradient(1200px 700px at 10% -10%, rgba(107,212,162,.18), transparent 60%),
       radial-gradient(900px 600px at 90% 0%, rgba(214,178,110,.14), transparent 55%),
       linear-gradient(180deg, #0b120f, #0f1713 40%, #0b120f);
+    background-repeat:no-repeat;
+    background-size:cover;
+    background-attachment:fixed;
   }
   header{
     padding:18px 22px;
@@ -350,15 +353,32 @@
   }
 
   async function postControl(path, body){
-    await fetch(path, {method:"POST", headers:authHeaders(), body:JSON.stringify(body || {})});
+    const res = await fetch(path, {method:"POST", headers:authHeaders(), body:JSON.stringify(body || {})});
+    if (!res.ok){
+      return false;
+    }
+    await fetchState();
+    return true;
   }
 
-  document.getElementById("btnStart").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/start`, {token: tokenInput.value});
-  document.getElementById("btnFinish").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/finish`, {token: tokenInput.value});
-  document.getElementById("btnShuffle").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/shuffle`, {token: tokenInput.value});
-  document.getElementById("btnDraw").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/draw`, {token: tokenInput.value, count: 1});
-  document.getElementById("btnRevealNext").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});
-  document.getElementById("btnRevealAll").onclick = () => postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"all"});
+  document.getElementById("btnStart").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/start`, {token: tokenInput.value});
+  };
+  document.getElementById("btnFinish").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/finish`, {token: tokenInput.value});
+  };
+  document.getElementById("btnShuffle").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/shuffle`, {token: tokenInput.value});
+  };
+  document.getElementById("btnDraw").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/draw`, {token: tokenInput.value, count: 1});
+  };
+  document.getElementById("btnRevealNext").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});
+  };
+  document.getElementById("btnRevealAll").onclick = async () => {
+    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"all"});
+  };
 
   document.getElementById("btnNarrate").onclick = async () => {
     const text = document.getElementById("narrationInput").value.trim();
