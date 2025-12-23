@@ -20,23 +20,21 @@ except Exception:
     import logging
     logger = logging.getLogger("bigtree")
 
-_DB_PATH: Optional[str] = None
+_LEGACY_DB_PATH: Optional[str] = None
+_DECK_DB_PATH: Optional[str] = None
+_SESSION_DB_PATH: Optional[str] = None
+_MIGRATED: Optional[bool] = None
 
 def _now() -> float:
     return time.time()
 
-def _get_db_path() -> str:
-    global _DB_PATH
-    if _DB_PATH:
-        return _DB_PATH
+def _get_base_dir() -> str:
     # Prefer legacy config path if present
     try:
         cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
         tarot_db = cfg.get("BOT", {}).get("tarot_db")
         if tarot_db:
-            _DB_PATH = tarot_db
-            os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-            return _DB_PATH
+            return os.path.dirname(tarot_db)
     except Exception:
         pass
 
@@ -51,13 +49,80 @@ def _get_db_path() -> str:
         base = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
     if not base:
         base = os.getenv("BIGTREE_WORKDIR") or os.path.join(os.getcwd(), ".bigtree")
-    path = os.path.join(base, "tarot", "tarot.json")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    _DB_PATH = path
-    return _DB_PATH
+    path = os.path.join(base, "tarot")
+    os.makedirs(path, exist_ok=True)
+    return path
 
-def _db() -> TinyDB:
-    return TinyDB(_get_db_path())
+def _get_legacy_db_path() -> str:
+    global _LEGACY_DB_PATH
+    if _LEGACY_DB_PATH:
+        return _LEGACY_DB_PATH
+    base = _get_base_dir()
+    path = os.path.join(base, "tarot.json")
+    _LEGACY_DB_PATH = path
+    return _LEGACY_DB_PATH
+
+def _get_deck_db_path() -> str:
+    global _DECK_DB_PATH
+    if _DECK_DB_PATH:
+        return _DECK_DB_PATH
+    base = _get_base_dir()
+    path = os.path.join(base, "tarot_decks.json")
+    _DECK_DB_PATH = path
+    return _DECK_DB_PATH
+
+def _get_session_db_path() -> str:
+    global _SESSION_DB_PATH
+    if _SESSION_DB_PATH:
+        return _SESSION_DB_PATH
+    base = _get_base_dir()
+    path = os.path.join(base, "tarot_sessions.json")
+    _SESSION_DB_PATH = path
+    return _SESSION_DB_PATH
+
+def _migrate_if_needed() -> None:
+    global _MIGRATED
+    if _MIGRATED is True:
+        return
+    base = _get_base_dir()
+    marker = os.path.join(base, ".tarot_migrated")
+    if os.path.exists(marker):
+        _MIGRATED = True
+        return
+    legacy_path = _get_legacy_db_path()
+    if not os.path.exists(legacy_path):
+        _MIGRATED = True
+        return
+    deck_db = TinyDB(_get_deck_db_path())
+    session_db = TinyDB(_get_session_db_path())
+    if deck_db.all() or session_db.all():
+        _MIGRATED = True
+        return
+    legacy_db = TinyDB(legacy_path)
+    moved = 0
+    for entry in legacy_db.all():
+        etype = entry.get("_type")
+        if etype in ("deck", "card"):
+            deck_db.insert(entry)
+            moved += 1
+        elif etype == "session":
+            session_db.insert(entry)
+            moved += 1
+    try:
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write(f"migrated={moved}\n")
+    except Exception:
+        pass
+    logger.info(f"[tarot] migrated {moved} entries to split dbs")
+    _MIGRATED = True
+
+def _db_decks() -> TinyDB:
+    _migrate_if_needed()
+    return TinyDB(_get_deck_db_path())
+
+def _db_sessions() -> TinyDB:
+    _migrate_if_needed()
+    return TinyDB(_get_session_db_path())
 
 def _new_id() -> str:
     return secrets.token_urlsafe(10)
@@ -88,7 +153,7 @@ def _get_spread(spread_id: str) -> List[Dict[str, Any]]:
 # -------- Decks --------
 def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     existing = db.get((q._type == "deck") & (q.deck_id == deck_id))
     if existing:
         return existing
@@ -103,15 +168,15 @@ def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:
     return deck
 
 def list_decks() -> List[Dict[str, Any]]:
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     return db.search(q._type == "deck")
 
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     return db.get((q._type == "deck") & (q.deck_id == deck_id))
 
 def set_deck_back(deck_id: str, back_image: str) -> bool:
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     deck = get_deck(deck_id)
     if not deck:
         create_deck(deck_id)
@@ -125,7 +190,7 @@ def set_deck_back(deck_id: str, back_image: str) -> bool:
 def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
     create_deck(deck_id)
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     card_id = (card.get("id") or card.get("card_id") or "").strip()
     name = (card.get("name") or card.get("title") or "").strip()
     if not name:
@@ -169,16 +234,22 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
 
 def list_cards(deck_id: str) -> List[Dict[str, Any]]:
     deck_id = (deck_id or "").strip() or "elf-classic"
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     return db.search((q._type == "card") & (q.deck_id == deck_id))
 
 def get_card(deck_id: str, card_id: str) -> Optional[Dict[str, Any]]:
-    db = _db(); q = Query()
+    db = _db_decks(); q = Query()
     return db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
 
 # -------- Sessions --------
+def list_sessions() -> List[Dict[str, Any]]:
+    db = _db_sessions(); q = Query()
+    sessions = db.search(q._type == "session")
+    sessions.sort(key=lambda s: float(s.get("created_at") or 0), reverse=True)
+    return sessions
+
 def create_session(priestess_id: int, deck_id: str, spread_id: str) -> Dict[str, Any]:
-    db = _db()
+    db = _db_sessions()
     session_id = _new_id()
     join_code = _new_code()
     priestess_token = _new_id()
@@ -206,7 +277,7 @@ def create_session(priestess_id: int, deck_id: str, spread_id: str) -> Dict[str,
     return session
 
 def _get_session_by(field: str, value: str) -> Optional[Dict[str, Any]]:
-    db = _db(); q = Query()
+    db = _db_sessions(); q = Query()
     return db.get((q._type == "session") & (getattr(q, field) == value))
 
 def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
@@ -216,7 +287,7 @@ def get_session_by_join_code(join_code: str) -> Optional[Dict[str, Any]]:
     return _get_session_by("join_code", join_code)
 
 def _update_session(session_id: str, session: Dict[str, Any]) -> None:
-    db = _db(); q = Query()
+    db = _db_sessions(); q = Query()
     db.update(session, (q._type == "session") & (q.session_id == session_id))
 
 def _add_event(session: Dict[str, Any], event_type: str, data: Dict[str, Any]) -> None:

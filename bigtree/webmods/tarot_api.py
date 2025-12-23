@@ -185,6 +185,21 @@ async def create_session(req: web.Request):
         "priestessToken": s["priestess_token"],
     })
 
+@route("GET", "/api/tarot/sessions", scopes=["tarot:admin"])
+async def list_sessions(req: web.Request):
+    sessions = []
+    for s in tar.list_sessions():
+        sessions.append({
+            "session_id": s.get("session_id"),
+            "join_code": s.get("join_code"),
+            "priestess_token": s.get("priestess_token"),
+            "deck_id": s.get("deck_id"),
+            "spread_id": s.get("spread_id"),
+            "status": s.get("status"),
+            "created_at": s.get("created_at"),
+        })
+    return web.json_response({"ok": True, "sessions": sessions})
+
 @route("POST", "/api/tarot/sessions/{join_code}/join", allow_public=True)
 async def join_session(req: web.Request):
     join_code = req.match_info["join_code"]

@@ -594,6 +594,16 @@
               <button id="tCreateSession">Create session</button>
             </div>
           </div>
+          <div class="row">
+            <div>
+              <label for="tSessionSelect">Existing sessions</label>
+              <select id="tSessionSelect"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tSessionRefresh" class="btn-ghost">Refresh sessions</button>
+            </div>
+          </div>
           <div class="status hidden" id="tSpreadNote">
             Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
           </div>
@@ -1659,9 +1669,41 @@
           $("tPriestessToken").value = data.priestessToken || "";
           renderLinks(data.joinCode || "", data.priestessToken || "");
           setStatus("Session created.", "ok");
+          await loadTarotSessions(data.joinCode || "");
         }catch(err){
           setStatus(err.message, "err");
         }
+      });
+
+      async function loadTarotSessions(selectJoin){
+        try{
+          const data = await jsonFetch("/api/tarot/sessions", {method:"GET"}, true);
+          const select = $("tSessionSelect");
+          select.innerHTML = "";
+          const sessions = data.sessions || [];
+          sessions.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.join_code || "";
+            const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
+            opt.textContent = `${s.join_code || "-"} | ${s.deck_id || "-"} | ${s.spread_id || "-"} | ${s.status || "-"} | ${created}`;
+            opt.dataset.token = s.priestess_token || "";
+            select.appendChild(opt);
+          });
+          if (selectJoin){
+            select.value = selectJoin;
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("tSessionRefresh").addEventListener("click", () => loadTarotSessions());
+      $("tSessionSelect").addEventListener("change", (ev) => {
+        const join = ev.target.value || "";
+        const token = ev.target.selectedOptions.length ? (ev.target.selectedOptions[0].dataset.token || "") : "";
+        $("tJoinCode").value = join;
+        $("tPriestessToken").value = token;
+        renderLinks(join, token);
       });
 
       $("tOpenOverlay").addEventListener("click", () => {
@@ -1900,6 +1942,7 @@
 
       loadTarotDeckList();
       loadTarotSessionDecks();
+      loadTarotSessions();
       loadTarotHouses();
 
       loadSettings();
