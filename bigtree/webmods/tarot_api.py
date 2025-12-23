@@ -44,6 +44,12 @@ def _cards_dir() -> str:
     os.makedirs(path, exist_ok=True)
     return path
 
+def _backs_dir() -> str:
+    base = _data_dir()
+    path = os.path.join(base, "tarot", "backs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
 def _safe_name(name: str) -> str:
     keep = []
     for ch in (name or ""):
@@ -151,6 +157,15 @@ async def tarot_admin_page(_req: web.Request):
 async def tarot_card_file(req: web.Request):
     filename = req.match_info["filename"]
     base = _cards_dir()
+    path = os.path.join(base, filename)
+    if not os.path.exists(path):
+        return web.Response(status=404)
+    return web.FileResponse(path)
+
+@route("GET", "/tarot/backs/{filename}", allow_public=True)
+async def tarot_back_file(req: web.Request):
+    filename = req.match_info["filename"]
+    base = _backs_dir()
     path = os.path.join(base, filename)
     if not os.path.exists(path):
         return web.Response(status=404)
@@ -486,4 +501,63 @@ async def upload_card_image(req: web.Request):
             f.write(data)
 
     url = f"/tarot/cards/{filename}"
+    return web.json_response({"ok": True, "url": url})
+
+@route("POST", "/api/tarot/upload-back-image", scopes=["tarot:admin"])
+async def upload_back_image(req: web.Request):
+    reader = await req.multipart()
+    file_part = None
+    deck_id = ""
+    while True:
+        part = await reader.next()
+        if part is None:
+            break
+        if part.name == "file":
+            file_part = part
+        elif part.name == "deck_id":
+            deck_id = (await part.text()).strip()
+    if file_part is None:
+        return _json_error("file required")
+    if not deck_id:
+        return _json_error("deck_id required")
+
+    safe_id = _safe_name(deck_id) or uuid.uuid4().hex
+    filename = f"{safe_id}_back.png"
+    dest = os.path.join(_backs_dir(), filename)
+
+    data = bytearray()
+    while True:
+        chunk = await file_part.read_chunk()
+        if not chunk:
+            break
+        data.extend(chunk)
+
+    saved = False
+    try:
+        from PIL import Image
+        from io import BytesIO
+        with Image.open(BytesIO(data)) as img:
+            img = img.convert("RGBA")
+            target_ratio = 3.0 / 4.2
+            w, h = img.size
+            ratio = w / h if h else target_ratio
+            if ratio > target_ratio:
+                new_w = int(h * target_ratio)
+                left = (w - new_w) // 2
+                img = img.crop((left, 0, left + new_w, h))
+            elif ratio < target_ratio:
+                new_h = int(w / target_ratio) if target_ratio else h
+                top = (h - new_h) // 2
+                img = img.crop((0, top, w, top + new_h))
+            img.save(dest, format="PNG")
+            saved = True
+    except Exception:
+        saved = False
+
+    if not saved:
+        with open(dest, "wb") as f:
+            f.write(data)
+
+    url = f"/tarot/backs/{filename}"
+    tar.set_deck_back(deck_id, url)
     return web.json_response({"ok": True, "url": url})

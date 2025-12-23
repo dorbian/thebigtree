@@ -508,7 +508,8 @@
         <div class="menu-sub" id="menuGames"></div>
         <div class="hidden" id="menuCreateGamePlaceholder"></div>
         <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
-        <div class="menu-item" id="menuTarotAdmin">Tarot Admin</div>
+        <div class="menu-item" id="menuTarotAdmin">Tarot Games</div>
+        <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
         <label class="toggle" style="margin-top:12px">
           <input type="checkbox" id="overlayMode">
           Overlay mode
@@ -610,41 +611,6 @@
           <p>Open the player, priestess, or overlay view.</p>
           <div class="row">
             <div>
-              <label for="tDeck">Deck</label>
-              <select id="tDeck"></select>
-            </div>
-            <div>
-              <label for="tSpread">Spread <span class="muted" id="tSpreadHelp">(?)</span></label>
-              <select id="tSpread">
-                <option value="single">Single</option>
-                <option value="tree">Tree</option>
-                <option value="cross">Cross</option>
-              </select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tCreateSession">Create session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tSessionSelect">Existing sessions</label>
-              <select id="tSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="status hidden" id="tSpreadNote">
-            Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
-          </div>
-          <div class="row">
-            <div>
               <label for="tJoinCode">Join code</label>
               <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
@@ -686,7 +652,47 @@
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotAdminPanel">
-          <h2>Tarot Admin</h2>
+          <h2>Tarot Games</h2>
+          <p>Create and manage tarot sessions.</p>
+          <div class="row">
+            <div>
+              <label for="tDeck">Deck</label>
+              <select id="tDeck"></select>
+            </div>
+            <div>
+              <label for="tSpread">Spread <span class="muted" id="tSpreadHelp">(?)</span></label>
+              <select id="tSpread">
+                <option value="single">Single</option>
+                <option value="tree">Tree</option>
+                <option value="cross">Cross</option>
+              </select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tCreateSession">Create session</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="tSessionSelect">Existing sessions</label>
+              <select id="tSessionSelect"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="status hidden" id="tSpreadNote">
+            Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
+          <h2>Deck Editor</h2>
           <div class="row">
             <div>
               <label for="taDeck">Deck</label>
@@ -713,6 +719,26 @@
             <div>
               <label>&nbsp;</label>
               <button id="taSeedDeck">Seed dummy deck</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="taBackImage">Deck back image URL</label>
+              <input id="taBackImage" placeholder="https://...">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="taSaveBack">Save deck back</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="taBackUpload">Upload deck back image</label>
+              <input id="taBackUpload" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <div class="muted">Upload replaces the deck back URL.</div>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -1285,9 +1311,11 @@
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
+        $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
+        $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
       }
 
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
@@ -1301,6 +1329,7 @@
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
+      $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -1870,6 +1899,7 @@
           const deck = $("taDeck").value.trim() || "elf-classic";
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
+          $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
           setStatus("Deck loaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
@@ -1888,6 +1918,7 @@
           }, true);
           await loadTarotDeckList(id.trim());
           setStatus("Deck created.", "ok");
+          await $("taLoadDeck").click();
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -1905,6 +1936,47 @@
           }, true);
           setStatus(`Seeded ${data.created || 0} cards.`, "ok");
           await $("taLoadDeck").click();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("taSaveBack").addEventListener("click", async () => {
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const backImage = $("taBackImage").value.trim();
+          if (!backImage){
+            setStatus("Enter a back image URL.", "err");
+            return;
+          }
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({back_image: backImage})
+          }, true);
+          setStatus("Deck back saved.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("taBackUpload").addEventListener("change", async (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const form = new FormData();
+          form.append("file", file);
+          form.append("deck_id", deck);
+          const res = await fetch("/api/tarot/upload-back-image", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: form
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("taBackImage").value = data.url || "";
+          setStatus("Deck back uploaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
         }
