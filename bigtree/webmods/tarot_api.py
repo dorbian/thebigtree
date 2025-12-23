@@ -2,13 +2,17 @@
 from __future__ import annotations
 import asyncio
 import json
+import logging
 from aiohttp import web
 import os
 import uuid
 import json as _json
 from pathlib import Path
+import bigtree
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
+
+log = getattr(bigtree, "logger", logging.getLogger("bigtree"))
 
 def _json_error(message: str, status: int = 400) -> web.Response:
     return web.json_response({"ok": False, "error": message}, status=status)
@@ -48,20 +52,47 @@ def _safe_name(name: str) -> str:
     return "".join(keep)
 
 _HOUSES_CACHE: dict | None = None
+_HOUSES_WARNED = False
+
+def _read_json(path: Path) -> dict | None:
+    try:
+        return _json.loads(path.read_text("utf-8"))
+    except Exception:
+        return None
 
 def _load_houses() -> dict:
     global _HOUSES_CACHE
+    global _HOUSES_WARNED
     if _HOUSES_CACHE is not None:
         return _HOUSES_CACHE
-    # Prefer repo root tarrot_help.json if present
+    candidates: list[Path] = []
+    env_path = os.getenv("BIGTREE_TAROT_HOUSES")
+    if env_path:
+        candidates.append(Path(env_path))
+    data_dir = Path(_data_dir())
+    candidates.extend([
+        data_dir / "tarot" / "houses.json",
+        data_dir / "tarot" / "tarrot_help.json",
+        data_dir / "tarrot_help.json",
+    ])
     try:
         repo_root = Path(__file__).resolve().parents[2]
-        path = repo_root / "tarrot_help.json"
-        if path.exists():
-            _HOUSES_CACHE = _json.loads(path.read_text("utf-8"))
-            return _HOUSES_CACHE
+        candidates.extend([
+            repo_root / "tarrot_help.json",
+            repo_root / "defaults" / "tarrot_help.json",
+        ])
     except Exception:
         pass
+    candidates.append(Path(__file__).resolve().parent / "tarrot_help.json")
+    for path in candidates:
+        if path.exists():
+            data = _read_json(path)
+            if data:
+                _HOUSES_CACHE = data
+                return _HOUSES_CACHE
+    if not _HOUSES_WARNED:
+        _HOUSES_WARNED = True
+        log.warning("[tarot] houses file not found; checked: %s", ", ".join(str(p) for p in candidates))
     _HOUSES_CACHE = {"houses": []}
     return _HOUSES_CACHE
 
