@@ -624,7 +624,11 @@
             </div>
             <div>
               <label for="taCardHouse">House</label>
-              <input id="taCardHouse" placeholder="whisper">
+              <select id="taCardHouse"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="taPickHouse">Pick random house</button>
             </div>
           </div>
           <div class="row">
@@ -637,6 +641,10 @@
             <div>
               <label for="taCardUpload">Upload image</label>
               <input id="taCardUpload" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>House info</label>
+              <div class="list" id="taHouseInfo">Pick a house to see details.</div>
             </div>
           </div>
           <div class="row">
@@ -1534,6 +1542,64 @@
         window.open(url, "_blank");
       });
 
+      let taHouses = [];
+
+      function taRenderHouseInfo(id){
+        const box = $("taHouseInfo");
+        const house = taHouses.find(h => h.id === id);
+        if (!house){
+          box.textContent = "Pick a house to see details.";
+          return;
+        }
+        const themes = Object.entries(house.themes || {}).map(([k,v]) => `${k} (${v})`).join(", ");
+        const keywords = (house.keywords || []).join(", ");
+        const upright = `Upright: ${keywords}.`;
+        const reversed = `Reversed: blocked or twisted ${keywords}.`;
+        box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
+      }
+
+      function taWeightedPick(){
+        const weights = {roots: 5, canopy: 5, ember: 5, whisper: 5, crown: 1};
+        const pool = [];
+        taHouses.forEach(h => {
+          const w = weights[h.id] || 1;
+          for (let i = 0; i < w; i++) pool.push(h.id);
+        });
+        return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "";
+      }
+
+      async function loadTarotHouses(){
+        try{
+          const data = await jsonFetch("/api/tarot/houses", {method:"GET"}, false);
+          taHouses = data.houses || [];
+          const select = $("taCardHouse");
+          select.innerHTML = "";
+          const none = document.createElement("option");
+          none.value = "";
+          none.textContent = "(none)";
+          select.appendChild(none);
+          taHouses.forEach(h => {
+            const opt = document.createElement("option");
+            opt.value = h.id;
+            opt.textContent = h.name;
+            select.appendChild(opt);
+          });
+        }catch(err){
+          setStatus("Failed to load houses.", "err");
+        }
+      }
+
+      $("taCardHouse").addEventListener("change", (ev) => {
+        taRenderHouseInfo(ev.target.value);
+      });
+      $("taPickHouse").addEventListener("click", () => {
+        const pick = taWeightedPick();
+        if (!pick) return;
+        const select = $("taCardHouse");
+        select.value = pick;
+        taRenderHouseInfo(pick);
+      });
+
       $("taLoadDeck").addEventListener("click", async () => {
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
@@ -1646,6 +1712,7 @@
       });
 
       loadTarotDeckList();
+      loadTarotHouses();
 
       loadSettings();
       if (apiKeyEl.value.trim()){

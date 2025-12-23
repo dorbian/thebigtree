@@ -5,6 +5,8 @@ import json
 from aiohttp import web
 import os
 import uuid
+import json as _json
+from pathlib import Path
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
 
@@ -45,6 +47,24 @@ def _safe_name(name: str) -> str:
             keep.append(ch)
     return "".join(keep)
 
+_HOUSES_CACHE: dict | None = None
+
+def _load_houses() -> dict:
+    global _HOUSES_CACHE
+    if _HOUSES_CACHE is not None:
+        return _HOUSES_CACHE
+    # Prefer repo root tarrot_help.json if present
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        path = repo_root / "tarrot_help.json"
+        if path.exists():
+            _HOUSES_CACHE = _json.loads(path.read_text("utf-8"))
+            return _HOUSES_CACHE
+    except Exception:
+        pass
+    _HOUSES_CACHE = {"houses": []}
+    return _HOUSES_CACHE
+
 # ---- Pages ----
 @route("GET", "/tarot/session/{join_code}", allow_public=True)
 async def tarot_session_page(req: web.Request):
@@ -81,6 +101,10 @@ async def tarot_card_file(req: web.Request):
     if not os.path.exists(path):
         return web.Response(status=404)
     return web.FileResponse(path)
+
+@route("GET", "/api/tarot/houses", allow_public=True)
+async def tarot_houses(_req: web.Request):
+    return web.json_response({"ok": True, "houses": _load_houses().get("houses", [])})
 
 @route("GET", "/overlay/session/{join_code}", allow_public=True)
 async def tarot_overlay_page(req: web.Request):

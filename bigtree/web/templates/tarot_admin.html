@@ -82,14 +82,11 @@
     </div>
     <div>
       <label for="cardHouse">House</label>
-      <select id="cardHouse">
-        <option value="">(none)</option>
-        <option value="roots">House of Roots</option>
-        <option value="canopy">House of Canopy</option>
-        <option value="ember">House of Ember</option>
-        <option value="whisper">House of Whisper</option>
-        <option value="crown">Crown of the Tree</option>
-      </select>
+      <select id="cardHouse"></select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="pickHouse">Pick random house</button>
     </div>
   </div>
   <div class="row">
@@ -98,8 +95,16 @@
       <input id="cardTags" placeholder="mischief,curiosity">
     </div>
   </div>
-  <label for="cardUpload">Upload image</label>
-  <input id="cardUpload" type="file" accept="image/*">
+  <div class="row">
+    <div>
+      <label for="cardUpload">Upload image</label>
+      <input id="cardUpload" type="file" accept="image/*">
+    </div>
+    <div>
+      <label>House info</label>
+      <div class="card" id="houseInfo">Pick a house to see details.</div>
+    </div>
+  </div>
   <label for="cardUpright">Upright</label>
   <textarea id="cardUpright" rows="3"></textarea>
   <label for="cardReversed">Reversed</label>
@@ -144,6 +149,7 @@
   const deckList = document.getElementById("deckList");
   const storageKey = "tarot_admin_key";
   let uploadedImageUrl = "";
+  let houseData = [];
 
   apiKey.value = localStorage.getItem(storageKey) || "";
   apiKey.addEventListener("input", () => localStorage.setItem(storageKey, apiKey.value.trim()));
@@ -274,5 +280,63 @@
     }
   });
 
+  function renderHouseInfo(id){
+    const box = document.getElementById("houseInfo");
+    const house = houseData.find(h => h.id === id);
+    if (!house){
+      box.textContent = "Pick a house to see details.";
+      return;
+    }
+    const themes = Object.entries(house.themes || {}).map(([k,v]) => `${k} (${v})`).join(", ");
+    const keywords = (house.keywords || []).join(", ");
+    const upright = `Upright: ${keywords}.`;
+    const reversed = `Reversed: blocked or twisted ${keywords}.`;
+    box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
+  }
+
+  function weightedPick(){
+    const weights = {roots: 5, canopy: 5, ember: 5, whisper: 5, crown: 1};
+    const pool = [];
+    houseData.forEach(h => {
+      const w = weights[h.id] || 1;
+      for (let i = 0; i < w; i++) pool.push(h.id);
+    });
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "";
+  }
+
+  async function loadHouses(){
+    try{
+      const res = await fetch("/api/tarot/houses");
+      const data = await res.json();
+      houseData = data.houses || [];
+      const select = document.getElementById("cardHouse");
+      select.innerHTML = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      select.appendChild(none);
+      houseData.forEach(h => {
+        const opt = document.createElement("option");
+        opt.value = h.id;
+        opt.textContent = h.name;
+        select.appendChild(opt);
+      });
+    }catch(err){
+      setStatus("Failed to load houses.", false);
+    }
+  }
+
+  document.getElementById("cardHouse").addEventListener("change", (ev) => {
+    renderHouseInfo(ev.target.value);
+  });
+  document.getElementById("pickHouse").addEventListener("click", () => {
+    const pick = weightedPick();
+    if (!pick) return;
+    const select = document.getElementById("cardHouse");
+    select.value = pick;
+    renderHouseInfo(pick);
+  });
+
   loadDeckList();
+  loadHouses();
 </script>
