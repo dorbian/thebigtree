@@ -497,6 +497,12 @@ async def upload_card_image(req: web.Request):
         saved = False
 
     if not saved:
+        raw_name = getattr(file_part, "filename", "") or ""
+        ext = Path(raw_name).suffix.lower()
+        if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            return _json_error("unsupported image format")
+        filename = f"{safe_id}{ext}"
+        dest = os.path.join(_cards_dir(), filename)
         with open(dest, "wb") as f:
             f.write(data)
 
@@ -558,7 +564,7 @@ async def upload_back_image(req: web.Request):
         raw_name = getattr(file_part, "filename", "") or ""
         ext = Path(raw_name).suffix.lower()
         if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-            ext = ".png"
+            return _json_error("unsupported image format")
         filename = f"{safe_id}_back{ext}"
         dest = os.path.join(_backs_dir(), filename)
         with open(dest, "wb") as f:
