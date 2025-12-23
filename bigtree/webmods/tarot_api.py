@@ -600,6 +600,6 @@ async def upload_back_image(req: web.Request):
         with open(dest, "wb") as f:
             f.write(data)
 
-    url = f"/tarot/backs/{filename}"
+    url = f"/tarot/backs/{filename}?v={uuid.uuid4().hex}"
     tar.set_deck_back(deck_id, url)
     return web.json_response({"ok": True, "url": url})
