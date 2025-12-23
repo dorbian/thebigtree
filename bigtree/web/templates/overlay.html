@@ -331,6 +331,43 @@
         border-bottom:1px solid rgba(255,255,255,0.06);
       }
       .list-card:last-child{border-bottom:none}
+      .list-card.clickable{cursor:pointer}
+      .list-card.active{
+        background:rgba(60,207,142,.12);
+        border-radius:10px;
+      }
+      .preview-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+        gap:12px;
+      }
+      .preview-card{
+        aspect-ratio:3/4.2;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(10,16,28,.6);
+        overflow:hidden;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        position:relative;
+      }
+      .preview-card img{
+        width:100%;
+        height:100%;
+        object-fit:cover;
+      }
+      .preview-label{
+        position:absolute;
+        bottom:8px;
+        left:8px;
+        padding:2px 8px;
+        border-radius:999px;
+        background:rgba(0,0,0,.5);
+        font-size:11px;
+        letter-spacing:.06em;
+        text-transform:uppercase;
+      }
       .subgrid{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -780,6 +817,15 @@
           </div>
           <div class="row">
             <div>
+              <label>Card preview</label>
+              <div class="preview-grid">
+                <div class="preview-card" id="taFrontPreview"><span class="preview-label">Front</span></div>
+                <div class="preview-card" id="taBackPreview"><span class="preview-label">Back</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div>
               <label for="taCardUpright">Upright</label>
               <textarea id="taCardUpright"></textarea>
             </div>
@@ -913,6 +959,7 @@
       const storage = window.localStorage;
       let currentCard = null;
       let currentGame = null;
+      let taSelectedCardId = "";
       let lastCalledCount = 0;
       let lastCalloutNumber = null;
       let activeGameId = "";
@@ -1015,9 +1062,13 @@
             const name = c.name || c.card_id || "Untitled";
             const id = c.card_id ? ` (${c.card_id})` : "";
             const house = c.house ? `<div class="muted">${c.house}</div>` : "";
-            return `<div class="list-card"><strong>${name}</strong><span class="muted">${id}</span>${house}</div>`;
+            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${house}</div>`;
           }).join("");
           el.innerHTML = header + items;
+          if (el.id === "taDeckList"){
+            window.taDeckData = data;
+            taSyncCardSelection();
+          }
           return;
         }
         el.textContent = JSON.stringify(data, null, 2);
@@ -1852,6 +1903,64 @@
         box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
       }
 
+      function taRenderPreviews(card){
+        const front = $("taFrontPreview");
+        const back = $("taBackPreview");
+        const backUrl = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.back_image : "";
+        front.innerHTML = '<span class="preview-label">Front</span>';
+        back.innerHTML = '<span class="preview-label">Back</span>';
+        if (card && card.image){
+          const img = document.createElement("img");
+          img.src = card.image;
+          front.appendChild(img);
+        } else if (card && card.name){
+          const label = document.createElement("div");
+          label.className = "muted";
+          label.textContent = card.name;
+          front.appendChild(label);
+        }
+        if (backUrl){
+          const img = document.createElement("img");
+          img.src = backUrl;
+          back.appendChild(img);
+        }
+      }
+
+      function taLoadCard(card){
+        if (!card) return;
+        taSelectedCardId = card.card_id || "";
+        $("taCardId").value = card.card_id || "";
+        $("taCardName").value = card.name || "";
+        $("taCardHouse").value = card.house || "";
+        $("taCardTags").value = (card.tags || []).join(", ");
+        $("taCardUpright").value = card.upright || "";
+        $("taCardReversed").value = card.reversed || "";
+        $("taArtistInstagram").value = (card.artist_links && card.artist_links.instagram) || "";
+        $("taArtistBluesky").value = (card.artist_links && card.artist_links.bluesky) || "";
+        $("taArtistX").value = (card.artist_links && card.artist_links.x) || "";
+        $("taArtistArtstation").value = (card.artist_links && card.artist_links.artstation) || "";
+        $("taArtistWebsite").value = (card.artist_links && card.artist_links.website) || "";
+        window.taUploadedImageUrl = card.image || "";
+        taRenderHouseInfo(card.house || "");
+        taRenderPreviews(card);
+        taSyncCardSelection();
+      }
+
+      function taSyncCardSelection(){
+        const list = $("taDeckList");
+        if (!list) return;
+        list.querySelectorAll(".list-card").forEach(el => {
+          const active = taSelectedCardId && el.dataset.cardId === taSelectedCardId;
+          el.classList.toggle("active", active);
+        });
+        if (window.taDeckData && window.taDeckData.cards && taSelectedCardId){
+          const match = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
+          if (match){
+            taRenderPreviews(match);
+          }
+        }
+      }
+
       function taWeightedPick(){
         const weights = {roots: 5, canopy: 5, ember: 5, whisper: 5, crown: 1};
         const pool = [];
@@ -1893,6 +2002,14 @@
         select.value = pick;
         taRenderHouseInfo(pick);
       });
+      $("taDeckList").addEventListener("click", (ev) => {
+        const target = ev.target.closest(".list-card");
+        if (!target || !target.dataset.cardId || !window.taDeckData) return;
+        const card = (window.taDeckData.cards || []).find(c => c.card_id === target.dataset.cardId);
+        if (card){
+          taLoadCard(card);
+        }
+      });
 
       $("taLoadDeck").addEventListener("click", async () => {
         try{
@@ -1900,6 +2017,7 @@
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
           $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
+          taRenderPreviews(null);
           setStatus("Deck loaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
@@ -1954,6 +2072,10 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({back_image: backImage})
           }, true);
+          if (window.taDeckData && window.taDeckData.deck){
+            window.taDeckData.deck.back_image = backImage;
+          }
+          taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
           setStatus("Deck back saved.", "ok");
         }catch(err){
           setStatus(err.message, "err");
@@ -1976,6 +2098,10 @@
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
           $("taBackImage").value = data.url || "";
+          if (window.taDeckData && window.taDeckData.deck){
+            window.taDeckData.deck.back_image = data.url || "";
+          }
+          taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
           setStatus("Deck back uploaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
@@ -2020,6 +2146,7 @@
           $("taArtistX").value = "";
           $("taArtistArtstation").value = "";
           $("taArtistWebsite").value = "";
+          taSelectedCardId = body.card_id || "";
           await $("taLoadDeck").click();
         }catch(err){
           setStatus(err.message, "err");
@@ -2059,6 +2186,13 @@
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
           window.taUploadedImageUrl = data.url;
+          if (window.taDeckData && window.taDeckData.cards){
+            const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
+            if (card){
+              card.image = data.url;
+              taRenderPreviews(card);
+            }
+          }
           setStatus("Image uploaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");

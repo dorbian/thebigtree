@@ -266,6 +266,7 @@
     stateEls.sessionId.textContent = s.session_id;
     stateEls.deckId.textContent = s.deck_id;
     stateEls.spreadId.textContent = s.spread_id;
+    const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
 
     stateEls.positions.innerHTML = "";
     currentState.spread.positions.forEach(pos => {
@@ -295,6 +296,11 @@
       inner.className = "inner";
       const back = document.createElement("div");
       back.className = "face back";
+      if (backUrl){
+        back.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+        back.style.backgroundSize = "cover";
+        back.style.backgroundPosition = "center";
+      }
       const front = document.createElement("div");
       front.className = "face front";
       if (draw && draw.card && draw.card.image){

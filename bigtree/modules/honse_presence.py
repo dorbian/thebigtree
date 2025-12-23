@@ -1,5 +1,4 @@
 from __future__ import annotations
-import logging
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -9,10 +8,7 @@ import requests
 HONSE_BASE_URL = os.getenv("HONSE_BASE_URL", "https://public-beta.honse.farm").rstrip("/")
 HONSE_REFRESH_SECONDS = int(os.getenv("HONSE_REFRESH_SECONDS", "300"))
 HONSE_TIMEOUT_SECONDS = int(os.getenv("HONSE_TIMEOUT_SECONDS", "10"))
-HONSE_DEBUG = os.getenv("HONSE_PRESENCE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
 HONSE_FEDERATION_ENTRY = os.getenv("HONSE_FEDERATION_ENTRY", "forest").strip().lower()
-
-logger = logging.getLogger("bigtree")
 
 
 def _entry_candidates(entry: Dict[str, Any]) -> List[str]:
@@ -77,13 +73,9 @@ def _get_json(url: str) -> Optional[Any]:
     try:
         resp = requests.get(url, timeout=HONSE_TIMEOUT_SECONDS)
         if not resp.ok:
-            if HONSE_DEBUG:
-                logger.warning("[honse_presence] %s -> %s", url, resp.status_code)
             return None
         return resp.json()
     except Exception:
-        if HONSE_DEBUG:
-            logger.warning("[honse_presence] %s -> request failed", url)
         return None
 
 
@@ -103,7 +95,6 @@ def get_online_count() -> Optional[int]:
     Return online user count for the configured federation server.
     Falls back to None if data cannot be retrieved.
     """
-    logger.warning("[honse_presence] fetching %s for entry '%s'", HONSE_BASE_URL, HONSE_FEDERATION_ENTRY)
     base_url = HONSE_BASE_URL
     if "://" not in base_url:
         base_url = f"https://{base_url}"
@@ -118,13 +109,5 @@ def get_online_count() -> Optional[int]:
     if entries:
         count = _extract_count(entries, HONSE_FEDERATION_ENTRY, hosts)
         if count is not None:
-            logger.warning("[honse_presence] %s -> %s online", HONSE_FEDERATION_ENTRY, count)
             return count
-        sample = []
-        for entry in entries[:3]:
-            sample.append(_entry_candidates(entry))
-        logger.warning("[honse_presence] no match for entry '%s' (hosts=%s, sample=%s)", HONSE_FEDERATION_ENTRY, hosts, sample)
-        return None
-    if HONSE_DEBUG:
-        logger.warning("[honse_presence] no entries for %s", base_host)
     return None

@@ -142,6 +142,7 @@
     if (!currentState) return;
     statusEl.textContent = currentState.session.status || "created";
     grid.innerHTML = "";
+    const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
     currentState.spread.positions.forEach(pos => {
       const draw = currentState.draw.find(d => d.position_id === pos.id);
       const slot = document.createElement("div");
@@ -157,6 +158,11 @@
       inner.className = "inner";
       const back = document.createElement("div");
       back.className = "face back";
+      if (backUrl){
+        back.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+        back.style.backgroundSize = "cover";
+        back.style.backgroundPosition = "center";
+      }
       const front = document.createElement("div");
       front.className = "face front";
       if (draw && draw.card && draw.card.image){
