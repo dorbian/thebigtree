@@ -7,6 +7,7 @@ from aiohttp import web
 import os
 import uuid
 import json as _json
+import imghdr
 from pathlib import Path
 import bigtree
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
@@ -497,9 +498,16 @@ async def upload_card_image(req: web.Request):
         saved = False
 
     if not saved:
-        raw_name = getattr(file_part, "filename", "") or ""
-        ext = Path(raw_name).suffix.lower()
-        if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        kind = imghdr.what(None, h=data)
+        ext_map = {
+            "jpeg": ".jpg",
+            "png": ".png",
+            "gif": ".gif",
+            "bmp": ".bmp",
+            "webp": ".webp",
+        }
+        ext = ext_map.get(kind)
+        if not ext:
             return _json_error("unsupported image format")
         filename = f"{safe_id}{ext}"
         dest = os.path.join(_cards_dir(), filename)
@@ -561,9 +569,16 @@ async def upload_back_image(req: web.Request):
         saved = False
 
     if not saved:
-        raw_name = getattr(file_part, "filename", "") or ""
-        ext = Path(raw_name).suffix.lower()
-        if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        kind = imghdr.what(None, h=data)
+        ext_map = {
+            "jpeg": ".jpg",
+            "png": ".png",
+            "gif": ".gif",
+            "bmp": ".bmp",
+            "webp": ".webp",
+        }
+        ext = ext_map.get(kind)
+        if not ext:
             return _json_error("unsupported image format")
         filename = f"{safe_id}_back{ext}"
         dest = os.path.join(_backs_dir(), filename)
