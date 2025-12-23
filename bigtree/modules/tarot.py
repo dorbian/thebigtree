@@ -179,7 +179,11 @@ def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:
 
 def list_decks() -> List[Dict[str, Any]]:
     db = _db_decks(); q = Query()
-    return db.search(q._type == "deck")
+    decks = db.search(q._type == "deck")
+    if not decks:
+        create_deck("elf-classic")
+        decks = db.search(q._type == "deck")
+    return decks
 
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
     db = _db_decks(); q = Query()
