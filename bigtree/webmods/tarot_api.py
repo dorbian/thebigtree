@@ -543,7 +543,8 @@ async def upload_back_image(req: web.Request):
         return _json_error("deck_id required")
 
     safe_id = _safe_name(deck_id) or uuid.uuid4().hex
-    filename = f"{safe_id}_back.png"
+    unique = uuid.uuid4().hex[:8]
+    filename = f"{safe_id}_back_{unique}.png"
     dest = os.path.join(_backs_dir(), filename)
 
     data = bytearray()
@@ -594,7 +595,7 @@ async def upload_back_image(req: web.Request):
                 ext = raw_ext
         if not ext:
             return _json_error("unsupported image format")
-        filename = f"{safe_id}_back{ext}"
+        filename = f"{safe_id}_back_{unique}{ext}"
         dest = os.path.join(_backs_dir(), filename)
         with open(dest, "wb") as f:
             f.write(data)
