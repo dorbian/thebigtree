@@ -169,6 +169,7 @@
   apiKey.addEventListener("input", () => {
     localStorage.setItem(storageKey, apiKey.value.trim());
     loadHouses();
+    loadDeckList();
   });
 
   function setStatus(msg, ok){
@@ -191,6 +192,9 @@
       deckList.innerHTML = data.cards.map(c => {
         return `<div class="card"><strong>${c.name}</strong> <span class="muted">(${c.card_id})</span><br><span class="muted">${c.house || ""}</span></div>`;
       }).join("");
+      if (!deckId.options.length || !deckId.querySelector(`option[value="${deckId.value}"]`)) {
+        await loadDeckList(deck);
+      }
       setStatus("Deck loaded.", true);
     }catch(err){
       setStatus(err.message, false);

@@ -319,6 +319,18 @@
         color:var(--muted);
         white-space:pre-wrap;
       }
+      .list-header{
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--accent-2);
+        margin-bottom:8px;
+      }
+      .list-card{
+        padding:8px 6px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+      }
+      .list-card:last-child{border-bottom:none}
       .subgrid{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -966,6 +978,22 @@
       }
 
       function showList(el, data){
+        if (data && Array.isArray(data.cards)){
+          if (!data.cards.length){
+            el.textContent = "No cards loaded.";
+            return;
+          }
+          const deckLabel = (data.deck && (data.deck.name || data.deck.deck_id)) || "";
+          const header = deckLabel ? `<div class="list-header">Deck: ${deckLabel}</div>` : "";
+          const items = data.cards.map(c => {
+            const name = c.name || c.card_id || "Untitled";
+            const id = c.card_id ? ` (${c.card_id})` : "";
+            const house = c.house ? `<div class="muted">${c.house}</div>` : "";
+            return `<div class="list-card"><strong>${name}</strong><span class="muted">${id}</span>${house}</div>`;
+          }).join("");
+          el.innerHTML = header + items;
+          return;
+        }
         el.textContent = JSON.stringify(data, null, 2);
       }
 
