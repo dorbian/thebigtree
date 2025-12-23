@@ -30,38 +30,47 @@ def _entry_candidates(entry: Dict[str, Any]) -> List[str]:
     return candidates
 
 
-def _matches_entry(entry: Dict[str, Any], entry_key: str, hosts: List[str]) -> bool:
+def _match_score(entry: Dict[str, Any], entry_key: str, hosts: List[str]) -> int:
     entry_key = (entry_key or "").strip().lower()
     if entry_key:
         for cand in _entry_candidates(entry):
-            if cand == entry_key or entry_key in cand:
-                return True
+            if cand == entry_key:
+                return 3
+        for cand in _entry_candidates(entry):
+            if entry_key in cand:
+                return 1
     hostname = str(entry.get("hostname") or "").lower().strip()
     if hostname and entry_key and entry_key in hostname:
-        return True
+        return 1
     if "://" in hostname:
         parsed = urlparse(hostname)
         hostname = (parsed.hostname or "").lower().strip()
     if ":" in hostname:
         hostname = hostname.split(":", 1)[0].strip()
     if hostname and any(hostname == h or hostname.endswith(h) for h in hosts):
-        return True
-    return False
+        return 2
+    return 0
 
 
 def _extract_count(entries: List[Dict[str, Any]], entry_key: str, hosts: List[str]) -> Optional[int]:
     hosts = [h.lower().strip() for h in hosts if h]
+    best_score = 0
+    best_count: Optional[int] = None
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        if not _matches_entry(entry, entry_key, hosts):
+        score = _match_score(entry, entry_key, hosts)
+        if not score or score < best_score:
             continue
         raw = entry.get("usersOnlineCount")
         try:
-            return int(raw)
+            count = int(raw)
         except Exception:
-            return None
-    return None
+            continue
+        if score > best_score:
+            best_score = score
+            best_count = count
+    return best_count
 
 
 def _get_json(url: str) -> Optional[Any]:

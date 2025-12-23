@@ -45,7 +45,7 @@ class TheBigTree(commands.Bot):
         try:
             count = await asyncio.to_thread(honse_presence.get_online_count)
             if count is not None and count > 0:
-                label = f"Channeling {count} Elf" if count == 1 else f"Channeling {count} Elves"
+                label = f"Communing with {count} elf" if count == 1 else f"Communing with {count} elves"
             else:
                 label = "listening to elves"
             await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
@@ -57,7 +57,7 @@ class TheBigTree(commands.Bot):
             try:
                 count = await asyncio.to_thread(honse_presence.get_online_count)
                 if count is not None and count > 0:
-                    label = f"Channeling {count} Elf" if count == 1 else f"Channeling {count} Elves"
+                    label = f"Communing with {count} elf" if count == 1 else f"Communing with {count} elves"
                 else:
                     label = "listening to elves"
                 await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=label))
