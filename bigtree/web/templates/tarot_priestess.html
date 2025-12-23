@@ -155,6 +155,13 @@
     font-size:11px;
     color:var(--muted);
   }
+  .help-toggle{
+    cursor:pointer;
+    color:var(--accent);
+    margin-left:4px;
+    font-size:11px;
+  }
+  .hidden{display:none}
 </style>
 
 <header>
@@ -170,7 +177,10 @@
       <div class="muted">Join code: <span id="joinCode">{JOIN}</span></div>
       <div class="muted">Session ID: <span id="sessionId">-</span></div>
       <div class="muted">Deck: <span id="deckId">-</span></div>
-      <div class="muted">Spread: <span id="spreadId">-</span></div>
+      <div class="muted">Spread: <span id="spreadId">-</span><span class="help-toggle" id="spreadHelp">(?)</span></div>
+    </div>
+    <div class="muted hidden" id="spreadNote">
+      Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
     </div>
     <div style="height:10px"></div>
     <label class="muted">Priestess token</label>
@@ -377,6 +387,10 @@
     const src = new EventSource(`/api/tarot/sessions/${joinCode}/stream?view=priestess`);
     src.onmessage = () => fetchState();
   }
+
+  document.getElementById("spreadHelp").addEventListener("click", () => {
+    document.getElementById("spreadNote").classList.toggle("hidden");
+  });
 
   fetchState();
   connectSSE();

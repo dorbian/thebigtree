@@ -578,6 +578,27 @@
           <p>Open the player, priestess, or overlay view.</p>
           <div class="row">
             <div>
+              <label for="tDeck">Deck</label>
+              <select id="tDeck"></select>
+            </div>
+            <div>
+              <label for="tSpread">Spread <span class="muted" id="tSpreadHelp">(?)</span></label>
+              <select id="tSpread">
+                <option value="single">Single</option>
+                <option value="tree">Tree</option>
+                <option value="cross">Cross</option>
+              </select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tCreateSession">Create session</button>
+            </div>
+          </div>
+          <div class="status hidden" id="tSpreadNote">
+            Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
+          </div>
+          <div class="row">
+            <div>
               <label for="tJoinCode">Join code</label>
               <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
@@ -1607,6 +1628,42 @@
         $("tLink").innerHTML = links.length ? links.join(" | ") : "No join code entered.";
       }
 
+      async function loadTarotSessionDecks(selectValue){
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const select = $("tDeck");
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          select.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("tCreateSession").addEventListener("click", async () => {
+        try{
+          const deck = $("tDeck").value.trim() || "elf-classic";
+          const spread = $("tSpread").value.trim() || "single";
+          const data = await jsonFetch("/api/tarot/sessions", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({deck_id: deck, spread_id: spread})
+          }, true);
+          $("tJoinCode").value = data.joinCode || "";
+          $("tPriestessToken").value = data.priestessToken || "";
+          renderLinks(data.joinCode || "", data.priestessToken || "");
+          setStatus("Session created.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
       $("tOpenOverlay").addEventListener("click", () => {
         const code = $("tJoinCode").value.trim();
         if (!code){
@@ -1649,6 +1706,10 @@
       $("tOpenAdminPage").addEventListener("click", () => {
         const base = getBase();
         window.open(new URL("/tarot/admin", base).toString(), "_blank");
+      });
+
+      $("tSpreadHelp").addEventListener("click", () => {
+        $("tSpreadNote").classList.toggle("hidden");
       });
 
       let taHouses = [];
@@ -1838,6 +1899,7 @@
       });
 
       loadTarotDeckList();
+      loadTarotSessionDecks();
       loadTarotHouses();
 
       loadSettings();
