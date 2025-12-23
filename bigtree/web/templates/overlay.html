@@ -888,11 +888,26 @@
 
       async function jsonFetch(path, opts, withKey = true){
         const res = await apiFetch(path, opts, withKey);
+        if (res.status === 401){
+          handleUnauthorized();
+          throw new Error("Unauthorized");
+        }
         const data = await res.json().catch(() => ({}));
         if (!res.ok){
           throw new Error(data.error || "Request failed");
         }
         return data;
+      }
+
+      function handleUnauthorized(){
+        apiKeyEl.value = "";
+        document.getElementById("appView").classList.add("hidden");
+        document.getElementById("loginView").classList.remove("hidden");
+        loginStatusEl.textContent = "Unauthorized. Please log in again.";
+        loginStatusEl.className = "status err";
+        overlayToggle.checked = false;
+        document.body.classList.remove("overlay");
+        saveSettings();
       }
 
       function showList(el, data){
