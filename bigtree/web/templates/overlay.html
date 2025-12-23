@@ -475,7 +475,7 @@
         <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
         <div class="menu-sub" id="menuGames"></div>
         <button class="menu-refresh" id="menuCreateGame" title="Create game">+ New</button>
-        <div class="menu-item" id="menuTarot">Tarot</div>
+        <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
         <div class="menu-item" id="menuTarotAdmin">Tarot Admin</div>
         <label class="toggle" style="margin-top:12px">
           <input type="checkbox" id="overlayMode">
@@ -573,13 +573,27 @@
           </div>
         </section>
 
-        <section class="panel" style="animation-delay:.1s" id="tarotPanel">
-          <h2>Tarot Overlay</h2>
-          <p>Enter a join code to open the new overlay page.</p>
+        <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
+          <h2>Tarot Views</h2>
+          <p>Open the player, priestess, or overlay view.</p>
           <div class="row">
             <div>
               <label for="tJoinCode">Join code</label>
               <input id="tJoinCode" placeholder="e.g. AB12CD">
+            </div>
+            <div>
+              <label for="tPriestessToken">Priestess token</label>
+              <input id="tPriestessToken" placeholder="token (for priestess)">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button id="tOpenPlayer">Open player</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tOpenPriestess">Open priestess</button>
             </div>
             <div>
               <label>&nbsp;</label>
@@ -588,8 +602,18 @@
           </div>
           <div class="row links">
             <div>
-              <span class="pill">Overlay link</span>
+              <span class="pill">Links</span>
               <div id="tLink">No join code entered.</div>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button id="tOpenGallery">Open gallery</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tOpenAdminPage">Open admin page</button>
             </div>
           </div>
         </section>
@@ -1147,10 +1171,10 @@
 
       function showPanel(which){
         $("menuBingo").classList.toggle("active", which === "bingo");
-        $("menuTarot").classList.toggle("active", which === "tarot");
+        $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
-        $("tarotPanel").classList.toggle("hidden", which !== "tarot");
+        $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
       }
 
@@ -1163,7 +1187,7 @@
         $("bCreateModal").classList.add("show");
         $("bTitle").focus();
       });
-      $("menuTarot").addEventListener("click", () => showPanel("tarot"));
+      $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
 
       let bingoRefreshTimer = null;
@@ -1531,6 +1555,29 @@
         return new URL("/overlay/session/" + encodeURIComponent(code), base).toString();
       }
 
+      function getPlayerUrl(code){
+        const base = getBase();
+        return new URL("/tarot/session/" + encodeURIComponent(code) + "?view=player", base).toString();
+      }
+
+      function getPriestessUrl(code, token){
+        const base = getBase();
+        const url = new URL("/tarot/session/" + encodeURIComponent(code), base);
+        url.searchParams.set("view", "priestess");
+        if (token) url.searchParams.set("token", token);
+        return url.toString();
+      }
+
+      function renderLinks(code, token){
+        const links = [];
+        if (code){
+          links.push(`<a href="${getPlayerUrl(code)}" target="_blank" rel="noreferrer">Player</a>`);
+          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Priestess</a>`);
+          links.push(`<a href="${getOverlayUrl(code)}" target="_blank" rel="noreferrer">Overlay</a>`);
+        }
+        $("tLink").innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
       $("tOpenOverlay").addEventListener("click", () => {
         const code = $("tJoinCode").value.trim();
         if (!code){
@@ -1538,8 +1585,41 @@
           return;
         }
         const url = getOverlayUrl(code);
-        $("tLink").innerHTML = '<a href="' + url + '" target="_blank" rel="noreferrer">' + url + "</a>";
+        renderLinks(code, $("tPriestessToken").value.trim());
         window.open(url, "_blank");
+      });
+
+      $("tOpenPlayer").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
+        }
+        const url = getPlayerUrl(code);
+        renderLinks(code, $("tPriestessToken").value.trim());
+        window.open(url, "_blank");
+      });
+
+      $("tOpenPriestess").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
+        }
+        const token = $("tPriestessToken").value.trim();
+        const url = getPriestessUrl(code, token);
+        renderLinks(code, token);
+        window.open(url, "_blank");
+      });
+
+      $("tOpenGallery").addEventListener("click", () => {
+        const base = getBase();
+        window.open(new URL("/tarot/gallery", base).toString(), "_blank");
+      });
+
+      $("tOpenAdminPage").addEventListener("click", () => {
+        const base = getBase();
+        window.open(new URL("/tarot/admin", base).toString(), "_blank");
       });
 
       let taHouses = [];
