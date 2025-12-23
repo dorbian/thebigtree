@@ -138,6 +138,12 @@
         color:var(--muted);
         border-radius:8px;
       }
+      .menu-refresh svg{
+        width:14px;
+        height:14px;
+        display:block;
+        fill:currentColor;
+      }
       .menu-refresh:hover{
         border-color:rgba(255,255,255,.25);
         color:var(--ink);
@@ -470,11 +476,22 @@
         <h3>Menu</h3>
         <div class="menu-item active" id="menuBingo">
           <span>Bingo</span>
-          <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games">R</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+              </svg>
+            </button>
+            <button class="menu-refresh" id="menuCreateGame" title="Create game" aria-label="Create game">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
         <div class="menu-sub" id="menuGames"></div>
-        <button class="menu-refresh" id="menuCreateGame" title="Create game">+ New</button>
+        <div class="hidden" id="menuCreateGamePlaceholder"></div>
         <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
         <div class="menu-item" id="menuTarotAdmin">Tarot Admin</div>
         <label class="toggle" style="margin-top:12px">
@@ -601,7 +618,11 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tSessionRefresh" class="btn-ghost">Refresh sessions</button>
+              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="status hidden" id="tSpreadNote">
@@ -1415,6 +1436,7 @@
         document.getElementById("appView").classList.remove("hidden");
         setStatus("Welcome to Bingo Control.", "ok");
         loadGamesMenu();
+        loadTarotSessions();
         showPanel("bingo");
         ensureBingoPolling();
       });

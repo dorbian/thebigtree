@@ -86,18 +86,28 @@ def _migrate_if_needed() -> None:
         return
     base = _get_base_dir()
     marker = os.path.join(base, ".tarot_migrated")
-    if os.path.exists(marker):
-        _MIGRATED = True
-        return
     legacy_path = _get_legacy_db_path()
-    if not os.path.exists(legacy_path):
-        _MIGRATED = True
-        return
     deck_db = TinyDB(_get_deck_db_path())
     session_db = TinyDB(_get_session_db_path())
-    if deck_db.all() or session_db.all():
-        _MIGRATED = True
-        return
+    if os.path.exists(marker):
+        if deck_db.all() or session_db.all():
+            _MIGRATED = True
+            return
+        if not os.path.exists(legacy_path):
+            _MIGRATED = True
+            return
+        legacy_db = TinyDB(legacy_path)
+        if not legacy_db.all():
+            _MIGRATED = True
+            return
+        # marker exists but split dbs are empty; re-migrate
+    else:
+        if not os.path.exists(legacy_path):
+            _MIGRATED = True
+            return
+        if deck_db.all() or session_db.all():
+            _MIGRATED = True
+            return
     legacy_db = TinyDB(legacy_path)
     moved = 0
     for entry in legacy_db.all():
