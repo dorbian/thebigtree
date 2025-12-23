@@ -508,6 +508,13 @@ async def upload_card_image(req: web.Request):
         }
         ext = ext_map.get(kind)
         if not ext:
+            raw_name = getattr(file_part, "filename", "") or ""
+            raw_ext = Path(raw_name).suffix.lower()
+            alias = {".jpeg": ".jpg", ".jfif": ".jpg"}
+            raw_ext = alias.get(raw_ext, raw_ext)
+            if raw_ext in {".png", ".jpg", ".gif", ".bmp", ".webp"}:
+                ext = raw_ext
+        if not ext:
             return _json_error("unsupported image format")
         filename = f"{safe_id}{ext}"
         dest = os.path.join(_cards_dir(), filename)
@@ -578,6 +585,13 @@ async def upload_back_image(req: web.Request):
             "webp": ".webp",
         }
         ext = ext_map.get(kind)
+        if not ext:
+            raw_name = getattr(file_part, "filename", "") or ""
+            raw_ext = Path(raw_name).suffix.lower()
+            alias = {".jpeg": ".jpg", ".jfif": ".jpg"}
+            raw_ext = alias.get(raw_ext, raw_ext)
+            if raw_ext in {".png", ".jpg", ".gif", ".bmp", ".webp"}:
+                ext = raw_ext
         if not ext:
             return _json_error("unsupported image format")
         filename = f"{safe_id}_back{ext}"
