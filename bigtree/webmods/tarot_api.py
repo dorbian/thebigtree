@@ -65,6 +65,29 @@ def _load_houses() -> dict:
     _HOUSES_CACHE = {"houses": []}
     return _HOUSES_CACHE
 
+def _dummy_cards(deck_id: str, per_house: int, crown_count: int) -> list[dict]:
+    houses = _load_houses().get("houses", [])
+    cards = []
+    for house in houses:
+        hid = house.get("id") or ""
+        hname = house.get("name") or hid
+        keywords = ", ".join(house.get("keywords") or [])
+        count = crown_count if hid == "crown" else per_house
+        for idx in range(max(0, int(count))):
+            title = f"{hname} - Echo {idx + 1}"
+            card = {
+                "card_id": f"{hid}_dummy_{idx + 1}",
+                "name": title,
+                "house": hid,
+                "upright": f"Upright: {keywords}.",
+                "reversed": f"Reversed: blocked or twisted {keywords}.",
+                "tags": house.get("keywords") or [],
+                "image": "",
+                "artist_links": {},
+            }
+            cards.append(card)
+    return cards
+
 # ---- Pages ----
 @route("GET", "/tarot/session/{join_code}", allow_public=True)
 async def tarot_session_page(req: web.Request):
@@ -332,6 +355,24 @@ async def add_card(req: web.Request):
     except Exception as ex:
         return _json_error(str(ex), status=400)
     return web.json_response({"ok": True, "card": card})
+
+@route("POST", "/api/tarot/decks/{deck_id}/seed", scopes=["tarot:admin"])
+async def seed_deck(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    per_house = int(body.get("per_house") or 4)
+    crown_count = int(body.get("crown_count") or 1)
+    tar.create_deck(deck_id, name=body.get("name"))
+    created = []
+    for card in _dummy_cards(deck_id, per_house, crown_count):
+        try:
+            created.append(tar.add_or_update_card(deck_id, card))
+        except Exception:
+            continue
+    return web.json_response({"ok": True, "created": len(created)})
 
 @route("PUT", "/api/tarot/decks/{deck_id}/back", scopes=["tarot:admin"])
 async def set_back(req: web.Request):

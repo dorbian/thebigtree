@@ -69,6 +69,20 @@
       <button id="addDeck">Add deck</button>
     </div>
   </div>
+  <div class="row">
+    <div>
+      <label for="seedPerHouse">Dummy cards per house</label>
+      <input id="seedPerHouse" type="number" value="4" min="0">
+    </div>
+    <div>
+      <label for="seedCrown">Dummy cards for Crown</label>
+      <input id="seedCrown" type="number" value="1" min="0">
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="seedDeck">Seed dummy deck</button>
+    </div>
+  </div>
 
   <h2>Add / Update Card</h2>
   <div class="row">
@@ -253,6 +267,28 @@
       if (!data.ok) throw new Error(data.error || "Failed");
       setStatus("Card saved.", true);
       loadDeck();
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  });
+
+  document.getElementById("seedDeck").addEventListener("click", async () => {
+    try{
+      const deck = deckId.value.trim() || "elf-classic";
+      const perHouse = Number(document.getElementById("seedPerHouse").value || 0);
+      const crownCount = Number(document.getElementById("seedCrown").value || 0);
+      const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/seed`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey.value.trim()
+        },
+        body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      await loadDeck();
+      setStatus(`Seeded ${data.created || 0} cards.`, true);
     }catch(err){
       setStatus(err.message, false);
     }
