@@ -775,11 +775,7 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button class="btn-ghost" id="taBackUploadWindow">Open upload window</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <div class="muted">Upload replaces the deck back URL.</div>
+              <a class="btn-ghost" id="taBackUploadWindow" href="#">Open upload page</a>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -815,12 +811,12 @@
               <input id="taCardUpload" type="file" accept="image/*">
             </div>
             <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taCardUploadWindow">Open upload window</button>
-            </div>
-            <div>
               <label>House info</label>
               <div class="list" id="taHouseInfo">Pick a house to see details.</div>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <a class="btn-ghost" id="taCardUploadWindow" href="#">Open upload page</a>
             </div>
           </div>
           <div class="row">
@@ -925,7 +921,7 @@
           </div>
           <div>
             <label>&nbsp;</label>
-            <button class="btn-ghost" id="bCreateBgUpload">Open upload window</button>
+            <a class="btn-ghost" id="bCreateBgUpload" href="#">Open upload page</a>
           </div>
           <div>
             <label>&nbsp;</label>
@@ -1002,7 +998,7 @@
 
       function openUploadWindow(){
         const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
-        window.open(target.toString(), "_blank");
+        return target.toString();
       }
 
       function configureUploadControls(){
@@ -1608,9 +1604,14 @@
         document.body.classList.remove("overlay");
         saveSettings();
       });
-      $("bCreateBgUpload").addEventListener("click", () => openUploadWindow());
-      $("taBackUploadWindow").addEventListener("click", () => openUploadWindow());
-      $("taCardUploadWindow").addEventListener("click", () => openUploadWindow());
+      ["bCreateBgUpload", "taBackUploadWindow", "taCardUploadWindow"].forEach((id) => {
+        const link = $(id);
+        if (link){
+          link.href = openUploadWindow();
+          link.target = "_blank";
+          link.rel = "noreferrer";
+        }
+      });
 
       $("bCreate").addEventListener("click", async () => {
         try{

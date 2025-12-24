@@ -100,11 +100,7 @@
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="backUploadWindow">Open upload window</button>
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <div class="muted">Upload replaces the deck back URL.</div>
+      <a id="backUploadWindow" href="#">Open upload page</a>
     </div>
   </div>
 
@@ -140,7 +136,7 @@
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="cardUploadWindow">Open upload window</button>
+      <a id="cardUploadWindow" href="#">Open upload page</a>
     </div>
     <div>
       <label>House info</label>
@@ -226,7 +222,7 @@
 
   function openUploadWindow(){
     const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
-    window.open(target.toString(), "_blank");
+    return target.toString();
   }
 
   function configureUploadControls(){
@@ -396,7 +392,14 @@
     }
   });
 
-  document.getElementById("backUploadWindow").addEventListener("click", () => openUploadWindow());
+  ["backUploadWindow", "cardUploadWindow"].forEach((id) => {
+    const link = document.getElementById(id);
+    if (link){
+      link.href = openUploadWindow();
+      link.target = "_blank";
+      link.rel = "noreferrer";
+    }
+  });
 
   document.getElementById("backUpload").addEventListener("change", async (ev) => {
     const file = ev.target.files[0];
@@ -425,7 +428,6 @@
     }
   });
 
-  document.getElementById("cardUploadWindow").addEventListener("click", () => openUploadWindow());
 
   document.getElementById("cardUpload").addEventListener("change", async (ev) => {
     const file = ev.target.files[0];
