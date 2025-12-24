@@ -769,18 +769,14 @@
             </div>
           </div>
           <div class="row">
-          <div>
-            <label for="taBackUpload">Upload deck back image</label>
-            <input id="taBackUpload" type="file" accept="image/*">
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="taBackLibrary">Choose from library</button>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <a class="btn-ghost" id="taBackUploadWindow" href="#">Open upload page</a>
-          </div>
+            <div>
+              <label for="taBackUpload">Upload deck back image</label>
+              <input id="taBackUpload" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="taBackLibrary">Choose from library</button>
+            </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
 
@@ -821,10 +817,6 @@
             <div>
               <label>House info</label>
               <div class="list" id="taHouseInfo">Pick a house to see details.</div>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <a class="btn-ghost" id="taCardUploadWindow" href="#">Open upload page</a>
             </div>
           </div>
           <div class="row">
@@ -927,14 +919,10 @@
             <label for="bCreateBgFile">Background image</label>
             <input id="bCreateBgFile" type="file" accept="image/*">
           </div>
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="bCreateBgLibrary">Choose from library</button>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <a class="btn-ghost" id="bCreateBgUpload" href="#">Open upload page</a>
-          </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="bCreateBgLibrary">Choose from library</button>
+            </div>
           <div>
             <label>&nbsp;</label>
             <button id="bCreate">Create</button>
@@ -1003,48 +991,6 @@
 
       function getBase(){
         return window.location.origin;
-      }
-
-      const uploadBaseConfig = "{UPLOAD_BASE}";
-
-      function getUploadBase(){
-        if (uploadBaseConfig && !uploadBaseConfig.startsWith("{")){
-          return uploadBaseConfig;
-        }
-        const base = new URL(window.location.origin);
-        base.port = "6443";
-        return base.toString();
-      }
-
-      function isUploadHost(){
-        try{
-          return new URL(getUploadBase()).origin === window.location.origin;
-        }catch(_err){
-          return false;
-        }
-      }
-
-      function buildUploadUrl(kind){
-        const target = new URL("/upload", getUploadBase());
-        if (kind) target.searchParams.set("kind", kind);
-        const key = apiKeyEl.value.trim();
-        if (key) target.searchParams.set("api_key", key);
-        const deck = $("taDeck") ? $("taDeck").value.trim() : "";
-        const card = $("taCardId") ? $("taCardId").value.trim() : "";
-        const game = getGameId();
-        if (deck) target.searchParams.set("deck_id", deck);
-        if (card) target.searchParams.set("card_id", card);
-        if (game) target.searchParams.set("game_id", game);
-        return target.toString();
-      }
-
-      function configureUploadControls(){
-        if (!isUploadHost()){
-          ["bCreateBgFile", "taBackUpload", "taCardUpload"].forEach(id => {
-            const el = $(id);
-            if (el) el.disabled = true;
-          });
-        }
       }
 
       let librarySelectHandler = null;
@@ -1707,20 +1653,6 @@
       });
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
       $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
-      const uploadLinks = [
-        {id: "bCreateBgUpload", kind: "bingo_bg"},
-        {id: "taBackUploadWindow", kind: "tarot_back"},
-        {id: "taCardUploadWindow", kind: "tarot_card"},
-      ];
-      uploadLinks.forEach((cfg) => {
-        const link = $(cfg.id);
-        if (!link) return;
-        link.addEventListener("click", () => {
-          link.href = buildUploadUrl(cfg.kind);
-          link.target = "_blank";
-          link.rel = "noreferrer";
-        });
-      });
 
       $("taBackLibrary").addEventListener("click", () => {
         librarySelectHandler = async (item) => {
@@ -1804,27 +1736,10 @@
           });
           const bgFile = $("bCreateBgFile").files[0];
           if (bgFile && data && data.game && data.game.game_id){
-            if (!isUploadHost()){
-              setStatus("Open upload window to upload files.", "err");
-              return;
-            }
             const fd = new FormData();
             fd.append("game_id", data.game.game_id);
             fd.append("file", bgFile);
-            const url = new URL("/bingo/upload-bg", getUploadBase());
-            const res = await fetch(url, {
-              method: "POST",
-              headers: {"X-API-Key": apiKeyEl.value.trim()},
-              body: fd
-            });
-            if (res.status === 401){
-              handleUnauthorized();
-              throw new Error("Unauthorized");
-            }
-            if (!res.ok){
-              const payload = await res.json().catch(() => ({}));
-              throw new Error(payload.error || "Request failed");
-            }
+            await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
           }
           setGameId(data.game.game_id || "");
           $("bCreateModal").classList.remove("show");
@@ -2327,15 +2242,11 @@
         const file = ev.target.files[0];
         if (!file) return;
         try{
-          if (!isUploadHost()){
-            setStatus("Open upload window to upload files.", "err");
-            return;
-          }
           const deck = $("taDeck").value.trim() || "elf-classic";
           const form = new FormData();
           form.append("file", file);
           form.append("deck_id", deck);
-          const res = await fetch(new URL("/api/tarot/upload-back-image", getUploadBase()), {
+          const res = await fetch("/api/tarot/upload-back-image", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: form
@@ -2420,14 +2331,10 @@
         const file = ev.target.files[0];
         if (!file) return;
         try{
-          if (!isUploadHost()){
-            setStatus("Open upload window to upload files.", "err");
-            return;
-          }
           const form = new FormData();
           form.append("file", file);
           form.append("card_id", $("taCardId").value.trim());
-          const res = await fetch(new URL("/api/tarot/upload-card-image", getUploadBase()), {
+          const res = await fetch("/api/tarot/upload-card-image", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: form
@@ -2448,7 +2355,6 @@
         }
       });
 
-      configureUploadControls();
       loadSettings();
       if (apiKeyEl.value.trim()){
         document.getElementById("loginView").classList.add("hidden");

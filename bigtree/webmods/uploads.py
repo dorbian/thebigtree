@@ -23,12 +23,6 @@ def _list_dir(path: str, prefix: str) -> list[dict]:
     items.sort(key=lambda i: i["name"])
     return items
 
-@route("GET", "/upload", allow_public=True)
-async def upload_page(_req: web.Request):
-    from bigtree.inc.webserver import get_server, DynamicWebServer
-    srv: DynamicWebServer | None = get_server()
-    html = srv.render_template("upload.html", {}) if srv else "<h1>Upload</h1>"
-    return web.Response(text=html, content_type="text/html")
 
 @route("GET", "/api/uploads/tarot/cards", scopes=["tarot:admin"])
 async def list_tarot_cards(_req: web.Request):

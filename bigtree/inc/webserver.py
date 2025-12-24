@@ -1,6 +1,6 @@
 # bigtree/inc/webserver.py
 from __future__ import annotations
-import asyncio, importlib, pkgutil, logging, os
+import asyncio, importlib, pkgutil, logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Any, List, Set, Optional
 from aiohttp import web, WSMsgType
@@ -35,15 +35,7 @@ def _cfg():
     if st is not None:
         host = st.get("WEB.listen_host", "0.0.0.0")
         port = st.get("WEB.listen_port", 8443, int)
-        upload_host = st.get("WEB.upload_listen_host", host)
-        upload_port = st.get("WEB.upload_listen_port", 6443, int)
         base = st.get("WEB.base_url", f"http://{host}:{port}")
-        upload_base = st.get("WEB.upload_base_url", "") or os.getenv("BIGTREE_UPLOAD_BASE_URL", "")
-        if not upload_base:
-            from urllib.parse import urlsplit
-            parsed = urlsplit(str(base))
-            scheme = parsed.scheme or "http"
-            upload_base = f"{scheme}://{upload_host}:{upload_port}"
         cors = st.get("webapi.cors_origin", "*")  # legacy CORS if you still keep it there
         jwt_secret = st.get("WEB.jwt_secret", "")
         jwt_algs = st.get("WEB.jwt_algorithms", ["HS256"], cast="json")
@@ -51,8 +43,6 @@ def _cfg():
         scopes   = st.get("WEB.api_key_scopes", {}, cast="json")
         return {
             "host": host, "port": port, "base_url": base,
-            "upload_host": upload_host, "upload_port": upload_port,
-            "upload_base_url": upload_base,
             "cors_origin": cors,
             "jwt_secret": jwt_secret, "jwt_algorithms": jwt_algs,
             "api_keys": api_keys, "api_key_scopes": scopes,
@@ -67,23 +57,10 @@ def _cfg():
             port = int(str(web.get("listen_port", 8443)))
         except Exception:
             port = 8443
-        upload_host = web.get("upload_listen_host", host)
-        try:
-            upload_port = int(str(web.get("upload_listen_port", 6443)))
-        except Exception:
-            upload_port = 6443
         base = (web.get("base_url") or f"http://{host}:{port}").rstrip("/")
-        upload_base = web.get("upload_base_url", "") or os.getenv("BIGTREE_UPLOAD_BASE_URL", "")
-        if not upload_base:
-            from urllib.parse import urlsplit
-            parsed = urlsplit(str(base))
-            scheme = parsed.scheme or "http"
-            upload_base = f"{scheme}://{upload_host}:{upload_port}"
         cors = (cfg.config.get("webapi", {}).get("cors_origin") or "*")
         return {
             "host": host, "port": port, "base_url": base,
-            "upload_host": upload_host, "upload_port": upload_port,
-            "upload_base_url": upload_base,
             "cors_origin": cors,
             "jwt_secret": web.get("jwt_secret", ""),
             "jwt_algorithms": web.get("jwt_algorithms", ["HS256"]),
@@ -92,14 +69,8 @@ def _cfg():
         }
 
     # Last resort defaults
-    upload_host = os.getenv("BIGTREE_UPLOAD_HOST", "0.0.0.0")
-    upload_port = int(os.getenv("BIGTREE_UPLOAD_PORT", "6443"))
-    upload_base = os.getenv("BIGTREE_UPLOAD_BASE_URL", "") or f"http://{upload_host}:{upload_port}"
     return {
         "host": "0.0.0.0", "port": 8443, "base_url": "http://0.0.0.0:8443",
-        "upload_host": upload_host,
-        "upload_port": upload_port,
-        "upload_base_url": upload_base,
         "cors_origin": "*", "jwt_secret": "", "jwt_algorithms": ["HS256"],
         "api_keys": [], "api_key_scopes": {},
     }
@@ -110,7 +81,6 @@ class DynamicWebServer:
         self.app = web.Application(middlewares=[self._cors_mw, auth_middleware()])
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
-        self._upload_site: Optional[web.TCPSite] = None
         self.ws_active: Set[web.WebSocketResponse] = set()
         self._cfg = _cfg()
 
@@ -169,17 +139,11 @@ class DynamicWebServer:
         self._load_modules()
         self._wire_routes()
         host, port = self._cfg["host"], self._cfg["port"]
-        upload_host = self._cfg.get("upload_host") or host
-        upload_port = int(self._cfg.get("upload_port") or 0)
         self._runner = web.AppRunner(self.app)
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, host, port)
         await self._site.start()
         log.info(f"[web] listening on {host}:{port} (base_url={self._cfg['base_url']})")
-        if upload_port and upload_port != port:
-            self._upload_site = web.TCPSite(self._runner, upload_host, upload_port)
-            await self._upload_site.start()
-            log.info(f"[web] upload listening on {upload_host}:{upload_port}")
 
     async def stop(self):
         if self._runner:
