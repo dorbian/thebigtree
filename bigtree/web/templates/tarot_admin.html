@@ -46,6 +46,42 @@
   .card{padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
   .muted{color:var(--muted);font-size:12px}
   .status{margin-top:10px}
+  .deck-picker{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+    margin-top:16px;
+  }
+  .deck-card{
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+    background:#0c1511;
+    display:flex;
+    flex-direction:column;
+    text-align:left;
+    padding:0;
+  }
+  .deck-card img{
+    width:100%;
+    aspect-ratio:3/4.2;
+    object-fit:cover;
+    background:#0c1511;
+  }
+  .deck-card .muted{
+    padding:8px 10px 10px;
+  }
+  .deck-placeholder{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    aspect-ratio:3/4.2;
+    color:var(--muted);
+    background:#0c1511;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
   .grid{
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -119,20 +155,6 @@
     <div>
       <label>&nbsp;</label>
       <button id="addDeck">Add deck</button>
-    </div>
-  </div>
-  <div class="row">
-    <div>
-      <label for="seedPerHouse">Dummy cards per house</label>
-      <input id="seedPerHouse" type="number" value="4" min="0">
-    </div>
-    <div>
-      <label for="seedCrown">Dummy cards for Crown</label>
-      <input id="seedCrown" type="number" value="1" min="0">
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <button id="seedDeck">Seed dummy deck</button>
     </div>
   </div>
   <div class="row">
@@ -283,6 +305,7 @@
     </div>
   </div>
 
+  <div class="deck-picker" id="deckPicker"></div>
   <div class="list" id="deckList"></div>
 </main>
 
@@ -291,6 +314,7 @@
   const deckId = document.getElementById("deckId");
   const status = document.getElementById("status");
   const deckList = document.getElementById("deckList");
+  const deckPicker = document.getElementById("deckPicker");
   const storageKey = "bt_api_key";
   let uploadedImageUrl = "";
   let houseData = [];
@@ -455,6 +479,11 @@
     const id = prompt("New deck id (e.g. elf-classic)") || "";
     if (!id.trim()) return;
     const name = prompt("Deck name (optional)") || "";
+    const backImage = document.getElementById("backImage").value.trim();
+    if (!backImage){
+      setStatus("Pick a deck back before creating a deck.", false);
+      return;
+    }
     try{
       const res = await fetch("/api/tarot/decks", {
         method: "POST",
@@ -466,6 +495,15 @@
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed");
+      const backArtist = document.getElementById("backArtist").value.trim() || undefined;
+      await fetch(`/api/tarot/decks/${encodeURIComponent(id.trim())}/back`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey.value.trim()
+        },
+        body: JSON.stringify({back_image: backImage, artist_id: backArtist})
+      });
       await loadDeckList(id.trim());
       setStatus("Deck created.", true);
       await loadDeck();
@@ -473,6 +511,37 @@
       setStatus(err.message, false);
     }
   });
+
+  function renderDeckPicker(decks){
+    deckPicker.innerHTML = "";
+    decks.forEach(d => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "deck-card";
+      card.title = d.deck_id || "";
+      const img = document.createElement("img");
+      img.src = d.back_image || "";
+      img.alt = d.name || d.deck_id || "deck";
+      const label = document.createElement("div");
+      label.className = "muted";
+      label.textContent = d.name ? `${d.name} (${d.deck_id})` : (d.deck_id || "");
+      if (!d.back_image){
+        img.style.display = "none";
+        const placeholder = document.createElement("div");
+        placeholder.className = "deck-placeholder";
+        placeholder.textContent = "No back image";
+        card.appendChild(placeholder);
+      } else {
+        card.appendChild(img);
+      }
+      card.appendChild(label);
+      card.addEventListener("click", async () => {
+        deckId.value = d.deck_id || "";
+        await loadDeck();
+      });
+      deckPicker.appendChild(card);
+    });
+  }
 
   async function loadDeckList(selectValue){
     try{
@@ -493,6 +562,7 @@
         opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
         deckId.appendChild(opt);
       });
+      renderDeckPicker(decks);
       const fallback = selectValue || "elf-classic";
       deckId.value = fallback;
     }catch(err){
@@ -532,27 +602,6 @@
     }
   });
 
-  document.getElementById("seedDeck").addEventListener("click", async () => {
-    try{
-      const deck = deckId.value.trim() || "elf-classic";
-      const perHouse = Number(document.getElementById("seedPerHouse").value || 0);
-      const crownCount = Number(document.getElementById("seedCrown").value || 0);
-      const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/seed`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey.value.trim()
-        },
-        body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Failed");
-      await loadDeck();
-      setStatus(`Seeded ${data.created || 0} cards.`, true);
-    }catch(err){
-      setStatus(err.message, false);
-    }
-  });
 
   document.getElementById("saveBack").addEventListener("click", async () => {
     try{
