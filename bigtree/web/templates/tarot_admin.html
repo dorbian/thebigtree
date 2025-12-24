@@ -100,6 +100,10 @@
     </div>
     <div>
       <label>&nbsp;</label>
+      <button id="backUploadWindow">Open upload window</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
       <div class="muted">Upload replaces the deck back URL.</div>
     </div>
   </div>
@@ -133,6 +137,10 @@
     <div>
       <label for="cardUpload">Upload image</label>
       <input id="cardUpload" type="file" accept="image/*">
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="cardUploadWindow">Open upload window</button>
     </div>
     <div>
       <label>House info</label>
@@ -195,6 +203,39 @@
   function setStatus(msg, ok){
     status.textContent = msg;
     status.style.color = ok ? "#6bd4a2" : "#e07a7a";
+  }
+
+  const uploadBaseConfig = "{UPLOAD_BASE}";
+
+  function getUploadBase(){
+    if (uploadBaseConfig){
+      return uploadBaseConfig;
+    }
+    const base = new URL(window.location.origin);
+    base.port = "6443";
+    return base.toString();
+  }
+
+  function isUploadHost(){
+    try{
+      return new URL(getUploadBase()).origin === window.location.origin;
+    }catch(_err){
+      return false;
+    }
+  }
+
+  function openUploadWindow(){
+    const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
+    window.open(target.toString(), "_blank");
+  }
+
+  function configureUploadControls(){
+    if (!isUploadHost()){
+      ["backUpload", "cardUpload"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+    }
   }
 
   async function loadDeck(){
@@ -355,15 +396,22 @@
     }
   });
 
+  document.getElementById("backUploadWindow").addEventListener("click", () => openUploadWindow());
+
   document.getElementById("backUpload").addEventListener("change", async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
     try{
+      if (!isUploadHost()){
+        setStatus("Open upload window to upload files.", false);
+        openUploadWindow();
+        return;
+      }
       const deck = deckId.value.trim() || "elf-classic";
       const form = new FormData();
       form.append("file", file);
       form.append("deck_id", deck);
-      const res = await fetch("/api/tarot/upload-back-image", {
+      const res = await fetch(new URL("/api/tarot/upload-back-image", getUploadBase()), {
         method: "POST",
         headers: {"X-API-Key": apiKey.value.trim()},
         body: form
@@ -377,15 +425,22 @@
     }
   });
 
+  document.getElementById("cardUploadWindow").addEventListener("click", () => openUploadWindow());
+
   document.getElementById("cardUpload").addEventListener("change", async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
     try{
+      if (!isUploadHost()){
+        setStatus("Open upload window to upload files.", false);
+        openUploadWindow();
+        return;
+      }
       const deck = deckId.value.trim() || "elf-classic";
       const form = new FormData();
       form.append("file", file);
       form.append("card_id", document.getElementById("cardId").value.trim());
-      const res = await fetch("/api/tarot/upload-card-image", {
+      const res = await fetch(new URL("/api/tarot/upload-card-image", getUploadBase()), {
         method: "POST",
         headers: {"X-API-Key": apiKey.value.trim()},
         body: form
@@ -463,6 +518,7 @@
     renderHouseInfo(pick);
   });
 
+  configureUploadControls();
   loadDeckList();
   loadHouses();
 </script>

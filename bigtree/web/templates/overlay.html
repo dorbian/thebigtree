@@ -775,6 +775,10 @@
             </div>
             <div>
               <label>&nbsp;</label>
+              <button class="btn-ghost" id="taBackUploadWindow">Open upload window</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
               <div class="muted">Upload replaces the deck back URL.</div>
             </div>
           </div>
@@ -809,6 +813,10 @@
             <div>
               <label for="taCardUpload">Upload image</label>
               <input id="taCardUpload" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="taCardUploadWindow">Open upload window</button>
             </div>
             <div>
               <label>House info</label>
@@ -917,6 +925,10 @@
           </div>
           <div>
             <label>&nbsp;</label>
+            <button class="btn-ghost" id="bCreateBgUpload">Open upload window</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
             <button id="bCreate">Create</button>
           </div>
         </div>
@@ -967,6 +979,39 @@
 
       function getBase(){
         return window.location.origin;
+      }
+
+      const uploadBaseConfig = "{UPLOAD_BASE}";
+
+      function getUploadBase(){
+        if (uploadBaseConfig){
+          return uploadBaseConfig;
+        }
+        const base = new URL(window.location.origin);
+        base.port = "6443";
+        return base.toString();
+      }
+
+      function isUploadHost(){
+        try{
+          return new URL(getUploadBase()).origin === window.location.origin;
+        }catch(_err){
+          return false;
+        }
+      }
+
+      function openUploadWindow(){
+        const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
+        window.open(target.toString(), "_blank");
+      }
+
+      function configureUploadControls(){
+        if (!isUploadHost()){
+          ["bCreateBgFile", "taBackUpload", "taCardUpload"].forEach(id => {
+            const el = $(id);
+            if (el) el.disabled = true;
+          });
+        }
       }
 
       function getGameId(){
@@ -1563,6 +1608,9 @@
         document.body.classList.remove("overlay");
         saveSettings();
       });
+      $("bCreateBgUpload").addEventListener("click", () => openUploadWindow());
+      $("taBackUploadWindow").addEventListener("click", () => openUploadWindow());
+      $("taCardUploadWindow").addEventListener("click", () => openUploadWindow());
 
       $("bCreate").addEventListener("click", async () => {
         try{
@@ -1583,10 +1631,28 @@
           });
           const bgFile = $("bCreateBgFile").files[0];
           if (bgFile && data && data.game && data.game.game_id){
+            if (!isUploadHost()){
+              setStatus("Open upload window to upload files.", "err");
+              openUploadWindow();
+              return;
+            }
             const fd = new FormData();
             fd.append("game_id", data.game.game_id);
             fd.append("file", bgFile);
-            await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
+            const url = new URL("/bingo/upload-bg", getUploadBase());
+            const res = await fetch(url, {
+              method: "POST",
+              headers: {"X-API-Key": apiKeyEl.value.trim()},
+              body: fd
+            });
+            if (res.status === 401){
+              handleUnauthorized();
+              throw new Error("Unauthorized");
+            }
+            if (!res.ok){
+              const payload = await res.json().catch(() => ({}));
+              throw new Error(payload.error || "Request failed");
+            }
           }
           setGameId(data.game.game_id || "");
           $("bCreateModal").classList.remove("show");
@@ -2089,11 +2155,16 @@
         const file = ev.target.files[0];
         if (!file) return;
         try{
+          if (!isUploadHost()){
+            setStatus("Open upload window to upload files.", "err");
+            openUploadWindow();
+            return;
+          }
           const deck = $("taDeck").value.trim() || "elf-classic";
           const form = new FormData();
           form.append("file", file);
           form.append("deck_id", deck);
-          const res = await fetch("/api/tarot/upload-back-image", {
+          const res = await fetch(new URL("/api/tarot/upload-back-image", getUploadBase()), {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: form
@@ -2178,10 +2249,15 @@
         const file = ev.target.files[0];
         if (!file) return;
         try{
+          if (!isUploadHost()){
+            setStatus("Open upload window to upload files.", "err");
+            openUploadWindow();
+            return;
+          }
           const form = new FormData();
           form.append("file", file);
           form.append("card_id", $("taCardId").value.trim());
-          const res = await fetch("/api/tarot/upload-card-image", {
+          const res = await fetch(new URL("/api/tarot/upload-card-image", getUploadBase()), {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: form
@@ -2202,6 +2278,7 @@
         }
       });
 
+      configureUploadControls();
       loadSettings();
       if (apiKeyEl.value.trim()){
         document.getElementById("loginView").classList.add("hidden");
