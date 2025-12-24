@@ -144,6 +144,9 @@ class DynamicWebServer:
         try:
             return txt.format(**mapping)
         except Exception:
+            # Fallback to simple token replacement for templates with braces.
+            for key, val in (mapping or {}).items():
+                txt = txt.replace("{" + str(key) + "}", str(val))
             return txt
 
     # ---------- CORS ----------

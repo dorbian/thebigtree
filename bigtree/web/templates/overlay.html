@@ -980,7 +980,7 @@
       const uploadBaseConfig = "{UPLOAD_BASE}";
 
       function getUploadBase(){
-        if (uploadBaseConfig){
+        if (uploadBaseConfig && !uploadBaseConfig.startsWith("{")){
           return uploadBaseConfig;
         }
         const base = new URL(window.location.origin);
