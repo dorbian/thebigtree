@@ -798,10 +798,6 @@
               <label for="taCardHouse">House</label>
               <select id="taCardHouse"></select>
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="taPickHouse">Pick random house</button>
-            </div>
           </div>
           <div class="row">
             <div>
@@ -2205,13 +2201,6 @@
         taRenderHouseInfo(ev.target.value);
       });
       $("taRefreshArtists").addEventListener("click", () => loadTarotArtists());
-      $("taPickHouse").addEventListener("click", () => {
-        const pick = taWeightedPick();
-        if (!pick) return;
-        const select = $("taCardHouse");
-        select.value = pick;
-        taRenderHouseInfo(pick);
-      });
       $("taDeckList").addEventListener("click", (ev) => {
         const target = ev.target.closest(".list-card");
         if (!target || !target.dataset.cardId || !window.taDeckData) return;

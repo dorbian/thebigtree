@@ -504,12 +504,15 @@ async def set_back(req: web.Request):
     back = str(body.get("back_image") or body.get("url") or "")
     if not back:
         return _json_error("back_image required")
-    artist_id = body.get("artist_id")
-    if isinstance(artist_id, str):
-        artist_id = artist_id.strip() or None
+    if "artist_id" in body:
+        artist_id = body.get("artist_id")
+        if isinstance(artist_id, str):
+            artist_id = artist_id.strip() or None
+        else:
+            artist_id = None
+        ok = tar.set_deck_back(deck_id, back, artist_id=artist_id)
     else:
-        artist_id = None
-    ok = tar.set_deck_back(deck_id, back, artist_id=artist_id)
+        ok = tar.set_deck_back(deck_id, back)
     if not ok:
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})

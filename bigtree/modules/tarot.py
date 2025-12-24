@@ -214,8 +214,13 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
     if not card_id:
         card_id = name.lower().replace(" ", "_")[:48]
     existing = db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
-    artist_id = (card.get("artist_id") or "").strip() or None
+    if "artist_id" in card:
+        artist_id = (card.get("artist_id") or "").strip() or None
+    else:
+        artist_id = (existing.get("artist_id") or "").strip() or None if existing else None
     artist_links = card.get("artist_links") if isinstance(card.get("artist_links"), dict) else {}
+    if not artist_links and existing and isinstance(existing.get("artist_links"), dict):
+        artist_links = existing.get("artist_links") or {}
     if artist_id:
         try:
             from bigtree.modules import artists

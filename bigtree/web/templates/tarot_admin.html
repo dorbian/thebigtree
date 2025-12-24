@@ -82,6 +82,11 @@
     text-transform:uppercase;
     letter-spacing:.08em;
   }
+  .icon-btn{
+    width:40px;
+    padding:6px;
+    text-align:center;
+  }
   .grid{
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -159,28 +164,15 @@
   </div>
   <div class="row">
     <div>
-      <label for="backImage">Deck back image URL</label>
-      <input id="backImage" placeholder="https://...">
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <button id="saveBack">Save deck back</button>
-    </div>
-  </div>
-  <div class="row">
-    <div>
-      <label for="backUpload">Upload deck back image</label>
-      <input id="backUpload" type="file" accept="image/*">
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <button id="backLibrary">Choose from library</button>
-    </div>
-    <div>
-      <label for="backArtist">Back artist</label>
-      <select id="backArtist"></select>
+      <label>Deck back</label>
+      <div class="row">
+        <button id="backLibrary" class="icon-btn" title="Choose from library">LIB</button>
+        <button id="backArtistPick" class="icon-btn" title="Pick artist">ART</button>
+      </div>
     </div>
   </div>
+  <input id="backImage" type="hidden">
+  <input id="backArtist" type="hidden">
 
   <h2>Add / Update Card</h2>
   <div class="row">
@@ -196,10 +188,6 @@
       <label for="cardHouse">House</label>
       <select id="cardHouse"></select>
     </div>
-    <div>
-      <label>&nbsp;</label>
-      <button id="pickHouse">Pick random house</button>
-    </div>
   </div>
   <div class="row">
     <div>
@@ -213,18 +201,18 @@
       <input id="cardUpload" type="file" accept="image/*">
     </div>
     <div>
-      <label>&nbsp;</label>
-      <button id="cardLibrary">Choose from library</button>
-    </div>
-    <div>
-      <label for="cardArtist">Card artist</label>
-      <select id="cardArtist"></select>
+      <label>Tools</label>
+      <div class="row">
+        <button id="cardLibrary" class="icon-btn" title="Choose from library">LIB</button>
+        <button id="cardArtistPick" class="icon-btn" title="Pick artist">ART</button>
+      </div>
     </div>
     <div>
       <label>House info</label>
       <div class="card" id="houseInfo">Pick a house to see details.</div>
     </div>
   </div>
+  <input id="cardArtist" type="hidden">
   <label for="cardUpright">Upright</label>
   <textarea id="cardUpright" rows="3"></textarea>
   <label for="cardReversed">Reversed</label>
@@ -304,6 +292,29 @@
       <div class="status" id="uploadLibraryStatus">Ready.</div>
     </div>
   </div>
+  <div class="modal" id="artistPickerModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Select Artist</div>
+        <button class="btn-ghost" id="artistPickerClose">Close</button>
+      </div>
+      <div class="row">
+        <div>
+          <label for="artistPickerSelect">Artist</label>
+          <select id="artistPickerSelect"></select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="artistPickerUse">Use artist</button>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="artistPickerClear" class="btn-ghost">Clear</button>
+        </div>
+      </div>
+      <div class="status" id="artistPickerStatus">Pick an artist to apply to the upload.</div>
+    </div>
+  </div>
 
   <div class="deck-picker" id="deckPicker"></div>
   <div class="list" id="deckList"></div>
@@ -344,9 +355,8 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed");
       artistData = data.artists || [];
-      ["backArtist", "cardArtist", "artistSelect"].forEach(id => {
-        const sel = document.getElementById(id);
-        if (!sel) return;
+      const sel = document.getElementById("artistSelect");
+      if (sel){
         sel.innerHTML = "";
         const none = document.createElement("option");
         none.value = "";
@@ -358,7 +368,8 @@
           opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
           sel.appendChild(opt);
         });
-      });
+      }
+      renderArtistPicker();
     }catch(err){
       setStatus(err.message, false);
     }
@@ -377,6 +388,39 @@
 
   function showLibraryModal(show){
     document.getElementById("uploadLibraryModal").classList.toggle("show", !!show);
+  }
+
+  let artistTarget = "card";
+
+  function setArtistPickerStatus(msg, ok){
+    const el = document.getElementById("artistPickerStatus");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = ok ? "#6bd4a2" : "#e07a7a";
+  }
+
+  function renderArtistPicker(){
+    const sel = document.getElementById("artistPickerSelect");
+    if (!sel) return;
+    sel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "(none)";
+    sel.appendChild(none);
+    artistData.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.artist_id || "";
+      opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+      sel.appendChild(opt);
+    });
+  }
+
+  function showArtistPicker(show, target){
+    if (target) artistTarget = target;
+    const modal = document.getElementById("artistPickerModal");
+    if (modal) modal.classList.toggle("show", !!show);
+    setArtistPickerStatus("Pick an artist to apply to the upload.", true);
+    renderArtistPicker();
   }
 
   async function loadLibrary(kind){
@@ -479,11 +523,6 @@
     const id = prompt("New deck id (e.g. elf-classic)") || "";
     if (!id.trim()) return;
     const name = prompt("Deck name (optional)") || "";
-    const backImage = document.getElementById("backImage").value.trim();
-    if (!backImage){
-      setStatus("Pick a deck back before creating a deck.", false);
-      return;
-    }
     try{
       const res = await fetch("/api/tarot/decks", {
         method: "POST",
@@ -495,18 +534,36 @@
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed");
-      const backArtist = document.getElementById("backArtist").value.trim() || undefined;
-      await fetch(`/api/tarot/decks/${encodeURIComponent(id.trim())}/back`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey.value.trim()
-        },
-        body: JSON.stringify({back_image: backImage, artist_id: backArtist})
-      });
       await loadDeckList(id.trim());
-      setStatus("Deck created.", true);
-      await loadDeck();
+      setStatus("Deck created. Pick a back image.", true);
+      librarySelectHandler = async (item) => {
+        const backImage = item.url || "";
+        document.getElementById("backImage").value = backImage;
+        document.getElementById("backArtist").value = item.artist_id || "";
+        try{
+          const res = await fetch(`/api/tarot/decks/${encodeURIComponent(id.trim())}/back`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKey.value.trim()
+            },
+            body: JSON.stringify({
+              back_image: backImage,
+              artist_id: document.getElementById("backArtist").value.trim() || undefined
+            })
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || payload.ok === false){
+            throw new Error(payload.error || "Failed");
+          }
+          await loadDeck();
+          setStatus("Deck back saved.", true);
+        }catch(err){
+          setStatus(err.message, false);
+        }
+      };
+      showLibraryModal(true);
+      loadLibrary("tarot-back");
     }catch(err){
       setStatus(err.message, false);
     }
@@ -579,7 +636,6 @@
         name: document.getElementById("cardName").value.trim(),
         house: document.getElementById("cardHouse").value.trim(),
         image: uploadedImageUrl || undefined,
-        artist_id: document.getElementById("cardArtist").value.trim() || undefined,
         tags,
         upright: document.getElementById("cardUpright").value.trim(),
         reversed: document.getElementById("cardReversed").value.trim(),
@@ -602,33 +658,6 @@
     }
   });
 
-
-  document.getElementById("saveBack").addEventListener("click", async () => {
-    try{
-      const deck = deckId.value.trim() || "elf-classic";
-      const backImage = document.getElementById("backImage").value.trim();
-      if (!backImage){
-        setStatus("Enter a back image URL.", false);
-        return;
-      }
-      const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/back`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey.value.trim()
-        },
-        body: JSON.stringify({
-          back_image: backImage,
-          artist_id: document.getElementById("backArtist").value.trim() || undefined
-        })
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Failed");
-      setStatus("Deck back saved.", true);
-    }catch(err){
-      setStatus(err.message, false);
-    }
-  });
 
   document.getElementById("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
   document.getElementById("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
@@ -670,6 +699,36 @@
     };
     showLibraryModal(true);
     loadLibrary("tarot-card");
+  });
+
+  document.getElementById("backArtistPick").addEventListener("click", () => {
+    showArtistPicker(true, "back");
+  });
+  document.getElementById("cardArtistPick").addEventListener("click", () => {
+    showArtistPicker(true, "card");
+  });
+  document.getElementById("artistPickerClose").addEventListener("click", () => {
+    showArtistPicker(false);
+  });
+  document.getElementById("artistPickerUse").addEventListener("click", () => {
+    const sel = document.getElementById("artistPickerSelect");
+    const picked = sel ? sel.value.trim() : "";
+    if (artistTarget === "back"){
+      document.getElementById("backArtist").value = picked;
+    } else {
+      document.getElementById("cardArtist").value = picked;
+    }
+    setArtistPickerStatus(picked ? "Artist selected." : "Artist cleared.", true);
+    showArtistPicker(false);
+  });
+  document.getElementById("artistPickerClear").addEventListener("click", () => {
+    if (artistTarget === "back"){
+      document.getElementById("backArtist").value = "";
+    } else {
+      document.getElementById("cardArtist").value = "";
+    }
+    setArtistPickerStatus("Artist cleared.", true);
+    showArtistPicker(false);
   });
 
   document.getElementById("artistRefresh").addEventListener("click", loadArtists);
@@ -744,30 +803,6 @@
     }
   });
 
-  document.getElementById("backUpload").addEventListener("change", async (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    try{
-      const deck = deckId.value.trim() || "elf-classic";
-      const form = new FormData();
-      form.append("file", file);
-      form.append("deck_id", deck);
-      const backArtistId = document.getElementById("backArtist").value.trim();
-      if (backArtistId) form.append("artist_id", backArtistId);
-      const res = await fetch("/api/tarot/upload-back-image", {
-        method: "POST",
-        headers: {"X-API-Key": apiKey.value.trim()},
-        body: form
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Failed");
-      document.getElementById("backImage").value = data.url || "";
-      setStatus("Deck back uploaded.", true);
-    }catch(err){
-      setStatus(err.message, false);
-    }
-  });
-
 
   document.getElementById("cardUpload").addEventListener("change", async (ev) => {
     const file = ev.target.files[0];
@@ -807,16 +842,6 @@
     box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
   }
 
-  function weightedPick(){
-    const weights = {roots: 5, canopy: 5, ember: 5, whisper: 5, crown: 1};
-    const pool = [];
-    houseData.forEach(h => {
-      const w = weights[h.id] || 1;
-      for (let i = 0; i < w; i++) pool.push(h.id);
-    });
-    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "";
-  }
-
   async function loadHouses(){
     try{
       const headers = {};
@@ -848,13 +873,6 @@
 
   document.getElementById("cardHouse").addEventListener("change", (ev) => {
     renderHouseInfo(ev.target.value);
-  });
-  document.getElementById("pickHouse").addEventListener("click", () => {
-    const pick = weightedPick();
-    if (!pick) return;
-    const select = document.getElementById("cardHouse");
-    select.value = pick;
-    renderHouseInfo(pick);
   });
 
   loadDeckList();
