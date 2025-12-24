@@ -466,32 +466,30 @@ async def set_back(req: web.Request):
 @route("POST", "/api/tarot/upload-card-image", scopes=["tarot:admin"])
 async def upload_card_image(req: web.Request):
     reader = await req.multipart()
-    file_part = None
     card_id = ""
+    filename_hint = ""
+    data = bytearray()
     while True:
         part = await reader.next()
         if part is None:
             break
         if part.name == "file":
-            file_part = part
+            filename_hint = getattr(part, "filename", "") or ""
+            while True:
+                chunk = await part.read_chunk()
+                if not chunk:
+                    break
+                data.extend(chunk)
         elif part.name == "card_id":
             card_id = (await part.text()).strip()
-    if file_part is None:
+    if not data:
+        _log_upload_context(req, "card", 0)
         return _json_error("file required")
 
     safe_id = _safe_name(card_id) or uuid.uuid4().hex
     filename = f"{safe_id}.png"
     dest = os.path.join(_cards_dir(), filename)
 
-    data = bytearray()
-    while True:
-        chunk = await file_part.read_chunk()
-        if not chunk:
-            break
-        data.extend(chunk)
-    if not data:
-        _log_upload_context(req, "card", 0)
-        return _json_error("empty upload")
     _log_upload_context(req, "card", len(data))
 
     saved = False
@@ -527,7 +525,7 @@ async def upload_card_image(req: web.Request):
         }
         ext = ext_map.get(kind)
         if not ext:
-            raw_name = getattr(file_part, "filename", "") or ""
+            raw_name = filename_hint
             raw_ext = Path(raw_name).suffix.lower()
             alias = {".jpeg": ".jpg", ".jfif": ".jpg"}
             raw_ext = alias.get(raw_ext, raw_ext)
@@ -546,17 +544,24 @@ async def upload_card_image(req: web.Request):
 @route("POST", "/api/tarot/upload-back-image", scopes=["tarot:admin"])
 async def upload_back_image(req: web.Request):
     reader = await req.multipart()
-    file_part = None
     deck_id = ""
+    filename_hint = ""
+    data = bytearray()
     while True:
         part = await reader.next()
         if part is None:
             break
         if part.name == "file":
-            file_part = part
+            filename_hint = getattr(part, "filename", "") or ""
+            while True:
+                chunk = await part.read_chunk()
+                if not chunk:
+                    break
+                data.extend(chunk)
         elif part.name == "deck_id":
             deck_id = (await part.text()).strip()
-    if file_part is None:
+    if not data:
+        _log_upload_context(req, "back", 0)
         return _json_error("file required")
     if not deck_id:
         return _json_error("deck_id required")
@@ -566,15 +571,6 @@ async def upload_back_image(req: web.Request):
     filename = f"{safe_id}_back_{unique}.png"
     dest = os.path.join(_backs_dir(), filename)
 
-    data = bytearray()
-    while True:
-        chunk = await file_part.read_chunk()
-        if not chunk:
-            break
-        data.extend(chunk)
-    if not data:
-        _log_upload_context(req, "back", 0)
-        return _json_error("empty upload")
     _log_upload_context(req, "back", len(data))
 
     saved = False
@@ -610,7 +606,7 @@ async def upload_back_image(req: web.Request):
         }
         ext = ext_map.get(kind)
         if not ext:
-            raw_name = getattr(file_part, "filename", "") or ""
+            raw_name = filename_hint
             raw_ext = Path(raw_name).suffix.lower()
             alias = {".jpeg": ".jpg", ".jfif": ".jpg"}
             raw_ext = alias.get(raw_ext, raw_ext)
