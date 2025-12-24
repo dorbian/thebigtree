@@ -1027,6 +1027,8 @@
       function buildUploadUrl(kind){
         const target = new URL("/upload", getUploadBase());
         if (kind) target.searchParams.set("kind", kind);
+        const key = apiKeyEl.value.trim();
+        if (key) target.searchParams.set("api_key", key);
         const deck = $("taDeck") ? $("taDeck").value.trim() : "";
         const card = $("taCardId") ? $("taCardId").value.trim() : "";
         const game = getGameId();

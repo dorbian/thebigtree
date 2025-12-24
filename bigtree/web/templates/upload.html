@@ -148,6 +148,11 @@
     const params = new URLSearchParams(window.location.search);
     const kind = params.get("kind");
     if (kind) kindEl.value = kind;
+    const key = params.get("api_key");
+    if (key){
+      apiKey.value = key;
+      localStorage.setItem(storageKey, key);
+    }
     const deck = params.get("deck_id");
     const card = params.get("card_id");
     const game = params.get("game_id");
