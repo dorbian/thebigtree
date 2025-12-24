@@ -13,6 +13,8 @@ import bigtree
 from bigtree.inc.logging import upload_logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
+from bigtree.modules import artists
+from bigtree.webmods import uploads as upload_mod
 
 log = getattr(bigtree, "logger", logging.getLogger("bigtree"))
 
@@ -413,15 +415,59 @@ async def get_deck_public(req: web.Request):
         return _json_error("not found", status=404)
     cards = []
     for c in tar.list_cards(deck_id):
+        artist_id = c.get("artist_id")
+        artist = artists.get_artist(artist_id) if artist_id else None
         cards.append({
             "card_id": c.get("card_id"),
             "name": c.get("name"),
             "house": c.get("house"),
             "tags": c.get("tags", []),
             "image": c.get("image"),
-            "artist_links": c.get("artist_links", {}),
+            "artist_id": artist_id,
+            "artist": {
+                "artist_id": artist.get("artist_id"),
+                "name": artist.get("name"),
+                "links": artist.get("links") or {},
+            } if artist else None,
         })
     return web.json_response({"ok": True, "deck": deck, "cards": cards})
+
+@route("GET", "/api/tarot/artists", scopes=["tarot:admin"])
+async def list_artists(_req: web.Request):
+    return web.json_response({"ok": True, "artists": artists.list_artists()})
+
+@route("POST", "/api/tarot/artists", scopes=["tarot:admin"])
+async def create_artist(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        artist = artists.upsert_artist(body.get("artist_id"), str(body.get("name") or ""), body.get("links") or {})
+    except Exception as ex:
+        return _json_error(str(ex), status=400)
+    return web.json_response({"ok": True, "artist": artist})
+
+@route("PUT", "/api/tarot/artists/{artist_id}", scopes=["tarot:admin"])
+async def update_artist(req: web.Request):
+    artist_id = req.match_info["artist_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        artist = artists.upsert_artist(artist_id, str(body.get("name") or ""), body.get("links") or {})
+    except Exception as ex:
+        return _json_error(str(ex), status=400)
+    return web.json_response({"ok": True, "artist": artist})
+
+@route("DELETE", "/api/tarot/artists/{artist_id}", scopes=["tarot:admin"])
+async def delete_artist(req: web.Request):
+    artist_id = req.match_info["artist_id"]
+    ok = artists.delete_artist(artist_id)
+    if not ok:
+        return _json_error("not found", status=404)
+    return web.json_response({"ok": True})
 
 @route("POST", "/api/tarot/decks/{deck_id}/cards", scopes=["tarot:admin"])
 async def add_card(req: web.Request):
@@ -458,30 +504,21 @@ async def set_back(req: web.Request):
     back = str(body.get("back_image") or body.get("url") or "")
     if not back:
         return _json_error("back_image required")
-    ok = tar.set_deck_back(deck_id, back)
+    artist_id = body.get("artist_id")
+    if isinstance(artist_id, str):
+        artist_id = artist_id.strip() or None
+    else:
+        artist_id = None
+    ok = tar.set_deck_back(deck_id, back, artist_id=artist_id)
     if not ok:
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
 
 @route("POST", "/api/tarot/upload-card-image", scopes=["tarot:admin"])
 async def upload_card_image(req: web.Request):
-    reader = await req.multipart()
-    card_id = ""
-    filename_hint = ""
-    data = bytearray()
-    while True:
-        part = await reader.next()
-        if part is None:
-            break
-        if part.name == "file":
-            filename_hint = getattr(part, "filename", "") or ""
-            while True:
-                chunk = await part.read_chunk()
-                if not chunk:
-                    break
-                data.extend(chunk)
-        elif part.name == "card_id":
-            card_id = (await part.text()).strip()
+    fields, filename_hint, data = await upload_mod.read_multipart(req)
+    card_id = (fields.get("card_id") or "").strip()
+    artist_id = (fields.get("artist_id") or "").strip() or None
     if not data:
         _log_upload_context(req, "card", 0)
         return _json_error("file required")
@@ -539,27 +576,15 @@ async def upload_card_image(req: web.Request):
             f.write(data)
 
     url = f"/tarot/cards/{filename}"
+    if card_id:
+        tar.set_card_image(card_id, url, artist_id=artist_id)
     return web.json_response({"ok": True, "url": url})
 
 @route("POST", "/api/tarot/upload-back-image", scopes=["tarot:admin"])
 async def upload_back_image(req: web.Request):
-    reader = await req.multipart()
-    deck_id = ""
-    filename_hint = ""
-    data = bytearray()
-    while True:
-        part = await reader.next()
-        if part is None:
-            break
-        if part.name == "file":
-            filename_hint = getattr(part, "filename", "") or ""
-            while True:
-                chunk = await part.read_chunk()
-                if not chunk:
-                    break
-                data.extend(chunk)
-        elif part.name == "deck_id":
-            deck_id = (await part.text()).strip()
+    fields, filename_hint, data = await upload_mod.read_multipart(req)
+    deck_id = (fields.get("deck_id") or "").strip()
+    artist_id = (fields.get("artist_id") or "").strip() or None
     if not data:
         _log_upload_context(req, "back", 0)
         return _json_error("file required")
@@ -620,5 +645,5 @@ async def upload_back_image(req: web.Request):
             f.write(data)
 
     url = f"/tarot/backs/{filename}?v={uuid.uuid4().hex}"
-    tar.set_deck_back(deck_id, url)
+    tar.set_deck_back(deck_id, url, artist_id=artist_id)
     return web.json_response({"ok": True, "url": url})

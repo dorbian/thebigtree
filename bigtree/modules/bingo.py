@@ -605,6 +605,23 @@ def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     db.update(g, doc_ids=[g.doc_id])
     return True, dest
 
+def delete_background(game_id: str) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    path = g.get("background_path")
+    if not path:
+        return False, "No background set."
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        return False, "Failed to delete background."
+    g["background_path"] = None
+    db = _open(game_id)
+    db.update(g, doc_ids=[g.doc_id])
+    return True, "OK"
+
 # -------- admin helpers --------
 def list_games() -> List[Dict[str, Any]]:
     _ensure_dirs()

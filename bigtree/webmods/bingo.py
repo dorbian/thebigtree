@@ -293,25 +293,16 @@ async def bingo_end(req: web.Request):
 # ---- Background upload (multipart/form-data) ----
 @route("POST", "/bingo/upload-bg", scopes=["bingo:admin"])
 async def bingo_upload_bg(req: web.Request):
-    reader = await req.multipart()
-    game_id, tmpfile, filename = None, None, "bg.png"
+    from bigtree.webmods import uploads as upload_mod
     import tempfile, os
+    fields, filename, data = await upload_mod.read_multipart(req)
+    game_id = (fields.get("game_id") or "").strip()
+    if not game_id or not data:
+        return web.json_response({"ok": False, "error": "game_id and file are required"}, status=400)
     with tempfile.TemporaryDirectory() as td:
-        while True:
-            part = await reader.next()
-            if part is None: break
-            if part.name == "game_id":
-                game_id = (await part.text()).strip()
-            elif part.name == "file":
-                filename = part.filename or filename
-                tmpfile = os.path.join(td, filename)
-                with open(tmpfile, "wb") as f:
-                    while True:
-                        chunk = await part.read_chunk()
-                        if not chunk: break
-                        f.write(chunk)
-        if not game_id or not tmpfile:
-            return web.json_response({"ok": False, "error": "game_id and file are required"}, status=400)
+        tmpfile = os.path.join(td, filename or "bg.png")
+        with open(tmpfile, "wb") as f:
+            f.write(data)
         ok, msg = bingo.save_background(game_id, tmpfile)
         if not ok: return web.json_response({"ok": False, "error": msg}, status=400)
     return web.json_response({"ok": True})

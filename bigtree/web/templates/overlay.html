@@ -777,6 +777,10 @@
               <label>&nbsp;</label>
               <button class="btn-ghost" id="taBackLibrary">Choose from library</button>
             </div>
+            <div>
+              <label for="taBackArtist">Back artist</label>
+              <select id="taBackArtist"></select>
+            </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
 
@@ -815,6 +819,10 @@
               <button class="btn-ghost" id="taCardLibrary">Choose from library</button>
             </div>
             <div>
+              <label for="taCardArtist">Card artist</label>
+              <select id="taCardArtist"></select>
+            </div>
+            <div>
               <label>House info</label>
               <div class="list" id="taHouseInfo">Pick a house to see details.</div>
             </div>
@@ -839,29 +847,15 @@
             </div>
           </div>
 
-          <h3>Artist Links</h3>
+          <h3>Artists</h3>
           <div class="row">
             <div>
-              <label for="taArtistInstagram">Instagram</label>
-              <input id="taArtistInstagram" placeholder="https://instagram.com/...">
+              <label for="taArtistSelect">Artist list</label>
+              <select id="taArtistSelect"></select>
             </div>
             <div>
-              <label for="taArtistBluesky">Bluesky</label>
-              <input id="taArtistBluesky" placeholder="https://bsky.app/profile/...">
-            </div>
-            <div>
-              <label for="taArtistX">X / Twitter</label>
-              <input id="taArtistX" placeholder="https://x.com/...">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="taArtistArtstation">ArtStation</label>
-              <input id="taArtistArtstation" placeholder="https://artstation.com/...">
-            </div>
-            <div>
-              <label for="taArtistWebsite">Website</label>
-              <input id="taArtistWebsite" placeholder="https://...">
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="taRefreshArtists">Refresh artists</button>
             </div>
           </div>
           <div class="row">
@@ -1047,8 +1041,39 @@
               }
               showLibraryModal(false);
             });
+            const meta = document.createElement("div");
+            meta.className = "muted";
+            meta.style.padding = "0 8px 8px";
+            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : (item.name || "");
+            const del = document.createElement("button");
+            del.className = "btn-ghost";
+            del.style.margin = "0 8px 8px";
+            del.textContent = "Delete";
+            del.addEventListener("click", async () => {
+              if (!confirm("Delete this file? This cannot be undone.")) return;
+              try{
+                let delUrl = "";
+                if (libraryKind === "tarot-back"){
+                  delUrl = "/api/uploads/tarot/backs/" + encodeURIComponent(item.name || "");
+                } else if (libraryKind === "tarot-card"){
+                  delUrl = "/api/uploads/tarot/cards/" + encodeURIComponent(item.name || "");
+                } else if (libraryKind === "bingo-bg"){
+                  delUrl = "/api/uploads/bingo/backgrounds/" + encodeURIComponent(item.game_id || "");
+                }
+                const res = await fetch(delUrl, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.ok === false){
+                  throw new Error(data.error || "Delete failed");
+                }
+                await loadLibrary(libraryKind);
+              }catch(err){
+                setLibraryStatus(err.message, "err");
+              }
+            });
             card.appendChild(img);
             card.appendChild(btn);
+            card.appendChild(meta);
+            card.appendChild(del);
             grid.appendChild(card);
           });
           setLibraryStatus("Pick an image.", "ok");
@@ -1659,11 +1684,15 @@
           const deck = $("taDeck").value.trim() || "elf-classic";
           const backImage = item.url || "";
           $("taBackImage").value = backImage;
+          if ($("taBackArtist")) $("taBackArtist").value = item.artist_id || "";
           try{
             await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
               method:"PUT",
               headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({back_image: backImage})
+              body: JSON.stringify({
+                back_image: backImage,
+                artist_id: $("taBackArtist") ? $("taBackArtist").value.trim() || undefined : undefined
+              })
             }, true);
             if (window.taDeckData && window.taDeckData.deck){
               window.taDeckData.deck.back_image = backImage;
@@ -1681,6 +1710,7 @@
       $("taCardLibrary").addEventListener("click", () => {
         librarySelectHandler = (item) => {
           window.taUploadedImageUrl = item.url || "";
+          if ($("taCardArtist")) $("taCardArtist").value = item.artist_id || "";
           if (window.taDeckData && window.taDeckData.cards){
             const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
             if (card){
@@ -2091,11 +2121,9 @@
         $("taCardTags").value = (card.tags || []).join(", ");
         $("taCardUpright").value = card.upright || "";
         $("taCardReversed").value = card.reversed || "";
-        $("taArtistInstagram").value = (card.artist_links && card.artist_links.instagram) || "";
-        $("taArtistBluesky").value = (card.artist_links && card.artist_links.bluesky) || "";
-        $("taArtistX").value = (card.artist_links && card.artist_links.x) || "";
-        $("taArtistArtstation").value = (card.artist_links && card.artist_links.artstation) || "";
-        $("taArtistWebsite").value = (card.artist_links && card.artist_links.website) || "";
+        const artistId = card.artist_id || "";
+        if ($("taCardArtist")) $("taCardArtist").value = artistId;
+        if ($("taArtistSelect")) $("taArtistSelect").value = artistId;
         window.taUploadedImageUrl = card.image || "";
         taRenderHouseInfo(card.house || "");
         taRenderPreviews(card);
@@ -2148,9 +2176,35 @@
         }
       }
 
+      async function loadTarotArtists(){
+        try{
+          const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
+          const artists = data.artists || [];
+          const selects = ["taBackArtist", "taCardArtist", "taArtistSelect"];
+          selects.forEach(id => {
+            const sel = $(id);
+            if (!sel) return;
+            sel.innerHTML = "";
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = "(none)";
+            sel.appendChild(none);
+            artists.forEach(a => {
+              const opt = document.createElement("option");
+              opt.value = a.artist_id || "";
+              opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+              sel.appendChild(opt);
+            });
+          });
+        }catch(err){
+          setStatus("Failed to load artists.", "err");
+        }
+      }
+
       $("taCardHouse").addEventListener("change", (ev) => {
         taRenderHouseInfo(ev.target.value);
       });
+      $("taRefreshArtists").addEventListener("click", () => loadTarotArtists());
       $("taPickHouse").addEventListener("click", () => {
         const pick = taWeightedPick();
         if (!pick) return;
@@ -2173,6 +2227,7 @@
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
           $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
+          if ($("taBackArtist")) $("taBackArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
           taRenderPreviews(null);
           setStatus("Deck loaded.", "ok");
         }catch(err){
@@ -2226,7 +2281,10 @@
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
             method:"PUT",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({back_image: backImage})
+            body: JSON.stringify({
+              back_image: backImage,
+              artist_id: $("taBackArtist") ? $("taBackArtist").value.trim() || undefined : undefined
+            })
           }, true);
           if (window.taDeckData && window.taDeckData.deck){
             window.taDeckData.deck.back_image = backImage;
@@ -2246,6 +2304,8 @@
           const form = new FormData();
           form.append("file", file);
           form.append("deck_id", deck);
+          const artistId = $("taBackArtist") ? $("taBackArtist").value.trim() : "";
+          if (artistId) form.append("artist_id", artistId);
           const res = await fetch("/api/tarot/upload-back-image", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
@@ -2273,16 +2333,11 @@
             name: $("taCardName").value.trim(),
             house: $("taCardHouse").value.trim(),
             image: window.taUploadedImageUrl || undefined,
+            artist_id: $("taCardArtist") ? $("taCardArtist").value.trim() || undefined : undefined,
             tags,
             upright: $("taCardUpright").value.trim(),
             reversed: $("taCardReversed").value.trim(),
-            artist_links: {
-              instagram: $("taArtistInstagram").value.trim(),
-              bluesky: $("taArtistBluesky").value.trim(),
-              x: $("taArtistX").value.trim(),
-              artstation: $("taArtistArtstation").value.trim(),
-              website: $("taArtistWebsite").value.trim()
-            }
+            artist_links: undefined
           };
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
             method:"POST",
@@ -2297,11 +2352,7 @@
           $("taCardTags").value = "";
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
-          $("taArtistInstagram").value = "";
-          $("taArtistBluesky").value = "";
-          $("taArtistX").value = "";
-          $("taArtistArtstation").value = "";
-          $("taArtistWebsite").value = "";
+          if ($("taCardArtist")) $("taCardArtist").value = "";
           taSelectedCardId = body.card_id || "";
           await $("taLoadDeck").click();
         }catch(err){
@@ -2334,6 +2385,8 @@
           const form = new FormData();
           form.append("file", file);
           form.append("card_id", $("taCardId").value.trim());
+          const artistId = $("taCardArtist") ? $("taCardArtist").value.trim() : "";
+          if (artistId) form.append("artist_id", artistId);
           const res = await fetch("/api/tarot/upload-card-image", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
@@ -2366,6 +2419,7 @@
         loadTarotSessionDecks();
         loadTarotSessions();
         loadTarotHouses();
+        loadTarotArtists();
       }
       renderCard(null, [], "BING");
     </script>

@@ -154,6 +154,10 @@
       <label>&nbsp;</label>
       <button id="backLibrary">Choose from library</button>
     </div>
+    <div>
+      <label for="backArtist">Back artist</label>
+      <select id="backArtist"></select>
+    </div>
   </div>
 
   <h2>Add / Update Card</h2>
@@ -191,6 +195,10 @@
       <button id="cardLibrary">Choose from library</button>
     </div>
     <div>
+      <label for="cardArtist">Card artist</label>
+      <select id="cardArtist"></select>
+    </div>
+    <div>
       <label>House info</label>
       <div class="card" id="houseInfo">Pick a house to see details.</div>
     </div>
@@ -200,7 +208,27 @@
   <label for="cardReversed">Reversed</label>
   <textarea id="cardReversed" rows="3"></textarea>
 
-  <h3>Artist Links</h3>
+  <h3>Artists</h3>
+  <div class="row">
+    <div>
+      <label for="artistSelect">Artist list</label>
+      <select id="artistSelect"></select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="artistRefresh" class="btn-ghost">Refresh artists</button>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="artistId">Artist ID (optional)</label>
+      <input id="artistId" placeholder="artist_id">
+    </div>
+    <div>
+      <label for="artistName">Name</label>
+      <input id="artistName" placeholder="Artist name">
+    </div>
+  </div>
   <div class="row">
     <div>
       <label for="artistInstagram">Instagram</label>
@@ -223,6 +251,16 @@
     <div>
       <label for="artistWebsite">Website</label>
       <input id="artistWebsite" placeholder="https://...">
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label>&nbsp;</label>
+      <button id="artistSave">Save artist</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="artistDelete" class="btn-ghost">Delete artist</button>
     </div>
   </div>
 
@@ -256,6 +294,7 @@
   const storageKey = "bt_api_key";
   let uploadedImageUrl = "";
   let houseData = [];
+  let artistData = [];
 
   apiKey.value = localStorage.getItem(storageKey) || "";
   apiKey.addEventListener("input", () => {
@@ -267,6 +306,38 @@
   function setStatus(msg, ok){
     status.textContent = msg;
     status.style.color = ok ? "#6bd4a2" : "#e07a7a";
+  }
+
+  async function loadArtists(){
+    try{
+      const res = await fetch("/api/tarot/artists", {
+        headers: {"X-API-Key": apiKey.value.trim()}
+      });
+      if (res.status === 401){
+        setStatus("Unauthorized. Enter API key.", false);
+        return;
+      }
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      artistData = data.artists || [];
+      ["backArtist", "cardArtist", "artistSelect"].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = "";
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = "(none)";
+        sel.appendChild(none);
+        artistData.forEach(a => {
+          const opt = document.createElement("option");
+          opt.value = a.artist_id || "";
+          opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+          sel.appendChild(opt);
+        });
+      });
+    }catch(err){
+      setStatus(err.message, false);
+    }
   }
 
   // Uploads are handled directly on this page.
@@ -319,8 +390,32 @@
           }
           showLibraryModal(false);
         });
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        meta.style.padding = "0 8px 8px";
+        meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : (item.name || "");
+        const del = document.createElement("button");
+        del.textContent = "Delete";
+        del.addEventListener("click", async () => {
+          if (!confirm("Delete this file? This cannot be undone.")) return;
+          try{
+            const delUrl = kind === "tarot-back"
+              ? "/api/uploads/tarot/backs/" + encodeURIComponent(item.name || "")
+              : "/api/uploads/tarot/cards/" + encodeURIComponent(item.name || "");
+            const res = await fetch(delUrl, {method: "DELETE", headers: {"X-API-Key": apiKey.value.trim()}});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false){
+              throw new Error(data.error || "Delete failed");
+            }
+            await loadLibrary(kind);
+          }catch(err){
+            setLibraryStatus(err.message, false);
+          }
+        });
         card.appendChild(img);
         card.appendChild(btn);
+        card.appendChild(meta);
+        card.appendChild(del);
         grid.appendChild(card);
       });
       setLibraryStatus("Pick an image.", true);
@@ -345,6 +440,7 @@
         return `<div class="card"><strong>${c.name}</strong> <span class="muted">(${c.card_id})</span><br><span class="muted">${c.house || ""}</span></div>`;
       }).join("");
       document.getElementById("backImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
+      document.getElementById("backArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
       if (!deckId.options.length || !deckId.querySelector(`option[value="${deckId.value}"]`)) {
         await loadDeckList(deck);
       }
@@ -413,16 +509,11 @@
         name: document.getElementById("cardName").value.trim(),
         house: document.getElementById("cardHouse").value.trim(),
         image: uploadedImageUrl || undefined,
+        artist_id: document.getElementById("cardArtist").value.trim() || undefined,
         tags,
         upright: document.getElementById("cardUpright").value.trim(),
         reversed: document.getElementById("cardReversed").value.trim(),
-        artist_links: {
-          instagram: document.getElementById("artistInstagram").value.trim(),
-          bluesky: document.getElementById("artistBluesky").value.trim(),
-          x: document.getElementById("artistX").value.trim(),
-          artstation: document.getElementById("artistArtstation").value.trim(),
-          website: document.getElementById("artistWebsite").value.trim()
-        }
+        artist_links: undefined
       };
       const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/cards`, {
         method: "POST",
@@ -477,7 +568,10 @@
           "Content-Type": "application/json",
           "X-API-Key": apiKey.value.trim()
         },
-        body: JSON.stringify({back_image: backImage})
+        body: JSON.stringify({
+          back_image: backImage,
+          artist_id: document.getElementById("backArtist").value.trim() || undefined
+        })
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed");
@@ -494,6 +588,7 @@
       const deck = deckId.value.trim() || "elf-classic";
       const backImage = item.url || "";
       document.getElementById("backImage").value = backImage;
+      document.getElementById("backArtist").value = item.artist_id || "";
       try{
         const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/back`, {
           method: "PUT",
@@ -501,7 +596,10 @@
             "Content-Type": "application/json",
             "X-API-Key": apiKey.value.trim()
           },
-          body: JSON.stringify({back_image: backImage})
+          body: JSON.stringify({
+            back_image: backImage,
+            artist_id: document.getElementById("backArtist").value.trim() || undefined
+          })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false){
@@ -518,10 +616,83 @@
   document.getElementById("cardLibrary").addEventListener("click", () => {
     librarySelectHandler = (item) => {
       uploadedImageUrl = item.url || "";
+      document.getElementById("cardArtist").value = item.artist_id || "";
       setStatus("Card image selected from library.", true);
     };
     showLibraryModal(true);
     loadLibrary("tarot-card");
+  });
+
+  document.getElementById("artistRefresh").addEventListener("click", loadArtists);
+  document.getElementById("artistSelect").addEventListener("change", (ev) => {
+    const pick = artistData.find(a => a.artist_id === ev.target.value);
+    if (!pick) return;
+    document.getElementById("artistId").value = pick.artist_id || "";
+    document.getElementById("artistName").value = pick.name || "";
+    const links = pick.links || {};
+    document.getElementById("artistInstagram").value = links.instagram || "";
+    document.getElementById("artistBluesky").value = links.bluesky || "";
+    document.getElementById("artistX").value = links.x || "";
+    document.getElementById("artistArtstation").value = links.artstation || "";
+    document.getElementById("artistWebsite").value = links.website || "";
+  });
+  document.getElementById("artistSave").addEventListener("click", async () => {
+    try{
+      const body = {
+        artist_id: document.getElementById("artistId").value.trim() || undefined,
+        name: document.getElementById("artistName").value.trim(),
+        links: {
+          instagram: document.getElementById("artistInstagram").value.trim(),
+          bluesky: document.getElementById("artistBluesky").value.trim(),
+          x: document.getElementById("artistX").value.trim(),
+          artstation: document.getElementById("artistArtstation").value.trim(),
+          website: document.getElementById("artistWebsite").value.trim()
+        }
+      };
+      const res = await fetch("/api/tarot/artists", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey.value.trim()
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      await loadArtists();
+      setStatus("Artist saved.", true);
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  });
+  document.getElementById("artistDelete").addEventListener("click", async () => {
+    const artistId = document.getElementById("artistId").value.trim();
+    if (!artistId){
+      setStatus("Select an artist to delete.", false);
+      return;
+    }
+    if (!confirm("Delete this artist? Cards will keep the artist_id but links will no longer resolve.")){
+      return;
+    }
+    try{
+      const res = await fetch("/api/tarot/artists/" + encodeURIComponent(artistId), {
+        method: "DELETE",
+        headers: {"X-API-Key": apiKey.value.trim()}
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      document.getElementById("artistId").value = "";
+      document.getElementById("artistName").value = "";
+      document.getElementById("artistInstagram").value = "";
+      document.getElementById("artistBluesky").value = "";
+      document.getElementById("artistX").value = "";
+      document.getElementById("artistArtstation").value = "";
+      document.getElementById("artistWebsite").value = "";
+      await loadArtists();
+      setStatus("Artist deleted.", true);
+    }catch(err){
+      setStatus(err.message, false);
+    }
   });
 
   document.getElementById("backUpload").addEventListener("change", async (ev) => {
@@ -532,6 +703,8 @@
       const form = new FormData();
       form.append("file", file);
       form.append("deck_id", deck);
+      const backArtistId = document.getElementById("backArtist").value.trim();
+      if (backArtistId) form.append("artist_id", backArtistId);
       const res = await fetch("/api/tarot/upload-back-image", {
         method: "POST",
         headers: {"X-API-Key": apiKey.value.trim()},
@@ -555,6 +728,8 @@
       const form = new FormData();
       form.append("file", file);
       form.append("card_id", document.getElementById("cardId").value.trim());
+      const cardArtistId = document.getElementById("cardArtist").value.trim();
+      if (cardArtistId) form.append("artist_id", cardArtistId);
       const res = await fetch("/api/tarot/upload-card-image", {
         method: "POST",
         headers: {"X-API-Key": apiKey.value.trim()},
@@ -635,4 +810,5 @@
 
   loadDeckList();
   loadHouses();
+  loadArtists();
 </script>

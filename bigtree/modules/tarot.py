@@ -189,7 +189,7 @@ def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
     db = _db_decks(); q = Query()
     return db.get((q._type == "deck") & (q.deck_id == deck_id))
 
-def set_deck_back(deck_id: str, back_image: str) -> bool:
+def set_deck_back(deck_id: str, back_image: str, artist_id: Optional[str] = None) -> bool:
     db = _db_decks(); q = Query()
     deck = get_deck(deck_id)
     if not deck:
@@ -198,6 +198,8 @@ def set_deck_back(deck_id: str, back_image: str) -> bool:
     if not deck:
         return False
     deck["back_image"] = back_image
+    if artist_id is not None:
+        deck["back_artist_id"] = artist_id or None
     db.update(deck, (q._type == "deck") & (q.deck_id == deck_id))
     return True
 
@@ -212,7 +214,16 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
     if not card_id:
         card_id = name.lower().replace(" ", "_")[:48]
     existing = db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+    artist_id = (card.get("artist_id") or "").strip() or None
     artist_links = card.get("artist_links") if isinstance(card.get("artist_links"), dict) else {}
+    if artist_id:
+        try:
+            from bigtree.modules import artists
+            artist = artists.get_artist(artist_id)
+            if artist and isinstance(artist.get("links"), dict):
+                artist_links = artist.get("links") or {}
+        except Exception:
+            pass
     if not artist_links:
         artist_links = {
             "instagram": card.get("artist_instagram"),
@@ -236,6 +247,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "reversed": (card.get("reversed") or "").strip(),
         "tags": card.get("tags") if isinstance(card.get("tags"), list) else [],
         "image": (card.get("image") or card.get("image_url") or "").strip(),
+        "artist_id": artist_id,
         "artist_links": cleaned_links,
         "updated_at": _now(),
     }
@@ -251,9 +263,50 @@ def list_cards(deck_id: str) -> List[Dict[str, Any]]:
     db = _db_decks(); q = Query()
     return db.search((q._type == "card") & (q.deck_id == deck_id))
 
+def clear_image_references(image_url: str) -> int:
+    """Remove image/back references pointing at the given URL (ignores query)."""
+    target = (image_url or "").split("?", 1)[0]
+    if not target:
+        return 0
+    db = _db_decks(); q = Query()
+    updated = 0
+    for card in db.search(q._type == "card"):
+        img = (card.get("image") or "").split("?", 1)[0]
+        if img and img == target:
+            card["image"] = ""
+            db.update(card, (q._type == "card") & (q.deck_id == card.get("deck_id")) & (q.card_id == card.get("card_id")))
+            updated += 1
+    for deck in db.search(q._type == "deck"):
+        back = (deck.get("back_image") or "").split("?", 1)[0]
+        if back and back == target:
+            deck["back_image"] = None
+            db.update(deck, (q._type == "deck") & (q.deck_id == deck.get("deck_id")))
+            updated += 1
+    return updated
+
 def get_card(deck_id: str, card_id: str) -> Optional[Dict[str, Any]]:
     db = _db_decks(); q = Query()
     return db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+
+def set_card_image(card_id: str, image: str, artist_id: Optional[str] = None) -> bool:
+    """Update card image (and artist_id) by card_id across decks."""
+    db = _db_decks(); q = Query()
+    card = db.get((q._type == "card") & (q.card_id == card_id))
+    if not card:
+        return False
+    card["image"] = image
+    if artist_id is not None:
+        card["artist_id"] = artist_id or None
+        # refresh artist_links if we can resolve it
+        try:
+            from bigtree.modules import artists
+            artist = artists.get_artist(artist_id) if artist_id else None
+            if artist and isinstance(artist.get("links"), dict):
+                card["artist_links"] = artist.get("links") or {}
+        except Exception:
+            pass
+    db.update(card, (q._type == "card") & (q.deck_id == card.get("deck_id")) & (q.card_id == card_id))
+    return True
 
 # -------- Sessions --------
 def list_sessions() -> List[Dict[str, Any]]:
