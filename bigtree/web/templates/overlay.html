@@ -127,6 +127,60 @@
         background:rgba(60,207,142,.18);
         border:1px solid rgba(60,207,142,.4);
       }
+      .sidebar{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .sidebar-body{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        flex:1;
+      }
+      .sidebar-footer{
+        display:flex;
+        gap:10px;
+        justify-content:space-between;
+        align-items:center;
+        margin-top:8px;
+      }
+      .menu-icon{
+        width:44px;
+        height:44px;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(15,30,22,.9);
+        color:var(--ink);
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        cursor:pointer;
+      }
+      .menu-icon.active{
+        border-color:rgba(157,224,125,.6);
+        background:rgba(60,207,142,.18);
+        color:var(--accent);
+      }
+      .menu-icon svg{
+        width:20px;
+        height:20px;
+        fill:currentColor;
+      }
+      .icon-btn{
+        width:44px;
+        height:44px;
+        padding:6px;
+        border-radius:12px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+      }
+      .icon-btn svg{
+        width:20px;
+        height:20px;
+        fill:currentColor;
+      }
       .menu-sub{
         margin-left:12px;
         border-left:1px dashed rgba(255,255,255,.08);
@@ -524,34 +578,48 @@
 
     <div class="app-shell hidden" id="appView">
       <aside class="sidebar">
-        <div class="brand">Forest Management</div>
-        <h3>Menu</h3>
-        <div class="menu-item active" id="menuBingo">
-          <span>Bingo</span>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-              </svg>
-            </button>
-            <button class="menu-refresh" id="menuCreateGame" title="Create game" aria-label="Create game">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
-              </svg>
-            </button>
+        <div class="sidebar-body">
+          <div class="brand">Forest Management</div>
+          <h3>Menu</h3>
+          <div class="menu-item active" id="menuBingo">
+            <span>Bingo</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                </svg>
+              </button>
+              <button class="menu-refresh" id="menuCreateGame" title="Create game" aria-label="Create game">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
+                </svg>
+              </button>
+            </div>
           </div>
+          <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
+          <div class="menu-sub" id="menuGames"></div>
+          <div class="hidden" id="menuCreateGamePlaceholder"></div>
+          <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
+          <div class="menu-item" id="menuTarotAdmin">Tarot Games</div>
+          <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
+          <label class="toggle" style="margin-top:12px">
+            <input type="checkbox" id="overlayMode">
+            Overlay mode
+          </label>
+          <div class="status" id="status">Ready.</div>
         </div>
-        <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
-        <div class="menu-sub" id="menuGames"></div>
-        <div class="hidden" id="menuCreateGamePlaceholder"></div>
-        <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
-        <div class="menu-item" id="menuTarotAdmin">Tarot Games</div>
-        <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
-        <label class="toggle" style="margin-top:12px">
-          <input type="checkbox" id="overlayMode">
-          Overlay mode
-        </label>
-        <div class="status" id="status">Ready.</div>
+        <div class="sidebar-footer">
+          <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+            </svg>
+          </button>
+          <button class="menu-icon" id="menuArtists" title="Artist index" aria-label="Artist index">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
+            </svg>
+          </button>
+        </div>
       </aside>
       <main class="content">
       <div class="grid">
@@ -759,28 +827,16 @@
           </div>
           <div class="row">
             <div>
-              <label for="taBackImage">Deck back image URL</label>
-              <input id="taBackImage" placeholder="https://...">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taSaveBack">Save deck back</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="taBackUpload">Upload deck back image</label>
-              <input id="taBackUpload" type="file" accept="image/*">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taBackLibrary">Choose from library</button>
-            </div>
-            <div>
-              <label for="taBackArtist">Back artist</label>
-              <select id="taBackArtist"></select>
+              <label>Deck back</label>
+              <button class="btn-ghost icon-btn" id="taBackLibrary" title="Choose from library">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                </svg>
+              </button>
             </div>
           </div>
+          <input id="taBackImage" type="hidden">
+          <input id="taBackArtist" type="hidden">
           <div class="list" id="taDeckList">No deck loaded.</div>
 
           <h3>Add / Update Card</h3>
@@ -806,22 +862,19 @@
           </div>
           <div class="row">
             <div>
-              <label for="taCardUpload">Upload image</label>
-              <input id="taCardUpload" type="file" accept="image/*">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taCardLibrary">Choose from library</button>
-            </div>
-            <div>
-              <label for="taCardArtist">Card artist</label>
-              <select id="taCardArtist"></select>
+              <label>Card image</label>
+              <button class="btn-ghost icon-btn" id="taCardLibrary" title="Choose from library">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                </svg>
+              </button>
             </div>
             <div>
               <label>House info</label>
               <div class="list" id="taHouseInfo">Pick a house to see details.</div>
             </div>
           </div>
+          <input id="taCardArtist" type="hidden">
           <div class="row">
             <div>
               <label>Card preview</label>
@@ -842,21 +895,131 @@
             </div>
           </div>
 
-          <h3>Artists</h3>
-          <div class="row">
-            <div>
-              <label for="taArtistSelect">Artist list</label>
-              <select id="taArtistSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taRefreshArtists">Refresh artists</button>
-            </div>
-          </div>
           <div class="row">
             <div>
               <label>&nbsp;</label>
               <button id="taSaveCard">Save card</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="mediaPanel">
+          <h2>Media Management</h2>
+          <p>Upload images and assign artists.</p>
+
+          <h3>Tarot card image</h3>
+          <div class="row">
+            <div>
+              <label for="mediaCardId">Card ID (optional)</label>
+              <input id="mediaCardId" placeholder="candlecap_sprite">
+            </div>
+            <div>
+              <label for="mediaCardFile">Image file</label>
+              <input id="mediaCardFile" type="file" accept="image/*">
+            </div>
+            <div>
+              <label for="mediaCardArtist">Artist</label>
+              <select id="mediaCardArtist"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="mediaCardUpload">Upload</button>
+            </div>
+          </div>
+
+          <h3>Tarot deck back</h3>
+          <div class="row">
+            <div>
+              <label for="mediaBackDeck">Deck</label>
+              <select id="mediaBackDeck"></select>
+            </div>
+            <div>
+              <label for="mediaBackFile">Image file</label>
+              <input id="mediaBackFile" type="file" accept="image/*">
+            </div>
+            <div>
+              <label for="mediaBackArtist">Artist</label>
+              <select id="mediaBackArtist"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="mediaBackUpload">Upload</button>
+            </div>
+          </div>
+
+          <h3>Library</h3>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost icon-btn" id="mediaLibraryCards" title="Tarot cards">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                </svg>
+              </button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost icon-btn" id="mediaLibraryBacks" title="Tarot backs">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="artistPanel">
+          <h2>Artist Index</h2>
+          <div class="row">
+            <div>
+              <label for="artistIndexSelect">Artist list</label>
+              <select id="artistIndexSelect"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="artistIndexRefresh">Refresh</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="artistIndexId">Artist ID (optional)</label>
+              <input id="artistIndexId" placeholder="artist_id">
+            </div>
+            <div>
+              <label for="artistIndexName">Name</label>
+              <input id="artistIndexName" placeholder="Artist name">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="artistIndexInstagram">Instagram</label>
+              <input id="artistIndexInstagram" placeholder="https://instagram.com/...">
+            </div>
+            <div>
+              <label for="artistIndexBluesky">Bluesky</label>
+              <input id="artistIndexBluesky" placeholder="https://bsky.app/profile/...">
+            </div>
+            <div>
+              <label for="artistIndexX">X / Twitter</label>
+              <input id="artistIndexX" placeholder="https://x.com/...">
+            </div>
+            <div>
+              <label for="artistIndexArtstation">ArtStation</label>
+              <input id="artistIndexArtstation" placeholder="https://artstation.com/...">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="artistIndexWebsite">Website</label>
+              <input id="artistIndexWebsite" placeholder="https://...">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="artistIndexSave">Save artist</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="artistIndexDelete">Delete artist</button>
             </div>
           </div>
         </section>
@@ -905,13 +1068,13 @@
             <input id="bTheme" type="color" value="#9de07d">
           </div>
           <div>
-            <label for="bCreateBgFile">Background image</label>
-            <input id="bCreateBgFile" type="file" accept="image/*">
+            <label>Background image</label>
+            <button class="btn-ghost icon-btn" id="bCreateBgLibrary" title="Choose from library">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+              </svg>
+            </button>
           </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="bCreateBgLibrary">Choose from library</button>
-            </div>
           <div>
             <label>&nbsp;</label>
             <button id="bCreate">Create</button>
@@ -977,6 +1140,7 @@
       let lastCalloutNumber = null;
       let activeGameId = "";
       let currentOwner = "";
+      window.taArtists = [];
 
       function getBase(){
         return window.location.origin;
@@ -1471,10 +1635,14 @@
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
+        $("menuMedia").classList.toggle("active", which === "media");
+        $("menuArtists").classList.toggle("active", which === "artists");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
+        $("mediaPanel").classList.toggle("hidden", which !== "media");
+        $("artistPanel").classList.toggle("hidden", which !== "artists");
       }
 
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
@@ -1489,6 +1657,8 @@
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
+      $("menuMedia").addEventListener("click", () => showPanel("media"));
+      $("menuArtists").addEventListener("click", () => showPanel("artists"));
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -1679,14 +1849,14 @@
           const deck = $("taDeck").value.trim() || "elf-classic";
           const backImage = item.url || "";
           $("taBackImage").value = backImage;
-          if ($("taBackArtist")) $("taBackArtist").value = item.artist_id || "";
+          $("taBackArtist").value = item.artist_id || "";
           try{
             await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
               method:"PUT",
               headers: {"Content-Type": "application/json"},
               body: JSON.stringify({
                 back_image: backImage,
-                artist_id: $("taBackArtist") ? $("taBackArtist").value.trim() || undefined : undefined
+                artist_id: item.artist_id || undefined
               })
             }, true);
             if (window.taDeckData && window.taDeckData.deck){
@@ -1705,7 +1875,7 @@
       $("taCardLibrary").addEventListener("click", () => {
         librarySelectHandler = (item) => {
           window.taUploadedImageUrl = item.url || "";
-          if ($("taCardArtist")) $("taCardArtist").value = item.artist_id || "";
+          $("taCardArtist").value = item.artist_id || "";
           if (window.taDeckData && window.taDeckData.cards){
             const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
             if (card){
@@ -1759,13 +1929,6 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
           });
-          const bgFile = $("bCreateBgFile").files[0];
-          if (bgFile && data && data.game && data.game.game_id){
-            const fd = new FormData();
-            fd.append("game_id", data.game.game_id);
-            fd.append("file", bgFile);
-            await apiFetch("/bingo/upload-bg", {method:"POST", body: fd});
-          }
           setGameId(data.game.game_id || "");
           $("bCreateModal").classList.remove("show");
           setStatus("Bingo game created.", "ok");
@@ -2111,9 +2274,7 @@
         $("taCardTags").value = (card.tags || []).join(", ");
         $("taCardUpright").value = card.upright || "";
         $("taCardReversed").value = card.reversed || "";
-        const artistId = card.artist_id || "";
-        if ($("taCardArtist")) $("taCardArtist").value = artistId;
-        if ($("taArtistSelect")) $("taArtistSelect").value = artistId;
+        $("taCardArtist").value = card.artist_id || "";
         window.taUploadedImageUrl = card.image || "";
         taRenderHouseInfo(card.house || "");
         taRenderPreviews(card);
@@ -2133,16 +2294,6 @@
             taRenderPreviews(match);
           }
         }
-      }
-
-      function taWeightedPick(){
-        const weights = {roots: 5, canopy: 5, ember: 5, whisper: 5, crown: 1};
-        const pool = [];
-        taHouses.forEach(h => {
-          const w = weights[h.id] || 1;
-          for (let i = 0; i < w; i++) pool.push(h.id);
-        });
-        return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "";
       }
 
       async function loadTarotHouses(){
@@ -2170,7 +2321,8 @@
         try{
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
-          const selects = ["taBackArtist", "taCardArtist", "taArtistSelect"];
+          window.taArtists = artists;
+          const selects = ["mediaBackArtist", "mediaCardArtist", "artistIndexSelect"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;
@@ -2187,14 +2339,160 @@
             });
           });
         }catch(err){
+          window.taArtists = [];
           setStatus("Failed to load artists.", "err");
         }
       }
 
+      $("artistIndexRefresh").addEventListener("click", () => loadTarotArtists());
+      $("artistIndexSelect").addEventListener("change", (ev) => {
+        const pick = (window.taArtists || []).find(a => a.artist_id === ev.target.value);
+        if (!pick){
+          $("artistIndexId").value = "";
+          $("artistIndexName").value = "";
+          $("artistIndexInstagram").value = "";
+          $("artistIndexBluesky").value = "";
+          $("artistIndexX").value = "";
+          $("artistIndexArtstation").value = "";
+          $("artistIndexWebsite").value = "";
+          return;
+        }
+        $("artistIndexId").value = pick.artist_id || "";
+        $("artistIndexName").value = pick.name || "";
+        const links = pick.links || {};
+        $("artistIndexInstagram").value = links.instagram || "";
+        $("artistIndexBluesky").value = links.bluesky || "";
+        $("artistIndexX").value = links.x || "";
+        $("artistIndexArtstation").value = links.artstation || "";
+        $("artistIndexWebsite").value = links.website || "";
+      });
+      $("artistIndexSave").addEventListener("click", async () => {
+        try{
+          const body = {
+            artist_id: $("artistIndexId").value.trim() || undefined,
+            name: $("artistIndexName").value.trim(),
+            links: {
+              instagram: $("artistIndexInstagram").value.trim(),
+              bluesky: $("artistIndexBluesky").value.trim(),
+              x: $("artistIndexX").value.trim(),
+              artstation: $("artistIndexArtstation").value.trim(),
+              website: $("artistIndexWebsite").value.trim()
+            }
+          };
+          const res = await fetch("/api/tarot/artists", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKeyEl.value.trim()
+            },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          await loadTarotArtists();
+          setStatus("Artist saved.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+      $("artistIndexDelete").addEventListener("click", async () => {
+        const artistId = $("artistIndexId").value.trim();
+        if (!artistId){
+          setStatus("Select an artist to delete.", "err");
+          return;
+        }
+        if (!confirm("Delete this artist? Cards will keep the artist_id but links will no longer resolve.")){
+          return;
+        }
+        try{
+          const res = await fetch("/api/tarot/artists/" + encodeURIComponent(artistId), {
+            method: "DELETE",
+            headers: {"X-API-Key": apiKeyEl.value.trim()}
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("artistIndexId").value = "";
+          $("artistIndexName").value = "";
+          $("artistIndexInstagram").value = "";
+          $("artistIndexBluesky").value = "";
+          $("artistIndexX").value = "";
+          $("artistIndexArtstation").value = "";
+          $("artistIndexWebsite").value = "";
+          await loadTarotArtists();
+          setStatus("Artist deleted.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("mediaLibraryCards").addEventListener("click", () => {
+        librarySelectHandler = null;
+        showLibraryModal(true);
+        loadLibrary("tarot-card");
+      });
+      $("mediaLibraryBacks").addEventListener("click", () => {
+        librarySelectHandler = null;
+        showLibraryModal(true);
+        loadLibrary("tarot-back");
+      });
+
+      $("mediaCardUpload").addEventListener("click", async () => {
+        const file = $("mediaCardFile").files[0];
+        if (!file){
+          setStatus("Select a card image to upload.", "err");
+          return;
+        }
+        try{
+          const fd = new FormData();
+          fd.append("file", file);
+          const cardId = $("mediaCardId").value.trim();
+          if (cardId) fd.append("card_id", cardId);
+          const artistId = $("mediaCardArtist").value.trim();
+          if (artistId) fd.append("artist_id", artistId);
+          const res = await fetch("/api/tarot/upload-card-image", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("mediaCardFile").value = "";
+          setStatus("Card image uploaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("mediaBackUpload").addEventListener("click", async () => {
+        const file = $("mediaBackFile").files[0];
+        if (!file){
+          setStatus("Select a back image to upload.", "err");
+          return;
+        }
+        try{
+          const deckId = $("mediaBackDeck").value.trim() || "elf-classic";
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("deck_id", deckId);
+          const artistId = $("mediaBackArtist").value.trim();
+          if (artistId) fd.append("artist_id", artistId);
+          const res = await fetch("/api/tarot/upload-back-image", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("mediaBackFile").value = "";
+          setStatus("Deck back uploaded.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
       $("taCardHouse").addEventListener("change", (ev) => {
         taRenderHouseInfo(ev.target.value);
       });
-      $("taRefreshArtists").addEventListener("click", () => loadTarotArtists());
       $("taDeckList").addEventListener("click", (ev) => {
         const target = ev.target.closest(".list-card");
         if (!target || !target.dataset.cardId || !window.taDeckData) return;
@@ -2210,7 +2508,7 @@
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
           $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
-          if ($("taBackArtist")) $("taBackArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
+          $("taBackArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
           taRenderPreviews(null);
           setStatus("Deck loaded.", "ok");
         }catch(err){
@@ -2229,8 +2527,28 @@
             body: JSON.stringify({deck_id: id.trim(), name: name.trim() || undefined})
           }, true);
           await loadTarotDeckList(id.trim());
-          setStatus("Deck created.", "ok");
-          await $("taLoadDeck").click();
+          setStatus("Deck created. Pick a back image.", "ok");
+          librarySelectHandler = async (item) => {
+            const backImage = item.url || "";
+            $("taBackImage").value = backImage;
+            $("taBackArtist").value = item.artist_id || "";
+            try{
+              await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id.trim()) + "/back", {
+                method:"PUT",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  back_image: backImage,
+                  artist_id: item.artist_id || undefined
+                })
+              }, true);
+              await $("taLoadDeck").click();
+              setStatus("Deck back saved.", "ok");
+            }catch(err){
+              setStatus(err.message, "err");
+            }
+          };
+          showLibraryModal(true);
+          loadLibrary("tarot-back");
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -2253,60 +2571,6 @@
         }
       });
 
-      $("taSaveBack").addEventListener("click", async () => {
-        try{
-          const deck = $("taDeck").value.trim() || "elf-classic";
-          const backImage = $("taBackImage").value.trim();
-          if (!backImage){
-            setStatus("Enter a back image URL.", "err");
-            return;
-          }
-          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
-            method:"PUT",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-              back_image: backImage,
-              artist_id: $("taBackArtist") ? $("taBackArtist").value.trim() || undefined : undefined
-            })
-          }, true);
-          if (window.taDeckData && window.taDeckData.deck){
-            window.taDeckData.deck.back_image = backImage;
-          }
-          taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
-          setStatus("Deck back saved.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("taBackUpload").addEventListener("change", async (ev) => {
-        const file = ev.target.files[0];
-        if (!file) return;
-        try{
-          const deck = $("taDeck").value.trim() || "elf-classic";
-          const form = new FormData();
-          form.append("file", file);
-          form.append("deck_id", deck);
-          const artistId = $("taBackArtist") ? $("taBackArtist").value.trim() : "";
-          if (artistId) form.append("artist_id", artistId);
-          const res = await fetch("/api/tarot/upload-back-image", {
-            method: "POST",
-            headers: {"X-API-Key": apiKeyEl.value.trim()},
-            body: form
-          });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
-          $("taBackImage").value = data.url || "";
-          if (window.taDeckData && window.taDeckData.deck){
-            window.taDeckData.deck.back_image = data.url || "";
-          }
-          taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
-          setStatus("Deck back uploaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
       $("taSaveCard").addEventListener("click", async () => {
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
@@ -2316,7 +2580,7 @@
             name: $("taCardName").value.trim(),
             house: $("taCardHouse").value.trim(),
             image: window.taUploadedImageUrl || undefined,
-            artist_id: $("taCardArtist") ? $("taCardArtist").value.trim() || undefined : undefined,
+            artist_id: $("taCardArtist").value.trim() || undefined,
             tags,
             upright: $("taCardUpright").value.trim(),
             reversed: $("taCardReversed").value.trim(),
@@ -2335,7 +2599,7 @@
           $("taCardTags").value = "";
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
-          if ($("taCardArtist")) $("taCardArtist").value = "";
+          $("taCardArtist").value = "";
           taSelectedCardId = body.card_id || "";
           await $("taLoadDeck").click();
         }catch(err){
@@ -2348,48 +2612,27 @@
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
           const select = $("taDeck");
+          const mediaSelect = $("mediaBackDeck");
           select.innerHTML = "";
+          if (mediaSelect) mediaSelect.innerHTML = "";
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
+            if (mediaSelect){
+              const opt2 = document.createElement("option");
+              opt2.value = d.deck_id;
+              opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+              mediaSelect.appendChild(opt2);
+            }
           });
           select.value = selectValue || "elf-classic";
+          if (mediaSelect) mediaSelect.value = selectValue || "elf-classic";
         }catch(err){
           setStatus(err.message, "err");
         }
       }
-
-      $("taCardUpload").addEventListener("change", async (ev) => {
-        const file = ev.target.files[0];
-        if (!file) return;
-        try{
-          const form = new FormData();
-          form.append("file", file);
-          form.append("card_id", $("taCardId").value.trim());
-          const artistId = $("taCardArtist") ? $("taCardArtist").value.trim() : "";
-          if (artistId) form.append("artist_id", artistId);
-          const res = await fetch("/api/tarot/upload-card-image", {
-            method: "POST",
-            headers: {"X-API-Key": apiKeyEl.value.trim()},
-            body: form
-          });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
-          window.taUploadedImageUrl = data.url;
-          if (window.taDeckData && window.taDeckData.cards){
-            const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
-            if (card){
-              card.image = data.url;
-              taRenderPreviews(card);
-            }
-          }
-          setStatus("Image uploaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
 
       loadSettings();
       if (apiKeyEl.value.trim()){
