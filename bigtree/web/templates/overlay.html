@@ -769,14 +769,18 @@
             </div>
           </div>
           <div class="row">
-            <div>
-              <label for="taBackUpload">Upload deck back image</label>
-              <input id="taBackUpload" type="file" accept="image/*">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <a class="btn-ghost" id="taBackUploadWindow" href="#">Open upload page</a>
-            </div>
+          <div>
+            <label for="taBackUpload">Upload deck back image</label>
+            <input id="taBackUpload" type="file" accept="image/*">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="taBackLibrary">Choose from library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <a class="btn-ghost" id="taBackUploadWindow" href="#">Open upload page</a>
+          </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
 
@@ -809,6 +813,10 @@
             <div>
               <label for="taCardUpload">Upload image</label>
               <input id="taCardUpload" type="file" accept="image/*">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="taCardLibrary">Choose from library</button>
             </div>
             <div>
               <label>House info</label>
@@ -921,6 +929,10 @@
           </div>
           <div>
             <label>&nbsp;</label>
+            <button class="btn-ghost" id="bCreateBgLibrary">Choose from library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
             <a class="btn-ghost" id="bCreateBgUpload" href="#">Open upload page</a>
           </div>
           <div>
@@ -956,6 +968,22 @@
           </div>
         </div>
         <div class="status" id="bPurchaseStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="uploadLibraryModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title" id="uploadLibraryTitle">Image Library</div>
+          <button class="btn-ghost" id="uploadLibraryClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
+          </div>
+        </div>
+        <div class="preview-grid" id="uploadLibraryGrid"></div>
+        <div class="status" id="uploadLibraryStatus">Ready.</div>
       </div>
     </div>
     <script>
@@ -1007,6 +1035,70 @@
             const el = $(id);
             if (el) el.disabled = true;
           });
+        }
+      }
+
+      let librarySelectHandler = null;
+      let libraryKind = "";
+
+      function setLibraryStatus(msg, kind){
+        const el = $("uploadLibraryStatus");
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function showLibraryModal(show){
+        $("uploadLibraryModal").classList.toggle("show", !!show);
+      }
+
+      async function loadLibrary(kind){
+        libraryKind = kind;
+        const grid = $("uploadLibraryGrid");
+        const title = $("uploadLibraryTitle");
+        title.textContent = kind === "tarot-back" ? "Tarot Backs" :
+          (kind === "tarot-card" ? "Tarot Cards" : "Bingo Backgrounds");
+        setLibraryStatus("Loading...", "");
+        grid.innerHTML = "";
+        let path = "";
+        if (kind === "tarot-back") path = "/api/uploads/tarot/backs";
+        if (kind === "tarot-card") path = "/api/uploads/tarot/cards";
+        if (kind === "bingo-bg") path = "/api/uploads/bingo/backgrounds";
+        try{
+          const res = await fetch(path, {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){
+            handleUnauthorized();
+            throw new Error("Unauthorized");
+          }
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          const items = data.items || [];
+          if (!items.length){
+            setLibraryStatus("No images found.", "err");
+            return;
+          }
+          items.forEach(item => {
+            const card = document.createElement("div");
+            card.className = "preview-card";
+            const img = document.createElement("img");
+            img.src = item.url;
+            img.alt = item.name || "image";
+            const btn = document.createElement("button");
+            btn.className = "btn-ghost";
+            btn.style.margin = "8px";
+            btn.textContent = "Use";
+            btn.addEventListener("click", () => {
+              if (librarySelectHandler){
+                librarySelectHandler(item);
+              }
+              showLibraryModal(false);
+            });
+            card.appendChild(img);
+            card.appendChild(btn);
+            grid.appendChild(card);
+          });
+          setLibraryStatus("Pick an image.", "ok");
+        }catch(err){
+          setLibraryStatus(err.message, "err");
         }
       }
 
@@ -1604,6 +1696,8 @@
         document.body.classList.remove("overlay");
         saveSettings();
       });
+      $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
+      $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
       ["bCreateBgUpload", "taBackUploadWindow", "taCardUploadWindow"].forEach((id) => {
         const link = $(id);
         if (link){
@@ -1611,6 +1705,69 @@
           link.target = "_blank";
           link.rel = "noreferrer";
         }
+      });
+
+      $("taBackLibrary").addEventListener("click", () => {
+        librarySelectHandler = async (item) => {
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const backImage = item.url || "";
+          $("taBackImage").value = backImage;
+          try{
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
+              method:"PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({back_image: backImage})
+            }, true);
+            if (window.taDeckData && window.taDeckData.deck){
+              window.taDeckData.deck.back_image = backImage;
+            }
+            taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
+            setStatus("Deck back saved from library.", "ok");
+          }catch(err){
+            setStatus(err.message, "err");
+          }
+        };
+        showLibraryModal(true);
+        loadLibrary("tarot-back");
+      });
+
+      $("taCardLibrary").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          window.taUploadedImageUrl = item.url || "";
+          if (window.taDeckData && window.taDeckData.cards){
+            const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
+            if (card){
+              card.image = window.taUploadedImageUrl;
+              taRenderPreviews(card);
+            }
+          }
+          setStatus("Card image selected from library.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("tarot-card");
+      });
+
+      $("bCreateBgLibrary").addEventListener("click", () => {
+        librarySelectHandler = async (item) => {
+          const gid = getGameId();
+          if (!gid){
+            setStatus("Create or select a game first.", "err");
+            return;
+          }
+          try{
+            await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/background-from-library", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({source_game_id: item.game_id})
+            }, true);
+            setStatus("Background applied from library.", "ok");
+            await refreshBingo();
+          }catch(err){
+            setStatus(err.message, "err");
+          }
+        };
+        showLibraryModal(true);
+        loadLibrary("bingo-bg");
       });
 
       $("bCreate").addEventListener("click", async () => {

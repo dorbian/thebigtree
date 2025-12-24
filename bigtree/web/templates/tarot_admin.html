@@ -46,6 +46,58 @@
   .card{padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
   .muted{color:var(--muted);font-size:12px}
   .status{margin-top:10px}
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+    margin-top:12px;
+  }
+  .thumb{
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+    background:#0c1511;
+    display:flex;
+    flex-direction:column;
+  }
+  .thumb img{
+    width:100%;
+    aspect-ratio:3/4.2;
+    object-fit:cover;
+    background:#0c1511;
+  }
+  .thumb button{
+    border-radius:0;
+  }
+  .modal{
+    position:fixed;
+    inset:0;
+    background:rgba(6,12,9,.7);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:20;
+  }
+  .modal.show{display:flex}
+  .modal-card{
+    width:min(720px,92vw);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:18px;
+  }
+  .modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .modal-title{
+    font-size:16px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
 </style>
 
 <main>
@@ -102,6 +154,10 @@
       <label>&nbsp;</label>
       <a id="backUploadWindow" href="#">Open upload page</a>
     </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="backLibrary">Choose from library</button>
+    </div>
   </div>
 
   <h2>Add / Update Card</h2>
@@ -137,6 +193,10 @@
     <div>
       <label>&nbsp;</label>
       <a id="cardUploadWindow" href="#">Open upload page</a>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="cardLibrary">Choose from library</button>
     </div>
     <div>
       <label>House info</label>
@@ -176,6 +236,22 @@
 
   <button id="saveCard">Save card</button>
   <div class="status" id="status"></div>
+  <div class="modal" id="uploadLibraryModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="uploadLibraryTitle">Image Library</div>
+        <button class="btn-ghost" id="uploadLibraryClose">Close</button>
+      </div>
+      <div class="row">
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
+        </div>
+      </div>
+      <div class="grid" id="uploadLibraryGrid"></div>
+      <div class="status" id="uploadLibraryStatus">Ready.</div>
+    </div>
+  </div>
 
   <div class="list" id="deckList"></div>
 </main>
@@ -231,6 +307,64 @@
         const el = document.getElementById(id);
         if (el) el.disabled = true;
       });
+    }
+  }
+
+  let librarySelectHandler = null;
+  let libraryKind = "";
+
+  function setLibraryStatus(msg, ok){
+    const el = document.getElementById("uploadLibraryStatus");
+    el.textContent = msg;
+    el.style.color = ok ? "#6bd4a2" : "#e07a7a";
+  }
+
+  function showLibraryModal(show){
+    document.getElementById("uploadLibraryModal").classList.toggle("show", !!show);
+  }
+
+  async function loadLibrary(kind){
+    libraryKind = kind;
+    const grid = document.getElementById("uploadLibraryGrid");
+    const title = document.getElementById("uploadLibraryTitle");
+    title.textContent = kind === "tarot-back" ? "Tarot Backs" : "Tarot Cards";
+    setLibraryStatus("Loading...", true);
+    grid.innerHTML = "";
+    const path = kind === "tarot-back" ? "/api/uploads/tarot/backs" : "/api/uploads/tarot/cards";
+    try{
+      const res = await fetch(path, {headers: {"X-API-Key": apiKey.value.trim()}});
+      if (res.status === 401){
+        setLibraryStatus("Unauthorized. Enter API key.", false);
+        return;
+      }
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Failed");
+      const items = data.items || [];
+      if (!items.length){
+        setLibraryStatus("No images found.", false);
+        return;
+      }
+      items.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "thumb";
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.name || "image";
+        const btn = document.createElement("button");
+        btn.textContent = "Use";
+        btn.addEventListener("click", () => {
+          if (librarySelectHandler){
+            librarySelectHandler(item);
+          }
+          showLibraryModal(false);
+        });
+        card.appendChild(img);
+        card.appendChild(btn);
+        grid.appendChild(card);
+      });
+      setLibraryStatus("Pick an image.", true);
+    }catch(err){
+      setLibraryStatus(err.message, false);
     }
   }
 
@@ -399,6 +533,42 @@
       link.target = "_blank";
       link.rel = "noreferrer";
     }
+  });
+  document.getElementById("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
+  document.getElementById("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
+  document.getElementById("backLibrary").addEventListener("click", () => {
+    librarySelectHandler = async (item) => {
+      const deck = deckId.value.trim() || "elf-classic";
+      const backImage = item.url || "";
+      document.getElementById("backImage").value = backImage;
+      try{
+        const res = await fetch(`/api/tarot/decks/${encodeURIComponent(deck)}/back`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey.value.trim()
+          },
+          body: JSON.stringify({back_image: backImage})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false){
+          throw new Error(data.error || "Failed");
+        }
+        setStatus("Deck back saved from library.", true);
+      }catch(err){
+        setStatus(err.message, false);
+      }
+    };
+    showLibraryModal(true);
+    loadLibrary("tarot-back");
+  });
+  document.getElementById("cardLibrary").addEventListener("click", () => {
+    librarySelectHandler = (item) => {
+      uploadedImageUrl = item.url || "";
+      setStatus("Card image selected from library.", true);
+    };
+    showLibraryModal(true);
+    loadLibrary("tarot-card");
   });
 
   document.getElementById("backUpload").addEventListener("change", async (ev) => {

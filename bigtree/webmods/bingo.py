@@ -316,6 +316,24 @@ async def bingo_upload_bg(req: web.Request):
         if not ok: return web.json_response({"ok": False, "error": msg}, status=400)
     return web.json_response({"ok": True})
 
+@route("POST", "/bingo/{game_id}/background-from-library", scopes=["bingo:admin"])
+async def bingo_background_from_library(req: web.Request):
+    game_id = req.match_info["game_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    source_game = str(body.get("source_game_id") or "")
+    if not source_game:
+        return web.json_response({"ok": False, "error": "source_game_id required"}, status=400)
+    src = bingo.get_game(source_game)
+    if not src or not src.get("background_path"):
+        return web.json_response({"ok": False, "error": "source background not found"}, status=404)
+    ok, msg = bingo.save_background(game_id, src["background_path"])
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True})
+
 # ---- Serve background asset ----
 @route("GET", "/bingo/assets/{game_id}", allow_public=True)
 async def bingo_asset(req: web.Request):
