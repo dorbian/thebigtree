@@ -683,7 +683,6 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenAdminPage">Open admin page</button>
             </div>
           </div>
         </section>
@@ -2058,11 +2057,6 @@
       $("tOpenGallery").addEventListener("click", () => {
         const base = getBase();
         window.open(new URL("/tarot/gallery", base).toString(), "_blank");
-      });
-
-      $("tOpenAdminPage").addEventListener("click", () => {
-        const base = getBase();
-        window.open(new URL("/tarot/admin", base).toString(), "_blank");
       });
 
       $("tSpreadHelp").addEventListener("click", () => {
