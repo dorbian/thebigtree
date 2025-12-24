@@ -18,6 +18,20 @@ log = getattr(bigtree, "logger", logging.getLogger("bigtree"))
 def _json_error(message: str, status: int = 400) -> web.Response:
     return web.json_response({"ok": False, "error": message}, status=status)
 
+def _log_upload_context(req: web.Request, label: str, size: int) -> None:
+    try:
+        clen = req.headers.get("Content-Length", "")
+        ctype = req.headers.get("Content-Type", "")
+        log.info(
+            "[tarot] %s upload size=%s content_length=%s content_type=%s",
+            label,
+            size,
+            clen,
+            ctype,
+        )
+    except Exception:
+        pass
+
 def _get_token(req: web.Request, body: dict) -> str:
     return (req.headers.get("X-Tarot-Token") or str(body.get("token") or "")).strip()
 
@@ -474,6 +488,10 @@ async def upload_card_image(req: web.Request):
         if not chunk:
             break
         data.extend(chunk)
+    if not data:
+        _log_upload_context(req, "card", 0)
+        return _json_error("empty upload")
+    _log_upload_context(req, "card", len(data))
 
     saved = False
     try:
@@ -553,6 +571,10 @@ async def upload_back_image(req: web.Request):
         if not chunk:
             break
         data.extend(chunk)
+    if not data:
+        _log_upload_context(req, "back", 0)
+        return _json_error("empty upload")
+    _log_upload_context(req, "back", len(data))
 
     saved = False
     try:
