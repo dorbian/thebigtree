@@ -10,6 +10,7 @@ import json as _json
 import imghdr
 from pathlib import Path
 import bigtree
+from bigtree.inc.logging import upload_logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
 
@@ -22,7 +23,7 @@ def _log_upload_context(req: web.Request, label: str, size: int) -> None:
     try:
         clen = req.headers.get("Content-Length", "")
         ctype = req.headers.get("Content-Type", "")
-        log.info(
+        upload_logger.info(
             "[tarot] %s upload size=%s content_length=%s content_type=%s",
             label,
             size,

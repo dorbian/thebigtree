@@ -41,5 +41,29 @@ formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', 
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+def _resolve_upload_log_path(base_path: str) -> str:
+    override = os.getenv("BIGTREE_UPLOAD_LOG_PATH")
+    if override:
+        return override
+    base_dir = os.path.dirname(base_path)
+    if base_dir:
+        return os.path.join(base_dir, "upload.log")
+    return "upload.log"
+
+upload_logger = logging.getLogger('discord.bigtree.uploads')
+upload_logger.setLevel(logging.DEBUG)
+upload_log_path = _resolve_upload_log_path(log_path)
+upload_dir = os.path.dirname(upload_log_path)
+if upload_dir:
+    os.makedirs(upload_dir, exist_ok=True)
+upload_handler = logging.handlers.RotatingFileHandler(
+    filename=upload_log_path,
+    encoding='utf-8',
+    maxBytes=16 * 1024 * 1024,
+    backupCount=3,
+)
+upload_handler.setFormatter(formatter)
+upload_logger.addHandler(upload_handler)
+
 # Assume client refers to a discord.Client subclass...
 # Suppress the default configuration since we have our own
