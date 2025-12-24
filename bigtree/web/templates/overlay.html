@@ -1024,8 +1024,15 @@
         }
       }
 
-      function openUploadWindow(){
-        const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
+      function buildUploadUrl(kind){
+        const target = new URL("/upload", getUploadBase());
+        if (kind) target.searchParams.set("kind", kind);
+        const deck = $("taDeck") ? $("taDeck").value.trim() : "";
+        const card = $("taCardId") ? $("taCardId").value.trim() : "";
+        const game = getGameId();
+        if (deck) target.searchParams.set("deck_id", deck);
+        if (card) target.searchParams.set("card_id", card);
+        if (game) target.searchParams.set("game_id", game);
         return target.toString();
       }
 
@@ -1698,13 +1705,19 @@
       });
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
       $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
-      ["bCreateBgUpload", "taBackUploadWindow", "taCardUploadWindow"].forEach((id) => {
-        const link = $(id);
-        if (link){
-          link.href = openUploadWindow();
+      const uploadLinks = [
+        {id: "bCreateBgUpload", kind: "bingo_bg"},
+        {id: "taBackUploadWindow", kind: "tarot_back"},
+        {id: "taCardUploadWindow", kind: "tarot_card"},
+      ];
+      uploadLinks.forEach((cfg) => {
+        const link = $(cfg.id);
+        if (!link) return;
+        link.addEventListener("click", () => {
+          link.href = buildUploadUrl(cfg.kind);
           link.target = "_blank";
           link.rel = "noreferrer";
-        }
+        });
       });
 
       $("taBackLibrary").addEventListener("click", () => {
@@ -1791,7 +1804,6 @@
           if (bgFile && data && data.game && data.game.game_id){
             if (!isUploadHost()){
               setStatus("Open upload window to upload files.", "err");
-              openUploadWindow();
               return;
             }
             const fd = new FormData();
@@ -2315,7 +2327,6 @@
         try{
           if (!isUploadHost()){
             setStatus("Open upload window to upload files.", "err");
-            openUploadWindow();
             return;
           }
           const deck = $("taDeck").value.trim() || "elf-classic";
@@ -2409,7 +2420,6 @@
         try{
           if (!isUploadHost()){
             setStatus("Open upload window to upload files.", "err");
-            openUploadWindow();
             return;
           }
           const form = new FormData();

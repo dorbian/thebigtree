@@ -296,8 +296,13 @@
     }
   }
 
-  function openUploadWindow(){
-    const target = new URL(window.location.pathname + window.location.search + window.location.hash, getUploadBase());
+  function buildUploadUrl(kind){
+    const target = new URL("/upload", getUploadBase());
+    if (kind) target.searchParams.set("kind", kind);
+    const deck = deckId.value.trim();
+    const card = document.getElementById("cardId").value.trim();
+    if (deck) target.searchParams.set("deck_id", deck);
+    if (card) target.searchParams.set("card_id", card);
     return target.toString();
   }
 
@@ -526,13 +531,17 @@
     }
   });
 
-  ["backUploadWindow", "cardUploadWindow"].forEach((id) => {
-    const link = document.getElementById(id);
-    if (link){
-      link.href = openUploadWindow();
+  [
+    {id: "backUploadWindow", kind: "tarot_back"},
+    {id: "cardUploadWindow", kind: "tarot_card"},
+  ].forEach((cfg) => {
+    const link = document.getElementById(cfg.id);
+    if (!link) return;
+    link.addEventListener("click", () => {
+      link.href = buildUploadUrl(cfg.kind);
       link.target = "_blank";
       link.rel = "noreferrer";
-    }
+    });
   });
   document.getElementById("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
   document.getElementById("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
