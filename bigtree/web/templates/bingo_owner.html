@@ -74,6 +74,37 @@
     opacity:1;
     pointer-events:auto;
   }
+  .call-ball{
+    position:fixed;
+    top:-140px;
+    left:50%;
+    transform:translateX(-50%);
+    width:140px;
+    height:140px;
+    border-radius:50%;
+    background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), rgba(0,0,0,.2)), linear-gradient(150deg, rgba(157,224,125,.95), rgba(60,207,142,.85));
+    border:2px solid rgba(255,255,255,.35);
+    box-shadow:0 18px 40px rgba(0,0,0,.35);
+    color:#0a1510;
+    font-weight:700;
+    font-size:48px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity:0;
+    pointer-events:none;
+    z-index:60;
+  }
+  .call-ball.show{
+    animation:ball-drop 2s ease forwards;
+  }
+  @keyframes ball-drop{
+    0%{transform:translate(-50%, -120px);opacity:0}
+    20%{opacity:1}
+    55%{transform:translate(-50%, 40px)}
+    75%{transform:translate(-50%, 10px)}
+    100%{transform:translate(-50%, -10px);opacity:0}
+  }
 </style>
 
 <!--
@@ -117,6 +148,7 @@
 <div class="called" id="called">Called numbers: -</div>
 <div id="list" class="grid"></div>
 <div class="bingo-overlay" id="bingoOverlay">BINGO</div>
+<div class="call-ball" id="callBall"></div>
 
 <script>
   const params = new URLSearchParams(location.search);
@@ -137,8 +169,11 @@
   const claimMsg = document.getElementById('claimMsg');
   const autoDabEl = document.getElementById('autoDab');
   const bingoOverlay = document.getElementById('bingoOverlay');
+  const callBall = document.getElementById('callBall');
   let selectedCardId = '';
   let localBingoPressed = false;
+  let lastBallNumber = null;
+  let callBallTimer = null;
 
   function marksKey(cardId){
     return `bingo_marks_${resolvedGame}_${cardId}`;
@@ -225,6 +260,11 @@
     }
     bingoOverlay.classList.toggle("show", hasPending || localBingoPressed);
     calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
+    const lastCalled = g.last_called || (called.length ? called[called.length - 1] : null);
+    if (lastCalled && lastCalled !== lastBallNumber){
+      showCallBall(lastCalled);
+      lastBallNumber = lastCalled;
+    }
     grid.innerHTML = '';
     const header = (g.header || "BING").slice(0,4).split("");
     while(header.length < 4) header.push(" ");
@@ -343,4 +383,18 @@
   }
   setInterval(tick, 2000);
   tick();
+
+  function showCallBall(number){
+    if (!callBall) return;
+    callBall.textContent = number;
+    callBall.classList.remove("show");
+    void callBall.offsetWidth;
+    callBall.classList.add("show");
+    if (callBallTimer){
+      clearTimeout(callBallTimer);
+    }
+    callBallTimer = setTimeout(() => {
+      callBall.classList.remove("show");
+    }, 2100);
+  }
 </script>
