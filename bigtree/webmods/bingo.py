@@ -1,6 +1,7 @@
 # bigtree/webmods/bingo.py
 from __future__ import annotations
 from aiohttp import web
+import os
 from typing import Any, Dict
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import bingo as bingo
@@ -321,6 +322,25 @@ async def bingo_background_from_library(req: web.Request):
     if not src or not src.get("background_path"):
         return web.json_response({"ok": False, "error": "source background not found"}, status=404)
     ok, msg = bingo.save_background(game_id, src["background_path"])
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True})
+
+@route("POST", "/bingo/{game_id}/background-from-media", scopes=["bingo:admin"])
+async def bingo_background_from_media(req: web.Request):
+    game_id = req.match_info["game_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    url = str(body.get("url") or "")
+    if not url:
+        return web.json_response({"ok": False, "error": "url required"}, status=400)
+    from bigtree.webmods import uploads as upload_mod
+    path = upload_mod.resolve_media_path(url)
+    if not path or not os.path.exists(path):
+        return web.json_response({"ok": False, "error": "media not found"}, status=404)
+    ok, msg = bingo.save_background(game_id, path)
     if not ok:
         return web.json_response({"ok": False, "error": msg}, status=400)
     return web.json_response({"ok": True})

@@ -138,12 +138,11 @@
         gap:10px;
         flex:1;
       }
-      .sidebar-footer{
+      .menu-icons{
         display:flex;
         gap:10px;
-        justify-content:space-between;
         align-items:center;
-        margin-top:8px;
+        margin-top:6px;
       }
       .menu-icon{
         width:44px;
@@ -602,23 +601,25 @@
           <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
           <div class="menu-item" id="menuTarotAdmin">Tarot Games</div>
           <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
-          <label class="toggle" style="margin-top:12px">
-            <input type="checkbox" id="overlayMode">
-            Overlay mode
-          </label>
+          <div class="menu-icons">
+            <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+              </svg>
+            </button>
+            <button class="menu-icon" id="menuArtists" title="Artist index" aria-label="Artist index">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
+              </svg>
+            </button>
+            <button class="menu-icon" id="menuOverlayToggle" title="Toggle overlay mode" aria-label="Toggle overlay mode">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/>
+              </svg>
+            </button>
+            <input type="checkbox" id="overlayMode" class="hidden">
+          </div>
           <div class="status" id="status">Ready.</div>
-        </div>
-        <div class="sidebar-footer">
-          <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
-            </svg>
-          </button>
-          <button class="menu-icon" id="menuArtists" title="Artist index" aria-label="Artist index">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
-            </svg>
-          </button>
         </div>
       </aside>
       <main class="content">
@@ -906,60 +907,24 @@
         <section class="panel hidden" style="animation-delay:.1s" id="mediaPanel">
           <h2>Media Management</h2>
           <p>Upload images and assign artists.</p>
-
-          <h3>Tarot card image</h3>
           <div class="row">
             <div>
-              <label for="mediaCardId">Card ID (optional)</label>
-              <input id="mediaCardId" placeholder="candlecap_sprite">
+              <label for="mediaFile">Image file</label>
+              <input id="mediaFile" type="file" accept="image/*">
             </div>
             <div>
-              <label for="mediaCardFile">Image file</label>
-              <input id="mediaCardFile" type="file" accept="image/*">
-            </div>
-            <div>
-              <label for="mediaCardArtist">Artist</label>
-              <select id="mediaCardArtist"></select>
+              <label for="mediaArtist">Artist</label>
+              <select id="mediaArtist"></select>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="mediaCardUpload">Upload</button>
+              <button id="mediaUpload">Upload</button>
             </div>
           </div>
-
-          <h3>Tarot deck back</h3>
           <div class="row">
             <div>
-              <label for="mediaBackDeck">Deck</label>
-              <select id="mediaBackDeck"></select>
-            </div>
-            <div>
-              <label for="mediaBackFile">Image file</label>
-              <input id="mediaBackFile" type="file" accept="image/*">
-            </div>
-            <div>
-              <label for="mediaBackArtist">Artist</label>
-              <select id="mediaBackArtist"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="mediaBackUpload">Upload</button>
-            </div>
-          </div>
-
-          <h3>Library</h3>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost icon-btn" id="mediaLibraryCards" title="Tarot cards">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost icon-btn" id="mediaLibraryBacks" title="Tarot backs">
+              <label>Gallery</label>
+              <button class="btn-ghost icon-btn" id="mediaLibraryOpen" title="Open gallery">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
                 </svg>
@@ -1132,6 +1097,7 @@
       const loginStatusEl = $("loginStatus");
       const apiKeyEl = $("apiKeyLogin");
       const overlayToggle = $("overlayMode");
+      const overlayToggleBtn = $("menuOverlayToggle");
       const storage = window.localStorage;
       let currentCard = null;
       let currentGame = null;
@@ -1163,14 +1129,10 @@
         libraryKind = kind;
         const grid = $("uploadLibraryGrid");
         const title = $("uploadLibraryTitle");
-        title.textContent = kind === "tarot-back" ? "Tarot Backs" :
-          (kind === "tarot-card" ? "Tarot Cards" : "Bingo Backgrounds");
+        title.textContent = "Media Library";
         setLibraryStatus("Loading...", "");
         grid.innerHTML = "";
-        let path = "";
-        if (kind === "tarot-back") path = "/api/uploads/tarot/backs";
-        if (kind === "tarot-card") path = "/api/uploads/tarot/cards";
-        if (kind === "bingo-bg") path = "/api/uploads/bingo/backgrounds";
+        const path = "/api/media/list";
         try{
           const res = await fetch(path, {headers: {"X-API-Key": apiKeyEl.value.trim()}});
           if (res.status === 401){
@@ -1211,13 +1173,9 @@
             del.addEventListener("click", async () => {
               if (!confirm("Delete this file? This cannot be undone.")) return;
               try{
-                let delUrl = "";
-                if (libraryKind === "tarot-back"){
-                  delUrl = "/api/uploads/tarot/backs/" + encodeURIComponent(item.name || "");
-                } else if (libraryKind === "tarot-card"){
-                  delUrl = "/api/uploads/tarot/cards/" + encodeURIComponent(item.name || "");
-                } else if (libraryKind === "bingo-bg"){
-                  delUrl = "/api/uploads/bingo/backgrounds/" + encodeURIComponent(item.game_id || "");
+                const delUrl = item.delete_url || "";
+                if (!delUrl){
+                  throw new Error("Delete not available");
                 }
                 const res = await fetch(delUrl, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
                 const data = await res.json().catch(() => ({}));
@@ -1279,6 +1237,7 @@
         apiKeyEl.value = storage.getItem("bt_api_key") || "";
         overlayToggle.checked = storage.getItem("bt_overlay") === "1";
         if (overlayToggle.checked) document.body.classList.add("overlay");
+        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
       }
 
       function saveSettings(){
@@ -1834,7 +1793,12 @@
       });
       overlayToggle.addEventListener("change", () => {
         document.body.classList.toggle("overlay", overlayToggle.checked);
+        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
         saveSettings();
+      });
+      overlayToggleBtn.addEventListener("click", () => {
+        overlayToggle.checked = !overlayToggle.checked;
+        overlayToggle.dispatchEvent(new Event("change"));
       });
       $("overlayExit").addEventListener("click", () => {
         overlayToggle.checked = false;
@@ -1897,10 +1861,10 @@
             return;
           }
           try{
-            await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/background-from-library", {
+            await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/background-from-media", {
               method:"POST",
               headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({source_game_id: item.game_id})
+              body: JSON.stringify({url: item.url})
             }, true);
             setStatus("Background applied from library.", "ok");
             await refreshBingo();
@@ -2322,7 +2286,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-          const selects = ["mediaBackArtist", "mediaCardArtist", "artistIndexSelect"];
+          const selects = ["mediaArtist", "artistIndexSelect"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;
@@ -2425,66 +2389,33 @@
         }
       });
 
-      $("mediaLibraryCards").addEventListener("click", () => {
+      $("mediaLibraryOpen").addEventListener("click", () => {
         librarySelectHandler = null;
         showLibraryModal(true);
-        loadLibrary("tarot-card");
-      });
-      $("mediaLibraryBacks").addEventListener("click", () => {
-        librarySelectHandler = null;
-        showLibraryModal(true);
-        loadLibrary("tarot-back");
+        loadLibrary("media");
       });
 
-      $("mediaCardUpload").addEventListener("click", async () => {
-        const file = $("mediaCardFile").files[0];
+      $("mediaUpload").addEventListener("click", async () => {
+        const file = $("mediaFile").files[0];
         if (!file){
-          setStatus("Select a card image to upload.", "err");
+          setStatus("Select an image to upload.", "err");
           return;
         }
         try{
           const fd = new FormData();
           fd.append("file", file);
-          const cardId = $("mediaCardId").value.trim();
-          if (cardId) fd.append("card_id", cardId);
-          const artistId = $("mediaCardArtist").value.trim();
+          const artistId = $("mediaArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
-          const res = await fetch("/api/tarot/upload-card-image", {
+          const res = await fetch("/api/media/upload", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
-          $("mediaCardFile").value = "";
-          setStatus("Card image uploaded.", "ok");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("mediaBackUpload").addEventListener("click", async () => {
-        const file = $("mediaBackFile").files[0];
-        if (!file){
-          setStatus("Select a back image to upload.", "err");
-          return;
-        }
-        try{
-          const deckId = $("mediaBackDeck").value.trim() || "elf-classic";
-          const fd = new FormData();
-          fd.append("file", file);
-          fd.append("deck_id", deckId);
-          const artistId = $("mediaBackArtist").value.trim();
-          if (artistId) fd.append("artist_id", artistId);
-          const res = await fetch("/api/tarot/upload-back-image", {
-            method: "POST",
-            headers: {"X-API-Key": apiKeyEl.value.trim()},
-            body: fd
-          });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
-          $("mediaBackFile").value = "";
-          setStatus("Deck back uploaded.", "ok");
+          $("mediaFile").value = "";
+          setStatus("Media uploaded.", "ok");
+          await loadLibrary("media");
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -2612,23 +2543,14 @@
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
           const select = $("taDeck");
-          const mediaSelect = $("mediaBackDeck");
           select.innerHTML = "";
-          if (mediaSelect) mediaSelect.innerHTML = "";
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
-            if (mediaSelect){
-              const opt2 = document.createElement("option");
-              opt2.value = d.deck_id;
-              opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
-              mediaSelect.appendChild(opt2);
-            }
           });
           select.value = selectValue || "elf-classic";
-          if (mediaSelect) mediaSelect.value = selectValue || "elf-classic";
         }catch(err){
           setStatus(err.message, "err");
         }

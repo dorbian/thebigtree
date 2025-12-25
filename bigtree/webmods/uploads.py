@@ -6,8 +6,14 @@ from bigtree.webmods import tarot_api
 from bigtree.modules import bingo as bingo_mod
 from bigtree.modules import tarot as tarot_mod
 from bigtree.modules import artists as artist_mod
+from bigtree.modules import media as media_mod
+import uuid
+import imghdr
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+def _media_dir() -> str:
+    return media_mod.get_media_dir()
 
 async def read_multipart(req: web.Request, *, file_field: str = "file") -> tuple[dict, str, bytes]:
     reader = await req.multipart()
@@ -59,6 +65,39 @@ def _artist_info(artist_id: str | None) -> dict:
         "artist_name": artist.get("name"),
         "artist_links": artist.get("links") or {},
     }
+
+def _media_item(filename: str, artist_id: str | None, original_name: str = "") -> dict:
+    item = {
+        "name": filename,
+        "url": f"/media/{filename}",
+        "source": "media",
+        "original_name": original_name,
+        "delete_url": f"/api/media/{filename}",
+    }
+    item.update(_artist_info(artist_id))
+    if artist_id and not item.get("artist_id"):
+        item["artist_id"] = artist_id
+    return item
+
+def resolve_media_path(url: str) -> str | None:
+    if not url:
+        return None
+    url = url.split("?", 1)[0]
+    if url.startswith("/media/"):
+        filename = url.split("/", 2)[-1]
+        return os.path.join(_media_dir(), filename)
+    if url.startswith("/tarot/cards/"):
+        filename = url.split("/", 3)[-1]
+        return os.path.join(tarot_api._cards_dir(), filename)
+    if url.startswith("/tarot/backs/"):
+        filename = url.split("/", 3)[-1]
+        return os.path.join(tarot_api._backs_dir(), filename)
+    if url.startswith("/bingo/assets/"):
+        game_id = url.split("/", 3)[-1]
+        g = bingo_mod.get_game(game_id)
+        if g and g.get("background_path"):
+            return g.get("background_path")
+    return None
 
 
 @route("GET", "/api/uploads/tarot/cards", scopes=["tarot:admin"])
@@ -120,6 +159,129 @@ async def list_bingo_backgrounds(_req: web.Request):
     except Exception:
         items = []
     return web.json_response({"ok": True, "items": items})
+
+@route("GET", "/media/{filename}", allow_public=True)
+async def media_file(req: web.Request):
+    filename = req.match_info["filename"]
+    path = os.path.join(_media_dir(), filename)
+    if not os.path.exists(path):
+        return web.Response(status=404)
+    return web.FileResponse(path)
+
+@route("POST", "/api/media/upload", scopes=["tarot:admin"])
+async def upload_media(req: web.Request):
+    fields, filename_hint, data = await read_multipart(req)
+    if not data:
+        return web.json_response({"ok": False, "error": "file required"}, status=400)
+    artist_id = (fields.get("artist_id") or "").strip() or None
+    kind = imghdr.what(None, h=data)
+    ext_map = {
+        "jpeg": ".jpg",
+        "png": ".png",
+        "gif": ".gif",
+        "bmp": ".bmp",
+        "webp": ".webp",
+    }
+    ext = ext_map.get(kind)
+    if not ext:
+        raw_ext = os.path.splitext(filename_hint or "")[1].lower()
+        alias = {".jpeg": ".jpg", ".jfif": ".jpg"}
+        raw_ext = alias.get(raw_ext, raw_ext)
+        if raw_ext in _IMG_EXTS:
+            ext = raw_ext
+    if not ext:
+        return web.json_response({"ok": False, "error": "unsupported image format"}, status=400)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(_media_dir(), filename)
+    try:
+        with open(dest, "wb") as f:
+            f.write(data)
+    except Exception:
+        return web.json_response({"ok": False, "error": "save failed"}, status=500)
+    entry = media_mod.add_media(filename, original_name=filename_hint, artist_id=artist_id)
+    item = _media_item(filename, entry.get("artist_id"), entry.get("original_name") or "")
+    return web.json_response({"ok": True, "item": item})
+
+@route("GET", "/api/media/list", scopes=["tarot:admin"])
+async def list_media(_req: web.Request):
+    items: list[dict] = []
+    seen: set[str] = set()
+    for entry in media_mod.list_media():
+        filename = entry.get("filename")
+        if not filename or filename in seen:
+            continue
+        seen.add(filename)
+        items.append(_media_item(filename, entry.get("artist_id"), entry.get("original_name") or ""))
+
+    for deck in tarot_mod.list_decks():
+        back = (deck.get("back_image") or "").strip()
+        if back:
+            url = _strip_query(back)
+            name = os.path.basename(url)
+            if name not in seen:
+                entry = {
+                    "name": name,
+                    "url": url,
+                    "source": "tarot-back",
+                    "delete_url": f"/api/uploads/tarot/backs/{name}",
+                }
+                entry.update(_artist_info(deck.get("back_artist_id")))
+                items.append(entry)
+                seen.add(name)
+    for deck in tarot_mod.list_decks():
+        for c in tarot_mod.list_cards(deck.get("deck_id") or "elf-classic"):
+            img = (c.get("image") or "").strip()
+            if not img:
+                continue
+            url = _strip_query(img)
+            name = os.path.basename(url)
+            if name in seen:
+                continue
+            entry = {
+                "name": name,
+                "url": url,
+                "source": "tarot-card",
+                "delete_url": f"/api/uploads/tarot/cards/{name}",
+            }
+            entry.update(_artist_info(c.get("artist_id")))
+            items.append(entry)
+            seen.add(name)
+
+    try:
+        for g in bingo_mod.list_games():
+            gid = g.get("game_id")
+            if not gid:
+                continue
+            game = bingo_mod.get_game(gid)
+            if not game or not game.get("background_path"):
+                continue
+            name = f"{gid}.png"
+            url = f"/bingo/assets/{gid}"
+            if name in seen:
+                continue
+            items.append({
+                "name": name,
+                "url": url,
+                "source": "bingo-bg",
+                "delete_url": f"/api/uploads/bingo/backgrounds/{gid}",
+            })
+            seen.add(name)
+    except Exception:
+        pass
+    return web.json_response({"ok": True, "items": items})
+
+@route("DELETE", "/api/media/{filename}", scopes=["tarot:admin"])
+async def delete_media(req: web.Request):
+    filename = req.match_info["filename"]
+    path = os.path.join(_media_dir(), filename)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except Exception:
+            return web.json_response({"ok": False, "error": "delete failed"}, status=500)
+    media_mod.delete_media(filename)
+    tarot_mod.clear_image_references(f"/media/{filename}")
+    return web.json_response({"ok": True})
 
 @route("DELETE", "/api/uploads/tarot/cards/{filename}", scopes=["tarot:admin"])
 async def delete_tarot_card_file(req: web.Request):
