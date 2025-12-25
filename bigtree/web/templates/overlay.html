@@ -992,18 +992,16 @@
           </div>
           <div>
             <label>&nbsp;</label>
-            <button class="btn-ghost" id="bChannelRefresh">Refresh channels</button>
+            <button class="menu-refresh" id="bChannelRefresh" title="Refresh channels" aria-label="Refresh channels">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+              </svg>
+            </button>
           </div>
         </div>
+        <input id="bChannel" type="hidden">
+        <input id="bCreatedBy" type="hidden">
         <div class="row">
-          <div>
-            <label for="bChannel">Channel ID</label>
-            <input id="bChannel" placeholder="0">
-          </div>
-          <div>
-            <label for="bCreatedBy">Created by</label>
-            <input id="bCreatedBy" placeholder="0">
-          </div>
           <div>
             <label for="bTheme">Theme color</label>
             <input id="bTheme" type="color" value="#9de07d">
@@ -1468,6 +1466,11 @@
           const data = await jsonFetch("/api/auth/me", {method:"GET"}, true);
           const name = data.user_name || data.user_id || "";
           const icon = data.user_icon || "";
+          const userId = data.user_id || "";
+          const createdBy = $("bCreatedBy");
+          if (createdBy){
+            createdBy.value = userId ? String(userId) : "";
+          }
           if (name){
             brandUserName.textContent = name;
             brandUser.classList.remove("hidden");
@@ -1490,6 +1493,10 @@
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
           brandUser.classList.add("hidden");
+          const createdBy = $("bCreatedBy");
+          if (createdBy){
+            createdBy.value = "";
+          }
         }
       }
 
