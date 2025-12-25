@@ -519,6 +519,15 @@
         padding:8px 0;
         gap:4px;
       }
+      .preview-card.library-card .preview-label{
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.06em;
+        color:var(--accent);
+      }
+      .preview-card.library-card .muted{
+        font-size:11px;
+      }
       .preview-card.library-card img{
         width:calc(100% - 16px);
         height:180px;
@@ -1370,19 +1379,27 @@
           items.forEach(item => {
             const card = document.createElement("div");
             card.className = "preview-card library-card";
+
             const titleText = document.createElement("div");
             titleText.className = "preview-label";
             titleText.style.position = "static";
-            titleText.style.margin = "8px";
+            titleText.style.margin = "8px 8px 2px";
             titleText.style.background = "transparent";
             titleText.style.padding = "0";
             titleText.textContent = item.title || item.name || "Untitled";
+
+            const meta = document.createElement("div");
+            meta.className = "muted";
+            meta.style.padding = "0 8px 6px";
+            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : "";
+
             const img = document.createElement("img");
             img.src = item.url;
             img.alt = item.name || "image";
+
             const btn = document.createElement("button");
             btn.className = "btn-ghost";
-            btn.style.margin = "8px";
+            btn.style.margin = "0 8px 8px";
             btn.textContent = "Use";
             btn.addEventListener("click", () => {
               if (librarySelectHandler){
@@ -1390,10 +1407,7 @@
               }
               showLibraryModal(false);
             });
-            const meta = document.createElement("div");
-            meta.className = "muted";
-            meta.style.padding = "0 8px 8px";
-            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : "";
+
             const del = document.createElement("button");
             del.className = "btn-ghost";
             del.style.margin = "0 8px 8px";
@@ -1415,8 +1429,11 @@
                 setLibraryStatus(err.message, "err");
               }
             });
+
             card.appendChild(titleText);
-            card.appendChild(meta);
+            if (meta.textContent){
+              card.appendChild(meta);
+            }
             card.appendChild(img);
             card.appendChild(btn);
             card.appendChild(del);
@@ -2003,7 +2020,9 @@
         }
       });
       $("menuMedia").addEventListener("click", () => {
-        $("mediaModal").classList.add("show");
+        librarySelectHandler = null;
+        showLibraryModal(true);
+        loadLibrary("media");
         loadTarotArtists();
       });
       $("menuArtists").addEventListener("click", () => {
