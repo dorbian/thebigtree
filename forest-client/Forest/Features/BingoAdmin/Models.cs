@@ -37,7 +37,8 @@ public record GameStats(
 public record Payouts(
     int single,
     int @double,
-    int full
+    int full,
+    int? remainder
 );
 
 public record Claim(

@@ -1122,9 +1122,14 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted($"Pot: {g.pot} {g.currency}");
         ImGui.SameLine();
         if (g.payouts is not null)
-            ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}");
+        {
+            var remainder = g.payouts.remainder.HasValue ? $" R:{g.payouts.remainder.Value}" : "";
+            ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}{remainder}");
+        }
         else
+        {
             ImGui.TextDisabled("Payouts unavailable");
+        }
         ImGui.Separator();
 
         ImGui.TextUnformatted("Called:");

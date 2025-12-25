@@ -385,11 +385,13 @@ def deny_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
     return True, "OK"
 
 def _payouts(pot: int) -> Dict[str, int]:
-    # split pot into 6 parts: 1/6, 2/6, 3/6 (last gets remainder)
-    p1 = pot // 6
-    p2 = (2 * pot) // 6
-    p3 = pot - (p1 + p2)
-    return {"single": p1, "double": p2, "full": p3}
+    # base is one tenth of the pot
+    base = pot // 10
+    remainder = pot - (base * 10)
+    p1 = base * 2
+    p2 = base * 3
+    p3 = base * 5
+    return {"single": p1, "double": p2, "full": p3, "remainder": remainder}
 
 def player_card_count(db: TinyDB, game_id: str, owner_name: str) -> int:
     Card = Query()
