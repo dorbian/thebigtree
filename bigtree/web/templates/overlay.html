@@ -1291,8 +1291,17 @@
       }
 
       function applyTheme(color){
-        if (!color) return;
-        const root = document.documentElement;
+        const panel = $("bingoPanel");
+        if (!panel){
+          return;
+        }
+        if (!color){
+          panel.style.removeProperty("--accent");
+          panel.style.removeProperty("--accent-2");
+          panel.style.removeProperty("--line");
+          panel.style.removeProperty("--panel");
+          return;
+        }
         const hex = color.startsWith("#") ? color.slice(1) : color;
         if (hex.length !== 6) return;
         const r = parseInt(hex.slice(0,2), 16);
@@ -1303,10 +1312,10 @@
         const dark = `#${toHex(mix(r, 0, 0.6))}${toHex(mix(g, 0, 0.6))}${toHex(mix(b, 0, 0.6))}`;
         const darker = `#${toHex(mix(r, 0, 0.8))}${toHex(mix(g, 0, 0.8))}${toHex(mix(b, 0, 0.8))}`;
         const light = `#${toHex(mix(r, 255, 0.35))}${toHex(mix(g, 255, 0.35))}${toHex(mix(b, 255, 0.35))}`;
-        root.style.setProperty("--accent", light);
-        root.style.setProperty("--accent-2", `#${hex}`);
-        root.style.setProperty("--line", dark);
-        root.style.setProperty("--panel", darker);
+        panel.style.setProperty("--accent", light);
+        panel.style.setProperty("--accent-2", `#${hex}`);
+        panel.style.setProperty("--line", dark);
+        panel.style.setProperty("--panel", darker);
       }
 
       function loadSettings(){
