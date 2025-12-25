@@ -582,10 +582,10 @@
       <aside class="sidebar">
         <div class="sidebar-body">
           <div class="brand">Forest Management</div>
-          <h3>Menu</h3>
-          <div class="menu-item active" id="menuBingo">
-            <span>Bingo</span>
-            <div style="display:flex;gap:6px;align-items:center">
+        <h3>Bingo</h3>
+        <div class="menu-item active" id="menuBingo">
+          <span>Bingo</span>
+          <div style="display:flex;gap:6px;align-items:center">
               <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
@@ -598,10 +598,11 @@
               </button>
             </div>
           </div>
-          <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
-          <div class="menu-sub" id="menuGames"></div>
-          <div class="hidden" id="menuCreateGamePlaceholder"></div>
-        <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
+        <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
+        <div class="menu-sub" id="menuGames"></div>
+        <div class="hidden" id="menuCreateGamePlaceholder"></div>
+        <h3>Tarot</h3>
+        <div class="menu-item" id="menuTarotLinks">Session Manager</div>
         <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
           <div class="menu-icons">
             <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
@@ -626,8 +627,8 @@
       </aside>
       <main class="content">
       <div class="grid">
-      <section class="panel" style="animation-delay:.05s" id="bingoPanel">
-        <h2>Bingo Control</h2>
+        <section class="panel" style="animation-delay:.05s" id="bingoPanel">
+          <h2>Manager</h2>
         <h3>Players</h3>
         <div class="list" id="bOwners">No players loaded.</div>
 
@@ -715,7 +716,7 @@
         </section>
 
         <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
-          <h2>Tarot Views</h2>
+          <h2>Session Manager</h2>
           <p>Open the player, priestess, or overlay view.</p>
           <div class="row">
             <div>
