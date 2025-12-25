@@ -440,6 +440,9 @@
         justify-content:center;
         z-index:20;
       }
+      #uploadLibraryModal{
+        z-index:30;
+      }
       .modal.show{display:flex}
       .modal-card{
         width:min(720px,92vw);
@@ -1166,6 +1169,10 @@
 
       function showLibraryModal(show){
         $("uploadLibraryModal").classList.toggle("show", !!show);
+        if (show){
+          $("mediaModal").classList.remove("show");
+          $("artistModal").classList.remove("show");
+        }
       }
 
       async function loadLibrary(kind){
