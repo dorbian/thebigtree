@@ -1019,6 +1019,7 @@
             <button id="bCreate">Create</button>
           </div>
         </div>
+        <div class="status" id="bCreatePayload">Payload preview: channel_id=?, created_by=?</div>
       </div>
     </div>
     <div class="modal" id="bOwnerModal">
@@ -1471,6 +1472,7 @@
           if (createdBy){
             createdBy.value = userId ? String(userId) : "";
           }
+          updateBingoCreatePayload();
           if (name){
             brandUserName.textContent = name;
             brandUser.classList.remove("hidden");
@@ -1497,6 +1499,7 @@
           if (createdBy){
             createdBy.value = "";
           }
+          updateBingoCreatePayload();
         }
       }
 
@@ -1840,6 +1843,7 @@
           if (select.value){
             $("bChannel").value = select.value;
           }
+          updateBingoCreatePayload();
         }catch(err){
           select.innerHTML = `<option value="">Failed to load</option>`;
           setStatus(err.message, "err");
@@ -1868,6 +1872,7 @@
         if (pick){
           $("bChannel").value = pick;
         }
+        updateBingoCreatePayload();
       });
       $("menuCreateGame").addEventListener("click", () => {
         $("bCreateModal").classList.add("show");
@@ -1875,6 +1880,7 @@
         $("bChannel").value = "";
         $("bChannelSelect").value = "";
         loadDiscordChannels();
+        updateBingoCreatePayload();
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
@@ -1975,6 +1981,20 @@
           endedEl.textContent = "Failed to load contests.";
           setStatus(err.message, "err");
         }
+      }
+
+      function updateBingoCreatePayload(){
+        const el = $("bCreatePayload");
+        if (!el){
+          return;
+        }
+        const channelId = $("bChannelSelect").value || $("bChannel").value || "?";
+        const createdBy = $("bCreatedBy").value || "?";
+        const channelLabel = $("bChannelSelect").selectedOptions.length
+          ? $("bChannelSelect").selectedOptions[0].textContent
+          : "";
+        const label = channelLabel ? ` (${channelLabel})` : "";
+        el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
       }
 
       function renderOwnersList(owners){
@@ -2254,6 +2274,7 @@
 
       $("bCreate").addEventListener("click", async () => {
         try{
+          updateBingoCreatePayload();
           const body = {
             title: $("bTitle").value,
             header_text: $("bHeader").value,
