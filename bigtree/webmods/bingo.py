@@ -2,7 +2,10 @@
 from __future__ import annotations
 from aiohttp import web
 import os
-from typing import Any, Dict
+import random
+from typing import Any, Dict, Optional
+import bigtree
+import discord
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import bingo as bingo
 
@@ -53,6 +56,46 @@ def _call_random(game_id: str):
         return False, "Random rolling not supported by bingo module"
     except Exception as e:
         return False, str(e)
+
+def _call_label(game: Dict[str, Any], number: int) -> str:
+    header = (game.get("header") or "BING").ljust(4)
+    try:
+        col_index = max(0, min(3, (int(number) - 1) // 10))
+    except Exception:
+        col_index = 0
+    col_char = header[col_index].strip()
+    return f"{col_char}{number}" if col_char else str(number)
+
+async def _announce_call(game: Dict[str, Any], number: Optional[int]):
+    if number is None:
+        return
+    channel_id = int(game.get("channel_id") or 0)
+    if not channel_id:
+        return
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return
+    channel = bot.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        return
+    call = _call_label(game, int(number))
+    title = game.get("title") or "Bingo"
+    templates = [
+        "The forest whispers... {call}.",
+        "Roots rustle and point to {call}.",
+        "A leaf lands on {call}.",
+        "Canopy echoes: {call}.",
+        "The grove chooses {call}.",
+        "Sapling scouts found {call}.",
+        "Mossy drums roll: {call}.",
+        "Hollow log hums {call}.",
+        "Branchlight falls on {call}.",
+    ]
+    msg = random.choice(templates).format(call=call, number=number, title=title)
+    try:
+        await channel.send(msg)
+    except Exception:
+        pass
 
 # ---------- Public JSON ----------
 @route("GET", "/bingo/{game_id}", allow_public=True)
@@ -147,10 +190,16 @@ async def bingo_call(req: web.Request):
     if num is None:
         ok, val = _call_random(g)
         if not ok: return web.json_response({"ok": False, "error": val}, status=501)
+        try:
+            last_called = val.get("last_called") if isinstance(val, dict) else None
+            await _announce_call(val, last_called)
+        except Exception:
+            pass
         return web.json_response({"ok": True, "called": getattr(val, "get", lambda _k, _d=None: None)("called", val)})
     game, err = bingo.call_number(g, int(num))
     if err and err != "Number already called.":
         return web.json_response({"ok": False, "error": err}, status=400)
+    await _announce_call(game, int(num))
     return web.json_response({"ok": True, "called": game["called"]})
 
 @route("POST", "/bingo/roll", scopes=["bingo:admin"])
@@ -160,6 +209,11 @@ async def bingo_roll(req: web.Request):
     ok, val = _call_random(g)
     if not ok:
         return web.json_response({"ok": False, "error": val}, status=501)
+    try:
+        last_called = val.get("last_called") if isinstance(val, dict) else None
+        await _announce_call(val, last_called)
+    except Exception:
+        pass
     return web.json_response({"ok": True, "called": getattr(val, "get", lambda _k, _d=None: None)("called", val)})
 
 @route("POST", "/bingo/start", scopes=["bingo:admin"])
