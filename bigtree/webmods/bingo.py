@@ -79,8 +79,14 @@ async def _announce_call(game: Dict[str, Any], number: Optional[int]):
         logger.warning("[bingo] call announce skipped: bot not ready")
         return
     channel = bot.get_channel(channel_id)
-    if not isinstance(channel, discord.TextChannel):
-        logger.warning("[bingo] call announce skipped: channel %s not found or not text", channel_id)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except Exception as exc:
+            logger.warning("[bingo] call announce skipped: channel %s not found (%s)", channel_id, exc)
+            return
+    if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        logger.warning("[bingo] call announce skipped: channel %s not text", channel_id)
         return
     call = _call_label(game, int(number))
     title = game.get("title") or "Bingo"
