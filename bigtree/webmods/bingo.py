@@ -161,6 +161,7 @@ async def bingo_owner_token_cards(req: web.Request):
 @route("POST", "/bingo/create", scopes=["bingo:admin"])
 async def bingo_create(req: web.Request):
     body = await req.json()
+    bot = getattr(bigtree, "bot", None)
     game = bingo.create_game(
         channel_id=int(body.get("channel_id") or 0),
         title=str(body.get("title") or "Bingo"),
@@ -176,6 +177,14 @@ async def bingo_create(req: web.Request):
             "max_number": body.get("max_number"),
         }.items() if v is not None}
     )
+    channel_id = int(game.get("channel_id") or 0)
+    if channel_id and bot:
+        try:
+            channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+            if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+                return web.json_response({"ok": False, "error": "Channel is not a text channel."}, status=400)
+        except Exception:
+            return web.json_response({"ok": False, "error": "Channel not found or not accessible by bot."}, status=400)
     return web.json_response({"ok": True, "game": game})
 
 @route("POST", "/bingo/buy", scopes=["bingo:admin"])

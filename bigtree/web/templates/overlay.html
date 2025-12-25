@@ -1834,7 +1834,10 @@
           if (current){
             select.value = current;
           }
-          if (!current && select.value){
+          if (!select.value && select.options.length){
+            select.value = select.options[0].value;
+          }
+          if (select.value){
             $("bChannel").value = select.value;
           }
         }catch(err){
@@ -1869,6 +1872,8 @@
       $("menuCreateGame").addEventListener("click", () => {
         $("bCreateModal").classList.add("show");
         $("bTitle").focus();
+        $("bChannel").value = "";
+        $("bChannelSelect").value = "";
         loadDiscordChannels();
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
@@ -2255,7 +2260,7 @@
             price: Number($("bPrice").value || 0),
             currency: $("bCurrency").value || "gil",
             max_cards_per_player: Number($("bMaxCards").value || 10),
-            channel_id: Number($("bChannel").value || $("bChannelSelect").value || 0),
+            channel_id: Number($("bChannelSelect").value || $("bChannel").value || 0),
             created_by: Number($("bCreatedBy").value || 0),
             theme_color: $("bTheme").value || ""
           };
