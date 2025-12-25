@@ -719,6 +719,24 @@
           <p>Open the player, priestess, or overlay view.</p>
           <div class="row">
             <div>
+              <label for="tSessionSelect">Existing sessions</label>
+              <select id="tSessionSelect"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                </svg>
+              </button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tCreateSession">New session</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
               <label for="tJoinCode">Join code</label>
               <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
@@ -749,38 +767,6 @@
           </div>
           <h3>Tarot Games</h3>
           <p>Create and manage tarot sessions.</p>
-          <div class="row">
-            <div>
-              <label for="tDeck">Deck</label>
-              <select id="tDeck"></select>
-            </div>
-            <div>
-              <label for="tSpread">Spread <span class="muted" id="tSpreadHelp">(?)</span></label>
-              <select id="tSpread">
-                <option value="single">Single</option>
-                <option value="tree">Tree</option>
-                <option value="cross">Cross</option>
-              </select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tCreateSession">Create session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tSessionSelect">Existing sessions</label>
-              <select id="tSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
           <div class="status hidden" id="tSpreadNote">
             Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
           </div>
@@ -804,16 +790,6 @@
             <div>
               <label>&nbsp;</label>
               <button id="taAddDeck">Add deck</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Deck back</label>
-              <button class="btn-ghost icon-btn" id="taBackLibrary" title="Choose from library">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
-                </svg>
-              </button>
             </div>
           </div>
           <input id="taBackImage" type="hidden">
@@ -1032,6 +1008,34 @@
           <div>
             <label>&nbsp;</label>
             <button id="deckCreateSubmit">Create deck</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="sessionCreateModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Create Session</div>
+          <button class="btn-ghost" id="sessionCreateClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="sessionCreateDeck">Deck</label>
+            <select id="sessionCreateDeck"></select>
+          </div>
+          <div>
+            <label for="sessionCreateSpread">Spread</label>
+            <select id="sessionCreateSpread">
+              <option value="single">Single</option>
+              <option value="tree">Tree</option>
+              <option value="cross">Cross</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="sessionCreateSubmit">Create session</button>
           </div>
         </div>
       </div>
@@ -1911,7 +1915,7 @@
         }
       });
 
-      $("taBackLibrary").addEventListener("click", () => {
+      $("taDeckBackPreview").addEventListener("click", () => {
         librarySelectHandler = async (item) => {
           const deck = $("taDeck").value.trim() || "elf-classic";
           const backImage = item.url || "";
@@ -1929,14 +1933,15 @@
             if (window.taDeckData && window.taDeckData.deck){
               window.taDeckData.deck.back_image = backImage;
             }
+            taUpdateDeckPreview(deck);
             taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
-            setStatus("Deck back saved from library.", "ok");
+            setStatus("Deck back updated.", "ok");
           }catch(err){
             setStatus(err.message, "err");
           }
         };
         showLibraryModal(true);
-        loadLibrary("tarot-back");
+        loadLibrary("media");
       });
 
       $("taCardLibrary").addEventListener("click", () => {
@@ -2186,24 +2191,30 @@
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
-          const select = $("tDeck");
-          select.innerHTML = "";
+          const modalSelect = $("sessionCreateDeck");
+          modalSelect.innerHTML = "";
           decks.forEach(d => {
-            const opt = document.createElement("option");
-            opt.value = d.deck_id;
-            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
-            select.appendChild(opt);
+            const opt2 = document.createElement("option");
+            opt2.value = d.deck_id;
+            opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            modalSelect.appendChild(opt2);
           });
-          select.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
+          modalSelect.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
         }catch(err){
           setStatus(err.message, "err");
         }
       }
 
-      $("tCreateSession").addEventListener("click", async () => {
+      $("tCreateSession").addEventListener("click", () => {
+        $("sessionCreateModal").classList.add("show");
+      });
+      $("sessionCreateClose").addEventListener("click", () => {
+        $("sessionCreateModal").classList.remove("show");
+      });
+      $("sessionCreateSubmit").addEventListener("click", async () => {
         try{
-          const deck = $("tDeck").value.trim() || "elf-classic";
-          const spread = $("tSpread").value.trim() || "single";
+          const deck = $("sessionCreateDeck").value.trim() || "elf-classic";
+          const spread = $("sessionCreateSpread").value.trim() || "single";
           const data = await jsonFetch("/api/tarot/sessions", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -2214,6 +2225,10 @@
           renderLinks(data.joinCode || "", data.priestessToken || "");
           setStatus("Session created.", "ok");
           await loadTarotSessions(data.joinCode || "");
+          $("sessionCreateModal").classList.remove("show");
+          if (data.joinCode){
+            window.open(getPriestessUrl(data.joinCode, data.priestessToken || ""), "_blank");
+          }
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -2282,10 +2297,6 @@
         const url = getPriestessUrl(code, token);
         renderLinks(code, token);
         window.open(url, "_blank");
-      });
-
-      $("tSpreadHelp").addEventListener("click", () => {
-        $("tSpreadNote").classList.toggle("hidden");
       });
 
       let taHouses = [];

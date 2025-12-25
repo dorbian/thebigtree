@@ -192,6 +192,9 @@
       <button class="btn accent" id="btnStart">Start Reading</button>
       <button class="btn danger" id="btnFinish">Finish</button>
     </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="btnOpenPlayer">Open player view</button>
+    </div>
     <div class="row">
       <button class="btn warn" id="btnShuffle">Shuffle</button>
       <button class="btn" id="btnDraw">Draw</button>
@@ -250,6 +253,16 @@
   function authHeaders(){
     return {"Content-Type":"application/json", "X-Tarot-Token": tokenInput.value.trim()};
   }
+
+  function getPlayerUrl(){
+    const url = new URL(`/tarot/session/${encodeURIComponent(joinCode)}`, window.location.origin);
+    url.searchParams.set("view", "player");
+    return url.toString();
+  }
+
+  document.getElementById("btnOpenPlayer").addEventListener("click", () => {
+    window.open(getPlayerUrl(), "_blank");
+  });
 
   async function fetchState(){
     const res = await fetch(`/api/tarot/sessions/${joinCode}/state?view=priestess`);
