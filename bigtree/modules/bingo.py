@@ -175,6 +175,7 @@ def create_game(
     created_by: int,
     header_text: Optional[str] = None,
     theme_color: Optional[str] = None,
+    announce_calls: Optional[bool] = None,
 ) -> Dict[str, Any]:
     _ensure_dirs()
     game_id = _new_game_id()
@@ -197,6 +198,7 @@ def create_game(
         "active": True,
         "background_path": None,  # file path under assets
         "theme_color": (theme_color or "").strip() or None,
+        "announce_calls": bool(announce_calls),
         "claims": [],
     }
     db = _open(game_id)

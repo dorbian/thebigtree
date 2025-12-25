@@ -70,6 +70,8 @@ def _call_label(game: Dict[str, Any], number: int) -> str:
 async def _announce_call(game: Dict[str, Any], number: Optional[int]):
     if number is None:
         return
+    if not game.get("announce_calls"):
+        return
     channel_id = int(game.get("channel_id") or 0)
     if not channel_id:
         logger.warning("[bingo] call announce skipped: missing channel_id")
@@ -172,6 +174,7 @@ async def bingo_create(req: web.Request):
         created_by=int(body.get("created_by") or 0),
         header_text=str(body.get("header_text") or body.get("header") or "BING"),
         theme_color=str(body.get("theme_color") or "").strip() or None,
+        announce_calls=bool(body.get("announce_calls")),
         **{k: v for k, v in {
             "size": body.get("size"),
             "free_center": body.get("free_center"),

@@ -974,7 +974,7 @@
           </div>
           <div>
             <label for="bPrice">Price</label>
-            <input id="bPrice" type="number" value="1000">
+            <input id="bPrice" type="number" value="10000">
           </div>
           <div>
             <label for="bCurrency">Currency</label>
@@ -1002,6 +1002,12 @@
         <input id="bChannel" type="hidden">
         <input id="bCreatedBy" type="hidden">
         <div class="row">
+          <div>
+            <label for="bAnnounceCalls">
+              <input type="checkbox" id="bAnnounceCalls">
+              Announce calls in Discord
+            </label>
+          </div>
           <div>
             <label for="bTheme">Theme color</label>
             <input id="bTheme" type="color" value="#9de07d">
@@ -1879,6 +1885,7 @@
         $("bTitle").focus();
         $("bChannel").value = "";
         $("bChannelSelect").value = "";
+        $("bAnnounceCalls").checked = false;
         loadDiscordChannels();
         updateBingoCreatePayload();
       });
@@ -2283,6 +2290,7 @@
             max_cards_per_player: Number($("bMaxCards").value || 10),
             channel_id: $("bChannelSelect").value || $("bChannel").value || "",
             created_by: $("bCreatedBy").value || "",
+            announce_calls: $("bAnnounceCalls").checked,
             theme_color: $("bTheme").value || ""
           };
           const data = await jsonFetch("/bingo/create", {

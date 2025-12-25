@@ -96,14 +96,14 @@
     z-index:60;
   }
   .call-ball.show{
-    animation:ball-drop 2s ease forwards;
+    animation:ball-drop 3.2s ease forwards;
   }
   @keyframes ball-drop{
     0%{transform:translate(-50%, -120px);opacity:0}
-    20%{opacity:1}
-    55%{transform:translate(-50%, 40px)}
-    75%{transform:translate(-50%, 10px)}
-    100%{transform:translate(-50%, -10px);opacity:0}
+    15%{opacity:1}
+    35%{transform:translate(-50%, calc(50vh - 70px));opacity:1}
+    85%{transform:translate(-50%, calc(50vh - 70px));opacity:1}
+    100%{transform:translate(-50%, calc(50vh - 90px));opacity:0}
   }
 </style>
 

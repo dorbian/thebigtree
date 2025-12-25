@@ -75,7 +75,6 @@ async def discord_channels(req: web.Request):
                 "position": channel.position,
             })
     channels.sort(key=lambda c: (c.get("guild_name") or "", c.get("category") or "", c.get("position") or 0, c.get("name") or ""))
-    logger.info("[discord] channel list payload: %s", channels)
     return web.json_response({"ok": True, "channels": channels})
 
 # ---------- Send a Discord message ----------
