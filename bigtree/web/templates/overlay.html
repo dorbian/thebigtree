@@ -814,20 +814,6 @@
           </div>
           <div class="row">
             <div>
-              <label for="taSeedPerHouse">Dummy cards per house</label>
-              <input id="taSeedPerHouse" type="number" value="4" min="0">
-            </div>
-            <div>
-              <label for="taSeedCrown">Dummy cards for Crown</label>
-              <input id="taSeedCrown" type="number" value="1" min="0">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="taSeedDeck">Seed dummy deck</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
               <label>Deck back</label>
               <button class="btn-ghost icon-btn" id="taBackLibrary" title="Choose from library">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -904,90 +890,6 @@
           </div>
         </section>
 
-        <section class="panel hidden" style="animation-delay:.1s" id="mediaPanel">
-          <h2>Media Management</h2>
-          <p>Upload images and assign artists.</p>
-          <div class="row">
-            <div>
-              <label for="mediaFile">Image file</label>
-              <input id="mediaFile" type="file" accept="image/*">
-            </div>
-            <div>
-              <label for="mediaArtist">Artist</label>
-              <select id="mediaArtist"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="mediaUpload">Upload</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Gallery</label>
-              <button class="btn-ghost icon-btn" id="mediaLibraryOpen" title="Open gallery">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel hidden" style="animation-delay:.1s" id="artistPanel">
-          <h2>Artist Index</h2>
-          <div class="row">
-            <div>
-              <label for="artistIndexSelect">Artist list</label>
-              <select id="artistIndexSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="artistIndexRefresh">Refresh</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="artistIndexId">Artist ID (optional)</label>
-              <input id="artistIndexId" placeholder="artist_id">
-            </div>
-            <div>
-              <label for="artistIndexName">Name</label>
-              <input id="artistIndexName" placeholder="Artist name">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="artistIndexInstagram">Instagram</label>
-              <input id="artistIndexInstagram" placeholder="https://instagram.com/...">
-            </div>
-            <div>
-              <label for="artistIndexBluesky">Bluesky</label>
-              <input id="artistIndexBluesky" placeholder="https://bsky.app/profile/...">
-            </div>
-            <div>
-              <label for="artistIndexX">X / Twitter</label>
-              <input id="artistIndexX" placeholder="https://x.com/...">
-            </div>
-            <div>
-              <label for="artistIndexArtstation">ArtStation</label>
-              <input id="artistIndexArtstation" placeholder="https://artstation.com/...">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="artistIndexWebsite">Website</label>
-              <input id="artistIndexWebsite" placeholder="https://...">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="artistIndexSave">Save artist</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="artistIndexDelete">Delete artist</button>
-            </div>
-          </div>
-        </section>
       </div>
       </main>
     </div>
@@ -1089,6 +991,147 @@
         </div>
         <div class="preview-grid" id="uploadLibraryGrid"></div>
         <div class="status" id="uploadLibraryStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="deckCreateModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Create Deck</div>
+          <button class="btn-ghost" id="deckCreateClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="deckCreateId">Deck ID</label>
+            <input id="deckCreateId" placeholder="elf-classic">
+          </div>
+          <div>
+            <label for="deckCreateName">Name</label>
+            <input id="deckCreateName" placeholder="Elf Classic">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Deck back</label>
+            <button class="btn-ghost icon-btn" id="deckCreateBackPick" title="Choose back image">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+              </svg>
+            </button>
+          </div>
+          <div>
+            <label for="deckCreateSeed">Seed dummy cards</label>
+            <select id="deckCreateSeed">
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+          <div>
+            <label for="deckCreatePerHouse">Per house</label>
+            <input id="deckCreatePerHouse" type="number" value="4" min="0">
+          </div>
+          <div>
+            <label for="deckCreateCrown">Crown</label>
+            <input id="deckCreateCrown" type="number" value="1" min="0">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="deckCreateSubmit">Create deck</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="mediaModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Media Management</div>
+          <button class="btn-ghost" id="mediaClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="mediaFile">Image file</label>
+            <input id="mediaFile" type="file" accept="image/*">
+          </div>
+          <div>
+            <label for="mediaArtist">Artist</label>
+            <select id="mediaArtist"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="mediaUpload">Upload</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Gallery</label>
+            <button class="btn-ghost icon-btn" id="mediaLibraryOpen" title="Open gallery">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="artistModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Artist Index</div>
+          <button class="btn-ghost" id="artistClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="artistIndexSelect">Artist list</label>
+            <select id="artistIndexSelect"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="artistIndexRefresh">Refresh</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="artistIndexId">Artist ID (optional)</label>
+            <input id="artistIndexId" placeholder="artist_id">
+          </div>
+          <div>
+            <label for="artistIndexName">Name</label>
+            <input id="artistIndexName" placeholder="Artist name">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="artistIndexInstagram">Instagram</label>
+            <input id="artistIndexInstagram" placeholder="https://instagram.com/...">
+          </div>
+          <div>
+            <label for="artistIndexBluesky">Bluesky</label>
+            <input id="artistIndexBluesky" placeholder="https://bsky.app/profile/...">
+          </div>
+          <div>
+            <label for="artistIndexX">X / Twitter</label>
+            <input id="artistIndexX" placeholder="https://x.com/...">
+          </div>
+          <div>
+            <label for="artistIndexArtstation">ArtStation</label>
+            <input id="artistIndexArtstation" placeholder="https://artstation.com/...">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="artistIndexWebsite">Website</label>
+            <input id="artistIndexWebsite" placeholder="https://...">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="artistIndexSave">Save artist</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="artistIndexDelete">Delete artist</button>
+          </div>
+        </div>
       </div>
     </div>
     <script>
@@ -1594,14 +1637,10 @@
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
-        $("menuMedia").classList.toggle("active", which === "media");
-        $("menuArtists").classList.toggle("active", which === "artists");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
-        $("mediaPanel").classList.toggle("hidden", which !== "media");
-        $("artistPanel").classList.toggle("hidden", which !== "artists");
       }
 
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
@@ -1616,8 +1655,14 @@
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
-      $("menuMedia").addEventListener("click", () => showPanel("media"));
-      $("menuArtists").addEventListener("click", () => showPanel("artists"));
+      $("menuMedia").addEventListener("click", () => {
+        $("mediaModal").classList.add("show");
+        loadTarotArtists();
+      });
+      $("menuArtists").addEventListener("click", () => {
+        $("artistModal").classList.add("show");
+        loadTarotArtists();
+      });
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -1754,6 +1799,15 @@
       $("bCloseCreate").addEventListener("click", () => {
         $("bCreateModal").classList.remove("show");
       });
+      $("deckCreateClose").addEventListener("click", () => {
+        $("deckCreateModal").classList.remove("show");
+      });
+      $("mediaClose").addEventListener("click", () => {
+        $("mediaModal").classList.remove("show");
+      });
+      $("artistClose").addEventListener("click", () => {
+        $("artistModal").classList.remove("show");
+      });
       $("bOwnerClose").addEventListener("click", () => {
         $("bOwnerModal").classList.remove("show");
       });
@@ -1807,6 +1861,59 @@
       });
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
       $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
+
+      $("deckCreateBackPick").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          $("deckCreateBackPick").dataset.backUrl = item.url || "";
+          $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
+          setStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("deckCreateSubmit").addEventListener("click", async () => {
+        const id = $("deckCreateId").value.trim();
+        if (!id){
+          setStatus("Deck id is required.", "err");
+          return;
+        }
+        const backUrl = $("deckCreateBackPick").dataset.backUrl || "";
+        if (!backUrl){
+          setStatus("Pick a deck back before creating the deck.", "err");
+          return;
+        }
+        const name = $("deckCreateName").value.trim();
+        const seed = $("deckCreateSeed").value === "yes";
+        const perHouse = Number($("deckCreatePerHouse").value || 0);
+        const crownCount = Number($("deckCreateCrown").value || 0);
+        const artistId = $("deckCreateBackPick").dataset.artistId || "";
+        try{
+          await jsonFetch("/api/tarot/decks", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({deck_id: id, name: name || undefined})
+          }, true);
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/back", {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
+          }, true);
+          if (seed){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/seed", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
+            }, true);
+          }
+          await loadTarotDeckList(id);
+          $("deckCreateModal").classList.remove("show");
+          setStatus("Deck created.", "ok");
+          await $("taLoadDeck").click();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
 
       $("taBackLibrary").addEventListener("click", () => {
         librarySelectHandler = async (item) => {
@@ -2447,59 +2554,15 @@
         }
       });
 
-      $("taAddDeck").addEventListener("click", async () => {
-        const id = prompt("New deck id (e.g. elf-classic)") || "";
-        if (!id.trim()) return;
-        const name = prompt("Deck name (optional)") || "";
-        try{
-          await jsonFetch("/api/tarot/decks", {
-            method:"POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({deck_id: id.trim(), name: name.trim() || undefined})
-          }, true);
-          await loadTarotDeckList(id.trim());
-          setStatus("Deck created. Pick a back image.", "ok");
-          librarySelectHandler = async (item) => {
-            const backImage = item.url || "";
-            $("taBackImage").value = backImage;
-            $("taBackArtist").value = item.artist_id || "";
-            try{
-              await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id.trim()) + "/back", {
-                method:"PUT",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  back_image: backImage,
-                  artist_id: item.artist_id || undefined
-                })
-              }, true);
-              await $("taLoadDeck").click();
-              setStatus("Deck back saved.", "ok");
-            }catch(err){
-              setStatus(err.message, "err");
-            }
-          };
-          showLibraryModal(true);
-          loadLibrary("tarot-back");
-        }catch(err){
-          setStatus(err.message, "err");
-        }
-      });
-
-      $("taSeedDeck").addEventListener("click", async () => {
-        try{
-          const deck = $("taDeck").value.trim() || "elf-classic";
-          const perHouse = Number($("taSeedPerHouse").value || 0);
-          const crownCount = Number($("taSeedCrown").value || 0);
-          const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/seed", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
-          }, true);
-          setStatus(`Seeded ${data.created || 0} cards.`, "ok");
-          await $("taLoadDeck").click();
-        }catch(err){
-          setStatus(err.message, "err");
-        }
+      $("taAddDeck").addEventListener("click", () => {
+        $("deckCreateId").value = "";
+        $("deckCreateName").value = "";
+        $("deckCreateSeed").value = "no";
+        $("deckCreatePerHouse").value = "4";
+        $("deckCreateCrown").value = "1";
+        $("deckCreateBackPick").dataset.backUrl = "";
+        $("deckCreateBackPick").dataset.artistId = "";
+        $("deckCreateModal").classList.add("show");
       });
 
       $("taSaveCard").addEventListener("click", async () => {
