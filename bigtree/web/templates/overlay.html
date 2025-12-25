@@ -1188,6 +1188,10 @@
             </button>
           </div>
           <div>
+            <label>Back preview</label>
+            <div class="preview-card" id="deckCreateBackPreview"><span class="preview-label">Back</span></div>
+          </div>
+          <div>
             <label for="deckCreateSeed">Seed dummy cards</label>
             <select id="deckCreateSeed">
               <option value="no">No</option>
@@ -2316,6 +2320,13 @@
         librarySelectHandler = (item) => {
           $("deckCreateBackPick").dataset.backUrl = item.url || "";
           $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
+          const preview = $("deckCreateBackPreview");
+          preview.innerHTML = '<span class="preview-label">Back</span>';
+          if (item.url){
+            const img = document.createElement("img");
+            img.src = item.url;
+            preview.appendChild(img);
+          }
           setStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
         };
         showLibraryModal(true);
@@ -2988,6 +2999,7 @@
         $("deckCreateCrown").value = "1";
         $("deckCreateBackPick").dataset.backUrl = "";
         $("deckCreateBackPick").dataset.artistId = "";
+        $("deckCreateBackPreview").innerHTML = '<span class="preview-label">Back</span>';
         $("deckCreateModal").classList.add("show");
       });
 
