@@ -13,10 +13,13 @@
     --accent-2:#d6b26e;
     --danger:#e07070;
     --line:rgba(255,255,255,.08);
+    --header-h:64px;
   }
   *{box-sizing:border-box}
   body{
     margin:0;
+    height:100vh;
+    overflow:hidden;
     font-family:"Cinzel", "Garamond", "Georgia", serif;
     color:var(--text);
     background:
@@ -29,6 +32,7 @@
   }
   header{
     padding:18px 22px;
+    height:var(--header-h);
     border-bottom:1px solid var(--line);
     display:flex;
     align-items:center;
@@ -45,12 +49,17 @@
     grid-template-columns: 260px 1fr 320px;
     gap:16px;
     padding:16px;
+    height:calc(100vh - var(--header-h));
+    min-height:0;
+    overflow:hidden;
   }
   .panel{
     background:var(--panel);
     border:1px solid var(--line);
     border-radius:14px;
     padding:14px;
+    min-height:0;
+    overflow:hidden;
   }
   .panel h2{
     margin:0 0 10px 0;
