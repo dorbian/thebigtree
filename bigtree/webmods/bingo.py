@@ -162,6 +162,7 @@ async def bingo_owner_token_cards(req: web.Request):
 async def bingo_create(req: web.Request):
     body = await req.json()
     bot = getattr(bigtree, "bot", None)
+    logger.info("[bingo] create payload channel_id=%s created_by=%s", body.get("channel_id"), body.get("created_by"))
     game = bingo.create_game(
         channel_id=int(body.get("channel_id") or 0),
         title=str(body.get("title") or "Bingo"),
