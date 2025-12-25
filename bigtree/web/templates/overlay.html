@@ -378,6 +378,21 @@
         height:14px;
         fill:currentColor;
       }
+      #bOwners{
+        max-height:140px;
+      }
+      .owner-row{
+        padding:4px 6px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+      }
+      .owner-row strong{
+        font-size:12px;
+        font-weight:600;
+      }
+      .owner-row .owner-meta{
+        gap:6px;
+        font-size:11px;
+      }
       .row{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
@@ -2036,8 +2051,7 @@
         el.innerHTML = "";
         owners.forEach(o => {
           const item = document.createElement("div");
-          item.style.padding = "8px 6px";
-          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          item.className = "owner-row";
           item.style.cursor = "pointer";
           const token = o.token || "";
           const link = token ? `${getBase()}/bingo/owner?token=${encodeURIComponent(token)}` : "";
