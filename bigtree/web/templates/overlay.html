@@ -357,6 +357,27 @@
         font-size:12px;
         font-weight:500;
       }
+      .owner-meta .owner-copy-icon{
+        width:28px;
+        height:28px;
+        padding:4px;
+        border-radius:8px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        background:transparent;
+        border:1px solid rgba(255,255,255,.18);
+        color:var(--muted);
+      }
+      .owner-meta .owner-copy-icon:hover{
+        color:var(--ink);
+        border-color:rgba(255,255,255,.3);
+      }
+      .owner-meta .owner-copy-icon svg{
+        width:14px;
+        height:14px;
+        fill:currentColor;
+      }
       .row{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
@@ -2021,7 +2042,7 @@
           const token = o.token || "";
           const link = token ? `${getBase()}/bingo/owner?token=${encodeURIComponent(token)}` : "";
           const linkHtml = link ? `<a href="${link}" class="owner-link" target="_blank" rel="noreferrer">Open</a>` : "";
-          const copyBtn = link ? `<button data-copy="${link}" class="btn-ghost owner-copy">Copy link</button>` : "";
+          const copyBtn = link ? `<button data-copy="${link}" class="owner-copy-icon" title="Copy link" aria-label="Copy link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg></button>` : "";
           item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${o.owner_name}</strong></div>\n              <div class="owner-meta">\n                <span class="owner-cards">${o.cards} cards</span>\n                ${linkHtml}\n                ${copyBtn}\n              </div>\n            </div>`;
           item.onclick = () => {
             $("bOwner").value = o.owner_name || "";
