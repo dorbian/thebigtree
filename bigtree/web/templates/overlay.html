@@ -601,9 +601,8 @@
           <div class="menu-selected" id="menuSelectedGame">No game selected.</div>
           <div class="menu-sub" id="menuGames"></div>
           <div class="hidden" id="menuCreateGamePlaceholder"></div>
-          <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
-          <div class="menu-item" id="menuTarotAdmin">Tarot Games</div>
-          <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
+        <div class="menu-item" id="menuTarotLinks">Tarot Views</div>
+        <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
           <div class="menu-icons">
             <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -748,19 +747,7 @@
               <div id="tLink">No join code entered.</div>
             </div>
           </div>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="tOpenGallery">Open gallery</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel hidden" style="animation-delay:.1s" id="tarotAdminPanel">
-          <h2>Tarot Games</h2>
+          <h3>Tarot Games</h3>
           <p>Create and manage tarot sessions.</p>
           <div class="row">
             <div>
@@ -805,6 +792,10 @@
             <div>
               <label for="taDeck">Deck</label>
               <select id="taDeck"></select>
+            </div>
+            <div>
+              <label>Back preview</label>
+              <div class="preview-card" id="taDeckBackPreview"><span class="preview-label">Back</span></div>
             </div>
             <div>
               <label>&nbsp;</label>
@@ -1153,6 +1144,7 @@
       let activeGameId = "";
       let currentOwner = "";
       window.taArtists = [];
+      let taDeckIndex = {};
 
       function getBase(){
         return window.location.origin;
@@ -1642,11 +1634,9 @@
       function showPanel(which){
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
-        $("menuTarotAdmin").classList.toggle("active", which === "tarotAdmin");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
-        $("tarotAdminPanel").classList.toggle("hidden", which !== "tarotAdmin");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
       }
 
@@ -1660,7 +1650,6 @@
         $("bTitle").focus();
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
-      $("menuTarotAdmin").addEventListener("click", () => showPanel("tarotAdmin"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
       $("menuMedia").addEventListener("click", () => {
         $("mediaModal").classList.add("show");
@@ -2295,11 +2284,6 @@
         window.open(url, "_blank");
       });
 
-      $("tOpenGallery").addEventListener("click", () => {
-        const base = getBase();
-        window.open(new URL("/tarot/gallery", base).toString(), "_blank");
-      });
-
       $("tSpreadHelp").addEventListener("click", () => {
         $("tSpreadNote").classList.toggle("hidden");
       });
@@ -2546,6 +2530,9 @@
           taLoadCard(card);
         }
       });
+      $("taDeck").addEventListener("change", (ev) => {
+        taUpdateDeckPreview(ev.target.value);
+      });
 
       $("taLoadDeck").addEventListener("click", async () => {
         try{
@@ -2554,6 +2541,7 @@
           showList($("taDeckList"), data);
           $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
           $("taBackArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
+          taUpdateDeckPreview(deck);
           taRenderPreviews(null);
           setStatus("Deck loaded.", "ok");
         }catch(err){
@@ -2614,15 +2602,31 @@
           const decks = data.decks || [];
           const select = $("taDeck");
           select.innerHTML = "";
+          taDeckIndex = {};
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
+            taDeckIndex[d.deck_id] = d;
           });
           select.value = selectValue || "elf-classic";
+          taUpdateDeckPreview(select.value);
         }catch(err){
           setStatus(err.message, "err");
+        }
+      }
+
+      function taUpdateDeckPreview(deckId){
+        const deck = taDeckIndex[deckId] || {};
+        const preview = $("taDeckBackPreview");
+        if (!preview) return;
+        preview.innerHTML = "<span class=\"preview-label\">Back</span>";
+        if (deck.back_image){
+          const img = document.createElement("img");
+          img.src = deck.back_image;
+          img.alt = deck.name || deck.deck_id || "Back";
+          preview.appendChild(img);
         }
       }
 
