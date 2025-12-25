@@ -67,9 +67,9 @@ async def discord_channels(req: web.Request):
                 continue
             category = channel.category.name if channel.category else ""
             channels.append({
-                "id": channel.id,
+                "id": str(channel.id),
                 "name": channel.name,
-                "guild_id": guild.id,
+                "guild_id": str(guild.id),
                 "guild_name": guild.name,
                 "category": category,
                 "position": channel.position,
