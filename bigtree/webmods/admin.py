@@ -7,6 +7,7 @@ import os
 from tinydb import TinyDB, Query
 import bigtree
 from bigtree.inc.webserver import route
+from bigtree.inc import web_tokens
 
 # ---------- TinyDB for admin clients ----------
 def _admin_db_path() -> str:
@@ -17,6 +18,32 @@ def _admin_db() -> TinyDB:
     path = _admin_db_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return TinyDB(path)
+
+def _extract_token(req: web.Request) -> str:
+    auth = req.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+def _find_web_token(token: str) -> Dict[str, Any]:
+    if not token:
+        return {}
+    for t in web_tokens.load_tokens():
+        if t.get("token") == token:
+            return t
+    return {}
+
+@route("GET", "/api/auth/me")
+async def auth_me(req: web.Request):
+    token = _extract_token(req)
+    doc = _find_web_token(token)
+    return web.json_response({
+        "ok": True,
+        "user_name": doc.get("user_name") if doc else None,
+        "user_id": doc.get("user_id") if doc else None,
+        "scopes": doc.get("scopes") if doc else [],
+        "source": "web_token" if doc else "api_key",
+    })
 
 # ---------- Send a Discord message ----------
 @route("POST", "/message", scopes=["admin:message"])
