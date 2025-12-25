@@ -6,6 +6,9 @@ import random
 from typing import Any, Dict, Optional
 import bigtree
 import discord
+import logging
+
+logger = getattr(bigtree, "logger", logging.getLogger("bigtree"))
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import bingo as bingo
 
@@ -71,12 +74,15 @@ async def _announce_call(game: Dict[str, Any], number: Optional[int]):
         return
     channel_id = int(game.get("channel_id") or 0)
     if not channel_id:
+        logger.warning("[bingo] call announce skipped: missing channel_id")
         return
     bot = getattr(bigtree, "bot", None)
     if not bot:
+        logger.warning("[bingo] call announce skipped: bot not ready")
         return
     channel = bot.get_channel(channel_id)
     if not isinstance(channel, discord.TextChannel):
+        logger.warning("[bingo] call announce skipped: channel %s not found or not text", channel_id)
         return
     call = _call_label(game, int(number))
     title = game.get("title") or "Bingo"
@@ -94,8 +100,8 @@ async def _announce_call(game: Dict[str, Any], number: Optional[int]):
     msg = random.choice(templates).format(call=call, number=number, title=title)
     try:
         await channel.send(msg)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[bingo] call announce failed for channel %s: %s", channel_id, exc)
 
 # ---------- Public JSON ----------
 @route("GET", "/bingo/{game_id}", allow_public=True)
