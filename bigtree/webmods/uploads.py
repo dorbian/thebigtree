@@ -66,12 +66,18 @@ def _artist_info(artist_id: str | None) -> dict:
         "artist_links": artist.get("links") or {},
     }
 
-def _media_item(filename: str, artist_id: str | None, original_name: str = "") -> dict:
+def _media_item(
+    filename: str,
+    artist_id: str | None,
+    original_name: str = "",
+    title: str = "",
+) -> dict:
     item = {
         "name": filename,
         "url": f"/media/{filename}",
         "source": "media",
         "original_name": original_name,
+        "title": title,
         "delete_url": f"/api/media/{filename}",
     }
     item.update(_artist_info(artist_id))
@@ -174,6 +180,7 @@ async def upload_media(req: web.Request):
     if not data:
         return web.json_response({"ok": False, "error": "file required"}, status=400)
     artist_id = (fields.get("artist_id") or "").strip() or None
+    title = (fields.get("title") or "").strip() or None
     kind = imghdr.what(None, h=data)
     ext_map = {
         "jpeg": ".jpg",
@@ -198,8 +205,18 @@ async def upload_media(req: web.Request):
             f.write(data)
     except Exception:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
-    entry = media_mod.add_media(filename, original_name=filename_hint, artist_id=artist_id)
-    item = _media_item(filename, entry.get("artist_id"), entry.get("original_name") or "")
+    entry = media_mod.add_media(
+        filename,
+        original_name=filename_hint,
+        artist_id=artist_id,
+        title=title,
+    )
+    item = _media_item(
+        filename,
+        entry.get("artist_id"),
+        entry.get("original_name") or "",
+        entry.get("title") or "",
+    )
     return web.json_response({"ok": True, "item": item})
 
 @route("GET", "/api/media/list", scopes=["tarot:admin"])
@@ -211,7 +228,12 @@ async def list_media(_req: web.Request):
         if not filename or filename in seen:
             continue
         seen.add(filename)
-        items.append(_media_item(filename, entry.get("artist_id"), entry.get("original_name") or ""))
+        items.append(_media_item(
+            filename,
+            entry.get("artist_id"),
+            entry.get("original_name") or "",
+            entry.get("title") or "",
+        ))
 
     for deck in tarot_mod.list_decks():
         back = (deck.get("back_image") or "").strip()

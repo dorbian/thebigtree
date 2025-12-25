@@ -61,13 +61,19 @@ def get_media(filename: str) -> Optional[Dict]:
     db = _db(); q = Query()
     return db.get((q._type == "media") & (q.filename == filename))
 
-def add_media(filename: str, original_name: Optional[str] = None, artist_id: Optional[str] = None) -> Dict:
+def add_media(
+    filename: str,
+    original_name: Optional[str] = None,
+    artist_id: Optional[str] = None,
+    title: Optional[str] = None,
+) -> Dict:
     db = _db(); q = Query()
     payload = {
         "_type": "media",
         "filename": filename,
         "original_name": original_name or "",
         "artist_id": artist_id or None,
+        "title": title or "",
         "created_at": _now(),
     }
     existing = get_media(filename)
@@ -75,6 +81,7 @@ def add_media(filename: str, original_name: Optional[str] = None, artist_id: Opt
         existing.update({
             "original_name": payload["original_name"] or existing.get("original_name", ""),
             "artist_id": payload["artist_id"],
+            "title": payload["title"] or existing.get("title", ""),
         })
         db.update(existing, (q._type == "media") & (q.filename == filename))
         return existing

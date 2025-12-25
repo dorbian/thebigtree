@@ -512,6 +512,23 @@
         justify-content:center;
         position:relative;
       }
+      .preview-card.library-card{
+        aspect-ratio:auto;
+        align-items:stretch;
+        justify-content:flex-start;
+        padding:8px 0;
+        gap:4px;
+      }
+      .preview-card.library-card img{
+        width:calc(100% - 16px);
+        height:180px;
+        object-fit:cover;
+        border-radius:10px;
+        margin:0 8px;
+      }
+      .preview-card.library-card .btn-ghost{
+        margin:0 8px 8px;
+      }
       .preview-card img{
         width:100%;
         height:100%;
@@ -1111,6 +1128,22 @@
         </div>
         <div class="row">
           <div>
+            <label for="uploadLibraryFile">Upload image</label>
+            <input id="uploadLibraryFile" type="file" accept="image/*">
+          </div>
+          <div>
+            <label for="uploadLibraryTitle">Title</label>
+            <input id="uploadLibraryTitle" placeholder="Image title">
+          </div>
+          <div>
+            <label for="uploadLibraryArtist">Artist</label>
+            <select id="uploadLibraryArtist"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="uploadLibraryUpload">Upload</button>
+          </div>
+          <div>
             <label>&nbsp;</label>
             <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
           </div>
@@ -1204,27 +1237,14 @@
         </div>
         <div class="row">
           <div>
-            <label for="mediaFile">Image file</label>
-            <input id="mediaFile" type="file" accept="image/*">
-          </div>
-          <div>
-            <label for="mediaArtist">Artist</label>
-            <select id="mediaArtist"></select>
-          </div>
-          <div>
             <label>&nbsp;</label>
-            <button id="mediaUpload">Upload</button>
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>Gallery</label>
-            <button class="btn-ghost icon-btn" id="mediaLibraryOpen" title="Open gallery">
+            <button class="btn-ghost icon-btn" id="mediaLibraryOpen" title="Open library">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
               </svg>
             </button>
           </div>
+          <div class="muted" style="align-self:center">Upload and select images from the library.</div>
         </div>
       </div>
     </div>
@@ -1349,7 +1369,14 @@
           }
           items.forEach(item => {
             const card = document.createElement("div");
-            card.className = "preview-card";
+            card.className = "preview-card library-card";
+            const titleText = document.createElement("div");
+            titleText.className = "preview-label";
+            titleText.style.position = "static";
+            titleText.style.margin = "8px";
+            titleText.style.background = "transparent";
+            titleText.style.padding = "0";
+            titleText.textContent = item.title || item.name || "Untitled";
             const img = document.createElement("img");
             img.src = item.url;
             img.alt = item.name || "image";
@@ -1366,7 +1393,7 @@
             const meta = document.createElement("div");
             meta.className = "muted";
             meta.style.padding = "0 8px 8px";
-            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : (item.name || "");
+            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : "";
             const del = document.createElement("button");
             del.className = "btn-ghost";
             del.style.margin = "0 8px 8px";
@@ -1388,9 +1415,10 @@
                 setLibraryStatus(err.message, "err");
               }
             });
+            card.appendChild(titleText);
+            card.appendChild(meta);
             card.appendChild(img);
             card.appendChild(btn);
-            card.appendChild(meta);
             card.appendChild(del);
             grid.appendChild(card);
           });
@@ -2770,7 +2798,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-          const selects = ["mediaArtist", "artistIndexSelect"];
+          const selects = ["uploadLibraryArtist", "artistIndexSelect"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;
@@ -2877,10 +2905,11 @@
         librarySelectHandler = null;
         showLibraryModal(true);
         loadLibrary("media");
+        loadTarotArtists();
       });
 
-      $("mediaUpload").addEventListener("click", async () => {
-        const file = $("mediaFile").files[0];
+      $("uploadLibraryUpload").addEventListener("click", async () => {
+        const file = $("uploadLibraryFile").files[0];
         if (!file){
           setStatus("Select an image to upload.", "err");
           return;
@@ -2888,7 +2917,9 @@
         try{
           const fd = new FormData();
           fd.append("file", file);
-          const artistId = $("mediaArtist").value.trim();
+          const title = $("uploadLibraryTitle").value.trim();
+          if (title) fd.append("title", title);
+          const artistId = $("uploadLibraryArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
           const res = await fetch("/api/media/upload", {
             method: "POST",
@@ -2897,7 +2928,8 @@
           });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
-          $("mediaFile").value = "";
+          $("uploadLibraryFile").value = "";
+          $("uploadLibraryTitle").value = "";
           setStatus("Media uploaded.", "ok");
           await loadLibrary("media");
         }catch(err){
