@@ -2260,8 +2260,8 @@
             price: Number($("bPrice").value || 0),
             currency: $("bCurrency").value || "gil",
             max_cards_per_player: Number($("bMaxCards").value || 10),
-            channel_id: Number($("bChannelSelect").value || $("bChannel").value || 0),
-            created_by: Number($("bCreatedBy").value || 0),
+            channel_id: $("bChannelSelect").value || $("bChannel").value || "",
+            created_by: $("bCreatedBy").value || "",
             theme_color: $("bTheme").value || ""
           };
           const data = await jsonFetch("/bingo/create", {
