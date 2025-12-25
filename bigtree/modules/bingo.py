@@ -520,7 +520,7 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
     db = _open(game_id)
     Card = Query()
     cards = db.search((Card._type == "card") & (Card.game_id == game_id))
-    pot = int(g["pot"])
+    pot = int(g.get("price", 0)) * len(cards)
     pays = _payouts(pot)
     # minimal public claim info
     claims = []
@@ -637,6 +637,10 @@ def list_games() -> List[Dict[str, Any]]:
         g = get_game(game_id)
         if not g:
             continue
+        db = _open(game_id)
+        Card = Query()
+        cards = db.search((Card._type == "card") & (Card.game_id == game_id))
+        pot = int(g.get("price", 0)) * len(cards)
         games.append({
             "game_id": g.get("game_id"),
             "title": g.get("title"),
@@ -644,7 +648,7 @@ def list_games() -> List[Dict[str, Any]]:
             "created_at": g.get("created_at"),
             "active": g.get("active", False),
             "stage": g.get("stage", "single"),
-            "pot": g.get("pot", 0),
+            "pot": pot,
         })
     games.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
     return games
