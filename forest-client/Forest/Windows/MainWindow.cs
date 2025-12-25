@@ -1111,12 +1111,20 @@ public class MainWindow : Window, IDisposable
         }
 
         var g = _bingoState.game;
+        if (g is null)
+        {
+            ImGui.TextDisabled("Game data not available.");
+            return;
+        }
         ImGui.TextUnformatted($"Game: {g.title} ({g.game_id})");
         ImGui.SameLine(); ImGui.TextDisabled($"Stage: {g.stage}");
         ImGui.Spacing();
         ImGui.TextUnformatted($"Pot: {g.pot} {g.currency}");
         ImGui.SameLine();
-        ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}");
+        if (g.payouts is not null)
+            ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}");
+        else
+            ImGui.TextDisabled("Payouts unavailable");
         ImGui.Separator();
 
         ImGui.TextUnformatted("Called:");

@@ -22,7 +22,7 @@ public record GameInfo(
     int? last_called,
     bool started,
     string stage,
-    Payouts payouts,
+    Payouts? payouts,
     string? background,
     string? theme_color,
     bool active,

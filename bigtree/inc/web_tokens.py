@@ -99,6 +99,8 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
     for t in tokens:
         if t.get("token") != token:
             continue
+        if "scopes" not in t:
+            return True
         scopes = set(t.get("scopes") or [])
         if "*" in scopes:
             return True
