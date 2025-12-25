@@ -41,6 +41,7 @@ async def auth_me(req: web.Request):
         "ok": True,
         "user_name": doc.get("user_name") if doc else None,
         "user_id": doc.get("user_id") if doc else None,
+        "user_icon": doc.get("user_icon") if doc else None,
         "scopes": doc.get("scopes") if doc else [],
         "source": "web_token" if doc else "api_key",
     })

@@ -252,6 +252,13 @@
         height:14px;
         fill:currentColor;
       }
+      .brand-user img{
+        width:16px;
+        height:16px;
+        border-radius:50%;
+        object-fit:cover;
+        border:1px solid var(--line);
+      }
       .toggle{
         display:flex;
         align-items:center;
@@ -467,6 +474,17 @@
         padding:18px;
         box-shadow:var(--shadow);
       }
+      .modal-card--wide{
+        width:min(1100px,90vw);
+        height:min(80vh,900px);
+        display:flex;
+        flex-direction:column;
+      }
+      .modal-card--wide .list{
+        flex:1;
+        max-height:none;
+        overflow:auto;
+      }
       .modal-header{
         display:flex;
         justify-content:space-between;
@@ -598,7 +616,8 @@
         <div class="sidebar-body">
           <div class="brand">Forest Management</div>
           <div class="brand-user hidden" id="brandUser">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <img id="brandUserIcon" alt="" class="hidden">
+            <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
               <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
             </svg>
             <span id="brandUserName"></span>
@@ -951,7 +970,7 @@
       </div>
     </div>
     <div class="modal" id="bOwnerModal">
-      <div class="modal-card">
+      <div class="modal-card modal-card--wide">
         <div class="modal-header">
           <div class="modal-title">Player Cards</div>
           <button class="btn-ghost" id="bOwnerClose">Close</button>
@@ -1366,11 +1385,19 @@
         saveSettings();
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
+        const brandUserIcon = $("brandUserIcon");
+        const brandUserFallback = $("brandUserFallback");
         if (brandUser){
           if (brandUserName){
             brandUserName.textContent = "";
           }
-          brandUser.textContent = "";
+          if (brandUserIcon){
+            brandUserIcon.src = "";
+            brandUserIcon.classList.add("hidden");
+          }
+          if (brandUserFallback){
+            brandUserFallback.classList.remove("hidden");
+          }
           brandUser.classList.add("hidden");
         }
       }
@@ -1378,21 +1405,36 @@
       async function loadAuthUser(){
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
-        if (!brandUser || !brandUserName){
+        const brandUserIcon = $("brandUserIcon");
+        const brandUserFallback = $("brandUserFallback");
+        if (!brandUser || !brandUserName || !brandUserIcon || !brandUserFallback){
           return;
         }
         try{
           const data = await jsonFetch("/api/auth/me", {method:"GET"}, true);
           const name = data.user_name || data.user_id || "";
+          const icon = data.user_icon || "";
           if (name){
             brandUserName.textContent = name;
             brandUser.classList.remove("hidden");
+            if (icon){
+              brandUserIcon.src = icon;
+              brandUserIcon.classList.remove("hidden");
+              brandUserFallback.classList.add("hidden");
+            }else{
+              brandUserIcon.src = "";
+              brandUserIcon.classList.add("hidden");
+              brandUserFallback.classList.remove("hidden");
+            }
           }else{
             brandUserName.textContent = "";
             brandUser.classList.add("hidden");
           }
         }catch(err){
           brandUserName.textContent = "";
+          brandUserIcon.src = "";
+          brandUserIcon.classList.add("hidden");
+          brandUserFallback.classList.remove("hidden");
           brandUser.classList.add("hidden");
         }
       }
@@ -1679,7 +1721,6 @@
             renderGamesList(data.games || []);
             const menu = $("menuGames");
             menu.innerHTML = "";
-            let currentLabel = "No game selected.";
             list.forEach(g => {
               const row = document.createElement("div");
               row.className = "menu-game";
@@ -1694,7 +1735,7 @@
               };
               menu.appendChild(row);
               if (g.game_id && g.game_id === getGameId()){
-                currentLabel = g.title ? `${g.title} - ${created}` : created;
+                row.classList.add("active");
               }
             });
             if (!list.length){
