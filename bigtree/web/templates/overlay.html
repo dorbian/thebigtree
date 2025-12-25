@@ -780,10 +780,6 @@
               <select id="taDeck"></select>
             </div>
             <div>
-              <label>Back preview</label>
-              <div class="preview-card" id="taDeckBackPreview"><span class="preview-label">Back</span></div>
-            </div>
-            <div>
               <label>&nbsp;</label>
               <button id="taLoadDeck">Load deck</button>
             </div>
@@ -792,8 +788,6 @@
               <button id="taAddDeck">Add deck</button>
             </div>
           </div>
-          <input id="taBackImage" type="hidden">
-          <input id="taBackArtist" type="hidden">
           <div class="list" id="taDeckList">No deck loaded.</div>
 
           <h3>Add / Update Card</h3>
@@ -1148,7 +1142,6 @@
       let activeGameId = "";
       let currentOwner = "";
       window.taArtists = [];
-      let taDeckIndex = {};
 
       function getBase(){
         return window.location.origin;
@@ -1915,35 +1908,6 @@
         }
       });
 
-      $("taDeckBackPreview").addEventListener("click", () => {
-        librarySelectHandler = async (item) => {
-          const deck = $("taDeck").value.trim() || "elf-classic";
-          const backImage = item.url || "";
-          $("taBackImage").value = backImage;
-          $("taBackArtist").value = item.artist_id || "";
-          try{
-            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
-              method:"PUT",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                back_image: backImage,
-                artist_id: item.artist_id || undefined
-              })
-            }, true);
-            if (window.taDeckData && window.taDeckData.deck){
-              window.taDeckData.deck.back_image = backImage;
-            }
-            taUpdateDeckPreview(deck);
-            taRenderPreviews(window.taDeckData && window.taDeckData.cards ? window.taDeckData.cards.find(c => c.card_id === taSelectedCardId) : null);
-            setStatus("Deck back updated.", "ok");
-          }catch(err){
-            setStatus(err.message, "err");
-          }
-        };
-        showLibraryModal(true);
-        loadLibrary("media");
-      });
-
       $("taCardLibrary").addEventListener("click", () => {
         librarySelectHandler = (item) => {
           window.taUploadedImageUrl = item.url || "";
@@ -2541,18 +2505,11 @@
           taLoadCard(card);
         }
       });
-      $("taDeck").addEventListener("change", (ev) => {
-        taUpdateDeckPreview(ev.target.value);
-      });
-
       $("taLoadDeck").addEventListener("click", async () => {
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
-          $("taBackImage").value = (data.deck && data.deck.back_image) ? data.deck.back_image : "";
-          $("taBackArtist").value = (data.deck && data.deck.back_artist_id) ? data.deck.back_artist_id : "";
-          taUpdateDeckPreview(deck);
           taRenderPreviews(null);
           setStatus("Deck loaded.", "ok");
         }catch(err){
@@ -2613,31 +2570,15 @@
           const decks = data.decks || [];
           const select = $("taDeck");
           select.innerHTML = "";
-          taDeckIndex = {};
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
-            taDeckIndex[d.deck_id] = d;
           });
           select.value = selectValue || "elf-classic";
-          taUpdateDeckPreview(select.value);
         }catch(err){
           setStatus(err.message, "err");
-        }
-      }
-
-      function taUpdateDeckPreview(deckId){
-        const deck = taDeckIndex[deckId] || {};
-        const preview = $("taDeckBackPreview");
-        if (!preview) return;
-        preview.innerHTML = "<span class=\"preview-label\">Back</span>";
-        if (deck.back_image){
-          const img = document.createElement("img");
-          img.src = deck.back_image;
-          img.alt = deck.name || deck.deck_id || "Back";
-          preview.appendChild(img);
         }
       }
 
