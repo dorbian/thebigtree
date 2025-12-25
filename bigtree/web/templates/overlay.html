@@ -1141,8 +1141,8 @@
             <input id="uploadLibraryFile" type="file" accept="image/*">
           </div>
           <div>
-            <label for="uploadLibraryTitle">Title</label>
-            <input id="uploadLibraryTitle" placeholder="Image title">
+            <label for="uploadLibraryTitleInput">Title</label>
+            <input id="uploadLibraryTitleInput" placeholder="Image title">
           </div>
           <div>
             <label for="uploadLibraryArtist">Artist</label>
@@ -2936,7 +2936,7 @@
         try{
           const fd = new FormData();
           fd.append("file", file);
-          const title = $("uploadLibraryTitle").value.trim();
+          const title = $("uploadLibraryTitleInput").value.trim();
           if (title) fd.append("title", title);
           const artistId = $("uploadLibraryArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
@@ -2948,7 +2948,7 @@
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
           $("uploadLibraryFile").value = "";
-          $("uploadLibraryTitle").value = "";
+          $("uploadLibraryTitleInput").value = "";
           setStatus("Media uploaded.", "ok");
           await loadLibrary("media");
         }catch(err){
