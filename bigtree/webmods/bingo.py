@@ -6,9 +6,7 @@ import random
 from typing import Any, Dict, Optional
 import bigtree
 import discord
-import logging
-
-logger = getattr(bigtree, "logger", logging.getLogger("bigtree"))
+from bigtree.inc.logging import logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import bingo as bingo
 
@@ -100,6 +98,7 @@ async def _announce_call(game: Dict[str, Any], number: Optional[int]):
     msg = random.choice(templates).format(call=call, number=number, title=title)
     try:
         await channel.send(msg)
+        logger.info("[bingo] call announce sent to channel %s: %s", channel_id, msg)
     except Exception as exc:
         logger.warning("[bingo] call announce failed for channel %s: %s", channel_id, exc)
 
