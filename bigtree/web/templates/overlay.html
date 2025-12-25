@@ -756,12 +756,18 @@
         <div class="list" id="bOwners">No players loaded.</div>
 
         <h3>Claims</h3>
-        <div class="row">
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="bAdvanceStage">Advance stage</button>
-          </div>
+      <div class="row">
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn-ghost" id="bAdvanceStage">Advance stage</button>
         </div>
+        <div>
+          <label>
+            <input type="checkbox" id="bAnnounceToggle">
+            Announce calls
+          </label>
+        </div>
+      </div>
         <div class="list" id="bClaims">No claims yet.</div>
 
           <h3>Active game</h3>
@@ -1584,7 +1590,11 @@
         $("bTitleVal").textContent = game.title || "-";
         $("bHeaderVal").textContent = game.header_text || game.header || "BING";
         $("bStageVal").textContent = game.stage || "-";
-        $("bPotVal").textContent = (game.pot != null ? `${game.pot} ${game.currency || ""}` : "-");
+        $("bPotVal").textContent = (game.pot != null ? `${formatGil(game.pot)} ${game.currency || ""}` : "-");
+        const announceToggle = $("bAnnounceToggle");
+        if (announceToggle){
+          announceToggle.checked = !!game.announce_calls;
+        }
         const called = Array.isArray(game.called) ? game.called : [];
         $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
         const buyBtn = $("bBuy");
@@ -1679,6 +1689,12 @@
           row.appendChild(wrap);
           el.appendChild(row);
         });
+      }
+
+      function formatGil(value){
+        const raw = Number(value);
+        if (!Number.isFinite(raw)) return String(value ?? "");
+        return raw.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
       }
 
       function renderCard(card, called, header){
@@ -1868,6 +1884,7 @@
             select.innerHTML = `<option value="">No channels available</option>`;
             return;
           }
+          let botlogsId = "";
           channels.forEach(ch => {
             const opt = document.createElement("option");
             opt.value = String(ch.id || "");
@@ -1876,13 +1893,16 @@
             const name = ch.name ? `#${ch.name}` : String(ch.id || "");
             opt.textContent = `${guild}${category} - ${name}`;
             select.appendChild(opt);
+            if (!botlogsId && String(ch.name || "").toLowerCase() === "bot-logs"){
+              botlogsId = opt.value;
+            }
           });
           const current = $("bChannel").value.trim();
           if (current){
             select.value = current;
           }
           if (!select.value && select.options.length){
-            select.value = select.options[0].value;
+            select.value = botlogsId || select.options[0].value;
           }
           if (select.value){
             $("bChannel").value = select.value;
@@ -1932,6 +1952,24 @@
       $("menuContests").addEventListener("click", () => {
         showPanel("contests");
         loadContestManagement();
+      });
+      $("bAnnounceToggle").addEventListener("change", async (ev) => {
+        const gid = getGameId();
+        if (!gid){
+          setStatus("Select a game first.", "err");
+          ev.target.checked = false;
+          return;
+        }
+        try{
+          await jsonFetch("/bingo/" + encodeURIComponent(gid), {
+            method:"PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({announce_calls: ev.target.checked})
+          });
+          setStatus("Updated announce setting.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       });
       $("menuMedia").addEventListener("click", () => {
         $("mediaModal").classList.add("show");

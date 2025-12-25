@@ -234,10 +234,10 @@
     owner = data.owner || owner;
     resolvedGame = (g.game_id || resolvedGame);
     summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
-    potValue.textContent = `${g.pot != null ? g.pot : 0} ${g.currency || ""}`.trim();
-    payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${g.payouts.single} ${g.currency || ""}`.trim() : "-";
-    payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${g.payouts.double} ${g.currency || ""}`.trim() : "-";
-    payoutFull.textContent = g.payouts && g.payouts.full != null ? `${g.payouts.full} ${g.currency || ""}`.trim() : "-";
+    potValue.textContent = `${formatGil(g.pot != null ? g.pot : 0)} ${g.currency || ""}`.trim();
+    payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${formatGil(g.payouts.single)} ${g.currency || ""}`.trim() : "-";
+    payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${formatGil(g.payouts.double)} ${g.currency || ""}`.trim() : "-";
+    payoutFull.textContent = g.payouts && g.payouts.full != null ? `${formatGil(g.payouts.full)} ${g.currency || ""}`.trim() : "-";
     stageValue.textContent = g.stage || "-";
     headerValue.textContent = g.header_text || g.header || "BING";
     if (!selectedCardId && cards.length){
@@ -383,6 +383,12 @@
   }
   setInterval(tick, 2000);
   tick();
+
+  function formatGil(value){
+    const raw = Number(value);
+    if (!Number.isFinite(raw)) return String(value ?? "");
+    return raw.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
 
   function showCallBall(number){
     if (!callBall) return;

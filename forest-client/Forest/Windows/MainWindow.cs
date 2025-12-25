@@ -24,6 +24,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 using ImGuiWindowFlags = Dalamud.Bindings.ImGui.ImGuiWindowFlags;
 
@@ -1119,12 +1120,12 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted($"Game: {g.title} ({g.game_id})");
         ImGui.SameLine(); ImGui.TextDisabled($"Stage: {g.stage}");
         ImGui.Spacing();
-        ImGui.TextUnformatted($"Pot: {g.pot} {g.currency}");
+        ImGui.TextUnformatted($"Pot: {FormatGil(g.pot)} {g.currency}");
         ImGui.SameLine();
         if (g.payouts is not null)
         {
-            var remainder = g.payouts.remainder.HasValue ? $" R:{g.payouts.remainder.Value}" : "";
-            ImGui.TextDisabled($"Payouts S:{g.payouts.single} D:{g.payouts.@double} F:{g.payouts.full}{remainder}");
+            var remainder = g.payouts.remainder.HasValue ? $" R:{FormatGil(g.payouts.remainder.Value)}" : "";
+            ImGui.TextDisabled($"Payouts S:{FormatGil(g.payouts.single)} D:{FormatGil(g.payouts.@double)} F:{FormatGil(g.payouts.full)}{remainder}");
         }
         else
         {
@@ -2488,6 +2489,11 @@ public class MainWindow : Window, IDisposable
             Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443",
             Plugin.Config.BingoApiKey
         );
+    }
+
+    private static string FormatGil(int value)
+    {
+        return value.ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
     }
 
     private void Hunt_EnsureClient()

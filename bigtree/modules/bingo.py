@@ -699,6 +699,9 @@ def update_game(game_id: str, **fields) -> Dict[str, Any]:
         val = str(fields["theme_color"] or "").strip()
         g["theme_color"] = val if val else None
         updated = True
+    if "announce_calls" in fields:
+        g["announce_calls"] = bool(fields["announce_calls"])
+        updated = True
     if "stage" in fields:
         ok, msg = set_stage(game_id, str(fields["stage"]))
         if not ok:

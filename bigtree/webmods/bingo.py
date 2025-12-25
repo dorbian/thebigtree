@@ -326,7 +326,7 @@ async def bingo_update(req: web.Request):
     except Exception:
         return web.json_response({"ok": False, "error": "invalid json"}, status=400)
     fields = {}
-    for key in ["title","price","currency","max_cards_per_player","free_center","size","max_number","status","background_path","stage","active","header"]:
+    for key in ["title","price","currency","max_cards_per_player","free_center","size","max_number","status","background_path","stage","active","header","announce_calls"]:
         if key in body: fields[key] = body[key]
     ok, value = _update_game(game_id, fields)
     if not ok: return web.json_response({"ok": False, "error": value}, status=501)
