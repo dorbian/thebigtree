@@ -35,8 +35,18 @@ def _read_contest(channel_id: int) -> Dict[str, Any]:
 
 @route("GET", "/contests", allow_public=True)
 async def list_contests(_req: web.Request):
-    channels = list(map(int, getattr(bigtree, "contestid", []) or []))
-    return web.json_response({"channels": channels})
+    channels = set(map(int, getattr(bigtree, "contestid", []) or []))
+    contest_dir = getattr(bigtree, "contest_dir", "/data/contest")
+    try:
+        for name in os.listdir(contest_dir):
+            if not name.endswith(".json"):
+                continue
+            stem = name[:-5]
+            if stem.isdigit():
+                channels.add(int(stem))
+    except Exception:
+        pass
+    return web.json_response({"channels": sorted(channels)})
 
 @route("GET", "/contests/{channel_id}", allow_public=True)
 async def get_contest(req: web.Request):

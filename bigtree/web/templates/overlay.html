@@ -420,6 +420,9 @@
         background:rgba(60,207,142,.12);
         border-radius:10px;
       }
+      .list-warn{
+        color:#ff9f9f;
+      }
       .preview-grid{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -1860,7 +1863,7 @@
             const entries = counts.entries !== undefined ? `${counts.entries} entries` : "entries unknown";
             const statusLabel = status === "ended" ? "Ended" : status === "active" ? "Active" : "Unknown";
             const error = info.exists === false ? (info.error || "contest db missing") : info.error;
-            const errorLine = error ? `<div class="muted">${error}</div>` : "";
+            const errorLine = error ? `<div class="list-warn">${error}</div>` : "";
             const card = `<div class="list-card"><strong>${label}</strong><div class="muted">${statusLabel} · ${entries}</div>${errorLine}</div>`;
             allCards.push(card);
             if (status === "ended"){
