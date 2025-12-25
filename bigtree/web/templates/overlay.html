@@ -603,6 +603,8 @@
         <h3>Tarot</h3>
         <div class="menu-item" id="menuTarotLinks">Session Manager</div>
         <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
+        <h3>Contests</h3>
+        <div class="menu-item" id="menuContests">Management</div>
           <div class="menu-icons">
             <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -852,6 +854,20 @@
               <button id="taSaveCard">Save card</button>
             </div>
           </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">
+          <h2>Contest Management</h2>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="contestRefresh">Refresh contests</button>
+            </div>
+          </div>
+          <h3>All contests</h3>
+          <div class="list" id="contestAllList">No contests loaded.</div>
+          <h3>Ended contests</h3>
+          <div class="list" id="contestEndedList">No ended contests yet.</div>
         </section>
 
       </div>
@@ -1632,9 +1648,11 @@
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
+        $("menuContests").classList.toggle("active", which === "contests");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
+        $("contestPanel").classList.toggle("hidden", which !== "contests");
       }
 
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
@@ -1648,6 +1666,10 @@
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
+      $("menuContests").addEventListener("click", () => {
+        showPanel("contests");
+        loadContestManagement();
+      });
       $("menuMedia").addEventListener("click", () => {
         $("mediaModal").classList.add("show");
         loadTarotArtists();
@@ -1656,6 +1678,7 @@
         $("artistModal").classList.add("show");
         loadTarotArtists();
       });
+      $("contestRefresh").addEventListener("click", () => loadContestManagement());
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -1672,6 +1695,74 @@
           }
           refreshBingo();
         }, 3000);
+      }
+
+      function contestStatus(meta){
+        if (!meta){
+          return "unknown";
+        }
+        const raw = (meta.status || meta.state || meta.phase || "").toString().toLowerCase();
+        if (["ended","closed","finished","complete","archived"].includes(raw)){
+          return "ended";
+        }
+        if (["active","open","running","live","ongoing"].includes(raw)){
+          return "active";
+        }
+        if (meta.ended === true || meta.closed === true || meta.finished === true){
+          return "ended";
+        }
+        if (meta.active === false || meta.is_active === false || meta.open === false){
+          return "ended";
+        }
+        return "active";
+      }
+
+      async function loadContestManagement(){
+        const allEl = $("contestAllList");
+        const endedEl = $("contestEndedList");
+        allEl.textContent = "Loading contests...";
+        endedEl.textContent = "Loading contests...";
+        try{
+          const list = await jsonFetch("/contests", {method:"GET"}, true);
+          const channels = list.channels || [];
+          if (!channels.length){
+            allEl.textContent = "No contests yet.";
+            endedEl.textContent = "No ended contests yet.";
+            return;
+          }
+          const details = await Promise.all(channels.map(async (id) => {
+            try{
+              return await jsonFetch("/contests/" + encodeURIComponent(id), {method:"GET"}, true);
+            }catch(err){
+              return {channel_id: id, error: err.message, exists: false};
+            }
+          }));
+          const allCards = [];
+          const endedCards = [];
+          details.forEach(info => {
+            const channelId = info.channel_id || info.channel || "";
+            const meta = info.meta || null;
+            const counts = info.counts || {};
+            const status = contestStatus(meta);
+            const name = meta ? (meta.name || meta.title || "") : "";
+            const label = name ? `${name} (ID ${channelId})` : `Channel ${channelId}`;
+            const entries = counts.entries !== undefined ? `${counts.entries} entries` : "entries unknown";
+            const statusLabel = status === "ended" ? "Ended" : status === "active" ? "Active" : "Unknown";
+            const error = info.exists === false ? (info.error || "contest db missing") : info.error;
+            const errorLine = error ? `<div class="muted">${error}</div>` : "";
+            const card = `<div class="list-card"><strong>${label}</strong><div class="muted">${statusLabel} · ${entries}</div>${errorLine}</div>`;
+            allCards.push(card);
+            if (status === "ended"){
+              endedCards.push(card);
+            }
+          });
+          allEl.innerHTML = allCards.length ? allCards.join("") : "No contests yet.";
+          endedEl.innerHTML = endedCards.length ? endedCards.join("") : "No ended contests yet.";
+        }catch(err){
+          allEl.textContent = "Failed to load contests.";
+          endedEl.textContent = "Failed to load contests.";
+          setStatus(err.message, "err");
+        }
       }
 
       function renderOwnersList(owners){
