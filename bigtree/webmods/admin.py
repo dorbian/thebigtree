@@ -8,6 +8,7 @@ from tinydb import TinyDB, Query
 import bigtree
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
+import discord
 
 # ---------- TinyDB for admin clients ----------
 def _admin_db_path() -> str:
@@ -45,6 +46,35 @@ async def auth_me(req: web.Request):
         "scopes": doc.get("scopes") if doc else [],
         "source": "web_token" if doc else "api_key",
     })
+
+@route("GET", "/discord/channels", scopes=["bingo:admin"])
+async def discord_channels(req: web.Request):
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+    guild_id = req.query.get("guild_id")
+    try:
+        guild_id = int(guild_id) if guild_id else None
+    except Exception:
+        return web.json_response({"ok": False, "error": "guild_id must be an integer"}, status=400)
+    channels = []
+    for guild in bot.guilds or []:
+        if guild_id and guild.id != guild_id:
+            continue
+        for channel in getattr(guild, "channels", []) or []:
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            category = channel.category.name if channel.category else ""
+            channels.append({
+                "id": channel.id,
+                "name": channel.name,
+                "guild_id": guild.id,
+                "guild_name": guild.name,
+                "category": category,
+                "position": channel.position,
+            })
+    channels.sort(key=lambda c: (c.get("guild_name") or "", c.get("category") or "", c.get("position") or 0, c.get("name") or ""))
+    return web.json_response({"ok": True, "channels": channels})
 
 # ---------- Send a Discord message ----------
 @route("POST", "/message", scopes=["admin:message"])

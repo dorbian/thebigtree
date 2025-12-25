@@ -987,6 +987,16 @@
         </div>
         <div class="row">
           <div>
+            <label for="bChannelSelect">Channel list</label>
+            <select id="bChannelSelect"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="bChannelRefresh">Refresh channels</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
             <label for="bChannel">Channel ID</label>
             <input id="bChannel" placeholder="0">
           </div>
@@ -1790,6 +1800,39 @@
           .catch(() => {});
       }
 
+      async function loadDiscordChannels(){
+        const select = $("bChannelSelect");
+        if (!select){
+          return;
+        }
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          if (!channels.length){
+            select.innerHTML = `<option value="">No channels available</option>`;
+            return;
+          }
+          channels.forEach(ch => {
+            const opt = document.createElement("option");
+            opt.value = String(ch.id || "");
+            const guild = ch.guild_name || ch.guild_id || "Guild";
+            const category = ch.category ? ` / ${ch.category}` : "";
+            const name = ch.name ? `#${ch.name}` : String(ch.id || "");
+            opt.textContent = `${guild}${category} - ${name}`;
+            select.appendChild(opt);
+          });
+          const current = $("bChannel").value.trim();
+          if (current){
+            select.value = current;
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load</option>`;
+          setStatus(err.message, "err");
+        }
+      }
+
       function showPanel(which){
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
@@ -1806,9 +1849,17 @@
         ev.stopPropagation();
         loadGamesMenu();
       });
+      $("bChannelRefresh").addEventListener("click", () => loadDiscordChannels());
+      $("bChannelSelect").addEventListener("change", (ev) => {
+        const pick = ev.target.value || "";
+        if (pick){
+          $("bChannel").value = pick;
+        }
+      });
       $("menuCreateGame").addEventListener("click", () => {
         $("bCreateModal").classList.add("show");
         $("bTitle").focus();
+        loadDiscordChannels();
       });
       $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
       $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
