@@ -8,6 +8,7 @@ from tinydb import TinyDB, Query
 import bigtree
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
+from bigtree.inc.logging import logger
 import discord
 
 # ---------- TinyDB for admin clients ----------
