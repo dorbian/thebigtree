@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiohttp import web
 from typing import Any, Dict
 import json
+from pathlib import Path
 import time
 import os
 from tinydb import TinyDB, Query
@@ -154,6 +155,28 @@ def _normalize_role_scopes(role_scopes: Dict[str, Any]) -> Dict[str, list[str]]:
         normalized[role_id] = scope_list
     return normalized
 
+def _auth_roles_path() -> Path | None:
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            base = bigtree.settings.get("BOT.DATA_DIR", None)
+        else:
+            base = None
+    except Exception:
+        base = None
+    base = base or getattr(bigtree, "datadir", None)
+    if not base:
+        return None
+    return Path(base) / "auth_roles.json"
+
+def _write_auth_roles_file(role_scopes: Dict[str, list[str]]) -> bool:
+    path = _auth_roles_path()
+    if not path:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"role_scopes": role_scopes}
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return True
+
 def _update_role_scopes(role_scopes: Dict[str, list[str]]) -> None:
     from configobj import ConfigObj
     path = _settings_path()
@@ -212,8 +235,12 @@ async def auth_roles_update(req: web.Request):
         try:
             _update_role_scopes(role_scopes)
             _update_role_ids(role_ids)
+            _write_auth_roles_file(role_scopes)
         except Exception as exc:
             auth_logger.error("[auth] roles update failed err=%s", exc)
+            if _write_auth_roles_file(role_scopes):
+                auth_logger.info("[auth] roles update stored in auth_roles.json fallback")
+                return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes, "fallback": True})
             return web.json_response({"ok": False, "error": "save failed"}, status=500)
         auth_logger.info("[auth] roles updated scopes=%s", role_scopes)
         return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes})

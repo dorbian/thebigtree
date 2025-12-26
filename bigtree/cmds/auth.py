@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -74,17 +75,25 @@ def _parse_scope_list(raw) -> list[str]:
 def _get_role_scope_map() -> tuple[dict[int, list[str]], bool]:
     raw = _settings_get("BOT", "auth_role_scopes", None)
     if raw is None:
-        return {}, False
+        raw = _load_auth_roles_file()
+        if raw is None:
+            return {}, False
     if isinstance(raw, str):
         raw = raw.strip()
         if not raw:
-            return {}, True
+            raw = _load_auth_roles_file()
+            if raw is None:
+                return {}, True
         try:
             raw = json.loads(raw)
         except Exception:
-            return {}, True
+            raw = _load_auth_roles_file()
+            if raw is None:
+                return {}, True
     if not isinstance(raw, dict):
-        return {}, True
+        raw = _load_auth_roles_file()
+        if raw is None:
+            return {}, True
     mapping: dict[int, list[str]] = {}
     for rid, scopes in raw.items():
         try:
@@ -96,6 +105,28 @@ def _get_role_scope_map() -> tuple[dict[int, list[str]], bool]:
             scope_list = ["*"]
         mapping[role_id] = scope_list
     return mapping, True
+
+
+def _auth_roles_path() -> Path | None:
+    base = _settings_get("BOT", "DATA_DIR", None) or getattr(bigtree, "datadir", None)
+    if not base:
+        return None
+    return Path(base) / "auth_roles.json"
+
+
+def _load_auth_roles_file() -> dict | None:
+    path = _auth_roles_path()
+    if not path or not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except Exception:
+        return None
+    if isinstance(data, dict) and "role_scopes" in data and isinstance(data["role_scopes"], dict):
+        return data["role_scopes"]
+    if isinstance(data, dict):
+        return data
+    return None
 
 
 def _get_scopes_for_member(member: discord.Member) -> list[str]:
