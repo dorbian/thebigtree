@@ -11,7 +11,7 @@ from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
 from bigtree.inc.settings import load_settings
 from pathlib import Path
-from bigtree.inc.logging import logger
+from bigtree.inc.logging import logger, auth_logger
 import discord
 
 # ---------- TinyDB for admin clients ----------
@@ -190,6 +190,7 @@ async def auth_roles(_req: web.Request):
         role_ids = [role_ids]
     role_ids = [str(r) for r in role_ids if str(r).strip()]
     role_scopes = _normalize_role_scopes(role_scopes)
+    auth_logger.info("[auth] roles list role_ids=%s role_scopes=%s", role_ids, list(role_scopes.keys()))
     return web.json_response({
         "ok": True,
         "role_ids": role_ids,
@@ -202,6 +203,7 @@ async def auth_roles_update(req: web.Request):
     try:
         body = await req.json()
     except Exception:
+        auth_logger.warning("[auth] roles update invalid json")
         return web.json_response({"ok": False, "error": "invalid json"}, status=400)
     role_scopes = body.get("role_scopes", None)
     if role_scopes is not None:
@@ -209,12 +211,14 @@ async def auth_roles_update(req: web.Request):
         role_ids = list(role_scopes.keys())
         _update_role_scopes(role_scopes)
         _update_role_ids(role_ids)
+        auth_logger.info("[auth] roles updated scopes=%s", role_scopes)
         return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes})
     role_ids = body.get("role_ids") or []
     if isinstance(role_ids, (str, int)):
         role_ids = [role_ids]
     role_ids = [str(r) for r in role_ids if str(r).strip()]
     _update_role_ids(role_ids)
+    auth_logger.info("[auth] roles updated legacy role_ids=%s", role_ids)
     return web.json_response({"ok": True, "role_ids": role_ids})
 
 # ---------- Send a Discord message ----------

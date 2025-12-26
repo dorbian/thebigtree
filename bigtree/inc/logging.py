@@ -65,5 +65,29 @@ upload_handler = logging.handlers.RotatingFileHandler(
 upload_handler.setFormatter(formatter)
 upload_logger.addHandler(upload_handler)
 
+def _resolve_auth_log_path(base_path: str) -> str:
+    override = os.getenv("BIGTREE_AUTH_LOG_PATH")
+    if override:
+        return override
+    base_dir = os.path.dirname(base_path)
+    if base_dir:
+        return os.path.join(base_dir, "auth.log")
+    return "auth.log"
+
+auth_logger = logging.getLogger('discord.bigtree.auth')
+auth_logger.setLevel(logging.DEBUG)
+auth_log_path = _resolve_auth_log_path(log_path)
+auth_dir = os.path.dirname(auth_log_path)
+if auth_dir:
+    os.makedirs(auth_dir, exist_ok=True)
+auth_handler = logging.handlers.RotatingFileHandler(
+    filename=auth_log_path,
+    encoding='utf-8',
+    maxBytes=8 * 1024 * 1024,
+    backupCount=3,
+)
+auth_handler.setFormatter(formatter)
+auth_logger.addHandler(auth_handler)
+
 # Assume client refers to a discord.Client subclass...
 # Suppress the default configuration since we have our own

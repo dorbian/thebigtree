@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 import bigtree
 from bigtree.inc import web_tokens
+from bigtree.inc.logging import auth_logger
 
 bot = bigtree.bot
 
@@ -129,6 +130,7 @@ class AuthCog(commands.Cog):
             member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
         scopes = _get_scopes_for_member(member) if member else []
         if not member or not scopes:
+            auth_logger.warning("[auth] denied user=%s", getattr(interaction.user, "id", "unknown"))
             await interaction.response.send_message("Not allowed.", ephemeral=True)
             return
         display_name = member.display_name or member.name
@@ -139,6 +141,11 @@ class AuthCog(commands.Cog):
             scopes=scopes,
             user_name=display_name,
             user_icon=avatar_url,
+        )
+        auth_logger.info(
+            "[auth] issued user=%s scopes=%s",
+            member.id,
+            ",".join(doc.get("scopes") or []),
         )
         expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
         await interaction.response.send_message(
