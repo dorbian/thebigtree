@@ -768,6 +768,11 @@
                 <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
               </svg>
             </button>
+            <button class="menu-icon" id="menuCalendar" title="Gallery calendar" aria-label="Gallery calendar">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h4V2zm-3 6v12h16V8H4zm2 2h4v4H6v-4z"/>
+              </svg>
+            </button>
             <button class="menu-icon" id="menuOverlayToggle" title="Toggle overlay mode" aria-label="Toggle overlay mode">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/>
@@ -1322,6 +1327,43 @@
         </div>
       </div>
     </div>
+    <div class="modal" id="calendarModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Gallery Calendar</div>
+          <button class="btn-ghost" id="calendarClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="calendarMonth">Month</label>
+            <select id="calendarMonth"></select>
+          </div>
+          <div>
+            <label for="calendarTitle">Title</label>
+            <input id="calendarTitle" placeholder="Optional title">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Artist</label>
+            <div class="status" id="calendarArtist">Forest</div>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn-ghost" id="calendarPick">Pick from library</button>
+          <button id="calendarSave">Save month</button>
+          <button class="btn-ghost" id="calendarClear">Clear month</button>
+          <button class="btn-ghost" id="calendarRefresh">Refresh</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>Preview</label>
+            <div class="preview-card" id="calendarPreview"></div>
+          </div>
+        </div>
+        <div class="status" id="calendarStatus">Ready.</div>
+      </div>
+    </div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -1338,6 +1380,14 @@
       let activeGameId = "";
       let currentOwner = "";
       window.taArtists = [];
+      let calendarData = [];
+      let calendarSelected = {
+        month: 1,
+        image: "",
+        title: "",
+        artist_id: null,
+        artist_name: "Forest"
+      };
 
       function getBase(){
         return window.location.origin;
@@ -1357,6 +1407,7 @@
         if (show){
           $("mediaModal").classList.remove("show");
           $("artistModal").classList.remove("show");
+          $("calendarModal").classList.remove("show");
         }
       }
 
@@ -1447,6 +1498,76 @@
           setLibraryStatus("Pick an image.", "ok");
         }catch(err){
           setLibraryStatus(err.message, "err");
+        }
+      }
+
+      function setCalendarStatus(msg, kind){
+        const el = $("calendarStatus");
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function renderCalendarPreview(){
+        const preview = $("calendarPreview");
+        preview.innerHTML = "";
+        if (!calendarSelected.image){
+          preview.textContent = "No image selected.";
+          return;
+        }
+        const img = document.createElement("img");
+        img.src = calendarSelected.image;
+        img.alt = calendarSelected.title || "calendar";
+        preview.appendChild(img);
+      }
+
+      function applyCalendarSelection(entry){
+        calendarSelected = {
+          month: entry.month,
+          image: entry.image || "",
+          title: entry.title || "",
+          artist_id: (entry.artist && entry.artist.artist_id) || null,
+          artist_name: (entry.artist && entry.artist.name) || "Forest"
+        };
+        $("calendarTitle").value = calendarSelected.title;
+        $("calendarArtist").textContent = calendarSelected.artist_name || "Forest";
+        renderCalendarPreview();
+      }
+
+      function populateCalendarMonths(){
+        const select = $("calendarMonth");
+        select.innerHTML = "";
+        calendarData.forEach(entry => {
+          const opt = document.createElement("option");
+          opt.value = entry.month;
+          opt.textContent = entry.month_name || `Month ${entry.month}`;
+          select.appendChild(opt);
+        });
+        const current = calendarSelected.month || 1;
+        select.value = String(current);
+      }
+
+      async function loadCalendarAdmin(){
+        setCalendarStatus("Loading...", "");
+        try{
+          const res = await fetch("/api/gallery/calendar", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){
+            handleUnauthorized();
+            throw new Error("Unauthorized");
+          }
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          calendarData = data.months || [];
+          if (!calendarData.length){
+            calendarData = [];
+            setCalendarStatus("No calendar data.", "err");
+            return;
+          }
+          populateCalendarMonths();
+          const entry = calendarData.find(e => e.month === (calendarSelected.month || 1)) || calendarData[0];
+          applyCalendarSelection(entry);
+          setCalendarStatus("Ready.", "ok");
+        }catch(err){
+          setCalendarStatus(err.message, "err");
         }
       }
 
@@ -2034,6 +2155,10 @@
         $("artistModal").classList.add("show");
         loadTarotArtists();
       });
+      $("menuCalendar").addEventListener("click", () => {
+        $("calendarModal").classList.add("show");
+        loadCalendarAdmin();
+      });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
 
       let bingoRefreshTimer = null;
@@ -2260,6 +2385,76 @@
       });
       $("artistClose").addEventListener("click", () => {
         $("artistModal").classList.remove("show");
+      });
+      $("calendarClose").addEventListener("click", () => {
+        $("calendarModal").classList.remove("show");
+      });
+      $("calendarRefresh").addEventListener("click", () => loadCalendarAdmin());
+      $("calendarMonth").addEventListener("change", (ev) => {
+        const month = parseInt(ev.target.value || "1", 10);
+        const entry = calendarData.find(e => e.month === month) || calendarData[0];
+        if (entry){
+          applyCalendarSelection(entry);
+        }
+      });
+      $("calendarPick").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          calendarSelected.image = item.url || "";
+          calendarSelected.title = item.title || item.name || "";
+          calendarSelected.artist_id = item.artist_id || null;
+          calendarSelected.artist_name = item.artist_name || "Forest";
+          $("calendarTitle").value = calendarSelected.title;
+          $("calendarArtist").textContent = calendarSelected.artist_name || "Forest";
+          renderCalendarPreview();
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+      $("calendarSave").addEventListener("click", async () => {
+        const month = parseInt($("calendarMonth").value || "1", 10);
+        const title = $("calendarTitle").value.trim();
+        const payload = {
+          month: month,
+          image: calendarSelected.image || "",
+          title: title,
+          artist_id: calendarSelected.artist_id || ""
+        };
+        if (!payload.image){
+          setCalendarStatus("Pick an image first.", "err");
+          return;
+        }
+        try{
+          await jsonFetch("/api/gallery/calendar", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          setCalendarStatus("Saved.", "ok");
+          await loadCalendarAdmin();
+        }catch(err){
+          setCalendarStatus(err.message, "err");
+        }
+      });
+      $("calendarClear").addEventListener("click", async () => {
+        const month = parseInt($("calendarMonth").value || "1", 10);
+        try{
+          await jsonFetch("/api/gallery/calendar", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({month: month, image: ""})
+          });
+          calendarSelected.image = "";
+          calendarSelected.title = "";
+          calendarSelected.artist_id = null;
+          calendarSelected.artist_name = "Forest";
+          $("calendarTitle").value = "";
+          $("calendarArtist").textContent = "Forest";
+          renderCalendarPreview();
+          setCalendarStatus("Cleared.", "ok");
+          await loadCalendarAdmin();
+        }catch(err){
+          setCalendarStatus(err.message, "err");
+        }
       });
       $("bOwnerClose").addEventListener("click", () => {
         $("bOwnerModal").classList.remove("show");

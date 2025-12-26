@@ -7,9 +7,13 @@ import os
 import bigtree
 from bigtree.inc.webserver import route
 
+_IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+def _contest_dir() -> str:
+    return getattr(bigtree, "contest_dir", "/data/contest")
+
 def _contest_db_path(channel_id: int) -> Optional[str]:
-    contest_dir = getattr(bigtree, "contest_dir", "/data/contest")
-    path = os.path.join(contest_dir, f"{channel_id}.json")
+    path = os.path.join(_contest_dir(), f"{channel_id}.json")
     return path if os.path.exists(path) else None
 
 def _read_contest(channel_id: int) -> Dict[str, Any]:
@@ -32,6 +36,47 @@ def _read_contest(channel_id: int) -> Dict[str, Any]:
         "entries": entries,
         "counts": {"entries": len(entries)},
     }
+
+def _contest_name(meta: Dict[str, Any] | None, channel_id: int) -> str:
+    if meta:
+        for key in ("name", "title", "contest_name", "label"):
+            value = (meta.get(key) or "").strip()
+            if value:
+                return value
+    return f"Contest {channel_id}"
+
+def _list_contest_entries() -> List[Dict[str, Any]]:
+    contest_dir = _contest_dir()
+    items: List[Dict[str, Any]] = []
+    if not os.path.isdir(contest_dir):
+        return items
+    for name in os.listdir(contest_dir):
+        if not name.endswith(".json"):
+            continue
+        stem = name[:-5]
+        if not stem.isdigit():
+            continue
+        channel_id = int(stem)
+        data = _read_contest(channel_id)
+        if not data.get("exists"):
+            continue
+        meta = data.get("meta")
+        contest_name = _contest_name(meta, channel_id)
+        for entry in data.get("entries") or []:
+            filename = (entry.get("file") or "").strip()
+            if not filename:
+                continue
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in _IMG_EXTS:
+                continue
+            items.append({
+                "title": "Contest Entry",
+                "contest": contest_name,
+                "url": f"/contest/media/{filename}",
+                "source": "contest",
+                "artist": {"artist_id": None, "name": "Forest", "links": {}},
+            })
+    return items
 
 @route("GET", "/contests", allow_public=True)
 async def list_contests(_req: web.Request):

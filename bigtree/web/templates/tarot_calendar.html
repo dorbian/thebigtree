@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Tarot Gallery</title>
+<title>Tarot Calendar</title>
 <style>
   :root{
     --bg:#0b1310;
@@ -45,31 +45,10 @@
   }
   .admin-link:hover{border-color:rgba(107,212,162,.7)}
   main{padding:20px}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
-  label{color:var(--muted);font-size:12px}
-  input, button{
-    padding:8px 10px;
-    border-radius:10px;
-    border:1px solid var(--line);
-    background:#0c1511;
-    color:var(--text);
-    font-family:inherit;
-    font-size:14px;
-  }
-  button{background:#122019;border-color:rgba(107,212,162,.4);cursor:pointer}
   .grid{
-    margin-top:16px;
     display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
     gap:14px;
-  }
-  .artist-link{
-    color:var(--accent);
-    text-decoration:none;
-    font-size:12px;
-    cursor:pointer;
-    display:inline-block;
-    margin:2px 0 6px 0;
   }
   .card{
     background:var(--panel);
@@ -79,15 +58,13 @@
   }
   .card img{width:100%;border-radius:10px;margin-bottom:8px}
   .muted{color:var(--muted);font-size:12px}
-  .links a{color:var(--accent);text-decoration:none;margin-right:8px;font-size:12px}
-  .contest-pill{
-    display:inline-block;
-    margin-top:6px;
-    padding:3px 8px;
-    border-radius:999px;
-    border:1px solid rgba(107,212,162,.35);
+  .artist-link{
     color:var(--accent);
-    font-size:11px;
+    text-decoration:none;
+    font-size:12px;
+    cursor:pointer;
+    display:inline-block;
+    margin:2px 0 6px 0;
   }
   .modal{
     position:fixed;
@@ -119,16 +96,23 @@
   .modal-close{
     margin-top:12px;
     width:100%;
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0c1511;
+    color:var(--text);
+    font-family:inherit;
+    font-size:14px;
   }
 </style>
 
 <header>
   <div>
-    <h1>Tarot Gallery</h1>
-    <p>Public art archive with artist credits.</p>
+    <h1>Tarot Calendar</h1>
+    <p>Monthly spotlight from the gallery.</p>
   </div>
   <div class="row">
-    <a class="admin-link" href="/tarot/calendar">Calendar</a>
+    <a class="admin-link" href="/tarot/gallery">Gallery</a>
     <a class="admin-link" href="/overlay">Admin login</a>
   </div>
 </header>
@@ -151,11 +135,6 @@
   const artistName = document.getElementById("artistName");
   const artistLinks = document.getElementById("artistLinks");
 
-  function link(label, url){
-    if (!url) return "";
-    return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
-  }
-
   function openArtistModal(name, links){
     artistName.textContent = name || "Forest";
     const linkItems = Object.entries(links || {})
@@ -172,19 +151,15 @@
   }
 
   async function load(){
-    const res = await fetch(`/api/gallery/images`);
+    const res = await fetch(`/api/gallery/calendar`);
     const data = await res.json();
     if (!data.ok){
-      grid.innerHTML = "<div class='muted'>Gallery unavailable.</div>";
+      grid.innerHTML = "<div class='muted'>Calendar unavailable.</div>";
       return;
     }
-    const items = data.items || [];
-    if (!items.length){
-      grid.innerHTML = "<div class='muted'>No images yet.</div>";
-      return;
-    }
-    grid.innerHTML = items.map(c => {
-      const artist = c.artist || {};
+    const months = data.months || [];
+    grid.innerHTML = months.map(m => {
+      const artist = m.artist || {};
       const artistName = artist.name || "Forest";
       const artistLinks = artist.links || {};
       const artistPayload = encodeURIComponent(JSON.stringify({
@@ -193,17 +168,10 @@
       }));
       return `
         <div class="card">
-          ${c.url ? `<img src="${c.url}" alt="${c.title || ""}">` : ""}
-          <div><strong>${c.title || ""}</strong></div>
+          <div><strong>${m.month_name || ""}</strong></div>
+          ${m.title ? `<div class="muted">${m.title}</div>` : ""}
+          ${m.image ? `<img src="${m.image}" alt="${m.title || m.month_name || ""}">` : `<div class="muted">No image yet.</div>`}
           <div><a class="artist-link" href="#" data-artist="${artistPayload}">${artistName}</a></div>
-          ${c.contest ? `<div class="contest-pill">${c.contest}</div>` : ""}
-          <div class="links">
-            ${link("Instagram", artistLinks.instagram)}
-            ${link("Bluesky", artistLinks.bluesky)}
-            ${link("X", artistLinks.x)}
-            ${link("ArtStation", artistLinks.artstation)}
-            ${link("Website", artistLinks.website)}
-          </div>
         </div>
       `;
     }).join("");

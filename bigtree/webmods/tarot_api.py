@@ -165,6 +165,12 @@ async def tarot_gallery_page(_req: web.Request):
     html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
     return web.Response(text=html, content_type="text/html")
 
+@route("GET", "/tarot/calendar", allow_public=True)
+async def tarot_calendar_page(_req: web.Request):
+    srv: DynamicWebServer | None = get_server()
+    html = srv.render_template("tarot_calendar.html", {}) if srv else "<h1>Tarot Calendar</h1>"
+    return web.Response(text=html, content_type="text/html")
+
 @route("GET", "/tarot/cards/{filename}", allow_public=True)
 async def tarot_card_file(req: web.Request):
     filename = req.match_info["filename"]
