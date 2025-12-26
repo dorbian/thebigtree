@@ -142,39 +142,48 @@ public class MainWindow : Window, IDisposable
 
     private void OnContextMenuOpened(IMenuOpenedArgs args)
     {
-        if (args.MenuType != MenuType.Default)
-            return;
         if (args.Target is not IPlayerCharacter pc)
             return;
         var name = pc.Name?.TextValue ?? string.Empty;
         if (string.IsNullOrWhiteSpace(name))
             return;
 
-        args.AddMenuItem(new MenuItem("Forest", _ => { })
+        var forestRoot = new MenuItem
         {
+            Name = "Forest",
             IsSubmenu = true
-        });
+        };
+        args.AddMenuItem(forestRoot);
         if (!Plugin.Config.BingoConnected || _bingoState is null)
         {
-            args.AddMenuItem(new MenuItem("Forest: Bingo (load a game first)", _ => { })
+            args.AddMenuItem(new MenuItem
             {
+                Name = "Forest: Bingo (load a game first)",
                 IsEnabled = false
             });
             return;
         }
 
-        args.AddMenuItem(new MenuItem("Forest: Buy 1 Bingo Card", _ =>
+        args.AddMenuItem(new MenuItem
         {
-            _ = Bingo_BuyForOwner(name, 1);
-            _view = View.Bingo;
-            _selectedOwner = name;
-        }));
-        args.AddMenuItem(new MenuItem("Forest: Buy 10 Bingo Cards", _ =>
+            Name = "Forest: Buy 1 Bingo Card",
+            OnClicked = _ =>
+            {
+                _ = Bingo_BuyForOwner(name, 1);
+                _view = View.Bingo;
+                _selectedOwner = name;
+            }
+        });
+        args.AddMenuItem(new MenuItem
         {
-            _ = Bingo_BuyForOwner(name, 10);
-            _view = View.Bingo;
-            _selectedOwner = name;
-        }));
+            Name = "Forest: Buy 10 Bingo Cards",
+            OnClicked = _ =>
+            {
+                _ = Bingo_BuyForOwner(name, 10);
+                _view = View.Bingo;
+                _selectedOwner = name;
+            }
+        });
     }
 
     // ------------------ Bingo: list/refresh ------------------
