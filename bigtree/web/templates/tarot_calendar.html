@@ -104,6 +104,49 @@
     font-family:inherit;
     font-size:14px;
   }
+  .image-modal{
+    position:fixed;
+    inset:0;
+    background:rgba(4,10,8,.9);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:70;
+  }
+  .image-modal.show{display:flex}
+  .image-modal img{
+    max-width:92vw;
+    max-height:90vh;
+    border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .image-modal .info{
+    position:absolute;
+    top:16px;
+    left:18px;
+    color:var(--text);
+    background:rgba(12,18,15,.85);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:8px 12px;
+    font-size:13px;
+    opacity:0;
+    transition:opacity .2s ease;
+  }
+  .image-modal.show-info .info{opacity:1}
+  .image-modal .close{
+    position:absolute;
+    top:12px;
+    right:12px;
+    width:36px;
+    height:36px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:rgba(12,18,15,.9);
+    color:var(--text);
+    font-size:18px;
+    cursor:pointer;
+  }
 </style>
 
 <header>
@@ -128,12 +171,21 @@
     <button class="modal-close" id="artistClose">Close</button>
   </div>
 </div>
+<div class="image-modal" id="imageModal" aria-hidden="true">
+  <div class="info" id="imageInfo"></div>
+  <button class="close" id="imageClose" aria-label="Close">×</button>
+  <img id="imageModalImg" alt="">
+</div>
 
 <script>
   const grid = document.getElementById("grid");
   const artistModal = document.getElementById("artistModal");
   const artistName = document.getElementById("artistName");
   const artistLinks = document.getElementById("artistLinks");
+  const imageModal = document.getElementById("imageModal");
+  const imageModalImg = document.getElementById("imageModalImg");
+  const imageInfo = document.getElementById("imageInfo");
+  let imageInfoTimer = null;
 
   function openArtistModal(name, links){
     artistName.textContent = name || "Forest";
@@ -150,6 +202,30 @@
     artistModal.setAttribute("aria-hidden", "true");
   }
 
+  function showImageInfo(){
+    imageModal.classList.add("show-info");
+    if (imageInfoTimer) clearTimeout(imageInfoTimer);
+    imageInfoTimer = setTimeout(() => {
+      imageModal.classList.remove("show-info");
+    }, 2000);
+  }
+
+  function openImageModal(data){
+    imageModalImg.src = data.url;
+    imageModalImg.alt = data.title || "";
+    imageInfo.textContent = data.info || "";
+    imageModal.classList.add("show");
+    imageModal.setAttribute("aria-hidden", "false");
+    showImageInfo();
+  }
+
+  function closeImageModal(){
+    imageModal.classList.remove("show");
+    imageModal.setAttribute("aria-hidden", "true");
+    imageModalImg.src = "";
+    imageInfo.textContent = "";
+  }
+
   async function load(){
     const res = await fetch(`/api/gallery/calendar`);
     const data = await res.json();
@@ -162,6 +238,8 @@
       const artist = m.artist || {};
       const artistName = artist.name || "Forest";
       const artistLinks = artist.links || {};
+      const infoParts = [m.month_name || "", m.title || "", artistName];
+      const infoText = infoParts.filter(Boolean).join(" \u2014 ");
       const artistPayload = encodeURIComponent(JSON.stringify({
         name: artistName,
         links: artistLinks
@@ -170,7 +248,7 @@
         <div class="card">
           <div><strong>${m.month_name || ""}</strong></div>
           ${m.title ? `<div class="muted">${m.title}</div>` : ""}
-          ${m.image ? `<img src="${m.image}" alt="${m.title || m.month_name || ""}">` : `<div class="muted">No image yet.</div>`}
+          ${m.image ? `<img src="${m.image}" alt="${m.title || m.month_name || ""}" data-full='${encodeURIComponent(JSON.stringify({url: m.image, info: infoText, title: m.title || ""}))}'>` : `<div class="muted">No image yet.</div>`}
           <div><a class="artist-link" href="#" data-artist="${artistPayload}">${artistName}</a></div>
         </div>
       `;
@@ -181,8 +259,23 @@
   artistModal.addEventListener("click", (event) => {
     if (event.target === artistModal) closeArtistModal();
   });
+  document.getElementById("imageClose").addEventListener("click", closeImageModal);
+  imageModal.addEventListener("click", (event) => {
+    if (event.target === imageModal) closeImageModal();
+  });
+  imageModal.addEventListener("mousemove", showImageInfo);
   grid.addEventListener("click", (event) => {
     const target = event.target;
+    if (target.tagName === "IMG" && target.getAttribute("data-full")){
+      event.preventDefault();
+      try{
+        const payload = JSON.parse(decodeURIComponent(target.getAttribute("data-full")));
+        openImageModal(payload);
+      }catch (err){
+        return;
+      }
+      return;
+    }
     if (!target.classList || !target.classList.contains("artist-link")) return;
     event.preventDefault();
     const payload = target.getAttribute("data-artist");
@@ -192,6 +285,11 @@
       openArtistModal(parsed.name, parsed.links);
     }catch (err){
       openArtistModal("Forest", {});
+    }
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && imageModal.classList.contains("show")){
+      closeImageModal();
     }
   });
   load();
