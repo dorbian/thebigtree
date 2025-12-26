@@ -65,6 +65,8 @@ public class MainWindow : Window, IDisposable
 
     // ---------- Bingo (Admin) ----------
     private BingoAdminApiClient? _bingoApi;
+    private string? _bingoApiBaseUrl;
+    private string? _bingoApiKey;
     private CancellationTokenSource? _bingoCts;
     private string _bingoStatus = "";
     private bool _bingoLoading = false;
@@ -2537,13 +2539,18 @@ public class MainWindow : Window, IDisposable
 
     private void Bingo_EnsureClient()
     {
-        if (_bingoApi is not null) return;
+        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443";
+        var apiKey = Plugin.Config.BingoApiKey;
+        var needsRefresh = _bingoApi is null
+                           || !string.Equals(_bingoApiBaseUrl, baseUrl, StringComparison.Ordinal)
+                           || !string.Equals(_bingoApiKey, apiKey, StringComparison.Ordinal);
+        if (!needsRefresh)
+            return;
 
-        // pulls both values from config
-        _bingoApi = new BingoAdminApiClient(
-            Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443",
-            Plugin.Config.BingoApiKey
-        );
+        _bingoApi?.Dispose();
+        _bingoApiBaseUrl = baseUrl;
+        _bingoApiKey = apiKey;
+        _bingoApi = new BingoAdminApiClient(baseUrl, apiKey);
     }
 
     private static string FormatGil(int value)
