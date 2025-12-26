@@ -1104,6 +1104,7 @@
             <button id="bCreate">Create</button>
           </div>
         </div>
+        <div class="status" id="bCreateBgStatus">No background selected.</div>
         <div class="status" id="bCreatePayload">Payload preview: channel_id=?, created_by=?</div>
       </div>
     </div>
@@ -1388,6 +1389,7 @@
         artist_id: null,
         artist_name: "Forest"
       };
+      let bingoCreateBgUrl = "";
 
       function getBase(){
         return window.location.origin;
@@ -2118,6 +2120,8 @@
         $("bChannel").value = "";
         $("bChannelSelect").value = "";
         $("bAnnounceCalls").checked = false;
+        bingoCreateBgUrl = "";
+        $("bCreateBgStatus").textContent = "No background selected.";
         loadDiscordChannels();
         updateBingoCreatePayload();
       });
@@ -2592,7 +2596,10 @@
         librarySelectHandler = async (item) => {
           const gid = getGameId();
           if (!gid){
-            setStatus("Create or select a game first.", "err");
+            bingoCreateBgUrl = item.url || "";
+            $("bCreateBgStatus").textContent = bingoCreateBgUrl
+              ? "Background selected for new game."
+              : "No background selected.";
             return;
           }
           try{
@@ -2608,7 +2615,7 @@
           }
         };
         showLibraryModal(true);
-        loadLibrary("bingo-bg");
+        loadLibrary("media");
       });
 
       $("bCreate").addEventListener("click", async () => {
@@ -2631,6 +2638,20 @@
             body: JSON.stringify(body)
           });
           setGameId(data.game.game_id || "");
+          if (bingoCreateBgUrl){
+            try{
+              await jsonFetch("/bingo/" + encodeURIComponent(data.game.game_id || "") + "/background-from-media", {
+                method:"POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({url: bingoCreateBgUrl})
+              }, true);
+              setStatus("Background applied from library.", "ok");
+            }catch(err){
+              setStatus(err.message, "err");
+            }
+            bingoCreateBgUrl = "";
+            $("bCreateBgStatus").textContent = "No background selected.";
+          }
           $("bCreateModal").classList.remove("show");
           setStatus("Bingo game created.", "ok");
           renderBingoState({game: data.game});
