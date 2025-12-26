@@ -39,7 +39,7 @@ def _read_contest(channel_id: int) -> Dict[str, Any]:
 
 def _contest_name(meta: Dict[str, Any] | None, channel_id: int) -> str:
     if meta:
-        for key in ("name", "title", "contest_name", "label"):
+        for key in ("name", "title", "contest_name", "label", "channel_name", "channel", "channel_title"):
             value = (meta.get(key) or "").strip()
             if value:
                 return value
