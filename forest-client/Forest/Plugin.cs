@@ -24,6 +24,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
 
     private const string CommandName = "/forest";
 

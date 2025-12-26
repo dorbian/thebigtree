@@ -4,6 +4,7 @@ using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
@@ -119,16 +120,61 @@ public class MainWindow : Window, IDisposable
         // Hook timers & chat like the old ForestWindow
         Plugin.Framework.Update += OnFrameworkUpdate;
         Plugin.ChatGui.ChatMessage += OnChatMessage;
+        if (Plugin.ContextMenu is not null)
+        {
+            Plugin.ContextMenu.OnMenuOpened += OnContextMenuOpened;
+        }
     }
 
     public void Dispose()
     {
         Plugin.Framework.Update -= OnFrameworkUpdate;
         Plugin.ChatGui.ChatMessage -= OnChatMessage;
+        if (Plugin.ContextMenu is not null)
+        {
+            Plugin.ContextMenu.OnMenuOpened -= OnContextMenuOpened;
+        }
 
         _bingoCts?.Cancel();
         _bingoApi?.Dispose();
         _huntApi?.Dispose();
+    }
+
+    private void OnContextMenuOpened(IMenuOpenedArgs args)
+    {
+        if (args.MenuType != MenuType.Default)
+            return;
+        if (args.Target is not IPlayerCharacter pc)
+            return;
+        var name = pc.Name?.TextValue ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        args.AddMenuItem(new MenuItem("Forest", _ => { })
+        {
+            IsSubmenu = true
+        });
+        if (!Plugin.Config.BingoConnected || _bingoState is null)
+        {
+            args.AddMenuItem(new MenuItem("Forest: Bingo (load a game first)", _ => { })
+            {
+                IsEnabled = false
+            });
+            return;
+        }
+
+        args.AddMenuItem(new MenuItem("Forest: Buy 1 Bingo Card", _ =>
+        {
+            _ = Bingo_BuyForOwner(name, 1);
+            _view = View.Bingo;
+            _selectedOwner = name;
+        }));
+        args.AddMenuItem(new MenuItem("Forest: Buy 10 Bingo Cards", _ =>
+        {
+            _ = Bingo_BuyForOwner(name, 10);
+            _view = View.Bingo;
+            _selectedOwner = name;
+        }));
     }
 
     // ------------------ Bingo: list/refresh ------------------
