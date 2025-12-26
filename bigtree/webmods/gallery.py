@@ -38,6 +38,9 @@ def _contest_media_url(filename: str) -> str:
 def _strip_query(url: str) -> str:
     return (url or "").split("?", 1)[0]
 
+def _media_path(filename: str) -> str:
+    return os.path.join(media_mod.get_media_dir(), filename)
+
 @route("GET", "/contest/media/{filename}", allow_public=True)
 async def contest_media_file(req: web.Request):
     filename = os.path.basename(req.match_info["filename"])
@@ -57,6 +60,8 @@ async def gallery_images(_req: web.Request):
     for entry in media_mod.list_media():
         filename = entry.get("filename")
         if not filename:
+            continue
+        if not os.path.exists(_media_path(filename)):
             continue
         url = f"/media/{filename}"
         seen.add(url)

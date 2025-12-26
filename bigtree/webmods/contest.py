@@ -69,6 +69,8 @@ def _list_contest_entries() -> List[Dict[str, Any]]:
             ext = os.path.splitext(filename)[1].lower()
             if ext not in _IMG_EXTS:
                 continue
+            if not os.path.exists(os.path.join(contest_dir, filename)):
+                continue
             items.append({
                 "title": "Contest Entry",
                 "contest": contest_name,
