@@ -167,23 +167,21 @@ public class MainWindow : Window, IDisposable
         args.AddMenuItem(new MenuItem
         {
             Name = "Forest: Buy 1 Bingo Card",
-            OnClicked = args =>
+            OnClicked = _ =>
             {
                 _ = Bingo_BuyForOwner(name, 1);
                 _view = View.Bingo;
                 _selectedOwner = name;
-                return args;
             }
         });
         args.AddMenuItem(new MenuItem
         {
             Name = "Forest: Buy 10 Bingo Cards",
-            OnClicked = args =>
+            OnClicked = _ =>
             {
                 _ = Bingo_BuyForOwner(name, 10);
                 _view = View.Bingo;
                 _selectedOwner = name;
-                return args;
             }
         });
     }
