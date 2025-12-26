@@ -139,14 +139,16 @@
         flex:1;
       }
       .menu-icons{
-        display:flex;
-        gap:10px;
-        align-items:center;
+        display:grid;
+        grid-template-columns:repeat(auto-fit, minmax(40px, 1fr));
+        gap:8px;
+        align-items:stretch;
         margin-top:6px;
       }
       .menu-icon{
-        width:44px;
-        height:44px;
+        width:100%;
+        aspect-ratio:1;
+        height:auto;
         border-radius:12px;
         border:1px solid var(--line);
         background:rgba(15,30,22,.9);
@@ -162,8 +164,8 @@
         color:var(--accent);
       }
       .menu-icon svg{
-        width:20px;
-        height:20px;
+        width:18px;
+        height:18px;
         fill:currentColor;
       }
       .icon-btn{
