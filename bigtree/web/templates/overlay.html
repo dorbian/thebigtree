@@ -396,6 +396,34 @@
         font-size:10px;
         line-height:1.1;
       }
+      .role-line{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        padding:8px 10px;
+        border-radius:8px;
+        border:1px solid rgba(255,255,255,.06);
+        background:rgba(8,12,20,.9);
+        margin-bottom:8px;
+        font-size:12px;
+      }
+      .role-title{
+        font-weight:600;
+        color:var(--ink);
+      }
+      .role-scopes{
+        display:flex;
+        flex-wrap:wrap;
+        gap:6px 12px;
+        font-size:11px;
+        color:var(--muted);
+      }
+      .role-scope{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        white-space:nowrap;
+      }
       .row{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
@@ -771,6 +799,11 @@
             <button class="menu-icon" id="menuCalendar" title="Gallery calendar" aria-label="Gallery calendar">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h4V2zm-3 6v12h16V8H4zm2 2h4v4H6v-4z"/>
+              </svg>
+            </button>
+            <button class="menu-icon" id="menuAuthRoles" title="Auth roles" aria-label="Auth roles">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a5 5 0 0 1 5 5v3h2a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1h2V7a5 5 0 0 1 5-5zm-3 8h6V7a3 3 0 0 0-6 0v3z"/>
               </svg>
             </button>
             <button class="menu-icon" id="menuOverlayToggle" title="Toggle overlay mode" aria-label="Toggle overlay mode">
@@ -1365,6 +1398,33 @@
         <div class="status" id="calendarStatus">Ready.</div>
       </div>
     </div>
+    <div class="modal" id="authRolesModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Auth Roles</div>
+          <button class="btn-ghost" id="authRolesClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="authRolesRefresh">Refresh roles</button>
+          </div>
+          <div class="muted" style="align-self:center">Select scopes each role can reach via /auth.</div>
+        </div>
+        <div class="list" id="authRolesList">No roles loaded.</div>
+        <div class="row">
+          <div>
+            <label for="authRoleIds">Selected role IDs</label>
+            <input id="authRoleIds" readonly>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="authRolesSave">Save</button>
+          </div>
+        </div>
+        <div class="status" id="authRolesStatus">Ready.</div>
+      </div>
+    </div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -1390,6 +1450,19 @@
         artist_name: "Forest"
       };
       let bingoCreateBgUrl = "";
+      let authRoleIds = new Set();
+      let authRoleScopes = {};
+      let authRolesCache = [];
+      const authScopeOptions = [
+        {id: "*", label: "All access"},
+        {id: "bingo:admin", label: "Bingo admin"},
+        {id: "tarot:admin", label: "Tarot admin"},
+        {id: "tarot:control", label: "Tarot control"},
+        {id: "admin:message", label: "Admin messages"},
+        {id: "admin:announce", label: "Admin announce"},
+        {id: "admin:web", label: "Admin web"},
+        {id: "hunt:admin", label: "Hunt admin"}
+      ];
 
       function getBase(){
         return window.location.origin;
@@ -1507,6 +1580,80 @@
         const el = $("calendarStatus");
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setAuthRolesStatus(msg, kind){
+        const el = $("authRolesStatus");
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function updateAuthRoleIdsField(){
+        authRoleIds = new Set(Object.keys(authRoleScopes || {}));
+        $("authRoleIds").value = Array.from(authRoleIds).join(", ");
+      }
+
+      function normalizeAuthRoleScopes(map){
+        const normalized = {};
+        Object.entries(map || {}).forEach(([roleId, scopes]) => {
+          const id = String(roleId).trim();
+          if (!id) return;
+          let list = [];
+          if (Array.isArray(scopes)){
+            list = scopes.map(s => String(s).trim()).filter(Boolean);
+          } else if (typeof scopes === "string"){
+            list = scopes.split(",").map(s => s.trim()).filter(Boolean);
+          }
+          if (list.includes("*")) list = ["*"];
+          if (list.length){
+            normalized[id] = list;
+          }
+        });
+        return normalized;
+      }
+
+      function renderAuthRolesList(roles){
+        if (!roles.length){
+          $("authRolesList").textContent = "No roles found.";
+          updateAuthRoleIdsField();
+          return;
+        }
+        $("authRolesList").innerHTML = roles.map(role => {
+          const roleId = String(role.id);
+          const roleName = role.name || roleId;
+          const scopes = new Set((authRoleScopes[roleId] || []).map(String));
+          const scopeHtml = authScopeOptions.map(scope => {
+            const checked = scopes.has(scope.id) ? "checked" : "";
+            const disabled = scopes.has("*") && scope.id !== "*" ? "disabled" : "";
+            return `<label class="role-scope"><input type="checkbox" data-role="${roleId}" data-scope="${scope.id}" ${checked} ${disabled}> ${scope.label}</label>`;
+          }).join("");
+          return `<div class="role-line"><div class="role-title">${roleName}</div><div class="role-scopes">${scopeHtml}</div></div>`;
+        }).join("");
+        updateAuthRoleIdsField();
+      }
+
+      async function loadAuthRoles(){
+        setAuthRolesStatus("Loading roles...", "");
+        $("authRolesList").textContent = "Loading...";
+        try{
+          const current = await jsonFetch("/api/auth/roles", {method:"GET"});
+          authRoleScopes = normalizeAuthRoleScopes(current.role_scopes || {});
+          if (!current.role_scopes_configured && !Object.keys(authRoleScopes).length && (current.role_ids || []).length){
+            const legacy = {};
+            (current.role_ids || []).forEach(id => {
+              legacy[String(id)] = ["*"];
+            });
+            authRoleScopes = legacy;
+          }
+          const res = await jsonFetch("/discord/roles", {method:"GET"});
+          const roles = res.roles || [];
+          authRolesCache = roles;
+          renderAuthRolesList(roles);
+          setAuthRolesStatus("Ready.", "ok");
+        }catch(err){
+          setAuthRolesStatus(err.message, "err");
+          $("authRolesList").textContent = "Failed to load roles.";
+        }
       }
 
       function renderCalendarPreview(){
@@ -2163,6 +2310,10 @@
         $("calendarModal").classList.add("show");
         loadCalendarAdmin();
       });
+      $("menuAuthRoles").addEventListener("click", () => {
+        $("authRolesModal").classList.add("show");
+        loadAuthRoles();
+      });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
 
       let bingoRefreshTimer = null;
@@ -2458,6 +2609,48 @@
           await loadCalendarAdmin();
         }catch(err){
           setCalendarStatus(err.message, "err");
+        }
+      });
+      $("authRolesClose").addEventListener("click", () => {
+        $("authRolesModal").classList.remove("show");
+      });
+      $("authRolesRefresh").addEventListener("click", () => loadAuthRoles());
+      $("authRolesList").addEventListener("change", (ev) => {
+        const input = ev.target;
+        if (!input || input.tagName !== "INPUT") return;
+        const roleId = input.getAttribute("data-role");
+        const scope = input.getAttribute("data-scope");
+        if (!roleId || !scope) return;
+        const current = new Set((authRoleScopes[roleId] || []).map(String));
+        if (input.checked){
+          if (scope === "*"){
+            current.clear();
+            current.add("*");
+          } else {
+            current.delete("*");
+            current.add(scope);
+          }
+        } else {
+          current.delete(scope);
+        }
+        if (current.size){
+          authRoleScopes[roleId] = Array.from(current);
+        } else {
+          delete authRoleScopes[roleId];
+        }
+        updateAuthRoleIdsField();
+        renderAuthRolesList(authRolesCache || []);
+      });
+      $("authRolesSave").addEventListener("click", async () => {
+        try{
+          await jsonFetch("/api/auth/roles", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({role_scopes: authRoleScopes})
+          });
+          setAuthRolesStatus("Saved.", "ok");
+        }catch(err){
+          setAuthRolesStatus(err.message, "err");
         }
       });
       $("bOwnerClose").addEventListener("click", () => {

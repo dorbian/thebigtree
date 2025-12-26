@@ -2,12 +2,15 @@
 from __future__ import annotations
 from aiohttp import web
 from typing import Any, Dict
+import json
 import time
 import os
 from tinydb import TinyDB, Query
 import bigtree
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
+from bigtree.inc.settings import load_settings
+from pathlib import Path
 from bigtree.inc.logging import logger
 import discord
 
@@ -76,6 +79,143 @@ async def discord_channels(req: web.Request):
             })
     channels.sort(key=lambda c: (c.get("guild_name") or "", c.get("category") or "", c.get("position") or 0, c.get("name") or ""))
     return web.json_response({"ok": True, "channels": channels})
+
+@route("GET", "/discord/roles", scopes=["bingo:admin"])
+async def discord_roles(req: web.Request):
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+    guild_id = req.query.get("guild_id")
+    try:
+        guild_id = int(guild_id) if guild_id else None
+    except Exception:
+        return web.json_response({"ok": False, "error": "guild_id must be an integer"}, status=400)
+    roles = []
+    for guild in bot.guilds or []:
+        if guild_id and guild.id != guild_id:
+            continue
+        for role in getattr(guild, "roles", []) or []:
+            roles.append({
+                "id": str(role.id),
+                "name": role.name,
+                "guild_id": str(guild.id),
+                "guild_name": guild.name,
+                "color": role.color.value if hasattr(role, "color") else 0,
+                "position": role.position,
+            })
+    roles.sort(key=lambda r: (r.get("guild_name") or "", -(r.get("position") or 0), r.get("name") or ""))
+    return web.json_response({"ok": True, "roles": roles})
+
+def _settings_path() -> Path:
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            return Path(getattr(bigtree.settings, "path", "") or "")
+    except Exception:
+        pass
+    return Path(os.getenv("HOME", "")) / ".config" / "bigtree.ini"
+
+def _update_role_ids(role_ids: list[str]) -> None:
+    from configobj import ConfigObj
+    path = _settings_path()
+    cfg = ConfigObj(str(path), encoding="utf-8")
+    cfg.setdefault("BOT", {})
+    cfg["BOT"]["elfministrator_role_ids"] = [str(r) for r in role_ids]
+    cfg.write()
+    try:
+        bigtree.settings = load_settings(path)
+    except Exception:
+        pass
+
+def _normalize_role_scopes(role_scopes: Dict[str, Any]) -> Dict[str, list[str]]:
+    if not isinstance(role_scopes, dict):
+        return {}
+    normalized: Dict[str, list[str]] = {}
+    for rid, scopes in role_scopes.items():
+        role_id = str(rid).strip()
+        if not role_id:
+            continue
+        scope_list: list[str] = []
+        if isinstance(scopes, str):
+            val = scopes.strip()
+            if val.startswith("[") or val.startswith("{"):
+                try:
+                    parsed = json.loads(val)
+                except Exception:
+                    parsed = val
+                scopes = parsed
+        if isinstance(scopes, (list, tuple, set)):
+            scope_list = [str(s).strip() for s in scopes if str(s).strip()]
+        elif isinstance(scopes, dict):
+            scope_list = [str(s).strip() for s in scopes.keys() if str(s).strip()]
+        elif isinstance(scopes, str):
+            scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+        if "*" in scope_list:
+            scope_list = ["*"]
+        normalized[role_id] = scope_list
+    return normalized
+
+def _update_role_scopes(role_scopes: Dict[str, list[str]]) -> None:
+    from configobj import ConfigObj
+    path = _settings_path()
+    cfg = ConfigObj(str(path), encoding="utf-8")
+    cfg.setdefault("BOT", {})
+    cfg["BOT"]["auth_role_scopes"] = json.dumps(role_scopes)
+    cfg.write()
+    try:
+        bigtree.settings = load_settings(path)
+    except Exception:
+        pass
+
+@route("GET", "/api/auth/roles", scopes=["bingo:admin"])
+async def auth_roles(_req: web.Request):
+    role_ids = []
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            role_ids = bigtree.settings.get("BOT.elfministrator_role_ids", [], cast="json") or []
+    except Exception:
+        role_ids = []
+    role_scopes = {}
+    role_scopes_configured = False
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            sec = bigtree.settings.section("BOT")
+            if isinstance(sec, dict) and "auth_role_scopes" in sec:
+                role_scopes_configured = True
+                role_scopes = sec.get("auth_role_scopes") or {}
+            else:
+                role_scopes = bigtree.settings.get("BOT.auth_role_scopes", {}, cast="json") or {}
+    except Exception:
+        role_scopes = {}
+    if isinstance(role_ids, (str, int)):
+        role_ids = [role_ids]
+    role_ids = [str(r) for r in role_ids if str(r).strip()]
+    role_scopes = _normalize_role_scopes(role_scopes)
+    return web.json_response({
+        "ok": True,
+        "role_ids": role_ids,
+        "role_scopes": role_scopes,
+        "role_scopes_configured": role_scopes_configured,
+    })
+
+@route("POST", "/api/auth/roles", scopes=["bingo:admin"])
+async def auth_roles_update(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+    role_scopes = body.get("role_scopes", None)
+    if role_scopes is not None:
+        role_scopes = _normalize_role_scopes(role_scopes)
+        role_ids = list(role_scopes.keys())
+        _update_role_scopes(role_scopes)
+        _update_role_ids(role_ids)
+        return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes})
+    role_ids = body.get("role_ids") or []
+    if isinstance(role_ids, (str, int)):
+        role_ids = [role_ids]
+    role_ids = [str(r) for r in role_ids if str(r).strip()]
+    _update_role_ids(role_ids)
+    return web.json_response({"ok": True, "role_ids": role_ids})
 
 # ---------- Send a Discord message ----------
 @route("POST", "/message", scopes=["admin:message"])

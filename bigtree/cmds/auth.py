@@ -1,6 +1,7 @@
 # bigtree/cmds/auth.py
 from __future__ import annotations
 from datetime import datetime, timezone
+import json
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -47,6 +48,72 @@ def _is_elfministrator(member: discord.Member) -> bool:
     return False
 
 
+def _parse_scope_list(raw) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str):
+        val = raw.strip()
+        if not val:
+            return []
+        if val.startswith("[") or val.startswith("{"):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+                if isinstance(parsed, dict):
+                    return [str(x).strip() for x in parsed.keys() if str(x).strip()]
+            except Exception:
+                pass
+        return [x.strip() for x in val.split(",") if x.strip()]
+    return []
+
+
+def _get_role_scope_map() -> tuple[dict[int, list[str]], bool]:
+    raw = _settings_get("BOT", "auth_role_scopes", None)
+    if raw is None:
+        return {}, False
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return {}, True
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return {}, True
+    if not isinstance(raw, dict):
+        return {}, True
+    mapping: dict[int, list[str]] = {}
+    for rid, scopes in raw.items():
+        try:
+            role_id = int(rid)
+        except Exception:
+            continue
+        scope_list = _parse_scope_list(scopes)
+        if "*" in scope_list:
+            scope_list = ["*"]
+        mapping[role_id] = scope_list
+    return mapping, True
+
+
+def _get_scopes_for_member(member: discord.Member) -> list[str]:
+    role_map, configured = _get_role_scope_map()
+    roles = {r.id for r in getattr(member, "roles", [])}
+    if configured:
+        scopes = set()
+        for role_id in roles:
+            for scope in role_map.get(role_id, []):
+                if scope:
+                    scopes.add(str(scope))
+        if "*" in scopes:
+            return ["*"]
+        return sorted(scopes)
+    if _is_elfministrator(member):
+        return ["*"]
+    return []
+
+
 class AuthCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -60,7 +127,8 @@ class AuthCog(commands.Cog):
         member = interaction.user
         if not isinstance(member, discord.Member):
             member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
-        if not member or not _is_elfministrator(member):
+        scopes = _get_scopes_for_member(member) if member else []
+        if not member or not scopes:
             await interaction.response.send_message("Not allowed.", ephemeral=True)
             return
         display_name = member.display_name or member.name
@@ -68,6 +136,7 @@ class AuthCog(commands.Cog):
         avatar_url = getattr(avatar_url, "url", None)
         doc = web_tokens.issue_token(
             user_id=member.id,
+            scopes=scopes,
             user_name=display_name,
             user_icon=avatar_url,
         )
