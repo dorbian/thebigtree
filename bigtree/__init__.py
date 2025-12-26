@@ -77,7 +77,8 @@ def initialize():
         _bt.settings = settings
         # Bot basics
         bot_sec = settings["BOT"]
-        contest_dir = bot_sec.get("contest_dir", "/data/contest")
+        default_contest_dir = str(workingdir.parent / "contest")
+        contest_dir = bot_sec.get("contest_dir", default_contest_dir)
         os.makedirs(contest_dir, exist_ok=True)
 
         # Cast IDs from config to int
