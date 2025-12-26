@@ -167,7 +167,7 @@ public class MainWindow : Window, IDisposable
         args.AddMenuItem(new MenuItem
         {
             Name = "Forest: Buy 1 Bingo Card",
-            OnClicked = _ =>
+            OnClicked = argsClicked =>
             {
                 _ = Bingo_BuyForOwner(name, 1);
                 _view = View.Bingo;
@@ -177,7 +177,7 @@ public class MainWindow : Window, IDisposable
         args.AddMenuItem(new MenuItem
         {
             Name = "Forest: Buy 10 Bingo Cards",
-            OnClicked = _ =>
+            OnClicked = argsClicked =>
             {
                 _ = Bingo_BuyForOwner(name, 10);
                 _view = View.Bingo;
