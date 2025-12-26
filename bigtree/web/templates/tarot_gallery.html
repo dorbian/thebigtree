@@ -26,9 +26,24 @@
   header{
     padding:22px;
     border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
   }
   header h1{margin:0 0 6px 0;letter-spacing:.05em}
   header p{margin:0;color:var(--muted)}
+  .admin-link{
+    color:var(--accent);
+    text-decoration:none;
+    font-size:13px;
+    border:1px solid rgba(107,212,162,.35);
+    padding:8px 12px;
+    border-radius:999px;
+    background:#0f1a14;
+    white-space:nowrap;
+  }
+  .admin-link:hover{border-color:rgba(107,212,162,.7)}
   main{padding:20px}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
   label{color:var(--muted);font-size:12px}
@@ -48,6 +63,14 @@
     grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
     gap:14px;
   }
+  .artist-link{
+    color:var(--accent);
+    text-decoration:none;
+    font-size:12px;
+    cursor:pointer;
+    display:inline-block;
+    margin:2px 0 6px 0;
+  }
   .card{
     background:var(--panel);
     border:1px solid var(--line);
@@ -57,11 +80,45 @@
   .card img{width:100%;border-radius:10px;margin-bottom:8px}
   .muted{color:var(--muted);font-size:12px}
   .links a{color:var(--accent);text-decoration:none;margin-right:8px;font-size:12px}
+  .modal{
+    position:fixed;
+    inset:0;
+    background:rgba(4,10,8,.72);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    z-index:50;
+  }
+  .modal.show{display:flex}
+  .modal-card{
+    max-width:420px;
+    width:100%;
+    background:#0f1814;
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:18px;
+  }
+  .modal-card h2{margin:0 0 10px 0;font-size:20px}
+  .modal-links a{
+    display:inline-block;
+    margin:0 8px 8px 0;
+    color:var(--accent);
+    text-decoration:none;
+    font-size:13px;
+  }
+  .modal-close{
+    margin-top:12px;
+    width:100%;
+  }
 </style>
 
 <header>
-  <h1>Tarot Gallery</h1>
-  <p>Public art archive with artist credits.</p>
+  <div>
+    <h1>Tarot Gallery</h1>
+    <p>Public art archive with artist credits.</p>
+  </div>
+  <a class="admin-link" href="/overlay">Admin login</a>
 </header>
 
 <main>
@@ -78,13 +135,39 @@
   <div class="grid" id="grid"></div>
 </main>
 
+<div class="modal" id="artistModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-card">
+    <h2 id="artistName">Artist</h2>
+    <div class="modal-links" id="artistLinks"></div>
+    <button class="modal-close" id="artistClose">Close</button>
+  </div>
+</div>
+
 <script>
   const grid = document.getElementById("grid");
   const deckInput = document.getElementById("deck");
+  const artistModal = document.getElementById("artistModal");
+  const artistName = document.getElementById("artistName");
+  const artistLinks = document.getElementById("artistLinks");
 
   function link(label, url){
     if (!url) return "";
     return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+  }
+
+  function openArtistModal(name, links){
+    artistName.textContent = name || "Forest";
+    const linkItems = Object.entries(links || {})
+      .filter(([, url]) => url)
+      .map(([label, url]) => `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`);
+    artistLinks.innerHTML = linkItems.length ? linkItems.join("") : "<span class='muted'>Forest</span>";
+    artistModal.classList.add("show");
+    artistModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeArtistModal(){
+    artistModal.classList.remove("show");
+    artistModal.setAttribute("aria-hidden", "true");
   }
 
   async function load(){
@@ -96,18 +179,25 @@
       return;
     }
     grid.innerHTML = data.cards.map(c => {
-      const links = c.artist_links || {};
+      const artist = c.artist || {};
+      const artistName = artist.name || "Forest";
+      const artistLinks = artist.links || {};
+      const artistPayload = encodeURIComponent(JSON.stringify({
+        name: artistName,
+        links: artistLinks
+      }));
       return `
         <div class="card">
           ${c.image ? `<img src="${c.image}" alt="${c.name}">` : ""}
           <div><strong>${c.name || ""}</strong></div>
+          <div><a class="artist-link" href="#" data-artist="${artistPayload}">${artistName}</a></div>
           <div class="muted">${c.house || ""}</div>
           <div class="links">
-            ${link("Instagram", links.instagram)}
-            ${link("Bluesky", links.bluesky)}
-            ${link("X", links.x)}
-            ${link("ArtStation", links.artstation)}
-            ${link("Website", links.website)}
+            ${link("Instagram", artistLinks.instagram)}
+            ${link("Bluesky", artistLinks.bluesky)}
+            ${link("X", artistLinks.x)}
+            ${link("ArtStation", artistLinks.artstation)}
+            ${link("Website", artistLinks.website)}
           </div>
         </div>
       `;
@@ -115,5 +205,22 @@
   }
 
   document.getElementById("load").addEventListener("click", load);
+  document.getElementById("artistClose").addEventListener("click", closeArtistModal);
+  artistModal.addEventListener("click", (event) => {
+    if (event.target === artistModal) closeArtistModal();
+  });
+  grid.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!target.classList || !target.classList.contains("artist-link")) return;
+    event.preventDefault();
+    const payload = target.getAttribute("data-artist");
+    if (!payload) return;
+    try{
+      const parsed = JSON.parse(decodeURIComponent(payload));
+      openArtistModal(parsed.name, parsed.links);
+    }catch (err){
+      openArtistModal("Forest", {});
+    }
+  });
   load();
 </script>
