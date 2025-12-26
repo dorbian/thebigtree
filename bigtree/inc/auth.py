@@ -13,6 +13,7 @@ from typing import Optional, Set, Dict, Any, Callable
 from aiohttp import web
 import bigtree
 from bigtree.inc import web_tokens
+from bigtree.inc.logging import auth_logger
 
 try:
     import jwt  # PyJWT (optional)
@@ -134,6 +135,13 @@ def auth_middleware() -> Callable:
 
         if not ok:
             # Be explicit but non-leaky
+            auth_logger.warning(
+                "[auth] unauthorized path=%s method=%s scopes=%s token=%s",
+                request.path,
+                request.method,
+                ",".join(sorted(needed_scopes)) if needed_scopes else "-",
+                "yes" if token else "no",
+            )
             return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
 
         return await handler(request)

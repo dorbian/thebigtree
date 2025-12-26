@@ -209,8 +209,12 @@ async def auth_roles_update(req: web.Request):
     if role_scopes is not None:
         role_scopes = _normalize_role_scopes(role_scopes)
         role_ids = list(role_scopes.keys())
-        _update_role_scopes(role_scopes)
-        _update_role_ids(role_ids)
+        try:
+            _update_role_scopes(role_scopes)
+            _update_role_ids(role_ids)
+        except Exception as exc:
+            auth_logger.error("[auth] roles update failed err=%s", exc)
+            return web.json_response({"ok": False, "error": "save failed"}, status=500)
         auth_logger.info("[auth] roles updated scopes=%s", role_scopes)
         return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes})
     role_ids = body.get("role_ids") or []
