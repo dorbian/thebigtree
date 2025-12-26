@@ -269,27 +269,6 @@ async def list_media(_req: web.Request):
             items.append(entry)
             seen.add(name)
 
-    try:
-        for g in bingo_mod.list_games():
-            gid = g.get("game_id")
-            if not gid:
-                continue
-            game = bingo_mod.get_game(gid)
-            if not game or not game.get("background_path"):
-                continue
-            name = f"{gid}.png"
-            url = f"/bingo/assets/{gid}"
-            if name in seen:
-                continue
-            items.append({
-                "name": name,
-                "url": url,
-                "source": "bingo-bg",
-                "delete_url": f"/api/uploads/bingo/backgrounds/{gid}",
-            })
-            seen.add(name)
-    except Exception:
-        pass
     return web.json_response({"ok": True, "items": items})
 
 @route("DELETE", "/api/media/{filename}", scopes=["tarot:admin"])
