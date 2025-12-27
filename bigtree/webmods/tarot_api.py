@@ -384,6 +384,22 @@ async def finish(req: web.Request):
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
 
+@route("DELETE", "/api/tarot/sessions/{session_id}", allow_public=True)
+async def delete_session(req: web.Request):
+    session_id = req.match_info["session_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    token = _get_token(req, body)
+    try:
+        ok = tar.delete_session(session_id, token)
+    except PermissionError:
+        return _json_error("unauthorized", status=403)
+    if not ok:
+        return _json_error("not found", status=404)
+    return web.json_response({"ok": True})
+
 # ---- Deck endpoints ----
 @route("POST", "/api/tarot/decks", scopes=["tarot:admin"])
 async def create_deck(req: web.Request):

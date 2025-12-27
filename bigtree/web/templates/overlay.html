@@ -979,6 +979,10 @@
               <label>&nbsp;</label>
               <button id="tOpenOverlay">Open overlay</button>
             </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tCloseSession">Close session</button>
+            </div>
           </div>
           <div class="row links">
             <div>
@@ -3168,6 +3172,34 @@
         const url = getPriestessUrl(code, token);
         renderLinks(code, token);
         window.open(url, "_blank");
+      });
+
+      $("tCloseSession").addEventListener("click", async () => {
+        const join = $("tJoinCode").value.trim();
+        const token = $("tPriestessToken").value.trim();
+        if (!join || !token){
+          setStatus("Join code and priestess token required.", "err");
+          return;
+        }
+        if (!confirm("Close this session? It will be removed from the list.")){
+          return;
+        }
+        try{
+          const state = await jsonFetch("/api/tarot/sessions/" + encodeURIComponent(join) + "/state?view=priestess", {method:"GET"}, true);
+          const sessionId = state.state && state.state.session ? state.state.session.session_id : "";
+          if (!sessionId){
+            throw new Error("Session not found.");
+          }
+          await jsonFetch("/api/tarot/sessions/" + encodeURIComponent(sessionId), {
+            method: "DELETE",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({token})
+          });
+          setStatus("Session closed.", "ok");
+          await loadTarotSessions();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       });
 
       let taHouses = [];

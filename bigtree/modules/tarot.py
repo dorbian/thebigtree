@@ -580,6 +580,15 @@ def end_session(sid: str) -> None:
     s["status"] = "finished"
     _update_session(sid, s)
 
+def delete_session(session_id: str, token: str) -> bool:
+    s = get_session_by_id(session_id)
+    if not s:
+        return False
+    _require_priestess(s, token)
+    db = _db_sessions(); q = Query()
+    db.remove((q._type == "session") & (q.session_id == session_id))
+    return True
+
 def draw_cards_legacy(sid: str, count: int = 1) -> List[Dict[str, Any]]:
     s = get_session_by_id(sid)
     if not s:
