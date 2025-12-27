@@ -1119,24 +1119,28 @@
               <select id="taDeck"></select>
             </div>
             <div>
-              <label for="taDeckTheme">Deck theme</label>
-              <select id="taDeckTheme">
-                <option value="classic">Classic</option>
-                <option value="wood">Wood</option>
-                <option value="neon">Neon</option>
-              </select>
+              <label>&nbsp;</label>
+              <button class="btn-ghost icon-btn" id="taEditDeck" title="Edit deck">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 15.5V20h4.5L19 9.5l-4.5-4.5L4 15.5zm16.4-9.9a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0l-1.5 1.5 4.5 4.5 1.5-1.5z"/>
+                </svg>
+              </button>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="taLoadDeck">Load deck</button>
+              <button class="btn-ghost icon-btn" id="taAddDeck" title="Add deck">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
+                </svg>
+              </button>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="taAddDeck">Add deck</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="taDeleteDeck">Delete deck</button>
+              <button class="btn-ghost icon-btn" id="taDeleteDeck" title="Delete deck">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 7h12v2H6zM9 9h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z"/>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -1427,6 +1431,48 @@
           <div>
             <label>&nbsp;</label>
             <button id="deckCreateSubmit">Create deck</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="deckEditModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Edit Deck</div>
+          <button class="btn-ghost" id="deckEditClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="deckEditName">Name</label>
+            <input id="deckEditName" placeholder="Elf Classic">
+          </div>
+          <div>
+            <label for="deckEditTheme">Card theme</label>
+            <select id="deckEditTheme">
+              <option value="classic">Classic</option>
+              <option value="wood">Wood</option>
+              <option value="neon">Neon</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Deck back</label>
+            <button class="btn-ghost icon-btn" id="deckEditBackPick" title="Choose back image">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+              </svg>
+            </button>
+          </div>
+          <div>
+            <label>Back preview</label>
+            <div class="preview-card" id="deckEditBackPreview"><span class="preview-label">Back</span></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="deckEditSubmit">Save changes</button>
           </div>
         </div>
       </div>
@@ -2946,7 +2992,7 @@
           await loadTarotDeckList(id);
           $("deckCreateModal").classList.remove("show");
           setStatus("Deck created.", "ok");
-          await $("taLoadDeck").click();
+          await loadTarotDeck();
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -3535,7 +3581,7 @@
         const front = $("taFrontPreview");
         const back = $("taBackPreview");
         const backUrl = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.back_image : "";
-        const theme = (window.taDeckData && window.taDeckData.deck && window.taDeckData.deck.theme) || $("taDeckTheme").value || "classic";
+        const theme = (window.taDeckData && window.taDeckData.deck && window.taDeckData.deck.theme) || "classic";
         front.dataset.cardTheme = theme;
         front.innerHTML = '<span class="preview-label">Front</span>';
         back.innerHTML = '<span class="preview-label">Back</span>';
@@ -3570,7 +3616,7 @@
         $("taCardName").value = card.name || "";
         taActiveHouse = card.house || "";
         $("taCardHouse").value = taActiveHouse;
-        $("taCardNumber").value = card.number || "";
+        $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
         $("taCardTags").value = (card.tags || []).join(", ");
         $("taCardUpright").value = card.upright || "";
         $("taCardReversed").value = card.reversed || "";
@@ -3809,48 +3855,20 @@
           taLoadCard(card);
         }
       });
-      $("taLoadDeck").addEventListener("click", async () => {
+      async function loadTarotDeck(){
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
-        const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
-        const deckTheme = (data.deck && data.deck.theme) ? data.deck.theme : "classic";
-        $("taDeckTheme").value = deckTheme;
-        showList($("taDeckList"), data);
-        taRenderPreviews(null);
-        setStatus("Deck loaded.", "ok");
-      }catch(err){
-        setStatus(err.message, "err");
-      }
-    });
-
-      $("taDeckTheme").addEventListener("change", async (ev) => {
-        const deck = $("taDeck").value.trim();
-        if (!deck){
-          setStatus("Pick a deck to update.", "err");
-          return;
-        }
-        const theme = ev.target.value || "classic";
-        try{
-          const res = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {
-            method: "PUT",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({theme})
-          }, true);
-          window.taDeckData = window.taDeckData || {};
-          window.taDeckData.deck = res.deck || {deck_id: deck, theme};
-          taRenderPreviews({
-            name: $("taCardName").value.trim(),
-            number: $("taCardNumber").value.trim(),
-            image: window.taUploadedImageUrl || ""
-          });
-          setStatus("Deck theme updated.", "ok");
+          const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
+          showList($("taDeckList"), data);
+          taRenderPreviews(null);
+          setStatus("Deck loaded.", "ok");
         }catch(err){
           setStatus(err.message, "err");
         }
-      });
+      }
 
       $("taDeck").addEventListener("change", async () => {
-        await $("taLoadDeck").click();
+        await loadTarotDeck();
       });
 
       $("taAddDeck").addEventListener("click", () => {
@@ -3864,6 +3882,104 @@
         $("deckCreateBackPick").dataset.artistId = "";
         $("deckCreateBackPreview").innerHTML = '<span class="preview-label">Back</span>';
         $("deckCreateModal").classList.add("show");
+      });
+
+      $("taEditDeck").addEventListener("click", async () => {
+        const deck = $("taDeck").value.trim();
+        if (!deck){
+          setStatus("Pick a deck to edit.", "err");
+          return;
+        }
+        try{
+          if (!window.taDeckData || !window.taDeckData.deck || window.taDeckData.deck.deck_id !== deck){
+            const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
+            showList($("taDeckList"), data);
+          }
+          const deckData = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : {};
+          $("deckEditName").value = deckData.name || "";
+          $("deckEditTheme").value = deckData.theme || "classic";
+          const backUrl = deckData.back_image || "";
+          const preview = $("deckEditBackPreview");
+          preview.innerHTML = '<span class="preview-label">Back</span>';
+          if (backUrl){
+            const img = document.createElement("img");
+            img.src = backUrl;
+            preview.appendChild(img);
+          }
+          $("deckEditBackPick").dataset.backUrl = backUrl;
+          $("deckEditBackPick").dataset.artistId = deckData.back_artist_id || "";
+          $("deckEditModal").classList.add("show");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("deckEditClose").addEventListener("click", () => {
+        $("deckEditModal").classList.remove("show");
+      });
+      $("deckEditModal").addEventListener("click", (event) => {
+        if (event.target === $("deckEditModal")){
+          $("deckEditModal").classList.remove("show");
+        }
+      });
+      $("deckEditBackPick").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          $("deckEditBackPick").dataset.backUrl = item.url || "";
+          $("deckEditBackPick").dataset.artistId = item.artist_id || "";
+          const preview = $("deckEditBackPreview");
+          preview.innerHTML = '<span class="preview-label">Back</span>';
+          if (item.url){
+            const img = document.createElement("img");
+            img.src = item.url;
+            preview.appendChild(img);
+          }
+          setStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("deckEditTheme").addEventListener("change", (ev) => {
+        const theme = ev.target.value || "classic";
+        if (!window.taDeckData) window.taDeckData = {};
+        window.taDeckData.deck = window.taDeckData.deck || {};
+        window.taDeckData.deck.theme = theme;
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: $("taCardNumber").value.trim(),
+          image: window.taUploadedImageUrl || ""
+        });
+      });
+
+      $("deckEditSubmit").addEventListener("click", async () => {
+        const deck = $("taDeck").value.trim();
+        if (!deck){
+          setStatus("Pick a deck to edit.", "err");
+          return;
+        }
+        const name = $("deckEditName").value.trim();
+        const theme = $("deckEditTheme").value || "classic";
+        const backUrl = $("deckEditBackPick").dataset.backUrl || "";
+        const artistId = $("deckEditBackPick").dataset.artistId || "";
+        try{
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name: name || undefined, theme})
+          }, true);
+          if (backUrl){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
+              method:"PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
+            }, true);
+          }
+          $("deckEditModal").classList.remove("show");
+          await loadTarotDeck();
+          setStatus("Deck updated.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
       });
 
       $("taDeleteDeck").addEventListener("click", async () => {
@@ -3922,7 +4038,7 @@
           taRenderNumberInfo("");
           taSetCardThemeWeights({});
           taSelectedCardId = body.card_id || "";
-          await $("taLoadDeck").click();
+          await loadTarotDeck();
         }catch(err){
           setStatus(err.message, "err");
         }
@@ -3942,7 +4058,7 @@
           });
           select.value = selectValue || "elf-classic";
           if (autoLoad && select.value){
-            await $("taLoadDeck").click();
+            await loadTarotDeck();
           }
         }catch(err){
           setStatus(err.message, "err");
