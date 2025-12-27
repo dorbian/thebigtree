@@ -89,8 +89,9 @@
   .grid{
     margin-top:16px;
     display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
     gap:14px;
+    grid-auto-rows:1fr;
   }
   .artist-link{
     color:var(--accent);
@@ -105,8 +106,19 @@
     border:1px solid var(--line);
     border-radius:14px;
     padding:10px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    min-height:100%;
   }
-  .card img{width:100%;border-radius:10px;margin-bottom:8px}
+  .card img{
+    width:100%;
+    border-radius:10px;
+    margin:0;
+    aspect-ratio:3/4.2;
+    object-fit:cover;
+    background:#0c1511;
+  }
   .muted{color:var(--muted);font-size:12px}
   .links a{color:var(--accent);text-decoration:none;margin-right:8px;font-size:12px}
   .contest-pill{
