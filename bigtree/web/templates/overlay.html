@@ -611,6 +611,11 @@
         --card-overlay-opacity:.45;
         --card-frame:rgba(214,178,110,.65);
         --card-frame-shadow:0 0 0 1px rgba(214,178,110,.25), inset 0 0 12px rgba(0,0,0,.35);
+        --card-title-letter:.12em;
+        --card-title-transform:uppercase;
+        --card-number-letter:.16em;
+        --card-number-transform:uppercase;
+        --card-title-border:rgba(214,178,110,.6);
       }
       .preview-card[data-card-theme="wood"]{
         --card-overlay:repeating-linear-gradient(45deg, rgba(104,68,36,.28) 0 8px, rgba(74,49,27,.28) 8px 16px),
@@ -618,6 +623,11 @@
         --card-overlay-opacity:.5;
         --card-frame:rgba(141,99,58,.9);
         --card-frame-shadow:inset 0 0 0 2px rgba(63,41,24,.5), inset 0 8px 18px rgba(0,0,0,.35);
+        --card-title-letter:.04em;
+        --card-title-transform:none;
+        --card-number-letter:.08em;
+        --card-number-transform:none;
+        --card-title-border:rgba(141,99,58,.85);
       }
       .preview-card[data-card-theme="neon"]{
         --card-overlay:radial-gradient(circle at 20% 20%, rgba(55,226,255,.25), transparent 45%),
@@ -625,18 +635,28 @@
         --card-overlay-opacity:.65;
         --card-frame:rgba(70,240,255,.9);
         --card-frame-shadow:0 0 14px rgba(70,240,255,.45), inset 0 0 12px rgba(255,82,205,.25);
+        --card-title-letter:.22em;
+        --card-title-transform:uppercase;
+        --card-number-letter:.22em;
+        --card-number-transform:uppercase;
+        --card-title-border:rgba(70,240,255,.8);
       }
       .preview-card .card-title{
         position:absolute;
-        left:0;
-        right:0;
-        bottom:0;
-        padding:6px 8px;
+        left:50%;
+        right:auto;
+        bottom:50%;
+        transform:translate(-50%, 50%);
+        padding:6px 10px;
         font-size:11px;
-        letter-spacing:.04em;
-        text-transform:uppercase;
+        letter-spacing:var(--card-title-letter, .04em);
+        text-transform:var(--card-title-transform, uppercase);
         color:var(--ink);
-        background:linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.7));
+        background:rgba(6,10,8,.65);
+        border:1px solid var(--card-title-border, rgba(255,255,255,.2));
+        border-radius:999px;
+        min-width:60%;
+        text-align:center;
         z-index:2;
       }
       .preview-card .card-number{
@@ -647,8 +667,8 @@
         padding:3px 8px;
         border-radius:999px;
         font-size:11px;
-        letter-spacing:.08em;
-        text-transform:uppercase;
+        letter-spacing:var(--card-number-letter, .08em);
+        text-transform:var(--card-number-transform, uppercase);
         color:var(--ink);
         background:rgba(6,10,8,.7);
         border:1px solid rgba(255,255,255,.2);

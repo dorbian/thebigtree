@@ -213,17 +213,22 @@
   .front img{width:100%;height:100%;object-fit:cover;position:relative;z-index:0}
   .card-title{
     position:absolute;
-    left:0;
-    right:0;
-    bottom:0;
-    padding:8px 10px;
-    font-size:12px;
-    letter-spacing:.04em;
-    text-transform:uppercase;
+    left:50%;
+    right:auto;
+    bottom:50%;
+    transform:translate(-50%, 50%);
+    padding:6px 12px;
+    font-size:var(--card-title-size, 12px);
+    letter-spacing:var(--card-title-letter, .04em);
+    text-transform:var(--card-title-transform, uppercase);
     color:var(--card-title-color, var(--text));
-    background:var(--card-title-bg, linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.75)));
+    background:var(--card-title-bg, rgba(6,10,8,.65));
     font-family:var(--card-title-font, inherit);
     text-shadow:var(--card-title-shadow, none);
+    border:1px solid var(--card-title-border, rgba(255,255,255,.2));
+    border-radius:999px;
+    min-width:60%;
+    text-align:center;
     z-index:2;
   }
   .card-number{
@@ -233,9 +238,9 @@
     transform:translateX(-50%);
     padding:4px 10px;
     border-radius:999px;
-    font-size:11px;
-    letter-spacing:.08em;
-    text-transform:uppercase;
+    font-size:var(--card-number-size, 11px);
+    letter-spacing:var(--card-number-letter, .08em);
+    text-transform:var(--card-number-transform, uppercase);
     color:var(--card-number-color, var(--text));
     background:var(--card-number-bg, rgba(6,10,8,.7));
     border:1px solid var(--card-number-border, rgba(255,255,255,.2));
@@ -250,6 +255,11 @@
     --card-title-bg:linear-gradient(180deg, rgba(10,10,10,0), rgba(10,10,10,.85));
     --card-title-font:"Cinzel","Garamond","Georgia",serif;
     --card-title-shadow:0 2px 6px rgba(0,0,0,.6);
+    --card-title-letter:.12em;
+    --card-title-transform:uppercase;
+    --card-title-border:rgba(214,178,110,.6);
+    --card-number-letter:.16em;
+    --card-number-transform:uppercase;
     --card-number-bg:rgba(18,12,6,.78);
     --card-number-border:rgba(214,178,110,.6);
   }
@@ -262,6 +272,11 @@
     --card-title-bg:linear-gradient(180deg, rgba(40,26,16,0), rgba(40,26,16,.85));
     --card-title-font:"Cormorant Garamond","Garamond","Georgia",serif;
     --card-title-color:#f0e6d6;
+    --card-title-letter:.04em;
+    --card-title-transform:none;
+    --card-title-border:rgba(141,99,58,.85);
+    --card-number-letter:.08em;
+    --card-number-transform:none;
     --card-number-bg:rgba(52,34,20,.85);
     --card-number-border:rgba(141,99,58,.85);
   }
@@ -279,14 +294,15 @@
     --card-title-font:"Orbitron","Trebuchet MS",sans-serif;
     --card-title-color:#e6fbff;
     --card-title-shadow:0 0 10px rgba(70,240,255,.65);
+    --card-title-letter:.22em;
+    --card-title-transform:uppercase;
+    --card-title-border:rgba(70,240,255,.8);
+    --card-number-letter:.22em;
+    --card-number-transform:uppercase;
     --card-number-bg:rgba(6,8,20,.85);
     --card-number-border:rgba(70,240,255,.8);
   }
   body[data-card-theme="neon"] .card-title{
-    top:auto;
-    bottom:0;
-    border-top:1px solid rgba(255,255,255,.12);
-    border-bottom:none;
     letter-spacing:.18em;
   }
   .meaning{
