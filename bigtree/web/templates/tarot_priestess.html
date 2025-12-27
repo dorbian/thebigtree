@@ -694,7 +694,15 @@
       inner.appendChild(back);
       inner.appendChild(front);
       cardWrap.appendChild(inner);
-      cardWrap.addEventListener("click", () => selectCard(pos.id));
+      cardWrap.addEventListener("click", async () => {
+        if (draw && !draw.revealed){
+          await postControl(
+            `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
+            {token: tokenInput.value, position_id: pos.id}
+          );
+        }
+        selectCard(pos.id);
+      });
       slot.appendChild(cardWrap);
       stateEls.grid.appendChild(slot);
     });
@@ -837,7 +845,23 @@
     await postControl(`/api/tarot/sessions/${currentState.session.session_id}/shuffle`, {token: tokenInput.value});
   };
   document.getElementById("btnDraw").onclick = async () => {
-    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/draw`, {token: tokenInput.value, count: 1});
+    if (!currentState){
+      await fetchState();
+    }
+    const positions = (currentState && currentState.spread && currentState.spread.positions) || [];
+    const drawn = (currentState && currentState.draw) || [];
+    const drawnIds = new Set(drawn.map(d => d.position_id));
+    const remaining = positions.filter(p => !drawnIds.has(p.id)).length;
+    if (remaining > 0){
+      await postControl(
+        `/api/tarot/sessions/${currentState.session.session_id}/draw`,
+        {token: tokenInput.value, count: remaining}
+      );
+    }
+    await postControl(
+      `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
+      {token: tokenInput.value, mode:"next"}
+    );
   };
   document.getElementById("btnRevealNext").onclick = async () => {
     await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});

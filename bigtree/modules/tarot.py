@@ -387,6 +387,18 @@ def list_decks() -> List[Dict[str, Any]]:
         decks = db.search(q._type == "deck")
     return decks
 
+def delete_deck(deck_id: str) -> bool:
+    deck_id = (deck_id or "").strip()
+    if not deck_id:
+        return False
+    db = _db_decks(); q = Query()
+    deck = db.get((q._type == "deck") & (q.deck_id == deck_id))
+    if not deck:
+        return False
+    db.remove((q._type == "deck") & (q.deck_id == deck_id))
+    db.remove((q._type == "card") & (q.deck_id == deck_id))
+    return True
+
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
     db = _db_decks(); q = Query()
     return db.get((q._type == "deck") & (q.deck_id == deck_id))

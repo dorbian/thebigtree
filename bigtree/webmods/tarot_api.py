@@ -451,6 +451,14 @@ async def get_deck(req: web.Request):
     cards = tar.list_cards(deck_id)
     return web.json_response({"ok": True, "deck": deck, "cards": cards})
 
+@route("DELETE", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin"])
+async def delete_deck(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    ok = tar.delete_deck(deck_id)
+    if not ok:
+        return _json_error("not found", status=404)
+    return web.json_response({"ok": True})
+
 @route("GET", "/api/tarot/decks/{deck_id}/public", allow_public=True)
 async def get_deck_public(req: web.Request):
     deck_id = req.match_info["deck_id"]
