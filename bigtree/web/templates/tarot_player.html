@@ -309,7 +309,7 @@
   }
 
   function parseCardNumber(value){
-    const text = String(value || "").trim();
+    const text = String(value).trim();
     if (!text) return NaN;
     if (/^\d+$/.test(text)) return parseInt(text, 10);
     return parseRoman(text);
