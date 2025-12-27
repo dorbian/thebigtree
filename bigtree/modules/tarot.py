@@ -156,9 +156,96 @@ SPREADS = {
     ],
 }
 
+_SPREADS_CACHE: Optional[List[Dict[str, Any]]] = None
+_SPREADS_WARNED = False
+
+def _read_json(path: str) -> Optional[dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return _json.loads(fh.read())
+    except Exception:
+        return None
+
+def _normalize_spreads(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, dict):
+        raw = raw.get("spreads")
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        sid = str(entry.get("id") or "").strip()
+        if not sid:
+            continue
+        label = str(entry.get("label") or sid.title()).strip()
+        positions = []
+        for pos in entry.get("positions") or []:
+            if not isinstance(pos, dict):
+                continue
+            pid = str(pos.get("id") or "").strip()
+            if not pid:
+                continue
+            positions.append({
+                "id": pid,
+                "label": str(pos.get("label") or pid.title()).strip(),
+                "prompt": str(pos.get("prompt") or "").strip(),
+            })
+        if not positions:
+            continue
+        out.append({
+            "id": sid,
+            "label": label,
+            "positions": positions,
+        })
+    return out
+
+def _load_spreads() -> List[Dict[str, Any]]:
+    global _SPREADS_CACHE, _SPREADS_WARNED
+    if _SPREADS_CACHE is not None:
+        return _SPREADS_CACHE
+    candidates: List[str] = []
+    env_path = os.getenv("BIGTREE_TAROT_SPREADS")
+    if env_path:
+        candidates.append(env_path)
+    base = _get_base_dir()
+    candidates.append(os.path.join(base, "spreads.json"))
+    try:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        candidates.append(os.path.join(repo_root, "tarot_spreads.json"))
+        candidates.append(os.path.join(repo_root, "defaults", "tarot_spreads.json"))
+    except Exception:
+        pass
+    for path in candidates:
+        if os.path.exists(path):
+            data = _read_json(path)
+            spreads = _normalize_spreads(data)
+            if spreads:
+                _SPREADS_CACHE = spreads
+                return _SPREADS_CACHE
+    if not _SPREADS_WARNED:
+        _SPREADS_WARNED = True
+        logger.warning("[tarot] spreads file not found; checked: %s", ", ".join(candidates))
+    # fallback to defaults
+    fallback = []
+    for sid, positions in SPREADS.items():
+        fallback.append({
+            "id": sid,
+            "label": sid.title(),
+            "positions": positions,
+        })
+    _SPREADS_CACHE = fallback
+    return _SPREADS_CACHE
+
+def list_spreads() -> List[Dict[str, Any]]:
+    return list(_load_spreads())
+
 def _get_spread(spread_id: str) -> List[Dict[str, Any]]:
     spread_id = (spread_id or "").strip().lower()
-    return SPREADS.get(spread_id) or SPREADS["single"]
+    for spread in _load_spreads():
+        if spread.get("id") == spread_id:
+            return spread.get("positions") or SPREADS["single"]
+    return SPREADS["single"]
 
 # -------- Decks --------
 def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:

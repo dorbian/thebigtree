@@ -250,6 +250,31 @@ async def join_session(req: web.Request):
         "viewerToken": joined["viewer_token"],
     })
 
+@route("POST", "/api/tarot/sessions/from-priestess", allow_public=True)
+async def create_session_from_priestess(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    join_code = str(body.get("join_code") or "")
+    token = str(body.get("token") or "").strip()
+    deck_id = str(body.get("deck_id") or "").strip() or "elf-classic"
+    spread_id = str(body.get("spread_id") or "").strip() or "single"
+    session = tar.get_session_by_join_code(join_code)
+    if not session:
+        return _json_error("not found", status=404)
+    try:
+        tar._require_priestess(session, token)
+    except PermissionError:
+        return _json_error("unauthorized", status=403)
+    new_session = tar.create_session(session.get("priestess_id") or 0, deck_id, spread_id)
+    return web.json_response({
+        "ok": True,
+        "session_id": new_session.get("session_id"),
+        "join_code": new_session.get("join_code"),
+        "priestess_token": new_session.get("priestess_token"),
+    })
+
 @route("GET", "/api/tarot/sessions/{join_code}/state", allow_public=True)
 async def get_state(req: web.Request):
     join_code = req.match_info["join_code"]
@@ -447,6 +472,21 @@ async def get_deck_public(req: web.Request):
             } if artist else None,
         })
     return web.json_response({"ok": True, "deck": deck, "cards": cards})
+
+@route("GET", "/api/tarot/decks/public", allow_public=True)
+async def list_decks_public(_req: web.Request):
+    decks = []
+    for d in tar.list_decks():
+        decks.append({
+            "deck_id": d.get("deck_id"),
+            "name": d.get("name") or d.get("deck_id"),
+            "back_image": d.get("back_image"),
+        })
+    return web.json_response({"ok": True, "decks": decks})
+
+@route("GET", "/api/tarot/spreads", allow_public=True)
+async def list_spreads(_req: web.Request):
+    return web.json_response({"ok": True, "spreads": tar.list_spreads()})
 
 @route("GET", "/api/tarot/artists", scopes=["tarot:admin"])
 async def list_artists(_req: web.Request):

@@ -212,6 +212,35 @@
     font-size:11px;
   }
   .hidden{display:none}
+  .modal{
+    position:fixed;
+    inset:0;
+    background:rgba(6,10,8,.7);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:20;
+  }
+  .modal.show{display:flex}
+  .modal-card{
+    width:min(520px, 92vw);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:16px;
+  }
+  .modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .modal-title{
+    font-size:14px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
 </style>
 
 <header>
@@ -243,6 +272,7 @@
     <div class="row" style="margin-top:8px">
       <button class="btn accent" id="btnStart">Start Reading</button>
       <button class="btn danger" id="btnFinish">Finish</button>
+      <button class="btn" id="btnNewSession">New session</button>
     </div>
     <div class="row" style="margin-top:6px">
       <button class="btn" id="btnOpenPlayer">Open player view</button>
@@ -281,6 +311,22 @@
   </div>
 </div>
 
+<div class="modal" id="newSessionModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">New Session</div>
+      <button class="btn" id="newSessionClose">Close</button>
+    </div>
+    <label class="muted">Deck</label>
+    <select id="newSessionDeck"></select>
+    <label class="muted" style="margin-top:8px">Spread</label>
+    <select id="newSessionSpread"></select>
+    <div style="height:8px"></div>
+    <button class="btn accent" id="newSessionCreate">Create & Open</button>
+    <div class="muted" id="newSessionStatus" style="margin-top:8px"></div>
+  </div>
+</div>
+
 <script>
   const joinCode = "{JOIN}";
   const qs = new URLSearchParams(location.search);
@@ -304,6 +350,10 @@
   const connStatus = document.getElementById("connStatus");
   const actionError = document.getElementById("actionError");
   const deckPreview = document.getElementById("deckPreview");
+  const newSessionModal = document.getElementById("newSessionModal");
+  const newSessionDeck = document.getElementById("newSessionDeck");
+  const newSessionSpread = document.getElementById("newSessionSpread");
+  const newSessionStatus = document.getElementById("newSessionStatus");
 
   let currentState = null;
   let selectedPosition = null;
@@ -509,6 +559,92 @@
 
   document.getElementById("spreadHelp").addEventListener("click", () => {
     document.getElementById("spreadNote").classList.toggle("hidden");
+  });
+
+  async function loadSessionOptions(){
+    try{
+      const decksRes = await fetch("/api/tarot/decks/public");
+      const decksData = await decksRes.json();
+      const decks = decksData.decks || [];
+      newSessionDeck.innerHTML = "";
+      decks.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d.deck_id;
+        opt.textContent = d.name || d.deck_id;
+        newSessionDeck.appendChild(opt);
+      });
+      if (!decks.length){
+        const opt = document.createElement("option");
+        opt.value = "elf-classic";
+        opt.textContent = "elf-classic";
+        newSessionDeck.appendChild(opt);
+      }
+      const spreadsRes = await fetch("/api/tarot/spreads");
+      const spreadsData = await spreadsRes.json();
+      const spreads = spreadsData.spreads || [];
+      newSessionSpread.innerHTML = "";
+      spreads.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.label || s.id;
+        newSessionSpread.appendChild(opt);
+      });
+      if (!spreads.length){
+        const opt = document.createElement("option");
+        opt.value = "single";
+        opt.textContent = "single";
+        newSessionSpread.appendChild(opt);
+      }
+    }catch(err){
+      newSessionStatus.textContent = "Failed to load decks/spreads.";
+    }
+  }
+
+  document.getElementById("btnNewSession").addEventListener("click", async () => {
+    newSessionStatus.textContent = "";
+    newSessionModal.classList.add("show");
+    await loadSessionOptions();
+  });
+  document.getElementById("newSessionClose").addEventListener("click", () => {
+    newSessionModal.classList.remove("show");
+  });
+  newSessionModal.addEventListener("click", (event) => {
+    if (event.target === newSessionModal){
+      newSessionModal.classList.remove("show");
+    }
+  });
+  document.getElementById("newSessionCreate").addEventListener("click", async () => {
+    const deck = newSessionDeck.value || "elf-classic";
+    const spread = newSessionSpread.value || "single";
+    const token = tokenInput.value.trim();
+    if (!token){
+      newSessionStatus.textContent = "Priestess token required.";
+      return;
+    }
+    newSessionStatus.textContent = "Creating...";
+    try{
+      const res = await fetch("/api/tarot/sessions/from-priestess", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          join_code: joinCode,
+          token: token,
+          deck_id: deck,
+          spread_id: spread,
+        })
+      });
+      const data = await res.json();
+      if (!data.ok){
+        newSessionStatus.textContent = data.error || "Failed to create.";
+        return;
+      }
+      const url = new URL(`/tarot/session/${encodeURIComponent(data.join_code)}`, window.location.origin);
+      url.searchParams.set("view", "priestess");
+      url.searchParams.set("token", data.priestess_token);
+      window.location.assign(url.toString());
+    }catch(err){
+      newSessionStatus.textContent = "Failed to create.";
+    }
   });
 
   fetchState();
