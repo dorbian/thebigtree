@@ -43,6 +43,14 @@ def _contest_name(meta: Dict[str, Any] | None, channel_id: int) -> str:
             value = (meta.get(key) or "").strip()
             if value:
                 return value
+    try:
+        bot = getattr(bigtree, "bot", None)
+        if bot:
+            channel = bot.get_channel(channel_id)
+            if channel and getattr(channel, "name", None):
+                return str(channel.name)
+    except Exception:
+        pass
     return f"Contest {channel_id}"
 
 def _list_contest_entries() -> List[Dict[str, Any]]:
