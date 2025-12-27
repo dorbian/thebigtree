@@ -1,0 +1,54 @@
+{
+  "houses": [
+    {
+      "id": "roots",
+      "name": "House of Roots",
+      "themes": {
+        "foundation": 3,
+        "memory": 2,
+        "stability": 3
+      },
+      "keywords": ["home", "tradition", "endurance", "belonging"]
+    },
+    {
+      "id": "canopy",
+      "name": "House of Canopy",
+      "themes": {
+        "growth": 3,
+        "connection": 3,
+        "hope": 2
+      },
+      "keywords": ["healing", "community", "relationships", "renewal"]
+    },
+    {
+      "id": "ember",
+      "name": "House of Ember",
+      "themes": {
+        "will": 3,
+        "conflict": 2,
+        "passion": 3
+      },
+      "keywords": ["drive", "courage", "ambition", "trial"]
+    },
+    {
+      "id": "whisper",
+      "name": "House of Whisper",
+      "themes": {
+        "secrets": 2,
+        "change": 3,
+        "curiosity": 3
+      },
+      "keywords": ["insight", "illusion", "trickery", "exploration"]
+    },
+    {
+      "id": "crown",
+      "name": "Crown of the Tree",
+      "themes": {
+        "fate": 3,
+        "cycles": 3,
+        "balance": 2
+      },
+      "keywords": ["destiny", "turning point", "world forces"]
+    }
+  ]
+}

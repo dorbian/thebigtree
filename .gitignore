@@ -171,3 +171,4 @@ chanel_scrape.py
 
 # Go build outputs
 overlay-client/dist/
+.ignore_help

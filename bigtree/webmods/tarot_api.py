@@ -98,10 +98,12 @@ def _load_houses() -> dict:
         data_dir / "tarot" / "houses.json",
         data_dir / "tarot" / "tarrot_help.json",
         data_dir / "tarrot_help.json",
+        data_dir / "houses.json",
     ])
     try:
         repo_root = Path(__file__).resolve().parents[2]
         candidates.extend([
+            repo_root / "houses.json",
             repo_root / "tarrot_help.json",
             repo_root / "defaults" / "tarrot_help.json",
         ])
