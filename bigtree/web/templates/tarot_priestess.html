@@ -87,6 +87,33 @@
     min-height:0;
     overflow:hidden;
   }
+  .analysis-panel{
+    margin-top:12px;
+    padding:10px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:rgba(8,12,10,.6);
+    max-height:200px;
+    overflow:auto;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .analysis-panel h3{
+    margin:0 0 8px 0;
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .analysis-card{
+    padding:8px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,.06);
+    background:rgba(6,10,8,.5);
+    margin-bottom:8px;
+  }
+  .analysis-card:last-child{margin-bottom:0}
+  .analysis-card strong{color:var(--text)}
   .panel h2{
     margin:0 0 10px 0;
     font-size:14px;
@@ -425,6 +452,10 @@
   <div class="panel">
     <h2>Spread</h2>
     <div id="cardGrid" class="card-grid"></div>
+    <div class="analysis-panel" id="analysisPanel">
+      <h3>Visible Card Focus</h3>
+      <div class="muted">Draw cards to see focused notes.</div>
+    </div>
   </div>
 
   <div class="panel">
@@ -494,6 +525,7 @@
   let currentState = null;
   let selectedPosition = null;
   let sse = null;
+  let lastDrawCount = 0;
   let houseThemes = {};
   let numberDefs = {};
 
@@ -667,8 +699,18 @@
       stateEls.grid.appendChild(slot);
     });
 
+    const newDrawCount = (currentState.draw || []).length;
+    if (newDrawCount > lastDrawCount){
+      const lastDraw = currentState.draw[newDrawCount - 1];
+      if (lastDraw && lastDraw.position_id){
+        selectedPosition = lastDraw.position_id;
+      }
+    }
+    lastDrawCount = newDrawCount;
+
     renderNarration();
     if (selectedPosition) updateMeaning(selectedPosition);
+    renderAnalysis();
   }
 
   function renderNarration(){
@@ -733,6 +775,43 @@
       ${numbers}
       <div style="margin-top:6px">${draw.reversed ? reversed : upright}</div>
     `;
+  }
+
+  function renderAnalysis(){
+    const panel = document.getElementById("analysisPanel");
+    if (!panel || !currentState){
+      return;
+    }
+    const draws = (currentState.draw || []).filter(d => d.revealed);
+    if (!draws.length){
+      panel.innerHTML = `<h3>Visible Card Focus</h3><div class="muted">Reveal cards to see focused notes.</div>`;
+      return;
+    }
+    const rows = draws.map(draw => {
+      const card = draw.card || {};
+      const name = card.name || "Card";
+      const house = card.house ? `House: ${card.house}` : "House: -";
+      const number = card.number ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
+      const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
+      const themeItems = Object.entries(card.themes || {}).filter(([, v]) => Number(v) > 0);
+      const themeList = themeItems.map(([k, v]) => {
+        const label = (k || "").replace(/_/g, " ");
+        if (highlight && highlight.has(k)){
+          return `<strong>${label} (${v})</strong>`;
+        }
+        return `${label} (${v})`;
+      }).join(", ");
+      const numbers = renderNumberInfo(card.number);
+      return `
+        <div class="analysis-card">
+          <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
+          <div class="muted">${house} - ${number}</div>
+          ${themeList ? `<div class="muted">Focus: ${themeList}</div>` : ""}
+          ${numbers}
+        </div>
+      `;
+    }).join("");
+    panel.innerHTML = `<h3>Visible Card Focus</h3>${rows}`;
   }
 
   async function postControl(path, body){
