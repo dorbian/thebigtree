@@ -111,6 +111,18 @@
     max-height:420px;
     overflow:auto;
   }
+  .deck-preview{
+    width:120px;
+    aspect-ratio:3/4.2;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:
+      radial-gradient(circle at 20% 20%, rgba(214,178,110,.18), transparent 40%),
+      linear-gradient(135deg, #1b2d26, #132018);
+    background-size:cover;
+    background-position:center;
+    margin-bottom:12px;
+  }
   .narration .line{
     font-size:13px;
     line-height:1.4;
@@ -147,6 +159,7 @@
     <div id="cardGrid" class="card-grid"></div>
   </div>
   <div class="panel">
+    <div class="deck-preview" id="deckPreview"></div>
     <h2 style="margin-top:0;font-size:14px;letter-spacing:.08em;color:var(--muted)">Narration</h2>
     <div class="narration" id="narrationFeed"></div>
   </div>
@@ -163,6 +176,7 @@
   const connDot = document.getElementById("connDot");
   const connStatus = document.getElementById("connStatus");
   const waitingNote = document.getElementById("waitingNote");
+  const deckPreview = document.getElementById("deckPreview");
   let currentState = null;
   let sse = null;
 
@@ -183,6 +197,11 @@
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
     grid.innerHTML = "";
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
+    if (backUrl){
+      deckPreview.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+    } else {
+      deckPreview.style.backgroundImage = "";
+    }
     const hasAnyDraw = (currentState.draw || []).length > 0;
     waitingNote.style.display = hasAnyDraw ? "none" : "block";
     currentState.spread.positions.forEach(pos => {
@@ -249,4 +268,5 @@
 
   fetchState();
   connectSSE();
+  setInterval(fetchState, 5000);
 </script>

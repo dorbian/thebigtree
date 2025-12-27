@@ -184,6 +184,18 @@
     margin-top:10px;
     padding-top:8px;
   }
+  .deck-preview{
+    width:120px;
+    aspect-ratio:3/4.2;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:
+      radial-gradient(circle at 20% 20%, rgba(214,178,110,.18), transparent 40%),
+      linear-gradient(135deg, #1b2d26, #132018);
+    background-size:cover;
+    background-position:center;
+    margin:10px 0;
+  }
   .narration .line{font-size:12px;margin-bottom:6px}
   .chip{
     display:inline-block;
@@ -227,6 +239,7 @@
     <div style="height:10px"></div>
     <label class="muted">Priestess token</label>
     <input id="tokenInput" placeholder="paste priestess token" />
+    <div class="deck-preview" id="deckPreview"></div>
     <div class="row" style="margin-top:8px">
       <button class="btn accent" id="btnStart">Start Reading</button>
       <button class="btn danger" id="btnFinish">Finish</button>
@@ -290,6 +303,7 @@
   const connDot = document.getElementById("connDot");
   const connStatus = document.getElementById("connStatus");
   const actionError = document.getElementById("actionError");
+  const deckPreview = document.getElementById("deckPreview");
 
   let currentState = null;
   let selectedPosition = null;
@@ -325,6 +339,11 @@
     stateEls.deckId.textContent = s.deck_id;
     stateEls.spreadId.textContent = s.spread_id;
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
+    if (backUrl){
+      deckPreview.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+    } else {
+      deckPreview.style.backgroundImage = "";
+    }
 
     stateEls.positions.innerHTML = "";
     currentState.spread.positions.forEach(pos => {
