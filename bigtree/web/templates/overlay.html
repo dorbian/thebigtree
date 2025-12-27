@@ -3823,7 +3823,7 @@
         }
       });
 
-      async function loadTarotDeckList(selectValue){
+      async function loadTarotDeckList(selectValue, autoLoad = true){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
@@ -3836,6 +3836,9 @@
             select.appendChild(opt);
           });
           select.value = selectValue || "elf-classic";
+          if (autoLoad && select.value){
+            await $("taLoadDeck").click();
+          }
         }catch(err){
           setStatus(err.message, "err");
         }
