@@ -168,6 +168,20 @@ def _auth_roles_path() -> Path | None:
         return None
     return Path(base) / "auth_roles.json"
 
+def _read_auth_roles_file() -> Dict[str, list[str]]:
+    path = _auth_roles_path()
+    if not path or not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except Exception:
+        return {}
+    if isinstance(data, dict) and isinstance(data.get("role_scopes"), dict):
+        return _normalize_role_scopes(data.get("role_scopes") or {})
+    if isinstance(data, dict):
+        return _normalize_role_scopes(data)
+    return {}
+
 def _write_auth_roles_file(role_scopes: Dict[str, list[str]]) -> bool:
     path = _auth_roles_path()
     if not path:
@@ -209,10 +223,14 @@ async def auth_roles(_req: web.Request):
                 role_scopes = bigtree.settings.get("BOT.auth_role_scopes", {}, cast="json") or {}
     except Exception:
         role_scopes = {}
+    role_scopes = _normalize_role_scopes(role_scopes)
+    if not role_scopes:
+        role_scopes = _read_auth_roles_file()
+    if role_scopes:
+        role_scopes_configured = True
     if isinstance(role_ids, (str, int)):
         role_ids = [role_ids]
     role_ids = [str(r) for r in role_ids if str(r).strip()]
-    role_scopes = _normalize_role_scopes(role_scopes)
     auth_logger.info("[auth] roles list role_ids=%s role_scopes=%s", role_ids, list(role_scopes.keys()))
     return web.json_response({
         "ok": True,
