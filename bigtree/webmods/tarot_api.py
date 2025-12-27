@@ -459,6 +459,20 @@ async def delete_deck(req: web.Request):
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
 
+@route("PUT", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin"])
+async def update_deck(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    name = body.get("name")
+    theme = body.get("theme")
+    deck = tar.update_deck(deck_id, name=name, theme=theme)
+    if not deck:
+        return _json_error("not found", status=404)
+    return web.json_response({"ok": True, "deck": deck})
+
 @route("GET", "/api/tarot/decks/{deck_id}/public", allow_public=True)
 async def get_deck_public(req: web.Request):
     deck_id = req.match_info["deck_id"]

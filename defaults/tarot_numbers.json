@@ -1,6 +1,11 @@
 {
   "numbers": [
     {
+      "number": 0,
+      "label": "",
+      "meaning": "The unmanifest, before identity, destiny"
+    },
+    {
       "number": 1,
       "label": "Aces",
       "meaning": "New beginnings, opportunity, potential"

@@ -263,7 +263,7 @@ def _normalize_numbers(raw: Any) -> List[Dict[str, Any]]:
             num = int(entry.get("number"))
         except Exception:
             continue
-        if num < 1 or num > 10:
+        if num < 0 or num > 10:
             continue
         label = str(entry.get("label") or "").strip()
         meaning = str(entry.get("meaning") or "").strip()
@@ -302,6 +302,7 @@ def _load_numbers() -> List[Dict[str, Any]]:
         _NUMBERS_WARNED = True
         logger.warning("[tarot] numbers file not found; checked: %s", ", ".join(candidates))
     _NUMBERS_CACHE = [
+        {"number": 0, "label": "", "meaning": "The unmanifest, before identity, destiny"},
         {"number": 1, "label": "Aces", "meaning": "New beginnings, opportunity, potential"},
         {"number": 2, "label": "", "meaning": "Balance, partnership, duality"},
         {"number": 3, "label": "", "meaning": "Creativity, groups, growth"},
@@ -398,6 +399,21 @@ def delete_deck(deck_id: str) -> bool:
     db.remove((q._type == "deck") & (q.deck_id == deck_id))
     db.remove((q._type == "card") & (q.deck_id == deck_id))
     return True
+
+def update_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    deck_id = (deck_id or "").strip()
+    if not deck_id:
+        return None
+    db = _db_decks(); q = Query()
+    deck = db.get((q._type == "deck") & (q.deck_id == deck_id))
+    if not deck:
+        return None
+    if name is not None:
+        deck["name"] = (name or deck_id)
+    if theme is not None:
+        deck["theme"] = _normalize_theme(theme)
+    db.update(deck, (q._type == "deck") & (q.deck_id == deck_id))
+    return deck
 
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
     db = _db_decks(); q = Query()

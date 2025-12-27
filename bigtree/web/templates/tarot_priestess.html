@@ -531,13 +531,13 @@
 
   function parseRoman(value){
     const roman = String(value || "").trim().toUpperCase();
-    if (!roman) return 0;
+    if (!roman) return NaN;
     const map = {I:1, V:5, X:10, L:50, C:100, D:500, M:1000};
     let total = 0;
     let prev = 0;
     for (let i = roman.length - 1; i >= 0; i -= 1){
       const num = map[roman[i]];
-      if (!num) return 0;
+      if (!num) return NaN;
       if (num < prev){
         total -= num;
       } else {
@@ -550,7 +550,7 @@
 
   function parseCardNumber(value){
     const text = String(value || "").trim();
-    if (!text) return 0;
+    if (!text) return NaN;
     if (/^\d+$/.test(text)) return parseInt(text, 10);
     return parseRoman(text);
   }
@@ -576,13 +576,14 @@
 
   function formatCardNumber(value){
     const num = parseCardNumber(value);
+    if (num === 0) return "0";
     return num ? toRoman(num) || String(value || "") : "";
   }
 
   function renderNumberInfo(value){
     const num = parseCardNumber(value);
-    if (!num) return "";
-    const digits = String(num).split("").map(d => parseInt(d, 10)).filter(d => d > 0);
+    if (!Number.isFinite(num)) return "";
+    const digits = String(num).split("").map(d => parseInt(d, 10));
     let sum = digits.reduce((acc, d) => acc + d, 0);
     while (sum > 10){
       sum = String(sum).split("").reduce((acc, d) => acc + parseInt(d, 10), 0);
@@ -590,6 +591,7 @@
     const picks = [];
     digits.forEach(d => { if (!picks.includes(d)) picks.push(d); });
     if (sum > 0 && !picks.includes(sum)) picks.push(sum);
+    if (num === 0 && !picks.includes(0)) picks.push(0);
     const rows = picks.map(pick => {
       const entry = numberDefs[pick] || {};
       const label = entry.label ? ` - ${entry.label}` : "";
@@ -679,7 +681,7 @@
         img.src = draw.card.image;
         front.appendChild(img);
       }
-      if (draw && draw.card && draw.card.number){
+      if (draw && draw.card && draw.card.number !== undefined && draw.card.number !== null){
         const number = document.createElement("div");
         number.className = "card-number";
         number.textContent = formatCardNumber(draw.card.number);
@@ -799,7 +801,7 @@
       const card = draw.card || {};
       const name = card.name || "Card";
       const house = card.house ? `House: ${card.house}` : "House: -";
-      const number = card.number ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
+      const number = (card.number !== undefined && card.number !== null) ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
       const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
       const themeItems = Object.entries(card.themes || {}).filter(([, v]) => Number(v) > 0);
       const themeList = themeItems.map(([k, v]) => {
