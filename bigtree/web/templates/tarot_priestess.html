@@ -44,6 +44,32 @@
     border:1px solid var(--line);
   }
   header h1{margin:0;font-size:20px;letter-spacing:.06em}
+  .subhead{
+    padding:8px 22px 0;
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .status-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#6bd4a2;
+    display:inline-block;
+    margin-right:6px;
+  }
+  .status-dot.off{background:#d18b8b}
+  .status-dot.warn{background:#d6b26e}
+  .error-bar{
+    padding:6px 10px;
+    border-radius:10px;
+    border:1px solid rgba(224,112,112,.6);
+    background:rgba(36,12,12,.6);
+    color:#ffdada;
+    font-size:12px;
+    display:none;
+  }
   .wrap{
     display:grid;
     grid-template-columns: 260px 1fr 320px;
@@ -181,15 +207,19 @@
   <h1>Tarot Priestess</h1>
   <span class="chip" id="sessionStatus">loading</span>
 </header>
+<div class="subhead">
+  <span><span class="status-dot" id="connDot"></span><span id="connStatus">connecting</span></span>
+  <span>Join: <strong id="joinCode">{JOIN}</strong></span>
+  <span>Deck: <strong id="deckId">-</strong></span>
+  <span>Spread: <strong id="spreadId">-</strong></span>
+</div>
 
 <div class="wrap">
   <div class="panel">
     <h2>Session</h2>
     <div class="stack">
-      <div class="muted">Join code: <span id="joinCode">{JOIN}</span></div>
       <div class="muted">Session ID: <span id="sessionId">-</span></div>
-      <div class="muted">Deck: <span id="deckId">-</span></div>
-      <div class="muted">Spread: <span id="spreadId">-</span><span class="help-toggle" id="spreadHelp">(?)</span></div>
+      <div class="muted">Spread help: <span class="help-toggle" id="spreadHelp">(?)</span></div>
     </div>
     <div class="muted hidden" id="spreadNote">
       Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
@@ -210,6 +240,7 @@
       <button class="btn" id="btnRevealNext">Reveal Next</button>
       <button class="btn" id="btnRevealAll">Reveal All</button>
     </div>
+    <div class="error-bar" id="actionError"></div>
     <div style="height:12px"></div>
     <h2>Positions</h2>
     <div id="positionsList" class="stack"></div>
@@ -256,8 +287,13 @@
     narration: document.getElementById("narrationFeed"),
   };
 
+  const connDot = document.getElementById("connDot");
+  const connStatus = document.getElementById("connStatus");
+  const actionError = document.getElementById("actionError");
+
   let currentState = null;
   let selectedPosition = null;
+  let sse = null;
 
   function authHeaders(){
     return {"Content-Type":"application/json", "X-Tarot-Token": tokenInput.value.trim()};
@@ -295,7 +331,7 @@
       const draw = currentState.draw.find(d => d.position_id === pos.id);
       const el = document.createElement("div");
       el.className = "muted";
-      let label = `${pos.label} — ${pos.prompt || ""}`;
+      let label = `${pos.label} - ${pos.prompt || ""}`;
       if (draw && draw.revealed) label += " (revealed)";
       else if (draw) label += " (drawn)";
       el.textContent = label;
@@ -309,7 +345,7 @@
       slot.className = "card-slot";
       const label = document.createElement("div");
       label.className = "label";
-      label.textContent = `${pos.label} — ${pos.prompt || ""}`;
+      label.textContent = `${pos.label} - ${pos.prompt || ""}`;
       slot.appendChild(label);
 
       const cardWrap = document.createElement("div");
@@ -383,8 +419,12 @@
   async function postControl(path, body){
     const res = await fetch(path, {method:"POST", headers:authHeaders(), body:JSON.stringify(body || {})});
     if (!res.ok){
+      const data = await res.json().catch(() => ({}));
+      actionError.textContent = data.error || "Request failed.";
+      actionError.style.display = "block";
       return false;
     }
+    actionError.style.display = "none";
     await fetchState();
     return true;
   }
@@ -432,7 +472,19 @@
   };
 
   function connectSSE(){
+    if (sse){
+      sse.close();
+    }
     const src = new EventSource(`/api/tarot/sessions/${joinCode}/stream?view=priestess`);
+    sse = src;
+    src.onopen = () => {
+      connDot.className = "status-dot";
+      connStatus.textContent = "connected";
+    };
+    src.onerror = () => {
+      connDot.className = "status-dot warn";
+      connStatus.textContent = "reconnecting";
+    };
     src.onmessage = () => fetchState();
   }
 

@@ -29,6 +29,23 @@
     border-bottom:1px solid var(--line);
   }
   header h1{margin:0;font-size:20px;letter-spacing:.05em}
+  .subhead{
+    padding:8px 22px 0;
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .status-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#6bd4a2;
+    display:inline-block;
+    margin-right:6px;
+  }
+  .status-dot.off{background:#d18b8b}
+  .status-dot.warn{background:#d6b26e}
   .wrap{
     padding:16px;
     display:grid;
@@ -107,14 +124,26 @@
     font-size:11px;
     color:var(--muted);
   }
+  .notice{
+    margin-bottom:10px;
+    font-size:12px;
+    color:var(--muted);
+  }
 </style>
 
 <header>
   <h1>Tarot Reading <span class="chip" id="sessionStatus">waiting</span></h1>
 </header>
+<div class="subhead">
+  <span><span class="status-dot" id="connDot"></span><span id="connStatus">connecting</span></span>
+  <span>Join: <strong id="joinCode"></strong></span>
+  <span>Deck: <strong id="deckName">-</strong></span>
+  <span>Spread: <strong id="spreadName">-</strong></span>
+</div>
 
 <div class="wrap">
   <div class="panel">
+    <div class="notice" id="waitingNote">Waiting for the reader to begin.</div>
     <div id="cardGrid" class="card-grid"></div>
   </div>
   <div class="panel">
@@ -128,7 +157,16 @@
   const statusEl = document.getElementById("sessionStatus");
   const grid = document.getElementById("cardGrid");
   const narration = document.getElementById("narrationFeed");
+  const joinEl = document.getElementById("joinCode");
+  const deckEl = document.getElementById("deckName");
+  const spreadEl = document.getElementById("spreadName");
+  const connDot = document.getElementById("connDot");
+  const connStatus = document.getElementById("connStatus");
+  const waitingNote = document.getElementById("waitingNote");
   let currentState = null;
+  let sse = null;
+
+  joinEl.textContent = joinCode;
 
   async function fetchState(){
     const res = await fetch(`/api/tarot/sessions/${joinCode}/state?view=player`);
@@ -141,15 +179,19 @@
   function render(){
     if (!currentState) return;
     statusEl.textContent = currentState.session.status || "created";
+    deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
+    spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
     grid.innerHTML = "";
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
+    const hasAnyDraw = (currentState.draw || []).length > 0;
+    waitingNote.style.display = hasAnyDraw ? "none" : "block";
     currentState.spread.positions.forEach(pos => {
       const draw = currentState.draw.find(d => d.position_id === pos.id);
       const slot = document.createElement("div");
       slot.className = "card-slot";
       const label = document.createElement("div");
       label.className = "label";
-      label.textContent = `${pos.label} — ${pos.prompt || ""}`;
+      label.textContent = `${pos.label} - ${pos.prompt || ""}`;
       slot.appendChild(label);
 
       const cardWrap = document.createElement("div");
@@ -189,7 +231,19 @@
   }
 
   function connectSSE(){
+    if (sse){
+      sse.close();
+    }
     const src = new EventSource(`/api/tarot/sessions/${joinCode}/stream?view=player`);
+    sse = src;
+    src.onopen = () => {
+      connDot.className = "status-dot";
+      connStatus.textContent = "connected";
+    };
+    src.onerror = () => {
+      connDot.className = "status-dot warn";
+      connStatus.textContent = "reconnecting";
+    };
     src.onmessage = () => fetchState();
   }
 
