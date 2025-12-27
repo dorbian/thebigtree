@@ -106,8 +106,29 @@
     transform:rotateY(180deg);
     background:#0d1411;
     position:relative;
+    isolation:isolate;
   }
-  .front img{width:100%;height:100%;object-fit:cover}
+  .front::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:var(--card-overlay, transparent);
+    opacity:var(--card-overlay-opacity, .35);
+    mix-blend-mode:screen;
+    pointer-events:none;
+    z-index:1;
+  }
+  .front::after{
+    content:"";
+    position:absolute;
+    inset:10px;
+    border-radius:10px;
+    border:1px solid var(--card-frame, rgba(255,255,255,.16));
+    box-shadow:var(--card-frame-shadow, none);
+    pointer-events:none;
+    z-index:1;
+  }
+  .front img{width:100%;height:100%;object-fit:cover;position:relative;z-index:0}
   .card-title{
     position:absolute;
     left:0;
@@ -117,8 +138,74 @@
     font-size:12px;
     letter-spacing:.04em;
     text-transform:uppercase;
-    color:var(--text);
-    background:linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.75));
+    color:var(--card-title-color, var(--text));
+    background:var(--card-title-bg, linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.75)));
+    font-family:var(--card-title-font, inherit);
+    text-shadow:var(--card-title-shadow, none);
+    z-index:2;
+  }
+  .card-number{
+    position:absolute;
+    top:8px;
+    left:50%;
+    transform:translateX(-50%);
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--card-number-color, var(--text));
+    background:var(--card-number-bg, rgba(6,10,8,.7));
+    border:1px solid var(--card-number-border, rgba(255,255,255,.2));
+    z-index:2;
+  }
+  body[data-card-theme="classic"]{
+    --card-overlay:radial-gradient(circle at 20% 10%, rgba(214,178,110,.35), transparent 55%),
+      linear-gradient(180deg, rgba(10,12,12,.2), rgba(8,8,8,.65));
+    --card-overlay-opacity:.45;
+    --card-frame:rgba(214,178,110,.65);
+    --card-frame-shadow:0 0 0 1px rgba(214,178,110,.25), inset 0 0 12px rgba(0,0,0,.35);
+    --card-title-bg:linear-gradient(180deg, rgba(10,10,10,0), rgba(10,10,10,.85));
+    --card-title-font:"Cinzel","Garamond","Georgia",serif;
+    --card-title-shadow:0 2px 6px rgba(0,0,0,.6);
+    --card-number-bg:rgba(18,12,6,.78);
+    --card-number-border:rgba(214,178,110,.6);
+  }
+  body[data-card-theme="wood"]{
+    --card-overlay:repeating-linear-gradient(45deg, rgba(104,68,36,.28) 0 8px, rgba(74,49,27,.28) 8px 16px),
+      radial-gradient(circle at 50% 20%, rgba(162,111,58,.25), transparent 60%);
+    --card-overlay-opacity:.5;
+    --card-frame:rgba(141,99,58,.9);
+    --card-frame-shadow:inset 0 0 0 2px rgba(63,41,24,.5), inset 0 8px 18px rgba(0,0,0,.35);
+    --card-title-bg:linear-gradient(180deg, rgba(40,26,16,0), rgba(40,26,16,.85));
+    --card-title-font:"Cormorant Garamond","Garamond","Georgia",serif;
+    --card-title-color:#f0e6d6;
+    --card-number-bg:rgba(52,34,20,.85);
+    --card-number-border:rgba(141,99,58,.85);
+  }
+  body[data-card-theme="wood"] .card-title{
+    text-transform:none;
+    letter-spacing:.02em;
+  }
+  body[data-card-theme="neon"]{
+    --card-overlay:radial-gradient(circle at 20% 20%, rgba(55,226,255,.25), transparent 45%),
+      radial-gradient(circle at 80% 0%, rgba(255,82,205,.18), transparent 45%);
+    --card-overlay-opacity:.65;
+    --card-frame:rgba(70,240,255,.9);
+    --card-frame-shadow:0 0 14px rgba(70,240,255,.45), inset 0 0 12px rgba(255,82,205,.25);
+    --card-title-bg:linear-gradient(90deg, rgba(7,7,18,.7), rgba(7,7,18,.2));
+    --card-title-font:"Orbitron","Trebuchet MS",sans-serif;
+    --card-title-color:#e6fbff;
+    --card-title-shadow:0 0 10px rgba(70,240,255,.65);
+    --card-number-bg:rgba(6,8,20,.85);
+    --card-number-border:rgba(70,240,255,.8);
+  }
+  body[data-card-theme="neon"] .card-title{
+    top:auto;
+    bottom:0;
+    border-top:1px solid rgba(255,255,255,.12);
+    border-bottom:none;
+    letter-spacing:.18em;
   }
   .narration{
     max-height:420px;
@@ -180,6 +267,60 @@
 
 <script>
   const joinCode = "{JOIN}";
+  const params = new URLSearchParams(location.search);
+  const themeParam = params.get("card_theme");
+  const themeLocked = params.has("card_theme");
+  document.body.dataset.cardTheme = themeParam || "classic";
+
+  function parseRoman(value){
+    const roman = String(value || "").trim().toUpperCase();
+    if (!roman) return 0;
+    const map = {I:1, V:5, X:10, L:50, C:100, D:500, M:1000};
+    let total = 0;
+    let prev = 0;
+    for (let i = roman.length - 1; i >= 0; i -= 1){
+      const num = map[roman[i]];
+      if (!num) return 0;
+      if (num < prev){
+        total -= num;
+      } else {
+        total += num;
+        prev = num;
+      }
+    }
+    return total;
+  }
+
+  function parseCardNumber(value){
+    const text = String(value || "").trim();
+    if (!text) return 0;
+    if (/^\d+$/.test(text)) return parseInt(text, 10);
+    return parseRoman(text);
+  }
+
+  function toRoman(num){
+    const n = Number(num);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const map = [
+      [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+      [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+      [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+    ];
+    let out = "";
+    let remaining = Math.floor(n);
+    map.forEach(([val, sym]) => {
+      while (remaining >= val){
+        out += sym;
+        remaining -= val;
+      }
+    });
+    return out;
+  }
+
+  function formatCardNumber(value){
+    const num = parseCardNumber(value);
+    return num ? toRoman(num) || String(value || "") : "";
+  }
   const statusEl = document.getElementById("sessionStatus");
   const grid = document.getElementById("cardGrid");
   const narration = document.getElementById("narrationFeed");
@@ -207,6 +348,10 @@
   function render(){
     if (!currentState) return;
     const status = currentState.session.status || "created";
+    if (!themeLocked){
+      const deckTheme = currentState.deck ? currentState.deck.theme : "";
+      document.body.dataset.cardTheme = deckTheme || "classic";
+    }
     statusEl.textContent = status;
     deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
@@ -251,6 +396,12 @@
         const img = document.createElement("img");
         img.src = draw.card.image;
         front.appendChild(img);
+      }
+      if (draw && draw.card && draw.card.number){
+        const number = document.createElement("div");
+        number.className = "card-number";
+        number.textContent = formatCardNumber(draw.card.number);
+        front.appendChild(number);
       }
       if (draw && draw.card && draw.card.name){
         const title = document.createElement("div");

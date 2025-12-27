@@ -433,7 +433,8 @@ async def create_deck(req: web.Request):
     body = await req.json()
     deck_id = str(body.get("deck_id") or body.get("id") or "elf-classic")
     name = body.get("name")
-    deck = tar.create_deck(deck_id, name=name)
+    theme = body.get("theme")
+    deck = tar.create_deck(deck_id, name=name, theme=theme)
     return web.json_response({"ok": True, "deck": deck})
 
 @route("GET", "/api/tarot/decks", scopes=["tarot:admin"])
@@ -465,6 +466,7 @@ async def get_deck_public(req: web.Request):
             "name": c.get("name"),
             "house": c.get("house"),
             "tags": c.get("tags", []),
+            "number": c.get("number"),
             "image": c.get("image"),
             "artist_id": artist_id,
             "artist": {
@@ -483,12 +485,17 @@ async def list_decks_public(_req: web.Request):
             "deck_id": d.get("deck_id"),
             "name": d.get("name") or d.get("deck_id"),
             "back_image": d.get("back_image"),
+            "theme": d.get("theme") or "classic",
         })
     return web.json_response({"ok": True, "decks": decks})
 
 @route("GET", "/api/tarot/spreads", allow_public=True)
 async def list_spreads(_req: web.Request):
     return web.json_response({"ok": True, "spreads": tar.list_spreads()})
+
+@route("GET", "/api/tarot/numbers", allow_public=True)
+async def list_numbers(_req: web.Request):
+    return web.json_response({"ok": True, "numbers": tar.list_numbers()})
 
 @route("GET", "/api/tarot/artists", scopes=["tarot:admin"])
 async def list_artists(_req: web.Request):

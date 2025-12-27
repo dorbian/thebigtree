@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 import os
+import json as _json
 import secrets
 import time
 import random
@@ -158,6 +159,8 @@ SPREADS = {
 
 _SPREADS_CACHE: Optional[List[Dict[str, Any]]] = None
 _SPREADS_WARNED = False
+_NUMBERS_CACHE: Optional[List[Dict[str, Any]]] = None
+_NUMBERS_WARNED = False
 
 def _read_json(path: str) -> Optional[dict]:
     try:
@@ -247,8 +250,119 @@ def _get_spread(spread_id: str) -> List[Dict[str, Any]]:
             return spread.get("positions") or SPREADS["single"]
     return SPREADS["single"]
 
+def _normalize_numbers(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, dict):
+        raw = raw.get("numbers")
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            num = int(entry.get("number"))
+        except Exception:
+            continue
+        if num < 1 or num > 10:
+            continue
+        label = str(entry.get("label") or "").strip()
+        meaning = str(entry.get("meaning") or "").strip()
+        out.append({
+            "number": num,
+            "label": label,
+            "meaning": meaning,
+        })
+    out.sort(key=lambda n: int(n.get("number") or 0))
+    return out
+
+def _load_numbers() -> List[Dict[str, Any]]:
+    global _NUMBERS_CACHE, _NUMBERS_WARNED
+    if _NUMBERS_CACHE is not None:
+        return _NUMBERS_CACHE
+    candidates: List[str] = []
+    env_path = os.getenv("BIGTREE_TAROT_NUMBERS")
+    if env_path:
+        candidates.append(env_path)
+    base = _get_base_dir()
+    candidates.append(os.path.join(base, "tarot_numbers.json"))
+    try:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        candidates.append(os.path.join(repo_root, "tarot_numbers.json"))
+        candidates.append(os.path.join(repo_root, "defaults", "tarot_numbers.json"))
+    except Exception:
+        pass
+    for path in candidates:
+        if os.path.exists(path):
+            data = _read_json(path)
+            numbers = _normalize_numbers(data)
+            if numbers:
+                _NUMBERS_CACHE = numbers
+                return _NUMBERS_CACHE
+    if not _NUMBERS_WARNED:
+        _NUMBERS_WARNED = True
+        logger.warning("[tarot] numbers file not found; checked: %s", ", ".join(candidates))
+    _NUMBERS_CACHE = [
+        {"number": 1, "label": "Aces", "meaning": "New beginnings, opportunity, potential"},
+        {"number": 2, "label": "", "meaning": "Balance, partnership, duality"},
+        {"number": 3, "label": "", "meaning": "Creativity, groups, growth"},
+        {"number": 4, "label": "", "meaning": "Structure, stability, manifestation"},
+        {"number": 5, "label": "", "meaning": "Change, instability, conflict"},
+        {"number": 6, "label": "", "meaning": "Communication, cooperation, harmony"},
+        {"number": 7, "label": "", "meaning": "Reflection, assessment, knowledge"},
+        {"number": 8, "label": "", "meaning": "Mastery, action, accomplishment"},
+        {"number": 9, "label": "", "meaning": "Fruition, attainment, fulfilment"},
+        {"number": 10, "label": "", "meaning": "Completion, end of a cycle, renewal"},
+    ]
+    return _NUMBERS_CACHE
+
+def list_numbers() -> List[Dict[str, Any]]:
+    return list(_load_numbers())
+
 # -------- Decks --------
-def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:
+_THEMES = {"classic", "wood", "neon"}
+
+def _normalize_theme(theme: Optional[str]) -> str:
+    theme = str(theme or "").strip().lower()
+    return theme if theme in _THEMES else "classic"
+
+_ROMAN_MAP = {
+    "I": 1,
+    "V": 5,
+    "X": 10,
+    "L": 50,
+    "C": 100,
+    "D": 500,
+    "M": 1000,
+}
+
+def _parse_roman(value: str) -> Optional[int]:
+    roman = (value or "").strip().upper()
+    if not roman:
+        return None
+    total = 0
+    prev = 0
+    for ch in reversed(roman):
+        num = _ROMAN_MAP.get(ch)
+        if not num:
+            return None
+        if num < prev:
+            total -= num
+        else:
+            total += num
+            prev = num
+    return total if total > 0 else None
+
+def _parse_number(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    return _parse_roman(text)
+
+def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
     db = _db_decks(); q = Query()
     existing = db.get((q._type == "deck") & (q.deck_id == deck_id))
@@ -258,6 +372,7 @@ def create_deck(deck_id: str, name: Optional[str] = None) -> Dict[str, Any]:
         "_type": "deck",
         "deck_id": deck_id,
         "name": (name or deck_id),
+        "theme": _normalize_theme(theme),
         "back_image": None,
         "created_at": _now(),
     }
@@ -330,6 +445,13 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         raw_themes = existing.get("themes")
     else:
         raw_themes = {}
+    if "number" in card:
+        raw_number = card.get("number")
+    elif existing:
+        raw_number = existing.get("number")
+    else:
+        raw_number = None
+    number = _parse_number(raw_number)
     cleaned_themes = {}
     if isinstance(raw_themes, dict):
         for key, val in raw_themes.items():
@@ -358,6 +480,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "artist_id": artist_id,
         "artist_links": cleaned_links,
         "themes": cleaned_themes,
+        "number": number,
         "updated_at": _now(),
     }
     if existing:
@@ -646,6 +769,7 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             "deck_id": deck.get("deck_id"),
             "name": deck.get("name"),
             "back_image": deck.get("back_image"),
+            "theme": deck.get("theme") or "classic",
         },
         "draw": _safe_draw(session, reveal_all),
         "narration": session.get("narration", []),

@@ -1,0 +1,54 @@
+{
+  "numbers": [
+    {
+      "number": 1,
+      "label": "Aces",
+      "meaning": "New beginnings, opportunity, potential"
+    },
+    {
+      "number": 2,
+      "label": "",
+      "meaning": "Balance, partnership, duality"
+    },
+    {
+      "number": 3,
+      "label": "",
+      "meaning": "Creativity, groups, growth"
+    },
+    {
+      "number": 4,
+      "label": "",
+      "meaning": "Structure, stability, manifestation"
+    },
+    {
+      "number": 5,
+      "label": "",
+      "meaning": "Change, instability, conflict"
+    },
+    {
+      "number": 6,
+      "label": "",
+      "meaning": "Communication, cooperation, harmony"
+    },
+    {
+      "number": 7,
+      "label": "",
+      "meaning": "Reflection, assessment, knowledge"
+    },
+    {
+      "number": 8,
+      "label": "",
+      "meaning": "Mastery, action, accomplishment"
+    },
+    {
+      "number": 9,
+      "label": "",
+      "meaning": "Fruition, attainment, fulfilment"
+    },
+    {
+      "number": 10,
+      "label": "",
+      "meaning": "Completion, end of a cycle, renewal"
+    }
+  ]
+}

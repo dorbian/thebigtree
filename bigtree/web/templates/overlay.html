@@ -597,6 +597,20 @@
         color:var(--ink);
         background:linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.7));
       }
+      .preview-card .card-number{
+        position:absolute;
+        top:8px;
+        left:50%;
+        transform:translateX(-50%);
+        padding:3px 8px;
+        border-radius:999px;
+        font-size:11px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--ink);
+        background:rgba(6,10,8,.7);
+        border:1px solid rgba(255,255,255,.2);
+      }
       .preview-card.library-card{
         aspect-ratio:auto;
         align-items:stretch;
@@ -1064,6 +1078,11 @@
               <label for="taCardHouse">House</label>
               <select id="taCardHouse"></select>
             </div>
+            <div>
+              <label for="taCardNumber">Number</label>
+              <input id="taCardNumber" list="taNumberList" placeholder="XIV or 14">
+              <datalist id="taNumberList"></datalist>
+            </div>
           </div>
           <div class="row">
             <div>
@@ -1090,6 +1109,10 @@
             <div>
               <label>House info</label>
               <div class="list" id="taHouseInfo">Pick a house to see details.</div>
+            </div>
+            <div>
+              <label>Number info</label>
+              <div class="list" id="taNumberInfo">Pick a number to see details.</div>
             </div>
           </div>
           <input id="taCardArtist" type="hidden">
@@ -1284,6 +1307,14 @@
           <div>
             <label for="deckCreateName">Name</label>
             <input id="deckCreateName" placeholder="Elf Classic">
+          </div>
+          <div>
+            <label for="deckCreateTheme">Card theme</label>
+            <select id="deckCreateTheme">
+              <option value="classic">Classic</option>
+              <option value="wood">Wood</option>
+              <option value="neon">Neon</option>
+            </select>
           </div>
         </div>
         <div class="row">
@@ -2762,6 +2793,7 @@
         loadTarotSessionDecks();
         loadTarotSessions();
         loadTarotHouses();
+        loadTarotNumbers();
         showPanel("bingo");
         ensureBingoPolling();
       });
@@ -2811,6 +2843,7 @@
           return;
         }
         const name = $("deckCreateName").value.trim();
+        const theme = $("deckCreateTheme").value || "classic";
         const seed = $("deckCreateSeed").value === "yes";
         const perHouse = Number($("deckCreatePerHouse").value || 0);
         const crownCount = Number($("deckCreateCrown").value || 0);
@@ -2819,7 +2852,7 @@
           await jsonFetch("/api/tarot/decks", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({deck_id: id, name: name || undefined})
+            body: JSON.stringify({deck_id: id, name: name || undefined, theme})
           }, true);
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/back", {
             method:"PUT",
@@ -3245,23 +3278,80 @@
       });
 
       let taHouses = [];
-      let taThemes = [];
+      let taNumbers = [];
+      let taActiveHouse = "";
 
       function taThemeLabel(theme){
         return (theme || "").replace(/_/g, " ");
       }
 
-      function taRenderThemeWeights(weights){
+      function taParseRoman(value){
+        const roman = String(value || "").trim().toUpperCase();
+        if (!roman) return 0;
+        const map = {I:1, V:5, X:10, L:50, C:100, D:500, M:1000};
+        let total = 0;
+        let prev = 0;
+        for (let i = roman.length - 1; i >= 0; i -= 1){
+          const num = map[roman[i]];
+          if (!num) return 0;
+          if (num < prev){
+            total -= num;
+          } else {
+            total += num;
+            prev = num;
+          }
+        }
+        return total;
+      }
+
+      function taParseCardNumber(value){
+        const text = String(value || "").trim();
+        if (!text) return 0;
+        if (/^\d+$/.test(text)) return parseInt(text, 10);
+        return taParseRoman(text);
+      }
+
+      function taToRoman(num){
+        const n = Number(num);
+        if (!Number.isFinite(n) || n <= 0) return "";
+        const map = [
+          [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+          [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+          [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+        ];
+        let out = "";
+        let remaining = Math.floor(n);
+        map.forEach(([val, sym]) => {
+          while (remaining >= val){
+            out += sym;
+            remaining -= val;
+          }
+        });
+        return out;
+      }
+
+      function taFormatCardNumber(value){
+        const num = taParseCardNumber(value);
+        return num ? taToRoman(num) || String(value || "") : "";
+      }
+
+      function taRenderThemeWeights(weights, houseId){
         const grid = $("taCardThemes");
         const hint = $("taCardThemesHint");
         if (!grid) return;
         grid.innerHTML = "";
-        if (!taThemes.length){
-          if (hint) hint.textContent = "No themes available.";
+        const house = taHouses.find(h => h.id === houseId);
+        const themes = house && house.themes ? Object.keys(house.themes) : [];
+        if (!houseId){
+          if (hint) hint.textContent = "Select a house to see theme weights.";
           return;
         }
-        if (hint) hint.textContent = "Set theme weights per card.";
-        taThemes.forEach(theme => {
+        if (!themes.length){
+          if (hint) hint.textContent = "No theme weights available for this house.";
+          return;
+        }
+        if (hint) hint.textContent = "Set theme weights for this house.";
+        themes.forEach(theme => {
           const row = document.createElement("div");
           row.className = "theme-weight";
           row.dataset.theme = theme;
@@ -3281,11 +3371,11 @@
 
       function taSetCardThemeWeights(weights){
         const grid = $("taCardThemes");
-        if (!grid || !taThemes.length){
+        if (!grid){
           return;
         }
         if (!grid.children.length){
-          taRenderThemeWeights(weights || {});
+          taRenderThemeWeights(weights || {}, taActiveHouse);
           return;
         }
         grid.querySelectorAll(".theme-weight").forEach(row => {
@@ -3337,6 +3427,31 @@
         box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
       }
 
+      function taRenderNumberInfo(value){
+        const box = $("taNumberInfo");
+        if (!box) return;
+        const num = taParseCardNumber(value);
+        if (!num){
+          box.textContent = "Pick a number to see details.";
+          return;
+        }
+        const digits = String(num).split("").map(d => parseInt(d, 10)).filter(d => d > 0);
+        let sum = digits.reduce((acc, d) => acc + d, 0);
+        while (sum > 10){
+          sum = String(sum).split("").reduce((acc, d) => acc + parseInt(d, 10), 0);
+        }
+        const picks = [];
+        digits.forEach(d => { if (!picks.includes(d)) picks.push(d); });
+        if (sum > 0 && !picks.includes(sum)) picks.push(sum);
+        const rows = picks.map(pick => {
+          const entry = taNumbers.find(n => Number(n.number) === pick);
+          const label = entry && entry.label ? ` - ${entry.label}` : "";
+          const meaning = entry && entry.meaning ? entry.meaning : "";
+          return `<div><strong>${pick}${label}</strong><br>${meaning}</div>`;
+        }).join("<div style=\"height:6px\"></div>");
+        box.innerHTML = rows || "No number details found.";
+      }
+
       function taRenderPreviews(card){
         const front = $("taFrontPreview");
         const back = $("taBackPreview");
@@ -3347,6 +3462,12 @@
           const img = document.createElement("img");
           img.src = card.image;
           front.appendChild(img);
+        }
+        if (card && card.number){
+          const number = document.createElement("div");
+          number.className = "card-number";
+          number.textContent = taFormatCardNumber(card.number);
+          front.appendChild(number);
         }
         if (card && card.name){
           const title = document.createElement("div");
@@ -3366,14 +3487,17 @@
         taSelectedCardId = card.card_id || "";
         $("taCardId").value = card.card_id || "";
         $("taCardName").value = card.name || "";
-        $("taCardHouse").value = card.house || "";
+        taActiveHouse = card.house || "";
+        $("taCardHouse").value = taActiveHouse;
+        $("taCardNumber").value = card.number || "";
         $("taCardTags").value = (card.tags || []).join(", ");
         $("taCardUpright").value = card.upright || "";
         $("taCardReversed").value = card.reversed || "";
         $("taCardArtist").value = card.artist_id || "";
         window.taUploadedImageUrl = card.image || "";
-        taSetCardThemeWeights(card.themes || {});
+        taRenderThemeWeights(card.themes || {}, taActiveHouse);
         taRenderHouseInfo(card.house || "");
+        taRenderNumberInfo($("taCardNumber").value);
         taApplyHouseThemeDefaults(card.house || "");
         taRenderPreviews(card);
         taSyncCardSelection();
@@ -3398,11 +3522,7 @@
         try{
           const data = await jsonFetch("/api/tarot/houses", {method:"GET"}, true);
           taHouses = data.houses || [];
-          const themeSet = new Set();
-          taHouses.forEach(h => {
-            Object.keys(h.themes || {}).forEach(theme => themeSet.add(theme));
-          });
-          taThemes = Array.from(themeSet).sort();
+          taActiveHouse = taActiveHouse || "";
           const select = $("taCardHouse");
           select.innerHTML = "";
           const none = document.createElement("option");
@@ -3415,9 +3535,30 @@
             opt.textContent = h.name;
             select.appendChild(opt);
           });
-          taRenderThemeWeights({});
+          taRenderThemeWeights({}, taActiveHouse);
         }catch(err){
           setStatus("Failed to load houses.", "err");
+        }
+      }
+
+      async function loadTarotNumbers(){
+        try{
+          const data = await jsonFetch("/api/tarot/numbers", {method:"GET"}, true);
+          taNumbers = data.numbers || [];
+          const input = $("taCardNumber");
+          const current = input.value || "";
+          const list = $("taNumberList");
+          list.innerHTML = "";
+          taNumbers.forEach(n => {
+            const opt = document.createElement("option");
+            opt.value = n.number;
+            opt.textContent = n.label ? `${n.number} - ${n.label}` : String(n.number);
+            list.appendChild(opt);
+          });
+          input.value = current;
+          taRenderNumberInfo(input.value);
+        }catch(err){
+          setStatus("Failed to load numbers.", "err");
         }
       }
 
@@ -3566,8 +3707,18 @@
       });
 
       $("taCardHouse").addEventListener("change", (ev) => {
-        taRenderHouseInfo(ev.target.value);
-        taApplyHouseThemeDefaults(ev.target.value);
+        taActiveHouse = ev.target.value;
+        taRenderHouseInfo(taActiveHouse);
+        taRenderThemeWeights({}, taActiveHouse);
+        taApplyHouseThemeDefaults(taActiveHouse);
+      });
+      $("taCardNumber").addEventListener("change", (ev) => {
+        taRenderNumberInfo(ev.target.value);
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: ev.target.value,
+          image: window.taUploadedImageUrl || ""
+        });
       });
       $("taDeckList").addEventListener("click", (ev) => {
         const target = ev.target.closest(".list-card");
@@ -3592,6 +3743,7 @@
       $("taAddDeck").addEventListener("click", () => {
         $("deckCreateId").value = "";
         $("deckCreateName").value = "";
+        $("deckCreateTheme").value = "classic";
         $("deckCreateSeed").value = "no";
         $("deckCreatePerHouse").value = "4";
         $("deckCreateCrown").value = "1";
@@ -3609,6 +3761,7 @@
             card_id: $("taCardId").value.trim() || undefined,
             name: $("taCardName").value.trim(),
             house: $("taCardHouse").value.trim(),
+            number: $("taCardNumber").value.trim() || undefined,
             image: window.taUploadedImageUrl || undefined,
             artist_id: $("taCardArtist").value.trim() || undefined,
             tags,
@@ -3626,11 +3779,13 @@
           $("taCardId").value = "";
           $("taCardName").value = "";
           $("taCardHouse").value = "";
+          $("taCardNumber").value = "";
           window.taUploadedImageUrl = "";
           $("taCardTags").value = "";
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
           $("taCardArtist").value = "";
+          taRenderNumberInfo("");
           taSetCardThemeWeights({});
           taSelectedCardId = body.card_id || "";
           await $("taLoadDeck").click();
@@ -3669,6 +3824,7 @@
         loadTarotSessionDecks();
         loadTarotSessions();
         loadTarotHouses();
+        loadTarotNumbers();
         loadTarotArtists();
       }
       renderCard(null, [], "BING");
