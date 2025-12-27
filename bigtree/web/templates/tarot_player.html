@@ -240,6 +240,43 @@
     background-position:center;
     margin-bottom:12px;
   }
+  .deck-pile-wrap{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .deck-pile{
+    width:64px;
+    aspect-ratio:3/4.2;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:
+      radial-gradient(circle at 20% 20%, rgba(214,178,110,.18), transparent 40%),
+      linear-gradient(135deg, #1b2d26, #132018);
+    background-size:cover;
+    background-position:center;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
+  .deck-label{
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .fly-card{
+    position:fixed;
+    left:0;
+    top:0;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background-size:cover;
+    background-position:center;
+    box-shadow:0 10px 24px rgba(0,0,0,.35);
+    pointer-events:none;
+    transition:transform .6s ease, opacity .6s ease;
+    z-index:9999;
+  }
   .narration .line{
     font-size:13px;
     line-height:1.4;
@@ -272,6 +309,10 @@
 
 <div class="wrap">
   <div class="panel">
+    <div class="deck-pile-wrap">
+      <div class="deck-pile" id="deckPile"></div>
+      <div class="deck-label">Deck</div>
+    </div>
     <div class="notice" id="waitingNote">Waiting for the reader to begin.</div>
     <div id="cardGrid" class="card-grid"></div>
   </div>
@@ -350,9 +391,12 @@
   const connStatus = document.getElementById("connStatus");
   const waitingNote = document.getElementById("waitingNote");
   const deckPreview = document.getElementById("deckPreview");
+  const deckPile = document.getElementById("deckPile");
   let currentState = null;
   let sse = null;
   let redirected = false;
+  const pendingDraws = [];
+  const pendingReveals = new Set();
 
   joinEl.textContent = joinCode;
 
@@ -384,8 +428,14 @@
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
     if (backUrl){
       deckPreview.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+      if (deckPile){
+        deckPile.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+      }
     } else {
       deckPreview.style.backgroundImage = "";
+      if (deckPile){
+        deckPile.style.backgroundImage = "";
+      }
     }
     const hasAnyDraw = (currentState.draw || []).length > 0;
     waitingNote.style.display = hasAnyDraw ? "none" : "block";
@@ -399,7 +449,10 @@
       slot.appendChild(label);
 
       const cardWrap = document.createElement("div");
-      cardWrap.className = "card" + (draw && draw.revealed ? " revealed" : "");
+      const shouldReveal = draw && draw.revealed;
+      const animateReveal = shouldReveal && pendingReveals.has(pos.id);
+      cardWrap.className = "card" + (shouldReveal && !animateReveal ? " revealed" : "");
+      cardWrap.dataset.positionId = pos.id;
       const inner = document.createElement("div");
       inner.className = "inner";
       const back = document.createElement("div");
@@ -433,6 +486,12 @@
       cardWrap.appendChild(inner);
       slot.appendChild(cardWrap);
       grid.appendChild(slot);
+      if (animateReveal){
+        requestAnimationFrame(() => {
+          cardWrap.classList.add("revealed");
+        });
+        pendingReveals.delete(pos.id);
+      }
     });
 
     narration.innerHTML = "";
@@ -442,6 +501,34 @@
       line.textContent = n.text;
       narration.appendChild(line);
     });
+    if (pendingDraws.length){
+      pendingDraws.splice(0).forEach(positionId => animateDraw(positionId));
+    }
+  }
+
+  function animateDraw(positionId){
+    if (!deckPile) return;
+    const target = grid.querySelector(`[data-position-id="${positionId}"]`);
+    if (!target) return;
+    const from = deckPile.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    const fly = document.createElement("div");
+    fly.className = "fly-card";
+    fly.style.width = `${from.width}px`;
+    fly.style.height = `${from.height}px`;
+    fly.style.left = `${from.left}px`;
+    fly.style.top = `${from.top}px`;
+    fly.style.backgroundImage = deckPile.style.backgroundImage || "";
+    document.body.appendChild(fly);
+    const dx = to.left - from.left;
+    const dy = to.top - from.top;
+    const scaleX = to.width / from.width;
+    const scaleY = to.height / from.height;
+    requestAnimationFrame(() => {
+      fly.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+      fly.style.opacity = "0";
+    });
+    fly.addEventListener("transitionend", () => fly.remove(), {once:true});
   }
 
   function connectSSE(){
@@ -458,7 +545,18 @@
       connDot.className = "status-dot warn";
       connStatus.textContent = "reconnecting";
     };
-    src.onmessage = () => fetchState();
+    src.onmessage = (ev) => {
+      try{
+        const payload = JSON.parse(ev.data);
+        if (payload.type === "CARD_DRAWN" && payload.data && payload.data.position_id){
+          pendingDraws.push(payload.data.position_id);
+        }
+        if (payload.type === "CARD_REVEALED" && payload.data && payload.data.position_id){
+          pendingReveals.add(payload.data.position_id);
+        }
+      }catch(err){}
+      fetchState();
+    };
   }
 
   fetchState();
