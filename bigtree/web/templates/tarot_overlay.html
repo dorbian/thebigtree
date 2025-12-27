@@ -55,6 +55,9 @@
     transform-style:preserve-3d;
     transition:transform .7s ease;
   }
+  .card.revealed .inner.reversed{
+    transform:rotateY(180deg) rotateZ(180deg);
+  }
   .card.revealed .inner{transform:rotateY(180deg)}
   .face{
     position:absolute;inset:0;
@@ -297,6 +300,9 @@
       cardWrap.className = "card" + (draw && draw.revealed ? " revealed" : "");
       const inner = document.createElement("div");
       inner.className = "inner";
+      if (draw && draw.reversed){
+        inner.classList.add("reversed");
+      }
       const back = document.createElement("div");
       back.className = "face back";
       if (backUrl){

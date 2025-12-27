@@ -162,11 +162,17 @@
     aspect-ratio:3/4.2;
     perspective:1000px;
   }
+  .card.dealt-hidden{
+    visibility:hidden;
+  }
   .card .inner{
     position:relative;
     width:100%;height:100%;
     transform-style:preserve-3d;
     transition:transform .7s ease;
+  }
+  .card.revealed .inner.reversed{
+    transform:rotateY(180deg) rotateZ(180deg);
   }
   .card.revealed .inner{transform:rotateY(180deg)}
   .face{
@@ -730,59 +736,68 @@
       label.textContent = `${pos.label} - ${pos.prompt || ""}`;
       slot.appendChild(label);
 
-      const cardWrap = document.createElement("div");
-      const shouldReveal = draw && draw.revealed;
-      const animateReveal = shouldReveal && pendingReveals.has(pos.id);
-      cardWrap.className = "card" + (shouldReveal && !animateReveal ? " revealed" : "");
-      cardWrap.dataset.positionId = pos.id;
+      if (draw){
+        const cardWrap = document.createElement("div");
+        const shouldReveal = draw && draw.revealed;
+        const animateReveal = shouldReveal && pendingReveals.has(pos.id);
+        const animateDraw = pendingDraws.includes(pos.id);
+        cardWrap.className = "card" + (shouldReveal && !animateReveal ? " revealed" : "");
+        if (animateDraw){
+          cardWrap.classList.add("dealt-hidden");
+        }
+        cardWrap.dataset.positionId = pos.id;
       const inner = document.createElement("div");
       inner.className = "inner";
-      const back = document.createElement("div");
-      back.className = "face back";
-      if (backUrl){
-        back.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
-        back.style.backgroundSize = "cover";
-        back.style.backgroundPosition = "center";
+      if (draw && draw.reversed){
+        inner.classList.add("reversed");
       }
-      const front = document.createElement("div");
-      front.className = "face front";
-      if (draw && draw.card && draw.card.image){
-        const img = document.createElement("img");
-        img.src = draw.card.image;
-        front.appendChild(img);
-      }
-      if (draw && draw.card && draw.card.number !== undefined && draw.card.number !== null){
-        const number = document.createElement("div");
-        number.className = "card-number";
-        number.textContent = formatCardNumber(draw.card.number);
-        front.appendChild(number);
-      }
-      if (draw && draw.card && draw.card.name){
-        const title = document.createElement("div");
-        title.className = "card-title";
-        title.textContent = draw.card.name;
-        front.appendChild(title);
-      }
-      inner.appendChild(back);
-      inner.appendChild(front);
-      cardWrap.appendChild(inner);
-      cardWrap.addEventListener("click", async () => {
-        if (draw && !draw.revealed){
-          await postControl(
-            `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
-            {token: tokenInput.value, position_id: pos.id}
-          );
+        const back = document.createElement("div");
+        back.className = "face back";
+        if (backUrl){
+          back.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
+          back.style.backgroundSize = "cover";
+          back.style.backgroundPosition = "center";
         }
-        selectCard(pos.id);
-      });
-      slot.appendChild(cardWrap);
-      stateEls.grid.appendChild(slot);
-      if (animateReveal){
-        requestAnimationFrame(() => {
-          cardWrap.classList.add("revealed");
+        const front = document.createElement("div");
+        front.className = "face front";
+        if (draw && draw.card && draw.card.image){
+          const img = document.createElement("img");
+          img.src = draw.card.image;
+          front.appendChild(img);
+        }
+        if (draw && draw.card && draw.card.number !== undefined && draw.card.number !== null){
+          const number = document.createElement("div");
+          number.className = "card-number";
+          number.textContent = formatCardNumber(draw.card.number);
+          front.appendChild(number);
+        }
+        if (draw && draw.card && draw.card.name){
+          const title = document.createElement("div");
+          title.className = "card-title";
+          title.textContent = draw.card.name;
+          front.appendChild(title);
+        }
+        inner.appendChild(back);
+        inner.appendChild(front);
+        cardWrap.appendChild(inner);
+        cardWrap.addEventListener("click", async () => {
+          if (draw && !draw.revealed){
+            await postControl(
+              `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
+              {token: tokenInput.value, position_id: pos.id}
+            );
+          }
+          selectCard(pos.id);
         });
-        pendingReveals.delete(pos.id);
+        slot.appendChild(cardWrap);
+        if (animateReveal){
+          requestAnimationFrame(() => {
+            cardWrap.classList.add("revealed");
+          });
+          pendingReveals.delete(pos.id);
+        }
       }
+      stateEls.grid.appendChild(slot);
     });
 
     const newDrawCount = (currentState.draw || []).length;
@@ -824,7 +839,13 @@
       fly.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
       fly.style.opacity = "0";
     });
-    fly.addEventListener("transitionend", () => fly.remove(), {once:true});
+    fly.addEventListener("transitionend", () => {
+      const card = stateEls.grid.querySelector(`[data-position-id="${positionId}"]`);
+      if (card){
+        card.classList.remove("dealt-hidden");
+      }
+      fly.remove();
+    }, {once:true});
   }
 
   function renderNarration(){
@@ -876,7 +897,7 @@
     const title = `${card.name}${draw.reversed ? " (reversed)" : ""}`;
     const upright = card.upright || "";
     const reversed = card.reversed || "";
-    const house = card.house ? `<div class="muted">House: ${card.house}</div>` : "";
+    const house = card.house ? `<div class="muted">Suit: ${card.house}</div>` : "";
     const prompt = pos ? `<div class="muted">${pos.label} — ${pos.prompt || ""}</div>` : "";
     const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
     const themes = renderThemeBars(card.themes, highlight);
@@ -904,7 +925,7 @@
     const rows = draws.map(draw => {
       const card = draw.card || {};
       const name = card.name || "Card";
-      const house = card.house ? `House: ${card.house}` : "House: -";
+      const house = card.house ? `Suit: ${card.house}` : "Suit: -";
       const number = (card.number !== undefined && card.number !== null) ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
       const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
       const themeItems = Object.entries(card.themes || {}).filter(([, v]) => Number(v) > 0);
@@ -958,6 +979,19 @@
     const drawn = (currentState && currentState.draw) || [];
     const drawnIds = new Set(drawn.map(d => d.position_id));
     const remaining = positions.filter(p => !drawnIds.has(p.id)).length;
+    const remainingPositions = positions.filter(p => !drawnIds.has(p.id));
+    if (remainingPositions.length){
+      remainingPositions.forEach(p => pendingDraws.push(p.id));
+      pendingReveals.add(remainingPositions[0].id);
+    } else {
+      const nextReveal = positions.find(p => {
+        const entry = drawn.find(d => d.position_id === p.id);
+        return entry && !entry.revealed;
+      });
+      if (nextReveal){
+        pendingReveals.add(nextReveal.id);
+      }
+    }
     if (remaining > 0){
       await postControl(
         `/api/tarot/sessions/${currentState.session.session_id}/draw`,
