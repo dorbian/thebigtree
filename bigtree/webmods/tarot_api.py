@@ -297,7 +297,7 @@ async def stream_events(req: web.Request):
     return resp
 
 # ---- Priestess controls ----
-@route("POST", "/api/tarot/sessions/{session_id}/start", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/start", allow_public=True)
 async def start_session(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
@@ -310,7 +310,7 @@ async def start_session(req: web.Request):
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
 
-@route("POST", "/api/tarot/sessions/{session_id}/shuffle", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/shuffle", allow_public=True)
 async def shuffle_session(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
@@ -323,7 +323,7 @@ async def shuffle_session(req: web.Request):
         return _json_error("not found", status=404)
     return web.json_response({"ok": True})
 
-@route("POST", "/api/tarot/sessions/{session_id}/draw", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/draw", allow_public=True)
 async def draw_cards(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
@@ -341,7 +341,7 @@ async def draw_cards(req: web.Request):
         return _json_error(str(ex), status=400)
     return web.json_response({"ok": True})
 
-@route("POST", "/api/tarot/sessions/{session_id}/reveal", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/reveal", allow_public=True)
 async def reveal_card(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
@@ -356,7 +356,7 @@ async def reveal_card(req: web.Request):
         return _json_error(str(ex), status=400)
     return web.json_response({"ok": True})
 
-@route("POST", "/api/tarot/sessions/{session_id}/narrate", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/narrate", allow_public=True)
 async def narrate(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
@@ -371,7 +371,7 @@ async def narrate(req: web.Request):
         return _json_error(str(ex), status=400)
     return web.json_response({"ok": True})
 
-@route("POST", "/api/tarot/sessions/{session_id}/finish", scopes=["tarot:control"])
+@route("POST", "/api/tarot/sessions/{session_id}/finish", allow_public=True)
 async def finish(req: web.Request):
     session_id = req.match_info["session_id"]
     body = await req.json()
