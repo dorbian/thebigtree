@@ -257,6 +257,7 @@
   }
 
   function formatCardNumber(value){
+    if (String(value || "").trim() === "0") return "0";
     const num = parseCardNumber(value);
     if (num === 0) return "0";
     return num ? toRoman(num) || String(value || "") : "";

@@ -168,6 +168,23 @@
         height:18px;
         fill:currentColor;
       }
+      .icon-group{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:6px;
+        border-radius:12px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(15,30,22,.85);
+      }
+      .icon-group .icon-btn{
+        width:38px;
+        height:38px;
+        padding:6px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(8,12,10,.45);
+      }
       .icon-btn{
         width:44px;
         height:44px;
@@ -1120,27 +1137,23 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button class="btn-ghost icon-btn" id="taEditDeck" title="Edit deck">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 15.5V20h4.5L19 9.5l-4.5-4.5L4 15.5zm16.4-9.9a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0l-1.5 1.5 4.5 4.5 1.5-1.5z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost icon-btn" id="taAddDeck" title="Add deck">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost icon-btn" id="taDeleteDeck" title="Delete deck">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M6 7h12v2H6zM9 9h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z"/>
-                </svg>
-              </button>
+              <div class="icon-group">
+                <button class="btn-ghost icon-btn" id="taAddDeck" title="Add deck">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M11 5h2v14h-2zM5 11h14v2H5z"/>
+                  </svg>
+                </button>
+                <button class="btn-ghost icon-btn" id="taEditDeck" title="Edit deck">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 15.5V20h4.5L19 9.5l-4.5-4.5L4 15.5zm16.4-9.9a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0l-1.5 1.5 4.5 4.5 1.5-1.5z"/>
+                  </svg>
+                </button>
+                <button class="btn-ghost icon-btn" id="taDeleteDeck" title="Delete deck">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 7h12v2H6zM9 9h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -3454,6 +3467,7 @@
       }
 
       function taFormatCardNumber(value){
+        if (String(value || "").trim() === "0") return "0";
         const num = taParseCardNumber(value);
         if (num === 0) return "0";
         return num ? taToRoman(num) || String(value || "") : "";
