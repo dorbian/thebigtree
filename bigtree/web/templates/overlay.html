@@ -562,6 +562,18 @@
         justify-content:center;
         position:relative;
       }
+      .preview-card .card-title{
+        position:absolute;
+        left:0;
+        right:0;
+        bottom:0;
+        padding:6px 8px;
+        font-size:11px;
+        letter-spacing:.04em;
+        text-transform:uppercase;
+        color:var(--ink);
+        background:linear-gradient(180deg, rgba(6,10,8,0), rgba(6,10,8,.7));
+      }
       .preview-card.library-card{
         aspect-ratio:auto;
         align-items:stretch;
@@ -3228,11 +3240,12 @@
           const img = document.createElement("img");
           img.src = card.image;
           front.appendChild(img);
-        } else if (card && card.name){
-          const label = document.createElement("div");
-          label.className = "muted";
-          label.textContent = card.name;
-          front.appendChild(label);
+        }
+        if (card && card.name){
+          const title = document.createElement("div");
+          title.className = "card-title";
+          title.textContent = card.name;
+          front.appendChild(title);
         }
         if (backUrl){
           const img = document.createElement("img");
