@@ -39,6 +39,27 @@
     justify-content:space-between;
     gap:16px;
   }
+  .header-actions{
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+  .icon-link{
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    border:1px solid rgba(107,212,162,.35);
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--accent);
+    text-decoration:none;
+  }
+  .icon-link svg{
+    width:18px;
+    height:18px;
+    fill:currentColor;
+  }
   header h1{margin:0 0 6px 0;letter-spacing:.05em}
   header p{margin:0;color:var(--muted)}
   .admin-link{
@@ -178,7 +199,17 @@
     <h1>Forest Gallery</h1>
     <p>Public art archive with artist credits.</p>
   </div>
-  <div class="row">
+  <div class="header-actions">
+    <a class="icon-link" href="https://join.thebigtree.life" target="_blank" rel="noreferrer" aria-label="Join the Forest on Discord">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20.5 4.6A18.5 18.5 0 0 0 16 3c-.2.4-.5 1-.6 1.4-1.7-.3-3.4-.3-5.1 0-.2-.5-.4-1-.6-1.4-1.6.4-3.1 1-4.5 1.6-2.9 4.3-3.7 8.5-3.3 12.6 2 1.5 3.9 2.4 5.9 3 .5-.7 1-1.5 1.3-2.3-.7-.2-1.4-.5-2-.9.2-.1.3-.3.5-.4 3.7 1.7 7.8 1.7 11.4 0 .2.1.3.3.5.4-.6.4-1.3.7-2 .9.4.8.8 1.6 1.3 2.3 2-.6 3.9-1.5 5.9-3 .5-4.1-.4-8.3-3.3-12.6zM9.5 15.4c-1.1 0-2-1-2-2.2 0-1.2.9-2.2 2-2.2s2 1 2 2.2c0 1.2-.9 2.2-2 2.2zm5 0c-1.1 0-2-1-2-2.2 0-1.2.9-2.2 2-2.2s2 1 2 2.2c0 1.2-.9 2.2-2 2.2z"/>
+      </svg>
+    </a>
+    <a class="icon-link" href="/overlay" target="_blank" rel="noreferrer" aria-label="Open admin overlay">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2a4 4 0 0 1 4 4v2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2V6a4 4 0 0 1 4-4zm-2 6h4V6a2 2 0 1 0-4 0v2z"/>
+      </svg>
+    </a>
     <a class="admin-link" href="/tarot/calendar">Calendar</a>
     <a class="admin-link" href="/overlay">Admin login</a>
   </div>

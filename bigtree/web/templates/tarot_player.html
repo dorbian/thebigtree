@@ -179,6 +179,7 @@
   const deckPreview = document.getElementById("deckPreview");
   let currentState = null;
   let sse = null;
+  let redirected = false;
 
   joinEl.textContent = joinCode;
 
@@ -192,9 +193,16 @@
 
   function render(){
     if (!currentState) return;
-    statusEl.textContent = currentState.session.status || "created";
+    const status = currentState.session.status || "created";
+    statusEl.textContent = status;
     deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
+    if (!redirected && ["finished", "ended", "closed"].includes(status)){
+      redirected = true;
+      setTimeout(() => {
+        window.location.assign("/");
+      }, 1500);
+    }
     grid.innerHTML = "";
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
     if (backUrl){
