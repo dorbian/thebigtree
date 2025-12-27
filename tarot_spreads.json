@@ -1,0 +1,57 @@
+{
+  "spreads": [
+    {
+      "id": "single",
+      "label": "Single",
+      "positions": [
+        {
+          "id": "root",
+          "label": "Root",
+          "prompt": "What holds"
+        }
+      ]
+    },
+    {
+      "id": "tree",
+      "label": "Tree",
+      "positions": [
+        {
+          "id": "root",
+          "label": "Root",
+          "prompt": "What holds"
+        },
+        {
+          "id": "trunk",
+          "label": "Trunk",
+          "prompt": "What grows"
+        },
+        {
+          "id": "canopy",
+          "label": "Canopy",
+          "prompt": "What reveals"
+        }
+      ]
+    },
+    {
+      "id": "cross",
+      "label": "Cross",
+      "positions": [
+        {
+          "id": "past",
+          "label": "Past",
+          "prompt": "What shaped this"
+        },
+        {
+          "id": "present",
+          "label": "Present",
+          "prompt": "What surrounds you"
+        },
+        {
+          "id": "future",
+          "label": "Future",
+          "prompt": "What may come"
+        }
+      ]
+    }
+  ]
+}
