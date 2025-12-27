@@ -324,6 +324,22 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
             "artstation": card.get("artist_artstation"),
             "website": card.get("artist_website"),
         }
+    if "themes" in card:
+        raw_themes = card.get("themes")
+    elif existing and isinstance(existing.get("themes"), dict):
+        raw_themes = existing.get("themes")
+    else:
+        raw_themes = {}
+    cleaned_themes = {}
+    if isinstance(raw_themes, dict):
+        for key, val in raw_themes.items():
+            try:
+                weight = int(val)
+            except Exception:
+                continue
+            if weight <= 0:
+                continue
+            cleaned_themes[str(key)] = weight
     cleaned_links = {}
     for key, val in artist_links.items():
         if not val:
@@ -341,6 +357,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "image": (card.get("image") or card.get("image_url") or "").strip(),
         "artist_id": artist_id,
         "artist_links": cleaned_links,
+        "themes": cleaned_themes,
         "updated_at": _now(),
     }
     if existing:

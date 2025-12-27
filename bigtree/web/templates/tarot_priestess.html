@@ -180,6 +180,35 @@
     font-size:13px;
     line-height:1.4;
   }
+  .theme-bars{
+    margin-top:8px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .theme-bar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .theme-bar .label{
+    min-width:90px;
+    text-transform:capitalize;
+  }
+  .theme-bar .track{
+    flex:1;
+    height:6px;
+    border-radius:999px;
+    background:rgba(255,255,255,.08);
+    overflow:hidden;
+  }
+  .theme-bar .fill{
+    height:100%;
+    background:linear-gradient(90deg, rgba(107,212,162,.8), rgba(214,178,110,.8));
+    border-radius:999px;
+  }
   textarea, input{
     width:100%;
     padding:6px 8px;
@@ -481,6 +510,28 @@
     updateMeaning(positionId);
   }
 
+  function renderThemeBars(themes){
+    const items = Object.entries(themes || {}).filter(([, value]) => Number(value) > 0);
+    if (!items.length){
+      return "";
+    }
+    items.sort((a, b) => Number(b[1]) - Number(a[1]));
+    const top = items.slice(0, 3);
+    const max = Math.max(...top.map(([, value]) => Number(value)));
+    const rows = top.map(([name, value]) => {
+      const width = Math.max(6, Math.round((Number(value) / max) * 100));
+      const label = (name || "").replace(/_/g, " ");
+      return `
+        <div class="theme-bar">
+          <div class="label">${label}</div>
+          <div class="track"><div class="fill" style="width:${width}%"></div></div>
+          <div>${value}</div>
+        </div>
+      `;
+    }).join("");
+    return `<div class="theme-bars">${rows}</div>`;
+  }
+
   function updateMeaning(positionId){
     const draw = currentState.draw.find(d => d.position_id === positionId);
     const pos = currentState.spread.positions.find(p => p.id === positionId);
@@ -494,10 +545,12 @@
     const reversed = card.reversed || "";
     const house = card.house ? `<div class="muted">House: ${card.house}</div>` : "";
     const prompt = pos ? `<div class="muted">${pos.label} — ${pos.prompt || ""}</div>` : "";
+    const themes = renderThemeBars(card.themes);
     stateEls.meaning.innerHTML = `
       <div><strong>${title}</strong></div>
       ${prompt}
       ${house}
+      ${themes}
       <div style="margin-top:6px">${draw.reversed ? reversed : upright}</div>
     `;
   }
@@ -667,3 +720,5 @@
   fetchState();
   connectSSE();
 </script>
+
+
