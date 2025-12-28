@@ -2,7 +2,7 @@
   "houses": [
     {
       "id": "roots",
-      "name": "House of Roots",
+      "name": "Roots",
       "themes": {
         "foundation": 3,
         "memory": 2,
@@ -12,7 +12,7 @@
     },
     {
       "id": "canopy",
-      "name": "House of Canopy",
+      "name": "Canopy",
       "themes": {
         "growth": 3,
         "connection": 3,
@@ -22,7 +22,7 @@
     },
     {
       "id": "ember",
-      "name": "House of Ember",
+      "name": "Ember",
       "themes": {
         "will": 3,
         "conflict": 2,
@@ -32,7 +32,7 @@
     },
     {
       "id": "whisper",
-      "name": "House of Whisper",
+      "name": "Whisper",
       "themes": {
         "secrets": 2,
         "change": 3,
