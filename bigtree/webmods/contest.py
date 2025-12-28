@@ -3,14 +3,34 @@ from __future__ import annotations
 from aiohttp import web
 from typing import Dict, Any, List, Optional
 from tinydb import TinyDB
+import json
 import os
 import bigtree
 from bigtree.inc.webserver import route
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
+def _settings_get(section: str, key: str, default=None):
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            sec = bigtree.settings.section(section)
+            if isinstance(sec, dict):
+                return sec.get(key, default)
+            return bigtree.settings.get(f"{section}.{key}", default)
+    except Exception:
+        pass
+    try:
+        cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+        return cfg.get(section, {}).get(key, default)
+    except Exception:
+        pass
+    return default
+
 def _contest_dir() -> str:
-    return getattr(bigtree, "contest_dir", "/data/contest")
+    if getattr(bigtree, "contest_dir", None):
+        return str(getattr(bigtree, "contest_dir"))
+    base = _settings_get("BOT", "DATA_DIR", None) or getattr(bigtree, "datadir", ".")
+    return os.path.join(str(base), "contest")
 
 def _contest_db_path(channel_id: int) -> Optional[str]:
     path = os.path.join(_contest_dir(), f"{channel_id}.json")
@@ -19,7 +39,30 @@ def _contest_db_path(channel_id: int) -> Optional[str]:
 def _read_contest(channel_id: int) -> Dict[str, Any]:
     path = _contest_db_path(channel_id)
     if not path:
-        return {"exists": False}
+        contest_ids = set(map(int, getattr(bigtree, "contestid", []) or []))
+        if channel_id in contest_ids:
+            contest_dir = _contest_dir()
+            os.makedirs(contest_dir, exist_ok=True)
+            path = os.path.join(contest_dir, f"{channel_id}.json")
+            db = TinyDB(path)
+            db.insert({"_type": "meta", "channel_id": channel_id, "status": "active"})
+        else:
+            return {"exists": False}
+    raw = None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except Exception:
+        raw = None
+    if isinstance(raw, dict) and "_default" not in raw:
+        meta = raw or None
+        return {
+            "exists": True,
+            "channel_id": channel_id,
+            "meta": meta,
+            "entries": meta.get("entries", []) if isinstance(meta, dict) else [],
+            "counts": {"entries": len(meta.get("entries", [])) if isinstance(meta, dict) and isinstance(meta.get("entries"), list) else 0},
+        }
     db = TinyDB(path)
     docs = db.all()
     meta = None
