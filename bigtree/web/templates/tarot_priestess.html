@@ -902,13 +902,16 @@
     const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
     const themes = renderThemeBars(card.themes, highlight);
     const numbers = renderNumberInfo(card.number);
+    const meaningBlock = draw.reversed
+      ? `<div><strong>Reversed</strong></div><div>${reversed || upright || ""}</div><div class="muted" style="margin-top:6px">Upright: ${upright || "-"}</div>`
+      : `<div>${upright || reversed || ""}</div>`;
     stateEls.meaning.innerHTML = `
       <div><strong>${title}</strong></div>
       ${prompt}
       ${house}
       ${themes}
       ${numbers}
-      <div style="margin-top:6px">${draw.reversed ? reversed : upright}</div>
+      <div style="margin-top:6px">${meaningBlock}</div>
     `;
   }
 
@@ -937,12 +940,16 @@
         return `${label} (${v})`;
       }).join(", ");
       const numbers = renderNumberInfo(card.number);
+      const meaningLine = draw.reversed
+        ? `<div class="muted"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
+        : (card.upright ? `<div class="muted">${card.upright}</div>` : "");
       return `
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
           <div class="muted">${house} - ${number}</div>
           ${themeList ? `<div class="muted">Focus: ${themeList}</div>` : ""}
           ${numbers}
+          ${meaningLine}
         </div>
       `;
     }).join("");
