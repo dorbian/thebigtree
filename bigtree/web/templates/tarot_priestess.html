@@ -166,6 +166,20 @@
     flex-direction:column;
     align-items:center;
   }
+  .card-slot:fullscreen{
+    background:rgba(5,10,8,.95);
+    border:none;
+    padding:24px;
+    align-items:center;
+    justify-content:center;
+  }
+  .card-slot:fullscreen .label{
+    display:none;
+  }
+  .card-slot:fullscreen .card{
+    max-width:none;
+    width:min(80vw, calc(80vh * 3 / 4.2));
+  }
   .card-slot .label{
     font-size:12px;
     color:var(--muted);
@@ -574,6 +588,19 @@
   const themeParam = qs.get("card_theme");
   const themeLocked = qs.has("card_theme");
   document.body.dataset.cardTheme = themeParam || "classic";
+
+  function toggleFullscreen(target){
+    if (!target || !target.requestFullscreen){
+      return;
+    }
+    if (document.fullscreenElement){
+      if (document.fullscreenElement === target){
+        document.exitFullscreen();
+      }
+      return;
+    }
+    target.requestFullscreen().catch(() => {});
+  }
   const tokenInput = document.getElementById("tokenInput");
   const storedTokenKey = "tarot_token_" + joinCode;
   tokenInput.value = qs.get("token") || localStorage.getItem(storedTokenKey) || "";
@@ -789,13 +816,16 @@
         inner.appendChild(back);
         inner.appendChild(front);
         cardWrap.appendChild(inner);
-        cardWrap.addEventListener("click", async () => {
+        cardWrap.addEventListener("click", async (event) => {
+          event.stopPropagation();
           if (draw && !draw.revealed){
             await postControl(
               `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
               {token: tokenInput.value, position_id: pos.id}
             );
           }
+          const fullscreenTarget = cardWrap.closest(".card-slot") || cardWrap;
+          toggleFullscreen(fullscreenTarget);
           selectCard(pos.id);
         });
         slot.appendChild(cardWrap);
