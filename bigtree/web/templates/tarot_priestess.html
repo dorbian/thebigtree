@@ -148,6 +148,7 @@
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
     gap:12px;
+    justify-items:center;
   }
   .card-slot{
     background:var(--panel-2);
@@ -156,6 +157,10 @@
     padding:10px;
     min-height:210px;
     position:relative;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
   }
   .card-slot .label{
     font-size:12px;
@@ -167,6 +172,7 @@
     width:100%;
     aspect-ratio:3/4.2;
     perspective:1000px;
+    max-width:220px;
   }
   .card.dealt-hidden{
     visibility:hidden;
@@ -372,18 +378,6 @@
     margin-top:10px;
     padding-top:8px;
   }
-  .deck-preview{
-    width:96px;
-    aspect-ratio:3/4.2;
-    border-radius:12px;
-    border:1px solid var(--line);
-    background:
-      radial-gradient(circle at 20% 20%, rgba(214,178,110,.18), transparent 40%),
-      linear-gradient(135deg, #1b2d26, #132018);
-    background-size:cover;
-    background-position:center;
-    margin:0 0 0 6px;
-  }
   .deck-pile-wrap{
     display:flex;
     align-items:center;
@@ -536,7 +530,6 @@
     <div class="deck-pile-wrap">
       <div class="deck-pile" id="deckPile"></div>
       <div class="deck-label">Deck</div>
-      <div class="deck-preview" id="deckPreview"></div>
     </div>
     <div id="cardGrid" class="card-grid"></div>
     <div class="analysis-panel" id="analysisPanel">
@@ -597,7 +590,6 @@
   const connDot = document.getElementById("connDot");
   const connStatus = document.getElementById("connStatus");
   const actionError = document.getElementById("actionError");
-  const deckPreview = document.getElementById("deckPreview");
   const deckPile = document.getElementById("deckPile");
   const newSessionModal = document.getElementById("newSessionModal");
   const newSessionDeck = document.getElementById("newSessionDeck");
@@ -720,14 +712,10 @@
     stateEls.deckId.textContent = s.deck_id;
     stateEls.spreadId.textContent = s.spread_id;
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
-    if (backUrl){
-      deckPreview.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
-      if (deckPile){
+    if (deckPile){
+      if (backUrl){
         deckPile.style.backgroundImage = `linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')`;
-      }
-    } else {
-      deckPreview.style.backgroundImage = "";
-      if (deckPile){
+      } else {
         deckPile.style.backgroundImage = "";
       }
     }
