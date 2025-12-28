@@ -934,6 +934,7 @@
     const rows = draws.map(draw => {
       const card = draw.card || {};
       const name = card.name || "Card";
+      const flavor = card.flavor_text ? `<div class="muted meaning-text">${card.flavor_text}</div>` : "";
       const house = card.house ? `Suit: ${card.house}` : "Suit: -";
       const number = (card.number !== undefined && card.number !== null) ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
       const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
@@ -949,15 +950,14 @@
       const meaningLine = draw.reversed
         ? `<div class="muted meaning-text"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
         : (card.upright ? `<div class="muted meaning-text">${card.upright}</div>` : "");
-      const flavor = card.flavor_text ? `<div class="muted meaning-text">${card.flavor_text}</div>` : "";
       return `
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
+          ${flavor}
           <div class="muted">${house} - ${number}</div>
           ${themeList ? `<div class="muted">Focus: ${themeList}</div>` : ""}
           ${numbers}
           ${meaningLine}
-          ${flavor}
         </div>
       `;
     }).join("");
