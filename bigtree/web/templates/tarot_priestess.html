@@ -370,7 +370,7 @@
     padding-top:8px;
   }
   .deck-preview{
-    width:120px;
+    width:96px;
     aspect-ratio:3/4.2;
     border-radius:12px;
     border:1px solid var(--line);
@@ -379,7 +379,7 @@
       linear-gradient(135deg, #1b2d26, #132018);
     background-size:cover;
     background-position:center;
-    margin:10px 0;
+    margin:0 0 0 6px;
   }
   .deck-pile-wrap{
     display:flex;
@@ -490,20 +490,18 @@
     <div style="height:10px"></div>
     <label class="muted">Priestess token</label>
     <input id="tokenInput" placeholder="paste priestess token" />
-    <div class="deck-preview" id="deckPreview"></div>
-    <div class="row" style="margin-top:8px">
-      <button class="btn accent" id="btnStart">Start Reading</button>
-      <button class="btn danger" id="btnFinish">Finish</button>
-      <button class="btn" id="btnNewSession">New session</button>
-    </div>
     <div class="row" style="margin-top:6px">
+      <button class="btn" id="btnNewSession">New session</button>
       <button class="btn" id="btnOpenPlayer">Open player view</button>
     </div>
-    <div class="row">
+    <div class="row" style="margin-top:8px">
+      <button class="btn accent" id="btnStart">Start Reading</button>
       <button class="btn warn" id="btnShuffle">Shuffle</button>
+      <button class="btn danger" id="btnFinish">Finish</button>
+    </div>
+    <div class="row">
       <button class="btn" id="btnDraw">Draw</button>
       <button class="btn" id="btnRevealNext">Reveal Next</button>
-      <button class="btn" id="btnRevealAll">Reveal All</button>
     </div>
     <div class="error-bar" id="actionError"></div>
     <div style="height:12px"></div>
@@ -516,6 +514,7 @@
     <div class="deck-pile-wrap">
       <div class="deck-pile" id="deckPile"></div>
       <div class="deck-label">Deck</div>
+      <div class="deck-preview" id="deckPreview"></div>
     </div>
     <div id="cardGrid" class="card-grid"></div>
     <div class="analysis-panel" id="analysisPanel">
@@ -528,12 +527,6 @@
     <h2>Meaning</h2>
     <div id="meaningPanel" class="meaning muted">Select a card to see details.</div>
     <div style="height:10px"></div>
-    <div class="row">
-      <button class="btn" id="btnAddPrompt">Add position prompt</button>
-      <button class="btn" id="btnAddUpright">Add upright meaning</button>
-      <button class="btn" id="btnAddReversed">Add reversed meaning</button>
-    </div>
-    <div style="height:8px"></div>
     <label class="muted">Custom narration</label>
     <textarea id="narrationInput" rows="3" placeholder="Write your narration line..."></textarea>
     <button class="btn accent" id="btnNarrate">Send narration</button>
@@ -946,6 +939,7 @@
       const meaningLine = draw.reversed
         ? `<div class="muted meaning-text"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
         : (card.upright ? `<div class="muted meaning-text">${card.upright}</div>` : "");
+      const flavor = card.flavor_text ? `<div class="muted meaning-text">${card.flavor_text}</div>` : "";
       return `
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
@@ -953,6 +947,7 @@
           ${themeList ? `<div class="muted">Focus: ${themeList}</div>` : ""}
           ${numbers}
           ${meaningLine}
+          ${flavor}
         </div>
       `;
     }).join("");
@@ -1016,31 +1011,11 @@
   document.getElementById("btnRevealNext").onclick = async () => {
     await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});
   };
-  document.getElementById("btnRevealAll").onclick = async () => {
-    await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"all"});
-  };
-
   document.getElementById("btnNarrate").onclick = async () => {
     const text = document.getElementById("narrationInput").value.trim();
     if (!text) return;
     await postControl(`/api/tarot/sessions/${currentState.session.session_id}/narrate`, {token: tokenInput.value, text});
     document.getElementById("narrationInput").value = "";
-  };
-
-  document.getElementById("btnAddPrompt").onclick = () => {
-    const pos = currentState.spread.positions.find(p => p.id === selectedPosition);
-    if (!pos) return;
-    document.getElementById("narrationInput").value = pos.prompt || pos.label;
-  };
-  document.getElementById("btnAddUpright").onclick = () => {
-    const draw = currentState.draw.find(d => d.position_id === selectedPosition);
-    if (!draw || !draw.card) return;
-    document.getElementById("narrationInput").value = draw.card.upright || "";
-  };
-  document.getElementById("btnAddReversed").onclick = () => {
-    const draw = currentState.draw.find(d => d.position_id === selectedPosition);
-    if (!draw || !draw.card) return;
-    document.getElementById("narrationInput").value = draw.card.reversed || "";
   };
 
   function connectSSE(){
@@ -1142,6 +1117,11 @@
 
   document.getElementById("btnNewSession").addEventListener("click", async () => {
     newSessionStatus.textContent = "";
+    try{
+      if (currentState && currentState.session && currentState.session.session_id){
+        await postControl(`/api/tarot/sessions/${currentState.session.session_id}/finish`, {token: tokenInput.value});
+      }
+    }catch(err){}
     newSessionModal.classList.add("show");
     await loadSessionOptions();
   });

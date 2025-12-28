@@ -473,6 +473,12 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         raw_themes = existing.get("themes")
     else:
         raw_themes = {}
+    if "flavor_text" in card:
+        flavor_text = str(card.get("flavor_text") or "").strip()
+    elif existing:
+        flavor_text = (existing.get("flavor_text") or "").strip()
+    else:
+        flavor_text = ""
     if "number" in card:
         raw_number = card.get("number")
     elif existing:
@@ -509,6 +515,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "artist_links": cleaned_links,
         "themes": cleaned_themes,
         "number": number,
+        "flavor_text": flavor_text,
         "updated_at": _now(),
     }
     if existing:

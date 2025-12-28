@@ -297,16 +297,31 @@
     font-size:11px;
     color:var(--muted);
   }
-  .notice{
-    margin-bottom:10px;
-    font-size:12px;
-    color:var(--muted);
-  }
+.notice{
+  margin-bottom:10px;
+  font-size:12px;
+  color:var(--muted);
+}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 12px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(8,14,12,.6);
+  color:var(--text);
+  font-size:12px;
+  cursor:pointer;
+}
 </style>
 
 <header>
   <h1>Tarot Reading <span class="chip" id="sessionStatus">waiting</span></h1>
 </header>
+<div class="subhead" style="justify-content:flex-end">
+  <button class="btn" id="downloadShot" style="display:none">Download screenshot</button>
+</div>
 <div class="subhead">
   <span><span class="status-dot" id="connDot"></span><span id="connStatus">connecting</span></span>
   <span>Join: <strong id="joinCode"></strong></span>
@@ -330,6 +345,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
   const joinCode = "{JOIN}";
   const params = new URLSearchParams(location.search);
@@ -399,6 +415,7 @@
   const waitingNote = document.getElementById("waitingNote");
   const deckPreview = document.getElementById("deckPreview");
   const deckPile = document.getElementById("deckPile");
+  const downloadShot = document.getElementById("downloadShot");
   let currentState = null;
   let sse = null;
   let redirected = false;
@@ -423,6 +440,9 @@
       document.body.dataset.cardTheme = deckTheme || "classic";
     }
     statusEl.textContent = status;
+    if (downloadShot){
+      downloadShot.style.display = ["finished", "ended", "closed"].includes(status) ? "inline-block" : "none";
+    }
     deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
     if (!redirected && ["finished", "ended", "closed"].includes(status)){
@@ -584,4 +604,21 @@
   fetchState();
   connectSSE();
   setInterval(fetchState, 5000);
+
+  if (downloadShot){
+    downloadShot.addEventListener("click", async () => {
+      if (!window.html2canvas) return;
+      downloadShot.disabled = true;
+      downloadShot.textContent = "Rendering...";
+      try{
+        const canvas = await window.html2canvas(document.body, {backgroundColor: null});
+        const link = document.createElement("a");
+        link.download = `tarot-session-${joinCode}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      }catch(err){}
+      downloadShot.disabled = false;
+      downloadShot.textContent = "Download screenshot";
+    });
+  }
 </script>

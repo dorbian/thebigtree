@@ -1186,6 +1186,12 @@
           </div>
           <div class="row">
             <div>
+              <label for="taCardFlavor">Flavor text</label>
+              <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div>
               <label>Theme weights</label>
               <div class="theme-grid" id="taCardThemes"></div>
               <div class="muted" id="taCardThemesHint">Select a suit to preload weights.</div>
@@ -3632,6 +3638,7 @@
         $("taCardHouse").value = taActiveHouse;
         $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
         $("taCardTags").value = (card.tags || []).join(", ");
+        $("taCardFlavor").value = card.flavor_text || "";
         $("taCardUpright").value = card.upright || "";
         $("taCardReversed").value = card.reversed || "";
         $("taCardArtist").value = card.artist_id || "";
@@ -4029,6 +4036,7 @@
             image: window.taUploadedImageUrl || undefined,
             artist_id: $("taCardArtist").value.trim() || undefined,
             tags,
+            flavor_text: $("taCardFlavor").value.trim() || undefined,
             upright: $("taCardUpright").value.trim(),
             reversed: $("taCardReversed").value.trim(),
             themes: taGetCardThemeWeights(),
@@ -4046,6 +4054,7 @@
           $("taCardNumber").value = "";
           window.taUploadedImageUrl = "";
           $("taCardTags").value = "";
+          $("taCardFlavor").value = "";
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
           $("taCardArtist").value = "";
