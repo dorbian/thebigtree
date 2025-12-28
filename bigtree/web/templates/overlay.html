@@ -1375,50 +1375,14 @@
 
         <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">
           <h2>Contest Management</h2>
-          <h3>Contest Channel</h3>
-          <div class="row">
-            <div>
-              <label for="contestCreateChannel">
-                <input type="checkbox" id="contestCreateChannel">
-                Create a new contest channel
-              </label>
-            </div>
-            <div>
-              <label>Category</label>
-              <div class="status" id="contestCategoryStatus">1239558949351460904</div>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="contestEmojiSelect">Channel emoji</label>
-              <select id="contestEmojiSelect">
-                <option value="🎃">🎃</option>
-                <option value="🌲">🌲</option>
-                <option value="🔮">🔮</option>
-                <option value="✨">✨</option>
-                <option value="🍂">🍂</option>
-              </select>
-            </div>
-            <div>
-              <label for="contestChannelName">Channel name</label>
-              <input id="contestChannelName" placeholder="elfoween">
-            </div>
-            <div>
-              <label for="contestTemplateChannel">Template channel</label>
-              <select id="contestTemplateChannel"></select>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Preview</label>
-              <div class="status" id="contestChannelPreview">🎃︱elfoween</div>
-            </div>
-          </div>
-          <div class="status" id="contestChannelStatus">Ready.</div>
           <div class="row">
             <div>
               <label>&nbsp;</label>
               <button class="btn-ghost" id="contestRefresh">Refresh contests</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="contestCreateChannelOpen">Create contest channel</button>
             </div>
           </div>
           <h3>Create Contest</h3>
@@ -1470,6 +1434,51 @@
           <h3>Ended contests</h3>
           <div class="list" id="contestEndedList">No ended contests yet.</div>
         </section>
+        <div class="modal" id="contestChannelModal">
+          <div class="modal-card">
+            <div class="modal-header">
+              <div class="modal-title">Create Contest Channel</div>
+              <button class="btn-ghost" id="contestChannelClose">Close</button>
+            </div>
+            <div class="row">
+              <div>
+                <label>Category</label>
+                <div class="status" id="contestCategoryStatus">1239558949351460904</div>
+              </div>
+              <div>
+                <label for="contestTemplateChannel">Template channel</label>
+                <select id="contestTemplateChannel"></select>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label for="contestEmojiSelect">Channel emoji</label>
+                <select id="contestEmojiSelect">
+                  <option value="🎃">🎃</option>
+                  <option value="🌲">🌲</option>
+                  <option value="🔮">🔮</option>
+                  <option value="✨">✨</option>
+                  <option value="🍂">🍂</option>
+                </select>
+              </div>
+              <div>
+                <label for="contestChannelName">Channel name</label>
+                <input id="contestChannelName" placeholder="elfoween">
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>Preview</label>
+                <div class="status" id="contestChannelPreview">🎃︱elfoween</div>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button id="contestChannelCreate">Create channel</button>
+              </div>
+            </div>
+            <div class="status" id="contestChannelStatus">Ready.</div>
+          </div>
+        </div>
 
       </div>
       </main>
@@ -3022,6 +3031,30 @@
       $("contestCreate").addEventListener("click", () => createContest());
       $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
       $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
+      $("contestCreateChannelOpen").addEventListener("click", () => {
+        $("contestChannelModal").classList.add("show");
+        loadContestChannels();
+      });
+      $("contestChannelClose").addEventListener("click", () => {
+        $("contestChannelModal").classList.remove("show");
+      });
+      $("contestChannelModal").addEventListener("click", (event) => {
+        if (event.target === $("contestChannelModal")){
+          $("contestChannelModal").classList.remove("show");
+        }
+      });
+      $("contestChannelCreate").addEventListener("click", async () => {
+        try{
+          const channelId = await createContestChannel();
+          if (channelId){
+            $("contestChannel").value = channelId;
+          }
+          $("contestChannelModal").classList.remove("show");
+          await loadContestManagement();
+        }catch(err){
+          // status already handled
+        }
+      });
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -3175,10 +3208,6 @@
 
       async function createContest(){
         let channelId = $("contestChannel").value;
-        const createChannel = $("contestCreateChannel") && $("contestCreateChannel").checked;
-        if (createChannel){
-          channelId = await createContestChannel();
-        }
         if (!channelId){
           setContestCreateStatus("Pick a channel first.", "err");
           return;
