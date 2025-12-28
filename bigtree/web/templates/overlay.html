@@ -1375,6 +1375,46 @@
 
         <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">
           <h2>Contest Management</h2>
+          <h3>Contest Channel</h3>
+          <div class="row">
+            <div>
+              <label for="contestCreateChannel">
+                <input type="checkbox" id="contestCreateChannel">
+                Create a new contest channel
+              </label>
+            </div>
+            <div>
+              <label>Category</label>
+              <div class="status" id="contestCategoryStatus">1239558949351460904</div>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="contestEmojiSelect">Channel emoji</label>
+              <select id="contestEmojiSelect">
+                <option value="🎃">🎃</option>
+                <option value="🌲">🌲</option>
+                <option value="🔮">🔮</option>
+                <option value="✨">✨</option>
+                <option value="🍂">🍂</option>
+              </select>
+            </div>
+            <div>
+              <label for="contestChannelName">Channel name</label>
+              <input id="contestChannelName" placeholder="elfoween">
+            </div>
+            <div>
+              <label for="contestTemplateChannel">Template channel</label>
+              <select id="contestTemplateChannel"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Preview</label>
+              <div class="status" id="contestChannelPreview">🎃︱elfoween</div>
+            </div>
+          </div>
+          <div class="status" id="contestChannelStatus">Ready.</div>
           <div class="row">
             <div>
               <label>&nbsp;</label>
@@ -1869,6 +1909,7 @@
       const overlayToggle = $("overlayMode");
       const overlayToggleBtn = $("menuOverlayToggle");
       const storage = window.localStorage;
+      const CONTEST_CATEGORY_ID = "1239558949351460904";
       let currentCard = null;
       let currentGame = null;
       let taSelectedCardId = "";
@@ -2979,6 +3020,8 @@
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
       $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
       $("contestCreate").addEventListener("click", () => createContest());
+      $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
+      $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -3017,6 +3060,32 @@
         return "active";
       }
 
+      function setContestChannelStatus(msg, kind){
+        const el = $("contestChannelStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function sanitizeChannelLabel(value){
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9\-]/g, "");
+      }
+
+      function updateContestChannelPreview(){
+        const emoji = ($("contestEmojiSelect") && $("contestEmojiSelect").value) || "🎃";
+        const name = sanitizeChannelLabel($("contestChannelName").value || "elfoween") || "elfoween";
+        const preview = `${emoji}︱${name}`;
+        const el = $("contestChannelPreview");
+        if (el){
+          el.textContent = preview;
+        }
+        return preview;
+      }
+
       function setContestCreateStatus(msg, kind){
         const el = $("contestCreateStatus");
         if (!el) return;
@@ -3026,12 +3095,23 @@
 
       async function loadContestChannels(){
         const select = $("contestChannel");
+        const templateSelect = $("contestTemplateChannel");
         if (!select) return;
         select.innerHTML = `<option value="">Loading...</option>`;
+        if (templateSelect){
+          templateSelect.innerHTML = `<option value="">Loading...</option>`;
+        }
         try{
           const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
           const channels = data.channels || [];
           select.innerHTML = "";
+          if (templateSelect){
+            templateSelect.innerHTML = "";
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = "(no template)";
+            templateSelect.appendChild(none);
+          }
           channels.forEach(c => {
             const opt = document.createElement("option");
             opt.value = c.id;
@@ -3041,21 +3121,64 @@
             const label = parts.length ? `${parts.join(" / ")} / #${c.name}` : `#${c.name}`;
             opt.textContent = label;
             select.appendChild(opt);
+            if (templateSelect){
+              const clone = document.createElement("option");
+              clone.value = c.id;
+              clone.textContent = label;
+              templateSelect.appendChild(clone);
+            }
           });
           if (!channels.length){
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "No channels found.";
             select.appendChild(opt);
+            if (templateSelect){
+              const opt2 = document.createElement("option");
+              opt2.value = "";
+              opt2.textContent = "No channels found.";
+              templateSelect.appendChild(opt2);
+            }
           }
         }catch(err){
           select.innerHTML = `<option value="">Failed to load channels</option>`;
+          if (templateSelect){
+            templateSelect.innerHTML = `<option value="">Failed to load channels</option>`;
+          }
           setContestCreateStatus(err.message, "err");
         }
       }
 
+      async function createContestChannel(){
+        const name = updateContestChannelPreview();
+        const templateId = $("contestTemplateChannel").value || "";
+        setContestChannelStatus("Creating channel...", "");
+        try{
+          const data = await jsonFetch("/api/contests/channel", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              name,
+              category_id: CONTEST_CATEGORY_ID,
+              template_channel_id: templateId || undefined
+            })
+          }, true);
+          setContestChannelStatus(`Channel created: ${data.name}`, "ok");
+          await loadContestChannels();
+          $("contestChannel").value = String(data.channel_id || "");
+          return String(data.channel_id || "");
+        }catch(err){
+          setContestChannelStatus(err.message, "err");
+          throw err;
+        }
+      }
+
       async function createContest(){
-        const channelId = $("contestChannel").value;
+        let channelId = $("contestChannel").value;
+        const createChannel = $("contestCreateChannel") && $("contestCreateChannel").checked;
+        if (createChannel){
+          channelId = await createContestChannel();
+        }
         if (!channelId){
           setContestCreateStatus("Pick a channel first.", "err");
           return;
@@ -4590,6 +4713,14 @@
         document.getElementById("loginView").classList.add("hidden");
         document.getElementById("appView").classList.remove("hidden");
         loadAuthUser();
+        const contestCategoryStatus = $("contestCategoryStatus");
+        if (contestCategoryStatus){
+          contestCategoryStatus.textContent = CONTEST_CATEGORY_ID;
+        }
+        if ($("contestChannelName") && !$("contestChannelName").value.trim()){
+          $("contestChannelName").value = "elfoween";
+        }
+        updateContestChannelPreview();
         loadGamesMenu();
         const saved = getSavedPanel();
         if (!getSeenDashboard()){

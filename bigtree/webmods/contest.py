@@ -269,3 +269,65 @@ async def create_contest(req: web.Request):
         bigtree.contestid.append(channel_id)
 
     return web.json_response({"ok": True, "channel_id": channel_id, "message_id": msg.id})
+
+@route("POST", "/api/contests/channel", scopes=["bingo:admin"])
+async def create_contest_channel(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    name = str(body.get("name") or "").strip()
+    try:
+        category_id = int(body.get("category_id") or 0)
+    except Exception:
+        category_id = 0
+    try:
+        template_channel_id = int(body.get("template_channel_id") or 0)
+    except Exception:
+        template_channel_id = 0
+    if not name:
+        return web.json_response({"ok": False, "error": "name required"}, status=400)
+    if not category_id:
+        return web.json_response({"ok": False, "error": "category_id required"}, status=400)
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+    category = bot.get_channel(category_id)
+    if not category or not isinstance(category, discord.CategoryChannel):
+        return web.json_response({"ok": False, "error": "category not found"}, status=404)
+    guild = category.guild
+    overwrites = {}
+    topic = None
+    slowmode_delay = 0
+    nsfw = False
+    if template_channel_id:
+        template = bot.get_channel(template_channel_id)
+        if template and isinstance(template, discord.TextChannel):
+            overwrites = dict(template.overwrites)
+            topic = template.topic
+            slowmode_delay = template.slowmode_delay or 0
+            nsfw = bool(template.nsfw)
+    everyone = guild.default_role
+    if everyone not in overwrites:
+        overwrites[everyone] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+    else:
+        ow = overwrites[everyone]
+        if ow.view_channel is not True:
+            ow.view_channel = True
+        if ow.send_messages is not True:
+            ow.send_messages = True
+        if ow.read_message_history is not True:
+            ow.read_message_history = True
+        overwrites[everyone] = ow
+    try:
+        channel = await guild.create_text_channel(
+            name=name,
+            category=category,
+            overwrites=overwrites,
+            topic=topic,
+            slowmode_delay=slowmode_delay,
+            nsfw=nsfw
+        )
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
+    return web.json_response({"ok": True, "channel_id": channel.id, "name": channel.name})
