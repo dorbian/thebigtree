@@ -1037,29 +1037,91 @@
           <p class="muted">Welcome to the forest control room. This is a quick start and reference for the bot and site.</p>
           <div class="dashboard-grid" style="margin-top:12px">
             <div class="credit-card">
-              <h4>Discord Bot</h4>
+              <h4>Discord Bot - Overview</h4>
               <p>Bingo: creates live games, calls numbers, tracks claims, and closes out winners.</p>
               <p>Tarot: starts sessions, draws and reveals cards, and drives the priestess/player views.</p>
               <p>Contests: collects entries, records votes, and publishes final results.</p>
               <p>Auth: issues time-limited web keys for trusted roles.</p>
             </div>
             <div class="credit-card">
-              <h4>Site & Overlay</h4>
-              <p>Dashboard: a short README for where everything lives.</p>
-              <p>Session Manager: open, run, and finish tarot readings with live overlays.</p>
-              <p>Deck Editor: build decks, cards, art, themes, and meanings with live preview.</p>
-              <p>Bingo Manager: operate a live game, review claims, and advance stages.</p>
-              <p>Overlay Mode: OBS-friendly views for streams.</p>
+              <h4>Discord Bot - How To Use</h4>
+              <p>Start with /auth to get a 24h web token if your role is allowed.</p>
+              <p>Run /bingo or /bingo-menu in the target channel to set up a game.</p>
+              <p>Use /tarot_start to open a session with a deck and spread.</p>
+              <p>Use /tarot_draw and /tarot_flip to control the reading.</p>
+              <p>Use /tarot_end to close a session when done.</p>
             </div>
             <div class="credit-card">
-              <h4>How To Use</h4>
-              <p>1) Pick a panel on the left to open a tool.</p>
-              <p>2) For tarot, create a session then open the player/priestess links.</p>
-              <p>3) For bingo, select a game, review claims, and advance stages.</p>
+              <h4>Discord Bot - Bingo</h4>
+              <p>Create and control: /bingo, /bingo-stage, /call.</p>
+              <p>Player flow: /buycard, /buycards, /bingo-status.</p>
+              <p>Share links: /bingo-url, /bingo-owner-url.</p>
+              <p>Endings: /bingo-end to close and lock a game.</p>
+              <p>Extras: /bingo-upload-bg to set a background.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Discord Bot - Tarot</h4>
+              <p>Session control: /tarot_start, /tarot_draw, /tarot_flip, /tarot_end.</p>
+              <p>Streaming presence: /tarot_stream for live status.</p>
+              <p>Deck additions: /tarot_add_card for quick inserts.</p>
+              <p>Admin tools: /tarot_addcard, /tarot_session for deeper admin flows.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Discord Bot - Admin & Tools</h4>
+              <p>Permissions group: /permissions list, add-role, remove-role.</p>
+              <p>Permissions group: /permissions add-user, remove-user, refresh.</p>
+              <p>Contest control: /contest to start, /contest_stop to end.</p>
+              <p>Posts: /commune for official announcements.</p>
+              <p>AI helper: /quickpost for short posts.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Site & Overlay - Overview</h4>
+              <p>Dashboard: a guide to features, flows, and credits.</p>
+              <p>Session Manager: open, run, and finish tarot readings.</p>
+              <p>Deck Editor: build decks, cards, art, themes, and meanings.</p>
+              <p>Bingo Manager: operate a live game and review claims.</p>
+              <p>Overlay Mode: OBS-friendly layouts for streams.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Site & Overlay - How To Use</h4>
+              <p>1) Paste your /auth key to unlock the tools.</p>
+              <p>2) Choose a panel on the left to open a tool.</p>
+              <p>3) For tarot, open a session then share player/priestess links.</p>
               <p>4) For decks, save cards and refresh the reading view.</p>
+              <p>5) For bingo, select a game and manage claims/stages.</p>
             </div>
             <div class="credit-card">
-              <h4>Support Pillars</h4>
+              <h4>Site & Overlay - Tarot Workflow</h4>
+              <p>Create a session and pick deck/spread.</p>
+              <p>Use Draw to pull cards and Reveal to flip them.</p>
+              <p>Click a card to reveal a specific position.</p>
+              <p>Use Finish to close the session and unlock screenshots.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Site & Overlay - Deck Editor</h4>
+              <p>Pick a deck to load and edit cards.</p>
+              <p>Set number, suit, meanings, flavor text, and art.</p>
+              <p>Theme weights apply to the selected suit only.</p>
+              <p>Use Edit Deck to change name, theme, and back art.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Site & Overlay - Admin Tools</h4>
+              <p>Auth Roles: define what scopes each role can reach.</p>
+              <p>Auth Keys: review or revoke active web tokens.</p>
+              <p>Media Library: upload, tag, and reuse images.</p>
+              <p>Artist Index: manage attributions and links.</p>
+              <p>Gallery Calendar: schedule featured art.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Troubleshooting</h4>
+              <p>If the overlay is blank, check your auth token.</p>
+              <p>If cards do not update, refresh the reading view.</p>
+              <p>Bad gateway means the main server is still starting.</p>
+              <p>If images fail, re-open the media library.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Thanks & Credits</h4>
+              <p>To those who keep the canopy bright and the roots steady.</p>
               <div class="credit-person">
                 <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/303221975529029642/fcac17d8f775dd9dee7d003ed560fcb7.webp?size=32" alt="Yamaneko Chi">
                 <p>Yamaneko Chi - my one true love and steady anchor.</p>
@@ -1072,16 +1134,13 @@
                 <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/278425202805702661/0c9474c19250e5b12cf2c348361cf051.webp?size=32" alt="Malady La'niaiserie">
                 <p>Malady La'niaiserie - party planner and forest hype master.</p>
               </div>
-            </div>
-            <div class="credit-card">
-              <h4>Guiding Hands</h4>
               <div class="credit-person">
                 <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/203508295149944832/d9959bb1fbc7a9824233885929bb93c5.webp?size=32" alt="Labreska Vaalkihar">
                 <p>Labreska Vaalkihar - tireless work on the forest mysticism.</p>
               </div>
               <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/guilds/1224347680776523847/users/303494786562916352/avatars/adfc4471b5831910dbd34942c13a9372.webp?size=128" alt="Levi Ancunin/Cesare">
-                <p>Levi Ancunin/Cesare - the one and only priest to have walked the forest.</p>
+                <img class="credit-avatar" src="https://cdn.discordapp.com/guilds/1224347680776523847/users/303494786562916352/avatars/adfc4471b5831910dbd34942c13a9372.webp?size=128" alt="Levi Anvunin/Cesare">
+                <p>Levi Anvunin/Cesare - the one and only priest to have walked the forest.</p>
               </div>
             </div>
           </div>
@@ -4482,6 +4541,9 @@
     </script>
   </body>
 </html>
+
+
+
 
 
 
