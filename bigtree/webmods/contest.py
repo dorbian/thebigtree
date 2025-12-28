@@ -2,13 +2,22 @@
 from __future__ import annotations
 from aiohttp import web
 from typing import Dict, Any, List, Optional
-from tinydb import TinyDB
+from tinydb import TinyDB, Query
 import json
+from datetime import datetime, timezone
+import discord
 import os
 import bigtree
 from bigtree.inc.webserver import route
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+DEFAULT_RULES = (
+    "1) One entry per person\n"
+    "2) Attach an image or video with your entry\n"
+    "3) Keep it cozy (server rules apply)\n"
+    "4) Voting uses :TreeCone: reactions\n"
+    "5) Most :TreeCone: by the deadline wins"
+)
 
 def _settings_get(section: str, key: str, default=None):
     try:
@@ -31,6 +40,22 @@ def _contest_dir() -> str:
         return str(getattr(bigtree, "contest_dir"))
     base = _settings_get("BOT", "DATA_DIR", None) or getattr(bigtree, "datadir", ".")
     return os.path.join(str(base), "contest")
+
+def _ensure_contestid_container() -> None:
+    if not hasattr(bigtree, "contestid") or bigtree.contestid is None:
+        bigtree.contestid = []
+
+def _resolve_vote_emoji(guild: discord.Guild | None, desired: str | None) -> str:
+    pick = (desired or _settings_get("CONTEST", "VOTE_EMOJI", ":TreeCone:") or ":TreeCone:").strip()
+    if pick.startswith(":") and pick.endswith(":"):
+        name = pick.strip(":")
+    else:
+        name = pick
+    if guild:
+        for emoji in getattr(guild, "emojis", []) or []:
+            if str(getattr(emoji, "name", "")) == name:
+                return str(emoji)
+    return pick
 
 def _contest_db_path(channel_id: int) -> Optional[str]:
     path = os.path.join(_contest_dir(), f"{channel_id}.json")
@@ -164,3 +189,83 @@ async def list_entries(req: web.Request):
     if not data.get("exists"):
         return web.json_response({"error": "contest not found"}, status=404)
     return web.json_response({"channel_id": channel_id, "entries": data["entries"]})
+
+@route("POST", "/api/contests/create", scopes=["bingo:admin"])
+async def create_contest(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        channel_id = int(body.get("channel_id") or 0)
+    except Exception:
+        channel_id = 0
+    if not channel_id:
+        return web.json_response({"ok": False, "error": "channel_id required"}, status=400)
+    title = str(body.get("title") or "").strip() or "Contest"
+    description = str(body.get("description") or "").strip() or "Post your entry as an attachment."
+    rules_text = str(body.get("rules") or "").strip() or DEFAULT_RULES
+    deadline_str = str(body.get("deadline") or "").strip()
+    vote_emoji = str(body.get("vote_emoji") or "").strip()
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+    channel = bot.get_channel(channel_id)
+    if not channel or not isinstance(channel, discord.TextChannel):
+        return web.json_response({"ok": False, "error": "channel not found"}, status=404)
+
+    deadline_dt = None
+    if deadline_str:
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                deadline_dt = datetime.strptime(deadline_str, fmt).replace(tzinfo=timezone.utc)
+                break
+            except Exception:
+                continue
+
+    vote_pick = _resolve_vote_emoji(channel.guild, vote_emoji)
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blurple(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    if rules_text:
+        embed.add_field(name="Rules", value=rules_text, inline=False)
+    if deadline_dt:
+        embed.add_field(name="Deadline", value=f"{deadline_dt:%Y-%m-%d %H:%M} UTC", inline=False)
+    embed.add_field(name="Voting", value=f"React with {vote_pick} on entries you like.", inline=False)
+
+    try:
+        msg = await channel.send(embed=embed)
+        try:
+            await msg.pin()
+        except Exception:
+            pass
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+    contest_dir = _contest_dir()
+    os.makedirs(contest_dir, exist_ok=True)
+    path = os.path.join(contest_dir, f"{channel_id}.json")
+    db = TinyDB(path)
+    db.remove(Query()._type == "meta")
+    db.insert({
+        "_type": "meta",
+        "channel_id": channel_id,
+        "channel_name": getattr(channel, "name", "") or "",
+        "title": title,
+        "description": description,
+        "rules": rules_text,
+        "deadline": deadline_dt.isoformat() if deadline_dt else None,
+        "vote_emoji": vote_pick,
+        "message_id": msg.id,
+        "status": "active",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    _ensure_contestid_container()
+    if channel_id not in bigtree.contestid:
+        bigtree.contestid.append(channel_id)
+
+    return web.json_response({"ok": True, "channel_id": channel_id, "message_id": msg.id})

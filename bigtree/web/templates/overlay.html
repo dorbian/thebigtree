@@ -303,6 +303,24 @@
       .panel.dashboard{
         padding:24px;
       }
+      .dashboard-readme{
+        max-width:880px;
+        line-height:1.5;
+      }
+      .dashboard-readme h3{
+        margin:16px 0 6px;
+        font-size:14px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        color:var(--accent-2);
+      }
+      .dashboard-readme p{
+        margin:0 0 8px;
+        color:var(--muted);
+      }
+      .dashboard-readme strong{
+        color:var(--ink);
+      }
       .dashboard-grid{
         display:grid;
         grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
@@ -1035,114 +1053,52 @@
         <section class="panel dashboard hidden" style="animation-delay:.02s" id="dashboardPanel">
           <h2>Forest Dashboard</h2>
           <p class="muted">Welcome to the forest control room. This is a quick start and reference for the bot and site.</p>
-          <div class="dashboard-grid" style="margin-top:12px">
-            <div class="credit-card">
-              <h4>Discord Bot - Overview</h4>
-              <p>Bingo: creates live games, calls numbers, tracks claims, and closes out winners.</p>
-              <p>Tarot: starts sessions, draws and reveals cards, and drives the priestess/player views.</p>
-              <p>Contests: collects entries, records votes, and publishes final results.</p>
-              <p>Auth: issues time-limited web keys for trusted roles.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Discord Bot - How To Use</h4>
-              <p>Start with /auth to get a 24h web token if your role is allowed.</p>
-              <p>Run /bingo or /bingo-menu in the target channel to set up a game.</p>
-              <p>Use /tarot_start to open a session with a deck and spread.</p>
-              <p>Use /tarot_draw and /tarot_flip to control the reading.</p>
-              <p>Use /tarot_end to close a session when done.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Discord Bot - Bingo</h4>
-              <p>Create and control: /bingo, /bingo-stage, /call.</p>
-              <p>Player flow: /buycard, /buycards, /bingo-status.</p>
-              <p>Share links: /bingo-url, /bingo-owner-url.</p>
-              <p>Endings: /bingo-end to close and lock a game.</p>
-              <p>Extras: /bingo-upload-bg to set a background.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Discord Bot - Tarot</h4>
-              <p>Session control: /tarot_start, /tarot_draw, /tarot_flip, /tarot_end.</p>
-              <p>Streaming presence: /tarot_stream for live status.</p>
-              <p>Deck additions: /tarot_add_card for quick inserts.</p>
-              <p>Admin tools: /tarot_addcard, /tarot_session for deeper admin flows.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Discord Bot - Admin & Tools</h4>
-              <p>Permissions group: /permissions list, add-role, remove-role.</p>
-              <p>Permissions group: /permissions add-user, remove-user, refresh.</p>
-              <p>Contest control: /contest to start, /contest_stop to end.</p>
-              <p>Posts: /commune for official announcements.</p>
-              <p>AI helper: /quickpost for short posts.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Site & Overlay - Overview</h4>
-              <p>Dashboard: a guide to features, flows, and credits.</p>
-              <p>Session Manager: open, run, and finish tarot readings.</p>
-              <p>Deck Editor: build decks, cards, art, themes, and meanings.</p>
-              <p>Bingo Manager: operate a live game and review claims.</p>
-              <p>Overlay Mode: OBS-friendly layouts for streams.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Site & Overlay - How To Use</h4>
-              <p>1) Paste your /auth key to unlock the tools.</p>
-              <p>2) Choose a panel on the left to open a tool.</p>
-              <p>3) For tarot, open a session then share player/priestess links.</p>
-              <p>4) For decks, save cards and refresh the reading view.</p>
-              <p>5) For bingo, select a game and manage claims/stages.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Site & Overlay - Tarot Workflow</h4>
-              <p>Create a session and pick deck/spread.</p>
-              <p>Use Draw to pull cards and Reveal to flip them.</p>
-              <p>Click a card to reveal a specific position.</p>
-              <p>Use Finish to close the session and unlock screenshots.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Site & Overlay - Deck Editor</h4>
-              <p>Pick a deck to load and edit cards.</p>
-              <p>Set number, suit, meanings, flavor text, and art.</p>
-              <p>Theme weights apply to the selected suit only.</p>
-              <p>Use Edit Deck to change name, theme, and back art.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Site & Overlay - Admin Tools</h4>
-              <p>Auth Roles: define what scopes each role can reach.</p>
-              <p>Auth Keys: review or revoke active web tokens.</p>
-              <p>Media Library: upload, tag, and reuse images.</p>
-              <p>Artist Index: manage attributions and links.</p>
-              <p>Gallery Calendar: schedule featured art.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Troubleshooting</h4>
-              <p>If the overlay is blank, check your auth token.</p>
-              <p>If cards do not update, refresh the reading view.</p>
-              <p>Bad gateway means the main server is still starting.</p>
-              <p>If images fail, re-open the media library.</p>
-            </div>
-            <div class="credit-card">
-              <h4>Thanks & Credits</h4>
-              <p>To those who keep the canopy bright and the roots steady.</p>
-              <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/303221975529029642/fcac17d8f775dd9dee7d003ed560fcb7.webp?size=32" alt="Yamaneko Chi">
-                <p>Yamaneko Chi - my one true love and steady anchor.</p>
-              </div>
-              <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/430786799422406656/c2574d5f988d0b7fd271f240332332b9.webp?size=32" alt="Asgorath White">
-                <p>Asgorath White - without whom the games would never have grown to what it is today.</p>
-              </div>
-              <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/278425202805702661/0c9474c19250e5b12cf2c348361cf051.webp?size=32" alt="Malady La'niaiserie">
-                <p>Malady La'niaiserie - party planner and forest hype master.</p>
-              </div>
-              <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/203508295149944832/d9959bb1fbc7a9824233885929bb93c5.webp?size=32" alt="Labreska Vaalkihar">
-                <p>Labreska Vaalkihar - tireless work on the forest mysticism.</p>
-              </div>
-              <div class="credit-person">
-                <img class="credit-avatar" src="https://cdn.discordapp.com/guilds/1224347680776523847/users/303494786562916352/avatars/adfc4471b5831910dbd34942c13a9372.webp?size=128" alt="Levi Anvunin/Cesare">
-                <p>Levi Anvunin/Cesare - the one and only priest to have walked the forest.</p>
-              </div>
-            </div>
+          <div class="dashboard-readme" style="margin-top:12px">
+            <h3>Quick Start</h3>
+            <p>1) Use /auth in Discord to get a 24h web token if your role allows it.</p>
+            <p>2) Paste the token on this page to unlock the tools.</p>
+            <p>3) Pick a panel on the left to open the manager you need.</p>
+
+            <h3>Discord Bot Commands</h3>
+            <p><strong>Bingo:</strong> /bingo, /bingo-menu, /bingo-stage, /call, /bingo-status, /bingo-end, /bingo-url, /bingo-owner-url, /buycard, /buycards, /bingo-upload-bg.</p>
+            <p><strong>Tarot:</strong> /tarot_start, /tarot_draw, /tarot_flip, /tarot_end, /tarot_stream, /tarot_add_card, /tarot_addcard, /tarot_session.</p>
+            <p><strong>Contests:</strong> /contest to start, /contest_stop to end.</p>
+            <p><strong>Permissions:</strong> /permissions list, add-role, remove-role, add-user, remove-user, refresh.</p>
+            <p><strong>Announcements:</strong> /commune to craft an official post.</p>
+            <p><strong>AI helper:</strong> /quickpost for a short draft with approve/retry.</p>
+
+            <h3>Site & Overlay Features</h3>
+            <p><strong>Dashboard:</strong> home base, quick reference, and credits.</p>
+            <p><strong>Session Manager:</strong> create and run tarot sessions, open player and priestess views.</p>
+            <p><strong>Deck Editor:</strong> build decks and cards, edit meanings, suits, numbers, and art.</p>
+            <p><strong>Bingo Manager:</strong> manage live games, claims, and stage changes.</p>
+            <p><strong>Overlay Mode:</strong> OBS-friendly layouts for stream scenes.</p>
+            <p><strong>Admin Tools:</strong> auth roles, auth keys, media library, artist index, gallery calendar.</p>
+
+            <h3>Tarot Workflow</h3>
+            <p>1) Create a session with a deck and spread.</p>
+            <p>2) Use Draw to pull cards and Reveal to flip them.</p>
+            <p>3) Click a card to reveal or fullscreen it.</p>
+            <p>4) Finish closes the session and enables screenshots.</p>
+
+            <h3>Deck Editor Workflow</h3>
+            <p>1) Pick a deck to load, then select a card or create a new one.</p>
+            <p>2) Set number, suit, meanings, flavor text, and art.</p>
+            <p>3) Theme weights apply only to the selected suit.</p>
+            <p>4) Use Edit Deck to change name, theme, and back art.</p>
+
+            <h3>Troubleshooting</h3>
+            <p>If the overlay is blank, check your auth token.</p>
+            <p>If cards do not update, refresh the reading view.</p>
+            <p>Bad gateway means the main server is still starting.</p>
+            <p>If images fail, reopen the media library.</p>
+
+            <h3>Thanks & Credits</h3>
+            <p>Yamaneko Chi - my one true love and steady anchor.</p>
+            <p>Asgorath White - without whom the games would never have grown to what it is today.</p>
+            <p>Malady La'niaiserie - party planner and forest hype master.</p>
+            <p>Labreska Vaalkihar - tireless work on the forest mysticism.</p>
+            <p>Levi Anvunin/Cesare - the one and only priest to have walked the forest.</p>
           </div>
         </section>
         <section class="panel" style="animation-delay:.05s" id="bingoPanel">
@@ -1425,6 +1381,50 @@
               <button class="btn-ghost" id="contestRefresh">Refresh contests</button>
             </div>
           </div>
+          <h3>Create Contest</h3>
+          <div class="row">
+            <div>
+              <label for="contestChannel">Channel</label>
+              <select id="contestChannel"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="menu-refresh" id="contestChannelRefresh" title="Refresh channels" aria-label="Refresh channels">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                </svg>
+              </button>
+            </div>
+            <div>
+              <label for="contestTitle">Title</label>
+              <input id="contestTitle" placeholder="Elfoween Costume Contest">
+            </div>
+            <div>
+              <label for="contestDeadline">Deadline</label>
+              <input id="contestDeadline" placeholder="2025-10-31 23:59">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="contestDescription">Description</label>
+              <textarea id="contestDescription" placeholder="Post your entry as an attachment. Most :TreeCone: wins!"></textarea>
+            </div>
+            <div>
+              <label for="contestRules">Rules</label>
+              <textarea id="contestRules" placeholder="Leave empty for defaults."></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="contestEmoji">Vote emoji</label>
+              <input id="contestEmoji" placeholder=":TreeCone:">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="contestCreate">Create contest</button>
+            </div>
+          </div>
+          <div class="status" id="contestCreateStatus">Ready.</div>
           <h3>All contests</h3>
           <div class="list" id="contestAllList">No contests loaded.</div>
           <h3>Ended contests</h3>
@@ -2926,6 +2926,7 @@
       $("menuContests").addEventListener("click", () => {
         showPanel("contests");
         loadContestManagement();
+        loadContestChannels();
       });
       $("bAnnounceToggle").addEventListener("change", async (ev) => {
         const gid = getGameId();
@@ -2976,6 +2977,8 @@
         loadAuthTokens();
       });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
+      $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
+      $("contestCreate").addEventListener("click", () => createContest());
 
       let bingoRefreshTimer = null;
       function ensureBingoPolling(){
@@ -3012,6 +3015,71 @@
           return "ended";
         }
         return "active";
+      }
+
+      function setContestCreateStatus(msg, kind){
+        const el = $("contestCreateStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      async function loadContestChannels(){
+        const select = $("contestChannel");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          channels.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            const parts = [];
+            if (c.guild_name) parts.push(c.guild_name);
+            if (c.category) parts.push(c.category);
+            const label = parts.length ? `${parts.join(" / ")} / #${c.name}` : `#${c.name}`;
+            opt.textContent = label;
+            select.appendChild(opt);
+          });
+          if (!channels.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No channels found.";
+            select.appendChild(opt);
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load channels</option>`;
+          setContestCreateStatus(err.message, "err");
+        }
+      }
+
+      async function createContest(){
+        const channelId = $("contestChannel").value;
+        if (!channelId){
+          setContestCreateStatus("Pick a channel first.", "err");
+          return;
+        }
+        const body = {
+          channel_id: channelId,
+          title: $("contestTitle").value.trim(),
+          description: $("contestDescription").value.trim(),
+          rules: $("contestRules").value.trim(),
+          deadline: $("contestDeadline").value.trim(),
+          vote_emoji: $("contestEmoji").value.trim()
+        };
+        setContestCreateStatus("Creating contest...", "");
+        try{
+          const res = await jsonFetch("/api/contests/create", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          }, true);
+          setContestCreateStatus(`Contest created in channel ${res.channel_id}.`, "ok");
+          await loadContestManagement();
+        }catch(err){
+          setContestCreateStatus(err.message, "err");
+        }
       }
 
       async function loadContestManagement(){
@@ -4542,6 +4610,7 @@
     </script>
   </body>
 </html>
+
 
 
 
