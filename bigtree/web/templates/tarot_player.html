@@ -63,6 +63,7 @@
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
     gap:14px;
+    justify-items:center;
   }
   .card-slot{
     background:var(--panel-2);
@@ -70,6 +71,10 @@
     border-radius:14px;
     padding:10px;
     min-height:240px;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
   }
   .label{
     font-size:12px;
@@ -80,6 +85,7 @@
     width:100%;
     aspect-ratio:3/4.2;
     perspective:1000px;
+    max-width:220px;
   }
   .card.dealt-hidden{
     visibility:hidden;
