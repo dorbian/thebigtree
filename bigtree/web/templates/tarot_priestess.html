@@ -97,9 +97,8 @@
     overflow:auto;
     font-size:12px;
     color:var(--muted);
-    white-space:pre-wrap;
   }
-  .analysis-panel .muted{
+  .meaning-text{
     white-space:pre-wrap;
   }
   .analysis-panel h3{
@@ -319,7 +318,6 @@
     font-family:"Spectral","Georgia",serif;
     font-size:13px;
     line-height:1.4;
-    white-space:pre-wrap;
   }
   .theme-bars{
     margin-top:8px;
@@ -908,8 +906,8 @@
     const themes = renderThemeBars(card.themes, highlight);
     const numbers = renderNumberInfo(card.number);
     const meaningBlock = draw.reversed
-      ? `<div><strong>Reversed</strong></div><div>${reversed || upright || ""}</div><div class="muted" style="margin-top:6px">Upright: ${upright || "-"}</div>`
-      : `<div>${upright || reversed || ""}</div>`;
+      ? `<div><strong>Reversed</strong></div><div class="meaning-text">${reversed || upright || ""}</div><div class="muted meaning-text" style="margin-top:6px">Upright: ${upright || "-"}</div>`
+      : `<div class="meaning-text">${upright || reversed || ""}</div>`;
     stateEls.meaning.innerHTML = `
       <div><strong>${title}</strong></div>
       ${prompt}
@@ -946,8 +944,8 @@
       }).join(", ");
       const numbers = renderNumberInfo(card.number);
       const meaningLine = draw.reversed
-        ? `<div class="muted"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
-        : (card.upright ? `<div class="muted">${card.upright}</div>` : "");
+        ? `<div class="muted meaning-text"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
+        : (card.upright ? `<div class="muted meaning-text">${card.upright}</div>` : "");
       return `
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
