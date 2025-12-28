@@ -1073,15 +1073,6 @@
     const remainingPositions = positions.filter(p => !drawnIds.has(p.id));
     if (remainingPositions.length){
       remainingPositions.forEach(p => pendingDraws.push(p.id));
-      pendingReveals.add(remainingPositions[0].id);
-    } else {
-      const nextReveal = positions.find(p => {
-        const entry = drawn.find(d => d.position_id === p.id);
-        return entry && !entry.revealed;
-      });
-      if (nextReveal){
-        pendingReveals.add(nextReveal.id);
-      }
     }
     if (remaining > 0){
       await postControl(
@@ -1089,10 +1080,6 @@
         {token: tokenInput.value, count: remaining}
       );
     }
-    await postControl(
-      `/api/tarot/sessions/${currentState.session.session_id}/reveal`,
-      {token: tokenInput.value, mode:"next"}
-    );
   };
   document.getElementById("btnRevealNext").onclick = async () => {
     await postControl(`/api/tarot/sessions/${currentState.session.session_id}/reveal`, {token: tokenInput.value, mode:"next"});
