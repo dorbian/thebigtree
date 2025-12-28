@@ -314,6 +314,20 @@
         padding:14px;
         background:rgba(6,10,18,.6);
       }
+      .credit-person{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        margin:6px 0;
+      }
+      .credit-avatar{
+        width:28px;
+        height:28px;
+        border-radius:50%;
+        border:1px solid rgba(255,255,255,.18);
+        object-fit:cover;
+        flex:0 0 auto;
+      }
       .credit-card h4{
         margin:0 0 6px 0;
         font-size:14px;
@@ -1020,36 +1034,55 @@
       <div class="grid">
         <section class="panel dashboard hidden" style="animation-delay:.02s" id="dashboardPanel">
           <h2>Forest Dashboard</h2>
-          <p class="muted">Welcome to the forest control room. Choose a panel on the left to get started.</p>
+          <p class="muted">Welcome to the forest control room. This is a quick start and reference for the bot and site.</p>
           <div class="dashboard-grid" style="margin-top:12px">
             <div class="credit-card">
               <h4>Discord Bot</h4>
-              <p>Bingo: runs games, calls, claims, and prizes.</p>
-              <p>Tarot: sessions, decks, spreads, and readings.</p>
-              <p>Contests: entries, votes, and results.</p>
-              <p>Media: uploads, galleries, and assets.</p>
+              <p>Bingo: creates live games, calls numbers, tracks claims, and closes out winners.</p>
+              <p>Tarot: starts sessions, draws and reveals cards, and drives the priestess/player views.</p>
+              <p>Contests: collects entries, records votes, and publishes final results.</p>
+              <p>Auth: issues time-limited web keys for trusted roles.</p>
             </div>
             <div class="credit-card">
               <h4>Site & Overlay</h4>
-              <p>Session Manager: create and manage tarot sessions.</p>
-              <p>Deck Editor: create decks, cards, art, and metadata.</p>
-              <p>Bingo Manager: run live games and track players.</p>
-              <p>Overlay Mode: OBS‑friendly views for streams.</p>
+              <p>Dashboard: a short README for where everything lives.</p>
+              <p>Session Manager: open, run, and finish tarot readings with live overlays.</p>
+              <p>Deck Editor: build decks, cards, art, themes, and meanings with live preview.</p>
+              <p>Bingo Manager: operate a live game, review claims, and advance stages.</p>
+              <p>Overlay Mode: OBS-friendly views for streams.</p>
             </div>
             <div class="credit-card">
-              <h4>Thanks & Credits</h4>
-              <p>To those who keep the canopy bright and the roots steady.</p>
+              <h4>How To Use</h4>
+              <p>1) Pick a panel on the left to open a tool.</p>
+              <p>2) For tarot, create a session then open the player/priestess links.</p>
+              <p>3) For bingo, select a game, review claims, and advance stages.</p>
+              <p>4) For decks, save cards and refresh the reading view.</p>
             </div>
             <div class="credit-card">
               <h4>Support Pillars</h4>
-              <p>303221975529029642 — my one true love and steady anchor.</p>
-              <p>430786799422406656 — always excited and ready to help.</p>
-              <p>278425202805702661 — party planner and forest hype master.</p>
+              <div class="credit-person">
+                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/303221975529029642/fcac17d8f775dd9dee7d003ed560fcb7.webp?size=32" alt="Yamaneko Chi">
+                <p>Yamaneko Chi - my one true love and steady anchor.</p>
+              </div>
+              <div class="credit-person">
+                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/430786799422406656/c2574d5f988d0b7fd271f240332332b9.webp?size=32" alt="Asgorath White">
+                <p>Asgorath White - without whom the games would never have grown to what it is today.</p>
+              </div>
+              <div class="credit-person">
+                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/278425202805702661/0c9474c19250e5b12cf2c348361cf051.webp?size=32" alt="Malady La'niaiserie">
+                <p>Malady La'niaiserie - party planner and forest hype master.</p>
+              </div>
             </div>
             <div class="credit-card">
               <h4>Guiding Hands</h4>
-              <p>203508295149944832 — tireless work on the forest’s mysticism.</p>
-              <p>303494786562916352 — the one and only priest to walk the forest.</p>
+              <div class="credit-person">
+                <img class="credit-avatar" src="https://cdn.discordapp.com/avatars/203508295149944832/d9959bb1fbc7a9824233885929bb93c5.webp?size=32" alt="Labreska Vaalkihar">
+                <p>Labreska Vaalkihar - tireless work on the forest mysticism.</p>
+              </div>
+              <div class="credit-person">
+                <img class="credit-avatar" src="https://cdn.discordapp.com/guilds/1224347680776523847/users/303494786562916352/avatars/adfc4471b5831910dbd34942c13a9372.webp?size=128" alt="Levi Anvunin/Cesare">
+                <p>Levi Anvunin/Cesare - the one and only priest to have walked the forest.</p>
+              </div>
             </div>
           </div>
         </section>
@@ -4449,6 +4482,7 @@
     </script>
   </body>
 </html>
+
 
 
 
