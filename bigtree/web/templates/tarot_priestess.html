@@ -120,6 +120,10 @@
   }
   .analysis-card:last-child{margin-bottom:0}
   .analysis-card strong{color:var(--text)}
+  .term-hit{
+    font-weight:700;
+    text-decoration:underline;
+  }
   .panel h2{
     margin:0 0 10px 0;
     font-size:14px;
@@ -489,6 +493,7 @@
 <div class="subhead">
   <span><span class="status-dot" id="connDot"></span><span id="connStatus">connecting</span></span>
   <span>Join: <strong id="joinCode">{JOIN}</strong></span>
+  <span>Session: <strong id="sessionId">-</strong></span>
   <span>Deck: <strong id="deckId">-</strong></span>
   <span>Spread: <strong id="spreadId">-</strong></span>
 </div>
@@ -497,15 +502,13 @@
   <div class="panel">
     <h2>Session</h2>
     <div class="stack">
-      <div class="muted">Session ID: <span id="sessionId">-</span></div>
-      <div class="muted">Spread help: <span class="help-toggle" id="spreadHelp">(?)</span></div>
+    <div class="muted">Spread help: <span class="help-toggle" id="spreadHelp">(?)</span></div>
     </div>
     <div class="muted hidden" id="spreadNote">
       Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
     </div>
     <div style="height:10px"></div>
-    <label class="muted">Priestess token</label>
-    <input id="tokenInput" placeholder="paste priestess token" />
+    <input id="tokenInput" class="hidden" />
     <div class="row" style="margin-top:6px">
       <button class="btn" id="btnNewSession">New session</button>
       <button class="btn" id="btnOpenPlayer">Open player view</button>
@@ -908,9 +911,13 @@
     const highlight = card.house && houseThemes[card.house] ? new Set(Object.keys(houseThemes[card.house])) : null;
     const themes = renderThemeBars(card.themes, highlight);
     const numbers = renderNumberInfo(card.number);
-    const meaningBlock = draw.reversed
-      ? `<div><strong>Reversed</strong></div><div class="meaning-text">${reversed || upright || ""}</div><div class="muted meaning-text" style="margin-top:6px">Upright: ${upright || "-"}</div>`
-      : `<div class="meaning-text">${upright || reversed || ""}</div>`;
+    const meaningBlock = `
+      <div><strong>Upright</strong></div>
+      <div class="meaning-text">${upright || "-"}</div>
+      <div style="height:6px"></div>
+      <div><strong>Reversed</strong></div>
+      <div class="meaning-text">${reversed || "-"}</div>
+    `;
     stateEls.meaning.innerHTML = `
       <div><strong>${title}</strong></div>
       ${prompt}
@@ -931,6 +938,7 @@
       panel.innerHTML = `<h3>Visible Card Focus</h3><div class="muted">Reveal cards to see focused notes.</div>`;
       return;
     }
+    const repeatTerms = collectRepeatTerms(draws);
     const rows = draws.map(draw => {
       const card = draw.card || {};
       const name = card.name || "Card";
@@ -947,9 +955,11 @@
         return `${label} (${v})`;
       }).join(", ");
       const numbers = renderNumberInfo(card.number);
+      const activeMeaning = draw.reversed ? (card.reversed || "") : (card.upright || "");
+      const highlightedMeaning = highlightRepeatedTerms(activeMeaning, repeatTerms);
       const meaningLine = draw.reversed
-        ? `<div class="muted meaning-text"><strong>Reversed:</strong> ${card.reversed || card.upright || "-"}</div>`
-        : (card.upright ? `<div class="muted meaning-text">${card.upright}</div>` : "");
+        ? `<div class="muted meaning-text"><strong>Reversed:</strong> ${highlightedMeaning || "-"}</div>`
+        : (activeMeaning ? `<div class="muted meaning-text">${highlightedMeaning}</div>` : "");
       return `
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
@@ -962,6 +972,42 @@
       `;
     }).join("");
     panel.innerHTML = `<h3>Visible Card Focus</h3>${rows}`;
+  }
+
+  const STOP_WORDS = new Set([
+    "a","an","the","and","or","but","so","to","of","in","on","for","with","from","by","as","at","be","is","are","was","were",
+    "it","its","this","that","these","those","your","you","we","our","us","i","me","my","they","their","them"
+  ]);
+
+  function normalizeTerms(text){
+    const raw = (text || "").toLowerCase();
+    return raw.split(/[^a-z0-9]+/).filter(word => word.length > 3 && !STOP_WORDS.has(word));
+  }
+
+  function collectRepeatTerms(draws){
+    const counts = {};
+    draws.forEach(draw => {
+      const card = draw.card || {};
+      const active = draw.reversed ? (card.reversed || "") : (card.upright || "");
+      const seen = new Set(normalizeTerms(active));
+      seen.forEach(term => {
+        counts[term] = (counts[term] || 0) + 1;
+      });
+    });
+    return new Set(Object.keys(counts).filter(term => counts[term] >= 2));
+  }
+
+  function highlightRepeatedTerms(text, repeats){
+    if (!text || !repeats || !repeats.size){
+      return text || "";
+    }
+    return text.replace(/\b([A-Za-z0-9]+)\b/g, (match) => {
+      const key = match.toLowerCase();
+      if (repeats.has(key)){
+        return `<span class="term-hit">${match}</span>`;
+      }
+      return match;
+    });
   }
 
   async function postControl(path, body){
