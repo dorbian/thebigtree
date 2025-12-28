@@ -300,6 +300,33 @@
         overflow:hidden;
         animation:rise .6s ease both;
       }
+      .panel.dashboard{
+        padding:24px;
+      }
+      .dashboard-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+        gap:16px;
+      }
+      .credit-card{
+        border:1px solid var(--line);
+        border-radius:14px;
+        padding:14px;
+        background:rgba(6,10,18,.6);
+      }
+      .credit-card h4{
+        margin:0 0 6px 0;
+        font-size:14px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--accent-2);
+      }
+      .credit-card p{
+        margin:0;
+        color:var(--muted);
+        font-size:13px;
+        line-height:1.4;
+      }
       .panel:before{
         content:"";
         position:absolute;
@@ -482,6 +509,18 @@
         font-weight:600;
         color:var(--ink);
         white-space:nowrap;
+      }
+      .token-code{
+        display:block;
+        font-size:10px;
+        word-break:break-all;
+        color:var(--muted);
+        margin-bottom:4px;
+      }
+      .token-actions{
+        display:flex;
+        gap:6px;
+        flex-wrap:wrap;
       }
       .role-scope-cell{
         text-align:center;
@@ -915,8 +954,10 @@
             </svg>
             <span id="brandUserName"></span>
           </div>
+        <h3>Home</h3>
+        <div class="menu-item" id="menuDashboard">Dashboard</div>
         <h3>Bingo</h3>
-        <div class="menu-item active" id="menuBingo">
+        <div class="menu-item" id="menuBingo">
           <span>Manager</span>
           <div style="display:flex;gap:6px;align-items:center">
               <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
@@ -960,6 +1001,11 @@
                 <path d="M12 2a5 5 0 0 1 5 5v3h2a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1h2V7a5 5 0 0 1 5-5zm-3 8h6V7a3 3 0 0 0-6 0v3z"/>
               </svg>
             </button>
+            <button class="menu-icon" id="menuAuthKeys" title="Auth keys" aria-label="Auth keys">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 1a7 7 0 0 0-4.3 12.5l-2.2 2.2V19h3.3l1.2-1.2h1.4l1.2-1.2h1.5l1.6-1.6A7 7 0 1 0 12 1zm0 4a3 3 0 1 1-3 3 3 3 0 0 1 3-3z"/>
+              </svg>
+            </button>
             <button class="menu-icon" id="menuOverlayToggle" title="Toggle overlay mode" aria-label="Toggle overlay mode">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/>
@@ -972,6 +1018,41 @@
       </aside>
       <main class="content">
       <div class="grid">
+        <section class="panel dashboard hidden" style="animation-delay:.02s" id="dashboardPanel">
+          <h2>Forest Dashboard</h2>
+          <p class="muted">Welcome to the forest control room. Choose a panel on the left to get started.</p>
+          <div class="dashboard-grid" style="margin-top:12px">
+            <div class="credit-card">
+              <h4>Discord Bot</h4>
+              <p>Bingo: runs games, calls, claims, and prizes.</p>
+              <p>Tarot: sessions, decks, spreads, and readings.</p>
+              <p>Contests: entries, votes, and results.</p>
+              <p>Media: uploads, galleries, and assets.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Site & Overlay</h4>
+              <p>Session Manager: create and manage tarot sessions.</p>
+              <p>Deck Editor: create decks, cards, art, and metadata.</p>
+              <p>Bingo Manager: run live games and track players.</p>
+              <p>Overlay Mode: OBS‑friendly views for streams.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Thanks & Credits</h4>
+              <p>To those who keep the canopy bright and the roots steady.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Support Pillars</h4>
+              <p>303221975529029642 — my one true love and steady anchor.</p>
+              <p>430786799422406656 — always excited and ready to help.</p>
+              <p>278425202805702661 — party planner and forest hype master.</p>
+            </div>
+            <div class="credit-card">
+              <h4>Guiding Hands</h4>
+              <p>203508295149944832 — tireless work on the forest’s mysticism.</p>
+              <p>303494786562916352 — the one and only priest to walk the forest.</p>
+            </div>
+          </div>
+        </section>
         <section class="panel" style="animation-delay:.05s" id="bingoPanel">
           <h2>Manager</h2>
         <h3>Players</h3>
@@ -1669,6 +1750,25 @@
         <div class="status" id="authRolesStatus">Ready.</div>
       </div>
     </div>
+    <div class="modal" id="authTokensModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Auth Keys</div>
+          <button class="btn-ghost" id="authTokensClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="authTokensRefresh">Refresh keys</button>
+          </div>
+          <div class="muted" style="align-self:center">Active web tokens and remaining lifetime.</div>
+        </div>
+        <div class="role-table-wrap" id="authTokensWrap">
+          <div class="list" id="authTokensList">No keys loaded.</div>
+        </div>
+        <div class="status" id="authTokensStatus">Ready.</div>
+      </div>
+    </div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -1686,6 +1786,9 @@
       let currentOwner = "";
       window.taArtists = [];
       let calendarData = [];
+      let authUserScopes = new Set();
+      let authUserIsElfmin = false;
+      let authTokensCache = [];
       let calendarSelected = {
         month: 1,
         image: "",
@@ -1788,6 +1891,10 @@
             del.style.margin = "0 8px 8px";
             del.textContent = "Delete";
             del.addEventListener("click", async () => {
+              if (!authUserIsElfmin){
+                setLibraryStatus("Only elfministrators can delete media.", "err");
+                return;
+              }
               if (!confirm("Delete this file? This cannot be undone.")) return;
               try{
                 const delUrl = item.delete_url || "";
@@ -1811,7 +1918,9 @@
             }
             card.appendChild(img);
             card.appendChild(btn);
-            card.appendChild(del);
+            if (authUserIsElfmin){
+              card.appendChild(del);
+            }
             grid.appendChild(card);
           });
           setLibraryStatus("Pick an image.", "ok");
@@ -1830,6 +1939,37 @@
         const el = $("authRolesStatus");
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setAuthTokensStatus(msg, kind){
+        const el = $("authTokensStatus");
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function computeElfminAccess(scopes, source){
+        if (source === "api_key"){
+          return true;
+        }
+        const set = new Set(Array.from(scopes || []).map(String));
+        return set.has("*") || set.has("bingo:admin");
+      }
+
+      function applyElfminVisibility(){
+        const isElfmin = !!authUserIsElfmin;
+        const authRolesBtn = $("menuAuthRoles");
+        const authKeysBtn = $("menuAuthKeys");
+        const deckDeleteBtn = $("taDeleteDeck");
+        if (authRolesBtn){
+          authRolesBtn.classList.toggle("hidden", !isElfmin);
+        }
+        if (authKeysBtn){
+          authKeysBtn.classList.toggle("hidden", !isElfmin);
+        }
+        if (deckDeleteBtn){
+          deckDeleteBtn.classList.toggle("hidden", !isElfmin);
+          deckDeleteBtn.disabled = !isElfmin;
+        }
       }
 
       function updateAuthRoleIdsField(){
@@ -1899,6 +2039,132 @@
         }catch(err){
           setAuthRolesStatus(err.message, "err");
           $("authRolesList").textContent = "Failed to load roles.";
+        }
+      }
+
+      function formatAuthTokenDuration(seconds){
+        const total = Math.max(0, Number(seconds) || 0);
+        if (!total) return "Expired";
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const secs = total % 60;
+        if (hours > 0){
+          return `${hours}h ${minutes}m`;
+        }
+        if (minutes > 0){
+          return `${minutes}m ${secs}s`;
+        }
+        return `${secs}s`;
+      }
+
+      function formatAuthTokenExpiry(token){
+        const duration = formatAuthTokenDuration(token.expires_in);
+        if (!token.expires_at){
+          return duration;
+        }
+        const stamp = new Date(Number(token.expires_at) * 1000);
+        return `${duration} (${stamp.toLocaleString()})`;
+      }
+
+      function renderAuthTokensList(tokens){
+        const list = $("authTokensList");
+        list.innerHTML = "";
+        if (!tokens || !tokens.length){
+          list.textContent = "No keys loaded.";
+          return;
+        }
+        const table = document.createElement("table");
+        table.className = "role-table";
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["User", "Token", "Scopes", "Expires", "Actions"].forEach(label => {
+          const th = document.createElement("th");
+          th.textContent = label;
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        const tbody = document.createElement("tbody");
+        tokens.forEach(token => {
+          const tr = document.createElement("tr");
+          const userCell = document.createElement("td");
+          userCell.textContent = token.user_name || token.user_id || "Unknown";
+          const tokenCell = document.createElement("td");
+          const code = document.createElement("code");
+          code.className = "token-code";
+          code.textContent = token.token || "";
+          tokenCell.appendChild(code);
+          const tokenMeta = document.createElement("div");
+          tokenMeta.className = "token-actions";
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "btn-ghost";
+          copyBtn.textContent = "Copy";
+          copyBtn.addEventListener("click", async () => {
+            try{
+              await navigator.clipboard.writeText(token.token || "");
+              setAuthTokensStatus("Copied token.", "ok");
+            }catch(err){
+              setAuthTokensStatus("Copy failed.", "err");
+            }
+          });
+          tokenMeta.appendChild(copyBtn);
+          tokenCell.appendChild(tokenMeta);
+          const scopeCell = document.createElement("td");
+          scopeCell.textContent = (token.scopes || []).join(", ");
+          const expiresCell = document.createElement("td");
+          expiresCell.textContent = formatAuthTokenExpiry(token);
+          const actionsCell = document.createElement("td");
+          const deleteBtn = document.createElement("button");
+          deleteBtn.className = "btn-ghost";
+          deleteBtn.textContent = "Delete";
+          deleteBtn.addEventListener("click", async () => {
+            if (!confirm("Delete this auth key? This will revoke access.")){
+              return;
+            }
+            try{
+              const res = await fetch("/api/auth/tokens/" + encodeURIComponent(token.token || ""), {
+                method: "DELETE",
+                headers: {"X-API-Key": apiKeyEl.value.trim()}
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.ok === false){
+                throw new Error(data.error || "Delete failed");
+              }
+              await loadAuthTokens();
+              setAuthTokensStatus("Auth key deleted.", "ok");
+            }catch(err){
+              setAuthTokensStatus(err.message, "err");
+            }
+          });
+          actionsCell.appendChild(deleteBtn);
+          tr.appendChild(userCell);
+          tr.appendChild(tokenCell);
+          tr.appendChild(scopeCell);
+          tr.appendChild(expiresCell);
+          tr.appendChild(actionsCell);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        list.appendChild(table);
+      }
+
+      async function loadAuthTokens(){
+        setAuthTokensStatus("Loading keys...", "");
+        $("authTokensList").textContent = "Loading...";
+        try{
+          const res = await fetch("/api/auth/tokens", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){
+            handleUnauthorized();
+            throw new Error("Unauthorized");
+          }
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          authTokensCache = data.tokens || [];
+          renderAuthTokensList(authTokensCache);
+          setAuthTokensStatus("Ready.", "ok");
+        }catch(err){
+          setAuthTokensStatus(err.message, "err");
+          $("authTokensList").textContent = "Failed to load keys.";
         }
       }
 
@@ -2087,6 +2353,9 @@
           const name = data.user_name || data.user_id || "";
           const icon = data.user_icon || "";
           const userId = data.user_id || "";
+          authUserScopes = new Set((data.scopes || []).map(String));
+          authUserIsElfmin = computeElfminAccess(authUserScopes, data.source);
+          applyElfminVisibility();
           const createdBy = $("bCreatedBy");
           if (createdBy){
             createdBy.value = userId ? String(userId) : "";
@@ -2114,6 +2383,9 @@
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
           brandUser.classList.add("hidden");
+          authUserScopes = new Set();
+          authUserIsElfmin = false;
+          applyElfminVisibility();
           const createdBy = $("bCreatedBy");
           if (createdBy){
             createdBy.value = "";
@@ -2484,16 +2756,54 @@
       }
 
       function showPanel(which){
+        if (!suppressPanelSave){
+          try{
+            localStorage.setItem("overlay_panel", which);
+          }catch(err){}
+        }
+        $("menuDashboard").classList.toggle("active", which === "dashboard");
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
         $("menuContests").classList.toggle("active", which === "contests");
+        $("dashboardPanel").classList.toggle("hidden", which !== "dashboard");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
         $("contestPanel").classList.toggle("hidden", which !== "contests");
       }
 
+      function getSavedPanel(){
+        try{
+          return localStorage.getItem("overlay_panel") || "";
+        }catch(err){
+          return "";
+        }
+      }
+
+      function getSeenDashboard(){
+        try{
+          return localStorage.getItem("overlay_seen_dashboard") === "1";
+        }catch(err){
+          return false;
+        }
+      }
+
+      function setSeenDashboard(){
+        try{
+          localStorage.setItem("overlay_seen_dashboard", "1");
+        }catch(err){}
+      }
+
+      let suppressPanelSave = false;
+
+      function showPanelOnce(which){
+        suppressPanelSave = true;
+        showPanel(which);
+        suppressPanelSave = false;
+      }
+
+      $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
       $("menuBingoRefresh").addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -2557,8 +2867,20 @@
         loadCalendarAdmin();
       });
       $("menuAuthRoles").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can manage auth roles.", "err");
+          return;
+        }
         $("authRolesModal").classList.add("show");
         loadAuthRoles();
+      });
+      $("menuAuthKeys").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can manage auth keys.", "err");
+          return;
+        }
+        $("authTokensModal").classList.add("show");
+        loadAuthTokens();
       });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
 
@@ -2862,6 +3184,10 @@
         $("authRolesModal").classList.remove("show");
       });
       $("authRolesRefresh").addEventListener("click", () => loadAuthRoles());
+      $("authTokensClose").addEventListener("click", () => {
+        $("authTokensModal").classList.remove("show");
+      });
+      $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
       $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;
@@ -2936,7 +3262,13 @@
         loadTarotSessions();
         loadTarotHouses();
         loadTarotNumbers();
-        showPanel("bingo");
+        const saved = getSavedPanel();
+        if (!getSeenDashboard()){
+          showPanelOnce("dashboard");
+          setSeenDashboard();
+        } else {
+          showPanel(saved || "bingo");
+        }
         ensureBingoPolling();
       });
       overlayToggle.addEventListener("change", () => {
@@ -4004,6 +4336,10 @@
       });
 
       $("taDeleteDeck").addEventListener("click", async () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can delete decks.", "err");
+          return;
+        }
         const deck = $("taDeck").value.trim();
         if (!deck){
           setStatus("Pick a deck to delete.", "err");
@@ -4094,7 +4430,13 @@
         document.getElementById("appView").classList.remove("hidden");
         loadAuthUser();
         loadGamesMenu();
-        showPanel("bingo");
+        const saved = getSavedPanel();
+        if (!getSeenDashboard()){
+          showPanelOnce("dashboard");
+          setSeenDashboard();
+        } else {
+          showPanel(saved || "bingo");
+        }
         ensureBingoPolling();
         loadTarotDeckList();
         loadTarotSessionDecks();

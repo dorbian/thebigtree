@@ -52,6 +52,33 @@ async def auth_me(req: web.Request):
         "source": "web_token" if doc else "api_key",
     })
 
+@route("GET", "/api/auth/tokens", scopes=["bingo:admin"])
+async def auth_tokens(_req: web.Request):
+    tokens = []
+    now = int(time.time())
+    for t in web_tokens.load_tokens():
+        expires = int(t.get("expires_at") or 0)
+        tokens.append({
+            "token": t.get("token"),
+            "user_id": t.get("user_id"),
+            "user_name": t.get("user_name"),
+            "scopes": t.get("scopes") or [],
+            "created_at": t.get("created_at"),
+            "expires_at": expires,
+            "expires_in": max(0, expires - now),
+        })
+    return web.json_response({"ok": True, "tokens": tokens})
+
+@route("DELETE", "/api/auth/tokens/{token}", scopes=["bingo:admin"])
+async def delete_auth_token(req: web.Request):
+    token = req.match_info.get("token") or ""
+    tokens = web_tokens.load_tokens()
+    kept = [t for t in tokens if t.get("token") != token]
+    if len(kept) == len(tokens):
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    web_tokens.save_tokens(kept)
+    return web.json_response({"ok": True})
+
 @route("GET", "/discord/channels", scopes=["bingo:admin"])
 async def discord_channels(req: web.Request):
     bot = getattr(bigtree, "bot", None)
