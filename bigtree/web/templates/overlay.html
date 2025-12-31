@@ -1061,7 +1061,7 @@
 
             <h3>Discord Bot Commands</h3>
             <p><strong>Bingo:</strong> /bingo, /bingo-menu, /bingo-stage, /call, /bingo-status, /bingo-end, /bingo-url, /bingo-owner-url, /buycard, /buycards, /bingo-upload-bg.</p>
-            <p><strong>Tarot:</strong> /tarot_start, /tarot_draw, /tarot_flip, /tarot_end, /tarot_stream, /tarot_add_card, /tarot_addcard, /tarot_session.</p>
+            <p><strong>Tarot:</strong> /tarot_start, /tarot_draw, /tarot_flip, /tarot_end, /tarot_stream, /tarot_add_card, /tarot_addcard, /tarot_session, /tarot_template_init, /tarot_deck_from_template, /tarot_claims_post.</p>
             <p><strong>Contests:</strong> /contest to start, /contest_stop to end.</p>
             <p><strong>Permissions:</strong> /permissions list, add-role, remove-role, add-user, remove-user, refresh.</p>
             <p><strong>Announcements:</strong> /commune to craft an official post.</p>
@@ -1653,10 +1653,11 @@
             <div class="preview-card" id="deckCreateBackPreview"><span class="preview-label">Back</span></div>
           </div>
           <div>
-            <label for="deckCreateSeed">Seed dummy cards</label>
+            <label for="deckCreateSeed">Seed cards</label>
             <select id="deckCreateSeed">
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
+              <option value="none">None</option>
+              <option value="dummy">Dummy per suit</option>
+              <option value="default">Default seed</option>
             </select>
           </div>
           <div>
@@ -3631,7 +3632,7 @@
         }
         const name = $("deckCreateName").value.trim();
         const theme = $("deckCreateTheme").value || "classic";
-        const seed = $("deckCreateSeed").value === "yes";
+        const seedChoice = $("deckCreateSeed").value || "none";
         const perHouse = Number($("deckCreatePerHouse").value || 0);
         const crownCount = Number($("deckCreateCrown").value || 0);
         const artistId = $("deckCreateBackPick").dataset.artistId || "";
@@ -3646,11 +3647,16 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
           }, true);
-          if (seed){
+          if (seedChoice === "dummy"){
             await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/seed", {
               method: "POST",
               headers: {"Content-Type": "application/json"},
               body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
+            }, true);
+          } else if (seedChoice === "default"){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/seed-template", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"}
             }, true);
           }
           await loadTarotDeckList(id);
@@ -4541,7 +4547,7 @@
         $("deckCreateId").value = "";
         $("deckCreateName").value = "";
         $("deckCreateTheme").value = "classic";
-        $("deckCreateSeed").value = "no";
+        $("deckCreateSeed").value = "none";
         $("deckCreatePerHouse").value = "4";
         $("deckCreateCrown").value = "1";
         $("deckCreateBackPick").dataset.backUrl = "";

@@ -27,6 +27,9 @@ _DECK_DB_PATH: Optional[str] = None
 _SESSION_DB_PATH: Optional[str] = None
 _MIGRATED: Optional[bool] = None
 _DECKS_MIGRATED: Optional[bool] = None
+_TEMPLATE_DECK_ID = "tarot-template"
+_DEFAULT_CARD_LIMIT = 2
+_SEED_CACHE: Optional[Dict[str, Any]] = None
 
 def _now() -> float:
     return time.time()
@@ -514,6 +517,158 @@ def _parse_number(value: Any) -> Optional[int]:
         return int(text)
     return _parse_roman(text)
 
+def _standard_tarot_cards() -> List[Dict[str, Any]]:
+    majors = [
+        "The Fool",
+        "The Magician",
+        "The High Priestess",
+        "The Empress",
+        "The Emperor",
+        "The Hierophant",
+        "The Lovers",
+        "The Chariot",
+        "Strength",
+        "The Hermit",
+        "Wheel of Fortune",
+        "Justice",
+        "The Hanged Man",
+        "Death",
+        "Temperance",
+        "The Devil",
+        "The Tower",
+        "The Star",
+        "The Moon",
+        "The Sun",
+        "Judgement",
+        "The World",
+    ]
+    ranks = [
+        "Ace",
+        "Two",
+        "Three",
+        "Four",
+        "Five",
+        "Six",
+        "Seven",
+        "Eight",
+        "Nine",
+        "Ten",
+        "Page",
+        "Knight",
+        "Queen",
+        "King",
+    ]
+    suits = ["Wands", "Cups", "Swords", "Pentacles"]
+    cards: List[Dict[str, Any]] = []
+    for name in majors:
+        cards.append({
+            "name": name,
+            "card_id": name.lower().replace(" ", "_"),
+            "tags": ["major"],
+        })
+    for suit in suits:
+        for rank in ranks:
+            name = f"{rank} of {suit}"
+            cards.append({
+                "name": name,
+                "card_id": name.lower().replace(" ", "_"),
+                "tags": [suit.lower(), "minor"],
+            })
+    return cards
+
+def _seed_candidates() -> List[str]:
+    candidates: List[str] = []
+    env_path = os.getenv("BIGTREE_TAROT_SEED")
+    if env_path:
+        candidates.append(env_path)
+    base = _get_base_dir()
+    candidates.append(os.path.join(base, "tarot_seed_default.json"))
+    candidates.append(os.path.join(base, "tarot", "seed.json"))
+    try:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        candidates.append(os.path.join(repo_root, "tarot_seed_default.json"))
+        candidates.append(os.path.join(repo_root, "defaults", "tarot_seed_default.json"))
+    except Exception:
+        pass
+    return candidates
+
+def _load_seed_data() -> Optional[Dict[str, Any]]:
+    global _SEED_CACHE
+    if _SEED_CACHE is not None:
+        return _SEED_CACHE
+    for path in _seed_candidates():
+        if not os.path.exists(path):
+            continue
+        data = _read_json(path)
+        if isinstance(data, dict):
+            _SEED_CACHE = data
+            return _SEED_CACHE
+    _SEED_CACHE = None
+    return None
+
+def _normalize_seed_data(data: Optional[Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    if not isinstance(data, dict):
+        return None, []
+    deck = data.get("deck") if isinstance(data.get("deck"), dict) else None
+    cards = data.get("cards") if isinstance(data.get("cards"), list) else []
+    return deck, [c for c in cards if isinstance(c, dict)]
+
+def ensure_template_deck(deck_id: Optional[str] = None) -> Dict[str, Any]:
+    template_id = (deck_id or _TEMPLATE_DECK_ID).strip() or _TEMPLATE_DECK_ID
+    deck, cards, path = _load_deck_bundle(template_id)
+    if deck and cards:
+        return deck
+    seed_data = _load_seed_data()
+    seed_deck, seed_cards = _normalize_seed_data(seed_data)
+    if seed_cards:
+        name = (seed_deck or {}).get("name") if seed_deck else None
+        theme = (seed_deck or {}).get("theme") if seed_deck else None
+        deck = deck or create_deck(template_id, name=name or "Tarot Template", theme=theme)
+        for card in seed_cards:
+            payload = dict(card)
+            payload["deck_id"] = template_id
+            add_or_update_card(template_id, payload)
+    else:
+        deck = deck or create_deck(template_id, name="Tarot Template", theme="classic")
+        existing_ids = {c.get("card_id") for c in (cards or []) if c.get("card_id")}
+        for card in _standard_tarot_cards():
+            if card.get("card_id") in existing_ids:
+                continue
+            add_or_update_card(template_id, card)
+    return get_deck(template_id) or deck
+
+def seed_deck_from_template(deck_id: str, template_id: Optional[str] = None) -> Dict[str, Any]:
+    template_id = (template_id or _TEMPLATE_DECK_ID).strip() or _TEMPLATE_DECK_ID
+    ensure_template_deck(template_id)
+    deck = get_deck(deck_id)
+    if not deck:
+        deck = create_deck(deck_id, name=deck_id)
+    for card in list_cards(template_id):
+        payload = {
+            "card_id": card.get("card_id"),
+            "name": card.get("name"),
+            "tags": card.get("tags", []),
+            "house": card.get("house"),
+        }
+        add_or_update_card(deck_id, payload)
+    return deck
+
+def seed_deck_from_seed_file(deck_id: str) -> Dict[str, Any]:
+    seed_data = _load_seed_data()
+    seed_deck, seed_cards = _normalize_seed_data(seed_data)
+    if not seed_cards:
+        return seed_deck_from_template(deck_id)
+    deck = get_deck(deck_id)
+    if not deck:
+        name = (seed_deck or {}).get("name") if seed_deck else None
+        theme = (seed_deck or {}).get("theme") if seed_deck else None
+        deck = create_deck(deck_id, name=name or deck_id, theme=theme)
+    for card in seed_cards:
+        payload = dict(card)
+        payload["deck_id"] = deck_id
+        add_or_update_card(deck_id, payload)
+    return deck
+
 def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
     _migrate_decks_to_files()
@@ -642,6 +797,34 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         raw_number = existing.get("number")
     else:
         raw_number = None
+    if "claim_status" in card:
+        claim_status = str(card.get("claim_status") or "").strip().lower() or None
+    else:
+        claim_status = (existing.get("claim_status") if existing else None)
+    if "claimed_by" in card:
+        claimed_by = card.get("claimed_by")
+    else:
+        claimed_by = existing.get("claimed_by") if existing else None
+    if "claimed_by_name" in card:
+        claimed_by_name = str(card.get("claimed_by_name") or "").strip() or None
+    else:
+        claimed_by_name = (existing.get("claimed_by_name") if existing else None)
+    if "claimed_at" in card:
+        claimed_at = card.get("claimed_at")
+    else:
+        claimed_at = existing.get("claimed_at") if existing else None
+    if "filled_by" in card:
+        filled_by = card.get("filled_by")
+    else:
+        filled_by = existing.get("filled_by") if existing else None
+    if "filled_by_name" in card:
+        filled_by_name = str(card.get("filled_by_name") or "").strip() or None
+    else:
+        filled_by_name = (existing.get("filled_by_name") if existing else None)
+    if "filled_at" in card:
+        filled_at = card.get("filled_at")
+    else:
+        filled_at = existing.get("filled_at") if existing else None
     number = _parse_number(raw_number)
     cleaned_themes = {}
     if isinstance(raw_themes, dict):
@@ -663,6 +846,7 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "deck_id": deck_id,
         "card_id": card_id,
         "name": name,
+        "suit": (card.get("suit") if "suit" in card else (existing.get("suit") if existing else None)),
         "house": (card.get("house") or "").strip() or None,
         "upright": (card.get("upright") or card.get("meaning") or "").strip(),
         "reversed": (card.get("reversed") or "").strip(),
@@ -673,6 +857,13 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "themes": cleaned_themes,
         "number": number,
         "flavor_text": flavor_text,
+        "claim_status": claim_status,
+        "claimed_by": claimed_by,
+        "claimed_by_name": claimed_by_name,
+        "claimed_at": claimed_at,
+        "filled_by": filled_by,
+        "filled_by_name": filled_by_name,
+        "filled_at": filled_at,
         "updated_at": _now(),
     }
     if existing:
@@ -757,6 +948,66 @@ def set_card_image(card_id: str, image: str, artist_id: Optional[str] = None) ->
             _save_deck_bundle(deck, cards, path)
             return True
     return False
+
+def _user_claim_count(deck_id: str, user_id: int) -> int:
+    count = 0
+    for card in list_cards(deck_id):
+        if card.get("claimed_by") == user_id and card.get("claim_status") == "claimed":
+            count += 1
+    return count
+
+def claim_card(deck_id: str, card_id: str, user_id: int, user_name: str, limit: int = _DEFAULT_CARD_LIMIT) -> Tuple[bool, str]:
+    card = get_card(deck_id, card_id)
+    if not card:
+        return False, "Card not found."
+    if card.get("claim_status") == "done":
+        return False, "Card is already marked done."
+    claimed_by = card.get("claimed_by")
+    if claimed_by and claimed_by != user_id:
+        return False, "Card is already claimed."
+    if claimed_by == user_id and card.get("claim_status") == "claimed":
+        return False, "You already claimed this card."
+    if _user_claim_count(deck_id, user_id) >= int(limit):
+        return False, f"You can only claim {limit} card(s) at a time."
+    card["claim_status"] = "claimed"
+    card["claimed_by"] = user_id
+    card["claimed_by_name"] = user_name
+    card["claimed_at"] = _now()
+    add_or_update_card(deck_id, card)
+    return True, "Card claimed."
+
+def unclaim_card(deck_id: str, card_id: str, user_id: int, force: bool = False) -> Tuple[bool, str]:
+    card = get_card(deck_id, card_id)
+    if not card:
+        return False, "Card not found."
+    if card.get("claim_status") != "claimed":
+        return False, "Card is not claimed."
+    if not force and card.get("claimed_by") != user_id:
+        return False, "You do not own this claim."
+    card["claim_status"] = None
+    card["claimed_by"] = None
+    card["claimed_by_name"] = None
+    card["claimed_at"] = None
+    add_or_update_card(deck_id, card)
+    return True, "Card unclaimed."
+
+def mark_card_done(deck_id: str, card_id: str, user_id: int, user_name: str, force: bool = False) -> Tuple[bool, str]:
+    card = get_card(deck_id, card_id)
+    if not card:
+        return False, "Card not found."
+    if card.get("claim_status") == "done":
+        return False, "Card is already marked done."
+    if not force and card.get("claimed_by") != user_id:
+        return False, "You do not own this claim."
+    card["claim_status"] = "done"
+    card["filled_by"] = user_id
+    card["filled_by_name"] = user_name
+    card["filled_at"] = _now()
+    card["claimed_by"] = None
+    card["claimed_by_name"] = None
+    card["claimed_at"] = None
+    add_or_update_card(deck_id, card)
+    return True, "Card marked done."
 
 # -------- Sessions --------
 def list_sessions() -> List[Dict[str, Any]]:

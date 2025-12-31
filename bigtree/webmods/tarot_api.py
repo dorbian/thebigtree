@@ -584,6 +584,12 @@ async def seed_deck(req: web.Request):
             continue
     return web.json_response({"ok": True, "created": len(created)})
 
+@route("POST", "/api/tarot/decks/{deck_id}/seed-template", scopes=["tarot:admin"])
+async def seed_deck_template(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    tar.seed_deck_from_seed_file(deck_id)
+    return web.json_response({"ok": True})
+
 @route("PUT", "/api/tarot/decks/{deck_id}/back", scopes=["tarot:admin"])
 async def set_back(req: web.Request):
     deck_id = req.match_info["deck_id"]
