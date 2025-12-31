@@ -4,6 +4,7 @@
 from __future__ import annotations
 import os
 import json as _json
+import hashlib
 import secrets
 import time
 import random
@@ -25,6 +26,7 @@ _LEGACY_DB_PATH: Optional[str] = None
 _DECK_DB_PATH: Optional[str] = None
 _SESSION_DB_PATH: Optional[str] = None
 _MIGRATED: Optional[bool] = None
+_DECKS_MIGRATED: Optional[bool] = None
 
 def _now() -> float:
     return time.time()
@@ -127,9 +129,158 @@ def _migrate_if_needed() -> None:
     logger.info(f"[tarot] migrated {moved} entries to split dbs")
     _MIGRATED = True
 
-def _db_decks() -> TinyDB:
+def _get_decks_dir() -> str:
+    base = _get_base_dir()
+    path = os.path.join(base, "decks")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def _safe_deck_filename(deck_id: str) -> str:
+    raw = str(deck_id or "").strip()
+    keep = []
+    for ch in raw:
+        if ch.isalnum() or ch in ("-", "_"):
+            keep.append(ch)
+        else:
+            keep.append("_")
+    name = "".join(keep).strip("_") or "deck"
+    if name != raw and raw:
+        digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
+        name = f"{name}_{digest}"
+    return f"{name}.json"
+
+def _deck_file_path(deck_id: str) -> str:
+    return os.path.join(_get_decks_dir(), _safe_deck_filename(deck_id))
+
+def _read_deck_file(path: str) -> Optional[Dict[str, Any]]:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = _json.loads(fh.read())
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        return None
+    return None
+
+def _write_deck_file(path: str, payload: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.tmp"
+    text = _json.dumps(payload, ensure_ascii=True, indent=2)
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+def _normalize_deck_file_data(data: Any) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    if not isinstance(data, dict):
+        return None, []
+    if "deck" in data:
+        deck = data.get("deck") if isinstance(data.get("deck"), dict) else None
+        cards = data.get("cards") if isinstance(data.get("cards"), list) else []
+        return deck, cards
+    if data.get("_type") == "deck":
+        cards = data.get("cards") if isinstance(data.get("cards"), list) else []
+        return data, cards
+    return None, []
+
+def _list_deck_files() -> List[str]:
+    try:
+        root = _get_decks_dir()
+        return [
+            os.path.join(root, name)
+            for name in os.listdir(root)
+            if name.lower().endswith(".json")
+        ]
+    except Exception:
+        return []
+
+def _load_deck_bundle(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
+    _migrate_decks_to_files()
+    deck_id = (deck_id or "").strip()
+    if not deck_id:
+        return None, [], None
+    candidate = _deck_file_path(deck_id)
+    if os.path.exists(candidate):
+        data = _read_deck_file(candidate)
+        deck, cards = _normalize_deck_file_data(data)
+        if deck:
+            return deck, cards, candidate
+    for path in _list_deck_files():
+        data = _read_deck_file(path)
+        deck, cards = _normalize_deck_file_data(data)
+        if deck and deck.get("deck_id") == deck_id:
+            return deck, cards, path
+    return None, [], candidate
+
+def _save_deck_bundle(deck: Dict[str, Any], cards: List[Dict[str, Any]], path: str) -> None:
+    _write_deck_file(path, {"deck": deck, "cards": cards})
+
+def _migrate_decks_to_files() -> None:
+    global _DECKS_MIGRATED
+    if _DECKS_MIGRATED is True:
+        return
+    base = _get_base_dir()
+    marker = os.path.join(base, ".tarot_decks_files")
+    try:
+        if os.path.exists(marker):
+            _DECKS_MIGRATED = True
+            return
+    except Exception:
+        pass
+
+    decks_dir = _get_decks_dir()
+    try:
+        if any(name.lower().endswith(".json") for name in os.listdir(decks_dir)):
+            try:
+                with open(marker, "w", encoding="utf-8") as fh:
+                    fh.write("migrated=1\n")
+            except Exception:
+                pass
+            _DECKS_MIGRATED = True
+            return
+    except Exception:
+        pass
+
     _migrate_if_needed()
-    return TinyDB(_get_deck_db_path())
+    deck_db_path = _get_deck_db_path()
+    if os.path.exists(deck_db_path):
+        db = TinyDB(deck_db_path)
+        q = Query()
+        decks = db.search(q._type == "deck")
+        cards = db.search(q._type == "card")
+        if decks or cards:
+            grouped_cards: Dict[str, List[Dict[str, Any]]] = {}
+            for card in cards:
+                deck_id = (card.get("deck_id") or "elf-classic").strip() or "elf-classic"
+                grouped_cards.setdefault(deck_id, []).append(card)
+            if not decks and grouped_cards:
+                decks = [
+                    {
+                        "_type": "deck",
+                        "deck_id": deck_id,
+                        "name": deck_id,
+                        "theme": "classic",
+                        "back_image": None,
+                        "created_at": _now(),
+                    }
+                    for deck_id in grouped_cards.keys()
+                ]
+            for deck in decks:
+                deck_id = (deck.get("deck_id") or "elf-classic").strip() or "elf-classic"
+                deck["deck_id"] = deck_id
+                deck.setdefault("_type", "deck")
+                deck.setdefault("name", deck_id)
+                deck.setdefault("theme", "classic")
+                deck.setdefault("back_image", None)
+                deck_path = _deck_file_path(deck_id)
+                _save_deck_bundle(deck, grouped_cards.get(deck_id, []), deck_path)
+            try:
+                with open(marker, "w", encoding="utf-8") as fh:
+                    fh.write(f"migrated={len(decks)}\n")
+            except Exception:
+                pass
+            _DECKS_MIGRATED = True
+            return
+    _DECKS_MIGRATED = True
 
 def _db_sessions() -> TinyDB:
     _migrate_if_needed()
@@ -365,8 +516,8 @@ def _parse_number(value: Any) -> Optional[int]:
 
 def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
-    db = _db_decks(); q = Query()
-    existing = db.get((q._type == "deck") & (q.deck_id == deck_id))
+    _migrate_decks_to_files()
+    existing, cards, path = _load_deck_bundle(deck_id)
     if existing:
         return existing
     deck = {
@@ -377,73 +528,79 @@ def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] =
         "back_image": None,
         "created_at": _now(),
     }
-    db.insert(deck)
+    path = path or _deck_file_path(deck_id)
+    _save_deck_bundle(deck, cards or [], path)
     return deck
 
 def list_decks() -> List[Dict[str, Any]]:
-    db = _db_decks(); q = Query()
-    decks = db.search(q._type == "deck")
+    _migrate_decks_to_files()
+    decks = []
+    for path in _list_deck_files():
+        data = _read_deck_file(path)
+        deck, _cards = _normalize_deck_file_data(data)
+        if deck:
+            decks.append(deck)
     if not decks:
         create_deck("elf-classic")
-        decks = db.search(q._type == "deck")
+        return list_decks()
     return decks
 
 def delete_deck(deck_id: str) -> bool:
     deck_id = (deck_id or "").strip()
     if not deck_id:
         return False
-    db = _db_decks(); q = Query()
-    deck = db.get((q._type == "deck") & (q.deck_id == deck_id))
-    if not deck:
+    deck, _cards, path = _load_deck_bundle(deck_id)
+    if not deck or not path:
         return False
-    db.remove((q._type == "deck") & (q.deck_id == deck_id))
-    db.remove((q._type == "card") & (q.deck_id == deck_id))
+    try:
+        os.remove(path)
+    except Exception:
+        return False
     return True
 
 def update_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Optional[Dict[str, Any]]:
     deck_id = (deck_id or "").strip()
     if not deck_id:
         return None
-    db = _db_decks(); q = Query()
-    deck = db.get((q._type == "deck") & (q.deck_id == deck_id))
+    deck, cards, path = _load_deck_bundle(deck_id)
     if not deck:
         return None
     if name is not None:
         deck["name"] = (name or deck_id)
     if theme is not None:
         deck["theme"] = _normalize_theme(theme)
-    db.update(deck, (q._type == "deck") & (q.deck_id == deck_id))
+    _save_deck_bundle(deck, cards, path or _deck_file_path(deck_id))
     return deck
 
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
-    db = _db_decks(); q = Query()
-    return db.get((q._type == "deck") & (q.deck_id == deck_id))
+    deck, _cards, _path = _load_deck_bundle(deck_id)
+    return deck
 
 def set_deck_back(deck_id: str, back_image: str, artist_id: Optional[str] = None) -> bool:
-    db = _db_decks(); q = Query()
     deck = get_deck(deck_id)
     if not deck:
         create_deck(deck_id)
-    deck = get_deck(deck_id)
+    deck, cards, path = _load_deck_bundle(deck_id)
     if not deck:
         return False
     deck["back_image"] = back_image
     if artist_id is not None:
         deck["back_artist_id"] = artist_id or None
-    db.update(deck, (q._type == "deck") & (q.deck_id == deck_id))
+    _save_deck_bundle(deck, cards, path or _deck_file_path(deck_id))
     return True
 
 def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
     create_deck(deck_id)
-    db = _db_decks(); q = Query()
+    deck, cards, path = _load_deck_bundle(deck_id)
+    cards = cards or []
     card_id = (card.get("id") or card.get("card_id") or "").strip()
     name = (card.get("name") or card.get("title") or "").strip()
     if not name:
         raise ValueError("name required")
     if not card_id:
         card_id = name.lower().replace(" ", "_")[:48]
-    existing = db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+    existing = next((c for c in cards if c.get("card_id") == card_id), None)
     if "artist_id" in card:
         artist_id = (card.get("artist_id") or "").strip() or None
     else:
@@ -519,61 +676,87 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "updated_at": _now(),
     }
     if existing:
-        db.update(payload, (q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+        for idx, entry in enumerate(cards):
+            if entry.get("card_id") == card_id:
+                payload["created_at"] = entry.get("created_at")
+                cards[idx] = payload
+                break
     else:
         payload["created_at"] = _now()
-        db.insert(payload)
+        cards.append(payload)
+    _save_deck_bundle(deck or get_deck(deck_id) or {"_type": "deck", "deck_id": deck_id}, cards, path or _deck_file_path(deck_id))
     return payload
 
 def list_cards(deck_id: str) -> List[Dict[str, Any]]:
     deck_id = (deck_id or "").strip() or "elf-classic"
-    db = _db_decks(); q = Query()
-    return db.search((q._type == "card") & (q.deck_id == deck_id))
+    _deck, cards, _path = _load_deck_bundle(deck_id)
+    return cards or []
 
 def clear_image_references(image_url: str) -> int:
     """Remove image/back references pointing at the given URL (ignores query)."""
     target = (image_url or "").split("?", 1)[0]
     if not target:
         return 0
-    db = _db_decks(); q = Query()
     updated = 0
-    for card in db.search(q._type == "card"):
-        img = (card.get("image") or "").split("?", 1)[0]
-        if img and img == target:
-            card["image"] = ""
-            db.update(card, (q._type == "card") & (q.deck_id == card.get("deck_id")) & (q.card_id == card.get("card_id")))
-            updated += 1
-    for deck in db.search(q._type == "deck"):
+    for path in _list_deck_files():
+        data = _read_deck_file(path)
+        deck, cards = _normalize_deck_file_data(data)
+        if not deck:
+            continue
+        changed = False
+        for card in cards:
+            img = (card.get("image") or "").split("?", 1)[0]
+            if img and img == target:
+                card["image"] = ""
+                updated += 1
+                changed = True
         back = (deck.get("back_image") or "").split("?", 1)[0]
         if back and back == target:
             deck["back_image"] = None
-            db.update(deck, (q._type == "deck") & (q.deck_id == deck.get("deck_id")))
             updated += 1
+            changed = True
+        if changed:
+            _save_deck_bundle(deck, cards, path)
     return updated
 
 def get_card(deck_id: str, card_id: str) -> Optional[Dict[str, Any]]:
-    db = _db_decks(); q = Query()
-    return db.get((q._type == "card") & (q.deck_id == deck_id) & (q.card_id == card_id))
+    if not deck_id or not card_id:
+        return None
+    _deck, cards, _path = _load_deck_bundle(deck_id)
+    for card in cards or []:
+        if card.get("card_id") == card_id:
+            return card
+    return None
 
 def set_card_image(card_id: str, image: str, artist_id: Optional[str] = None) -> bool:
     """Update card image (and artist_id) by card_id across decks."""
-    db = _db_decks(); q = Query()
-    card = db.get((q._type == "card") & (q.card_id == card_id))
-    if not card:
-        return False
-    card["image"] = image
-    if artist_id is not None:
-        card["artist_id"] = artist_id or None
-        # refresh artist_links if we can resolve it
-        try:
-            from bigtree.modules import artists
-            artist = artists.get_artist(artist_id) if artist_id else None
-            if artist and isinstance(artist.get("links"), dict):
-                card["artist_links"] = artist.get("links") or {}
-        except Exception:
-            pass
-    db.update(card, (q._type == "card") & (q.deck_id == card.get("deck_id")) & (q.card_id == card_id))
-    return True
+    for path in _list_deck_files():
+        data = _read_deck_file(path)
+        deck, cards = _normalize_deck_file_data(data)
+        if not deck:
+            continue
+        updated = False
+        for idx, card in enumerate(cards):
+            if card.get("card_id") != card_id:
+                continue
+            card["image"] = image
+            if artist_id is not None:
+                card["artist_id"] = artist_id or None
+                # refresh artist_links if we can resolve it
+                try:
+                    from bigtree.modules import artists
+                    artist = artists.get_artist(artist_id) if artist_id else None
+                    if artist and isinstance(artist.get("links"), dict):
+                        card["artist_links"] = artist.get("links") or {}
+                except Exception:
+                    pass
+            cards[idx] = card
+            updated = True
+            break
+        if updated:
+            _save_deck_bundle(deck, cards, path)
+            return True
+    return False
 
 # -------- Sessions --------
 def list_sessions() -> List[Dict[str, Any]]:
