@@ -5263,12 +5263,14 @@
         librarySelectHandler = (item) => {
           $("deckCreateBackPick").dataset.backUrl = item.url || "";
           $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
-          const preview = `${emoji} | ${name}`;
-          preview.innerHTML = '<span class="preview-label">Back</span>';
-          if (item.url){
-            const img = document.createElement("img");
-            img.src = item.url;
-            preview.appendChild(img);
+          const preview = $("deckCreateBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (item.url){
+              const img = document.createElement("img");
+              img.src = item.url;
+              preview.appendChild(img);
+            }
           }
           setTarotStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
         };
@@ -6425,14 +6427,16 @@
         librarySelectHandler = (item) => {
           $("deckEditBackPick").dataset.backUrl = item.url || "";
           $("deckEditBackPick").dataset.artistId = item.artist_id || "";
-          const preview = `${emoji} | ${name}`;
-          preview.innerHTML = '<span class="preview-label">Back</span>';
-          if (item.url){
-            const img = document.createElement("img");
-            img.src = item.url;
-            preview.appendChild(img);
+          const preview = $("deckEditBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (item.url){
+              const img = document.createElement("img");
+              img.src = item.url;
+              preview.appendChild(img);
+            }
           }
-          setStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+          setTarotStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
         };
         showLibraryModal(true);
         loadLibrary("media");
