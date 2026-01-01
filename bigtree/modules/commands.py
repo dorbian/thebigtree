@@ -38,17 +38,23 @@ class GalleryUploadModal(discord.ui.Modal, title="Gallery: Add Details"):
         super().__init__()
         self.filename = filename
         self.artist_id = artist_id
+        safe_title = (default_title or "").strip()
+        safe_name = (default_name or "").strip()
+        if len(safe_title) > 120:
+            safe_title = safe_title[:120]
+        if len(safe_name) > 80:
+            safe_name = safe_name[:80]
         self.title_input = discord.ui.TextInput(
             label="Title",
             required=False,
             max_length=120,
-            default=default_title or ""
+            default=safe_title
         )
         self.artist_input = discord.ui.TextInput(
             label="Artist name",
             required=False,
             max_length=80,
-            default=default_name or ""
+            default=safe_name
         )
         self.add_item(self.title_input)
         self.add_item(self.artist_input)
@@ -66,6 +72,66 @@ class GalleryUploadModal(discord.ui.Modal, title="Gallery: Add Details"):
             return
         await interaction.response.send_message("Gallery details saved.", ephemeral=True)
 
+class GalleryLinksModal(discord.ui.Modal, title="Gallery: Artist Links"):
+    def __init__(self, artist_id: str, defaults: dict):
+        super().__init__()
+        self.artist_id = artist_id
+        def _safe(value: str, limit: int = 200) -> str:
+            value = (value or "").strip()
+            return value[:limit] if len(value) > limit else value
+        self.instagram_input = discord.ui.TextInput(
+            label="Instagram",
+            required=False,
+            max_length=200,
+            default=_safe(defaults.get("instagram", ""))
+        )
+        self.bluesky_input = discord.ui.TextInput(
+            label="Bluesky",
+            required=False,
+            max_length=200,
+            default=_safe(defaults.get("bluesky", ""))
+        )
+        self.x_input = discord.ui.TextInput(
+            label="X",
+            required=False,
+            max_length=200,
+            default=_safe(defaults.get("x", ""))
+        )
+        self.artstation_input = discord.ui.TextInput(
+            label="ArtStation",
+            required=False,
+            max_length=200,
+            default=_safe(defaults.get("artstation", ""))
+        )
+        self.website_input = discord.ui.TextInput(
+            label="Website",
+            required=False,
+            max_length=200,
+            default=_safe(defaults.get("website", ""))
+        )
+        self.add_item(self.instagram_input)
+        self.add_item(self.bluesky_input)
+        self.add_item(self.x_input)
+        self.add_item(self.artstation_input)
+        self.add_item(self.website_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        links = {
+            "instagram": (self.instagram_input.value or "").strip(),
+            "bluesky": (self.bluesky_input.value or "").strip(),
+            "x": (self.x_input.value or "").strip(),
+            "artstation": (self.artstation_input.value or "").strip(),
+            "website": (self.website_input.value or "").strip(),
+        }
+        artist = artist_mod.get_artist(self.artist_id) or {}
+        artist_name = artist.get("name") or getattr(interaction.user, "display_name", "") or interaction.user.name
+        try:
+            artist_mod.upsert_artist(self.artist_id, artist_name, links)
+        except Exception as exc:
+            await interaction.response.send_message(f"Could not save links: {exc}", ephemeral=True)
+            return
+        await interaction.response.send_message("Artist links saved.", ephemeral=True)
+
 class GalleryUploadView(discord.ui.View):
     def __init__(self, filename: str, artist_id: str):
         super().__init__(timeout=3600)
@@ -74,16 +140,37 @@ class GalleryUploadView(discord.ui.View):
 
     @discord.ui.button(label="Add details", style=discord.ButtonStyle.secondary)
     async def add_details(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        if not _can_edit_gallery_upload(interaction.user, self.artist_id):
-            await interaction.response.send_message("Only the uploader can edit this entry.", ephemeral=True)
-            return
-        artist = artist_mod.get_artist(self.artist_id) or {}
-        media = media_mod.get_media(self.filename) or {}
-        default_title = media.get("title") or ""
-        default_name = artist.get("name") or getattr(interaction.user, "display_name", "") or interaction.user.name
-        await interaction.response.send_modal(
-            GalleryUploadModal(self.filename, self.artist_id, default_title, default_name)
-        )
+        try:
+            if not _can_edit_gallery_upload(interaction.user, self.artist_id):
+                await interaction.response.send_message("Only the uploader can edit this entry.", ephemeral=True)
+                return
+            artist = artist_mod.get_artist(self.artist_id) or {}
+            media = media_mod.get_media(self.filename) or {}
+            default_title = media.get("title") or ""
+            default_name = artist.get("name") or getattr(interaction.user, "display_name", "") or interaction.user.name
+            await interaction.response.send_modal(
+                GalleryUploadModal(self.filename, self.artist_id, default_title, default_name)
+            )
+        except Exception as exc:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"Could not open editor: {exc}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Could not open editor: {exc}", ephemeral=True)
+
+    @discord.ui.button(label="Edit links", style=discord.ButtonStyle.secondary)
+    async def edit_links(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        try:
+            if not _can_edit_gallery_upload(interaction.user, self.artist_id):
+                await interaction.response.send_message("Only the uploader can edit this entry.", ephemeral=True)
+                return
+            artist = artist_mod.get_artist(self.artist_id) or {}
+            defaults = artist.get("links") or {}
+            await interaction.response.send_modal(GalleryLinksModal(self.artist_id, defaults))
+        except Exception as exc:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"Could not open links editor: {exc}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Could not open links editor: {exc}", ephemeral=True)
 
 def _resolve_contest_view():
     """
