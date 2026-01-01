@@ -11,6 +11,7 @@ from bigtree.modules import gallery as gallery_mod
 from bigtree.webmods import contest as contest_mod
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+_REACTION_TYPES = set(gallery_mod.reaction_types())
 
 def _artist_payload(artist_id: str | None) -> Dict[str, Any]:
     if artist_id:
@@ -41,6 +42,10 @@ def _strip_query(url: str) -> str:
 def _media_path(filename: str) -> str:
     return os.path.join(media_mod.get_media_dir(), filename)
 
+def _item_id(source: str, identifier: str) -> str:
+    identifier = (identifier or "").strip()
+    return f"{source}:{identifier}" if identifier else ""
+
 @route("GET", "/contest/media/{filename}", allow_public=True)
 async def contest_media_file(req: web.Request):
     filename = os.path.basename(req.match_info["filename"])
@@ -64,12 +69,16 @@ async def gallery_images(_req: web.Request):
         if not os.path.exists(_media_path(filename)):
             continue
         url = f"/media/{filename}"
+        item_id = _item_id("media", filename)
         seen.add(url)
         items.append({
+            "item_id": item_id,
             "title": entry.get("title") or entry.get("original_name") or filename,
             "url": url,
             "source": "media",
+            "type": "Artifact",
             "artist": _artist_payload(entry.get("artist_id")),
+            "reactions": gallery_mod.get_reactions(item_id),
         })
 
     for deck in tarot_mod.list_decks():
@@ -78,11 +87,15 @@ async def gallery_images(_req: web.Request):
         if back:
             url = _strip_query(back)
             if url and url not in seen:
+                item_id = _item_id("tarot-back", deck_id)
                 items.append({
+                    "item_id": item_id,
                     "title": deck.get("name") or deck_id,
                     "url": url,
                     "source": "tarot-back",
+                    "type": "Tarot",
                     "artist": _artist_payload(deck.get("back_artist_id")),
+                    "reactions": gallery_mod.get_reactions(item_id),
                 })
                 seen.add(url)
         for card in tarot_mod.list_cards(deck_id):
@@ -92,21 +105,60 @@ async def gallery_images(_req: web.Request):
             url = _strip_query(img)
             if not url or url in seen:
                 continue
+            card_id = card.get("card_id") or card.get("name") or url
+            item_id = _item_id("tarot-card", f"{deck_id}:{card_id}")
             items.append({
+                "item_id": item_id,
                 "title": card.get("name") or card.get("card_id") or "Card",
                 "url": url,
                 "source": "tarot-card",
+                "type": "Tarot",
                 "artist": _artist_payload(card.get("artist_id")),
+                "reactions": gallery_mod.get_reactions(item_id),
             })
             seen.add(url)
 
     try:
         contests = contest_mod._list_contest_entries()
-        items.extend(contests)
+        for entry in contests:
+            url = _strip_query(entry.get("url") or "")
+            filename = os.path.basename(url) if url else ""
+            item_id = _item_id("contest", filename or url)
+            entry["item_id"] = item_id
+            entry["type"] = entry.get("type") or "Contest"
+            entry["reactions"] = gallery_mod.get_reactions(item_id)
+            if entry.get("contest"):
+                entry["event_name"] = entry.get("contest")
+            items.append(entry)
     except Exception:
         pass
 
     return web.json_response({"ok": True, "items": items})
+
+@route("GET", "/api/gallery/reactions", allow_public=True)
+async def gallery_reactions(req: web.Request):
+    item_id = (req.query.get("item_id") or "").strip()
+    if not item_id:
+        return web.json_response({"ok": False, "error": "item_id required"}, status=400)
+    return web.json_response({"ok": True, "item_id": item_id, "reactions": gallery_mod.get_reactions(item_id)})
+
+@route("POST", "/api/gallery/reactions", allow_public=True)
+async def gallery_react(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    item_id = str(body.get("item_id") or "").strip()
+    reaction_id = str(body.get("reaction") or "").strip().lower()
+    if not item_id:
+        return web.json_response({"ok": False, "error": "item_id required"}, status=400)
+    if reaction_id not in _REACTION_TYPES:
+        return web.json_response({"ok": False, "error": "invalid reaction"}, status=400)
+    try:
+        counts = gallery_mod.increment_reaction(item_id, reaction_id)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response({"ok": True, "item_id": item_id, "reactions": counts})
 
 @route("GET", "/api/gallery/calendar", allow_public=True)
 async def gallery_calendar(_req: web.Request):

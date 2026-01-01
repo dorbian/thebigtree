@@ -11,6 +11,8 @@ except Exception:
     bigtree = None
 
 _CALENDAR_DB_PATH: Optional[str] = None
+_REACTIONS_DB_PATH: Optional[str] = None
+_REACTION_TYPES = ("appreciation", "inspired", "gratitude", "craft")
 
 def _now() -> float:
     return time.time()
@@ -38,6 +40,59 @@ def _db_path() -> str:
 
 def _db() -> TinyDB:
     return TinyDB(_db_path())
+
+def _reactions_path() -> str:
+    global _REACTIONS_DB_PATH
+    if _REACTIONS_DB_PATH:
+        return _REACTIONS_DB_PATH
+    _REACTIONS_DB_PATH = os.path.join(_get_base_dir(), "gallery_reactions.json")
+    return _REACTIONS_DB_PATH
+
+def _reactions_db() -> TinyDB:
+    return TinyDB(_reactions_path())
+
+def reaction_types() -> List[str]:
+    return list(_REACTION_TYPES)
+
+def get_reactions(item_id: str) -> Dict[str, int]:
+    if not item_id:
+        return {}
+    db = _reactions_db(); q = Query()
+    row = db.get((q._type == "reaction") & (q.item_id == item_id))
+    counts = row.get("counts") if row else None
+    if not isinstance(counts, dict):
+        counts = {}
+    return {key: int(counts.get(key) or 0) for key in _REACTION_TYPES}
+
+def list_reactions(item_ids: List[str]) -> Dict[str, Dict[str, int]]:
+    out: Dict[str, Dict[str, int]] = {}
+    for item_id in item_ids:
+        out[item_id] = get_reactions(item_id)
+    return out
+
+def increment_reaction(item_id: str, reaction_id: str, amount: int = 1) -> Dict[str, int]:
+    if not item_id:
+        raise ValueError("item_id required")
+    reaction_id = str(reaction_id or "").strip().lower()
+    if reaction_id not in _REACTION_TYPES:
+        raise ValueError("invalid reaction")
+    db = _reactions_db(); q = Query()
+    row = db.get((q._type == "reaction") & (q.item_id == item_id))
+    counts = row.get("counts") if row else {}
+    if not isinstance(counts, dict):
+        counts = {}
+    counts[reaction_id] = int(counts.get(reaction_id) or 0) + max(1, int(amount or 1))
+    payload = {
+        "_type": "reaction",
+        "item_id": item_id,
+        "counts": counts,
+        "updated_at": _now(),
+    }
+    if row:
+        db.update(payload, (q._type == "reaction") & (q.item_id == item_id))
+    else:
+        db.insert(payload)
+    return get_reactions(item_id)
 
 def list_calendar() -> List[Dict]:
     db = _db(); q = Query()

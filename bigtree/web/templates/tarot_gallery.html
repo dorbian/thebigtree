@@ -1,4 +1,6 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Forest Gallery</title>
@@ -396,6 +398,8 @@
     cursor:pointer;
   }
 </style>
+</head>
+<body>
 
 <header>
   <div>
@@ -567,10 +571,7 @@
       const itemKey = target.getAttribute("data-item");
       if (!reactionId || !itemKey) return;
       const decodedKey = decodeURIComponent(itemKey);
-      const local = getLocalReactions(decodedKey);
-      local[reactionId] = (local[reactionId] || 0) + 1;
-      setLocalReactions(decodedKey, local);
-      renderGrid();
+      postReaction(decodedKey, reactionId);
       return;
     }
     if (!target.classList || !target.classList.contains("artist-link")) return;
@@ -590,24 +591,25 @@
     }
   });
   load();
-</script>
-  function getItemKey(item){
-    return item.id || item.image_id || item.url || `${item.title || "offering"}-${item.artist && item.artist.name ? item.artist.name : "forest"}`;
-  }
 
-  function getLocalReactions(itemKey){
+  async function postReaction(itemId, reactionId){
     try{
-      const raw = localStorage.getItem(`gallery_react_${itemKey}`);
-      return raw ? JSON.parse(raw) : {};
-    }catch(err){
-      return {};
-    }
-  }
-
-  function setLocalReactions(itemKey, data){
-    try{
-      localStorage.setItem(`gallery_react_${itemKey}`, JSON.stringify(data));
+      const res = await fetch("/api/gallery/reactions", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({item_id: itemId, reaction: reactionId})
+      });
+      const data = await res.json();
+      if (!data.ok) return;
+      const match = galleryItems.find(item => getItemKey(item) === itemId);
+      if (match){
+        match.reactions = data.reactions || {};
+      }
+      renderGrid();
     }catch(err){}
+  }
+  function getItemKey(item){
+    return item.item_id || item.id || item.image_id || item.url || `${item.title || "offering"}-${item.artist && item.artist.name ? item.artist.name : "forest"}`;
   }
 
   function getYear(item){
@@ -676,11 +678,10 @@
         links: artistLinks
       }));
       const itemKey = getItemKey(item);
-      const localCounts = getLocalReactions(itemKey);
       const baseCounts = item.reactions || {};
       const isActive = !activeArtistFilter || activeArtistFilter === artistName;
       const reactionRow = REACTIONS.map(reaction => {
-        const count = Number(baseCounts[reaction.id] || 0) + Number(localCounts[reaction.id] || 0);
+        const count = Number(baseCounts[reaction.id] || 0);
         return `
           <button class="reaction" data-reaction="${reaction.id}" data-item="${encodeURIComponent(itemKey)}" aria-label="${reaction.label}">
             <span>${reaction.label}</span> ${count}
@@ -714,3 +715,6 @@
       `;
     }).join("");
   }
+</script>
+</body>
+</html>

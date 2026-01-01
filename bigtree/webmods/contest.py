@@ -148,10 +148,11 @@ def _list_contest_entries() -> List[Dict[str, Any]]:
             if not os.path.exists(os.path.join(contest_dir, filename)):
                 continue
             items.append({
-                "title": "Contest Entry",
+                "title": entry.get("title") or "",
                 "contest": contest_name,
                 "url": f"/contest/media/{filename}",
                 "source": "contest",
+                "type": "Contest",
                 "artist": {"artist_id": None, "name": "Forest", "links": {}},
             })
     return items
