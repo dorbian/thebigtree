@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -15,6 +15,8 @@
         --muted:#9bb6a7;
         --accent:#9de07d;
         --accent-2:#3ccf8e;
+        --neutral:#e9e2d2;
+        --neutral-2:#c7bfae;
         --line:#1f3a2b;
         --shadow:0 18px 40px rgba(0,0,0,.35);
         --radius:18px;
@@ -240,7 +242,7 @@
         padding:24px;
         display:flex;
         flex-direction:column;
-        gap:18px;
+        gap:24px;
         animation:fadeup .6s ease both;
       }
       .top{
@@ -370,31 +372,31 @@
         margin:0 0 10px;
         font-size:18px;
         text-transform:uppercase;
-        letter-spacing:.08em;
-        color:var(--accent-2);
+        letter-spacing:.12em;
+        color:var(--accent);
       }
       .panel h3{
-        margin:14px 0 8px;
-        font-size:14px;
+        margin:16px 0 10px;
+        font-size:13px;
         text-transform:uppercase;
-        letter-spacing:.08em;
-        color:var(--muted);
+        letter-spacing:.14em;
+        color:var(--neutral-2);
       }
       #tarotDecksPanel{
-        padding:12px;
+        padding:16px;
         font-size:12px;
       }
       #tarotDecksPanel h2{
-        font-size:16px;
-        margin-bottom:8px;
+        font-size:17px;
+        margin-bottom:10px;
       }
       #tarotDecksPanel h3{
         font-size:12px;
-        margin:10px 0 6px;
+        margin:12px 0 8px;
       }
       #tarotDecksPanel .row{
-        gap:6px;
-        margin-bottom:6px;
+        gap:8px;
+        margin-bottom:8px;
       }
       #tarotDecksPanel input,
       #tarotDecksPanel select,
@@ -413,21 +415,14 @@
         margin-top:8px;
       }
       #tarotDecksPanel .theme-weight{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:8px;
-        padding:8px 10px;
-        background:rgba(7,14,18,.55);
-        border:1px solid rgba(93,187,127,.2);
+        padding:8px;
+        background:rgba(8,12,16,.55);
+        border:1px solid rgba(93,187,127,.25);
         border-radius:10px;
       }
       #tarotDecksPanel .theme-weight label{
-        font-size:0.85rem;
+        font-size:11px;
         text-transform:capitalize;
-      }
-      #tarotDecksPanel .theme-weight input{
-        width:64px;
       }
       #tarotDecksPanel .list{
         max-height:140px;
@@ -560,15 +555,15 @@
       .row{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-        gap:10px;
-        margin-bottom:10px;
+        gap:8px;
+        margin-bottom:8px;
       }
       label{
         display:block;
         font-size:12px;
         text-transform:uppercase;
-        letter-spacing:.08em;
-        color:var(--muted);
+        letter-spacing:.1em;
+        color:var(--neutral-2);
         margin-bottom:4px;
       }
       input, select, textarea, button{
@@ -624,6 +619,11 @@
         border:1px solid var(--line);
         background:rgba(6,10,18,.6);
       }
+      .status.alert{
+        background:rgba(30,18,14,.65);
+        border-color:rgba(210,152,122,.35);
+        color:#f3d7c4;
+      }
       .status.ok{color:#b8ffce;border-color:rgba(160,255,196,.3)}
       .status.err{color:#ff9f9f;border-color:rgba(255,159,159,.3)}
       .list{
@@ -653,6 +653,152 @@
       .list-card.active{
         background:rgba(60,207,142,.12);
         border-radius:10px;
+      }
+      .section-divider{
+        height:1px;
+        background:linear-gradient(90deg, transparent, rgba(157,224,125,.25), transparent);
+        margin:18px 0;
+      }
+      .context-header{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        padding:12px 14px;
+        border-radius:14px;
+        border:1px solid rgba(233,226,210,.18);
+        background:rgba(6,10,18,.55);
+        margin-bottom:12px;
+      }
+      .context-path{
+        font-size:12px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--neutral);
+      }
+      .context-meta{
+        font-size:12px;
+        color:var(--muted);
+      }
+      .deck-editor-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+        gap:14px;
+      }
+      .deck-editor-column{
+        background:rgba(7,12,16,.5);
+        border:1px solid rgba(31,58,43,.6);
+        border-radius:14px;
+        padding:12px;
+      }
+      .deck-editor-column h4{
+        margin:0 0 10px;
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.12em;
+        color:var(--neutral);
+      }
+      .btn-primary{
+        height:42px;
+        background:var(--accent);
+        color:#0a1510;
+        font-weight:700;
+        letter-spacing:.08em;
+        border:none;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:8px;
+      }
+      .btn-primary svg{
+        width:18px;
+        height:18px;
+        fill:currentColor;
+      }
+      .btn-ghost{
+        background:rgba(8,12,10,.25);
+        border:1px solid rgba(255,255,255,.12);
+        color:var(--muted);
+      }
+      .danger-action{
+        opacity:0;
+        transition:opacity .2s ease;
+        border-color:rgba(210,92,92,.45);
+        color:#e7b1b1;
+      }
+      .icon-group:hover .danger-action{
+        opacity:1;
+      }
+      .theme-weight{
+        display:grid;
+        gap:6px;
+        grid-template-columns:1fr;
+      }
+      .theme-weight .theme-bar{
+        position:relative;
+        height:8px;
+        border-radius:999px;
+        background:rgba(15,30,22,.6);
+        overflow:hidden;
+        border:1px solid rgba(93,187,127,.2);
+      }
+      .theme-weight .theme-fill{
+        position:absolute;
+        inset:0;
+        width:0%;
+        background:linear-gradient(90deg, rgba(157,224,125,.35), rgba(60,207,142,.85));
+      }
+      .theme-weight .theme-value{
+        font-size:11px;
+        color:var(--neutral-2);
+        text-align:right;
+      }
+      .theme-weight input[type="range"]{
+        width:100%;
+        accent-color:var(--accent-2);
+      }
+      .preview-card.card-object{
+        box-shadow:0 12px 25px rgba(0,0,0,.35), inset 0 0 28px rgba(0,0,0,.35);
+      }
+      .preview-card.card-object::before{
+        opacity:.55;
+      }
+      .preview-card.hover-flip .card-meaning{
+        position:absolute;
+        left:10px;
+        right:10px;
+        bottom:12px;
+        z-index:2;
+        font-size:11px;
+        line-height:1.3;
+        color:var(--neutral);
+        background:rgba(5,8,10,.5);
+        border:1px solid rgba(233,226,210,.15);
+        border-radius:10px;
+        padding:6px 8px;
+      }
+      .preview-card.hover-flip .meaning-line{
+        opacity:.9;
+        transition:opacity .2s ease;
+      }
+      .preview-card.hover-flip .meaning-line.reversed{
+        opacity:.15;
+      }
+      .preview-card.hover-flip:hover .meaning-line.upright{
+        opacity:.15;
+      }
+      .preview-card.hover-flip:hover .meaning-line.reversed{
+        opacity:.9;
+      }
+      .contest-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+        gap:12px;
+      }
+      .contest-actions{
+        display:flex;
+        gap:8px;
+        margin-top:6px;
       }
       .list-warn{
         color:#ff9f9f;
@@ -1259,6 +1405,13 @@
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
           <h2>Deck Editor</h2>
+          <div class="context-header">
+            <div>
+              <div class="context-path" id="taContextPath">Deck Editor / Forest / No card selected</div>
+              <div class="context-meta" id="taContextMeta">Pick a card to edit.</div>
+            </div>
+            <div class="context-meta" id="taContextDeck"></div>
+          </div>
           <div class="row">
             <div>
               <label for="taDeck">Deck</label>
@@ -1277,7 +1430,7 @@
                     <path d="M4 15.5V20h4.5L19 9.5l-4.5-4.5L4 15.5zm16.4-9.9a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0l-1.5 1.5 4.5 4.5 1.5-1.5z"/>
                   </svg>
                 </button>
-                <button class="btn-ghost icon-btn" id="taDeleteDeck" title="Delete deck">
+                <button class="btn-ghost icon-btn danger-action" id="taDeleteDeck" title="Delete deck">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 7h12v2H6zM9 9h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z"/>
                   </svg>
@@ -1286,89 +1439,117 @@
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
+          <div class="status" id="taDeckStatus">Pick a deck to begin.</div>
 
-          <h3>Add / Update Card</h3>
-          <div class="row">
-            <div>
-              <label for="taCardId">Card ID</label>
-              <input id="taCardId" placeholder="candlecap_sprite">
-            </div>
-            <div>
-              <label for="taCardName">Name</label>
-              <input id="taCardName" placeholder="Candlecap Sprite">
-            </div>
-            <div>
-              <label for="taCardHouse">Suit</label>
-              <select id="taCardHouse"></select>
-            </div>
-            <div>
-              <label for="taCardNumber">Number</label>
-              <input id="taCardNumber" list="taNumberList" placeholder="XIV or 14">
-              <datalist id="taNumberList"></datalist>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="taCardTags">Tags</label>
-              <input id="taCardTags" placeholder="mischief,curiosity">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="taCardFlavor">Flavor text</label>
-              <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Theme weights</label>
-              <div class="theme-grid" id="taCardThemes"></div>
-              <div class="muted" id="taCardThemesHint">Select a suit to preload weights.</div>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Card image</label>
-              <button class="btn-ghost icon-btn" id="taCardLibrary" title="Choose from library">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>Suit info</label>
-              <div class="list" id="taHouseInfo">Pick a suit to see details.</div>
-            </div>
-            <div>
-              <label>Number info</label>
-              <div class="list" id="taNumberInfo">Pick a number to see details.</div>
-            </div>
-          </div>
-          <input id="taCardArtist" type="hidden">
-          <div class="row">
-            <div>
-              <label>Card preview</label>
-              <div class="preview-grid">
-                <div class="preview-card" id="taFrontPreview"><span class="preview-label">Front</span></div>
-                <div class="preview-card" id="taBackPreview"><span class="preview-label">Back</span></div>
+          <div class="section-divider"></div>
+          <h3>Card Editor</h3>
+          <div class="deck-editor-grid">
+            <div class="deck-editor-column">
+              <h4>Identity</h4>
+              <div class="row">
+                <div>
+                  <label for="taCardId">Card ID</label>
+                  <input id="taCardId" placeholder="candlecap_sprite">
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardName">Name</label>
+                  <input id="taCardName" placeholder="Candlecap Sprite">
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardHouse">Suit</label>
+                  <select id="taCardHouse"></select>
+                </div>
+                <div>
+                  <label for="taCardNumber">Number</label>
+                  <input id="taCardNumber" list="taNumberList" placeholder="XIV or 14">
+                  <datalist id="taNumberList"></datalist>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardTags">Tags</label>
+                  <input id="taCardTags" placeholder="mischief,curiosity">
+                </div>
               </div>
             </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="taCardUpright">Upright</label>
-              <textarea id="taCardUpright"></textarea>
+            <div class="deck-editor-column">
+              <h4>Meaning</h4>
+              <div class="row">
+                <div>
+                  <label for="taCardFlavor">Flavor text</label>
+                  <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardUpright">Upright</label>
+                  <textarea id="taCardUpright"></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardReversed">Reversed</label>
+                  <textarea id="taCardReversed"></textarea>
+                </div>
+              </div>
             </div>
-            <div>
-              <label for="taCardReversed">Reversed</label>
-              <textarea id="taCardReversed"></textarea>
+            <div class="deck-editor-column">
+              <h4>Meta</h4>
+              <div class="row">
+                <div>
+                  <label>Theme weights</label>
+                  <div class="theme-grid" id="taCardThemes"></div>
+                  <div class="muted" id="taCardThemesHint">Select a suit to preload weights.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Suit info</label>
+                  <div class="list" id="taHouseInfo">Pick a suit to see details.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Number info</label>
+                  <div class="list" id="taNumberInfo">Pick a number to see details.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Card image</label>
+                  <button class="btn-ghost icon-btn" id="taCardLibrary" title="Choose from library">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <input id="taCardArtist" type="hidden">
+              <div class="row">
+                <div>
+                  <label>Card preview</label>
+                  <div class="preview-grid">
+                    <div class="preview-card" id="taFrontPreview"><span class="preview-label">Front</span></div>
+                    <div class="preview-card" id="taBackPreview"><span class="preview-label">Back</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="row">
             <div>
               <label>&nbsp;</label>
-              <button id="taSaveCard">Save card</button>
+              <button id="taSaveCard" class="btn-primary">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+                </svg>
+                Save card
+              </button>
             </div>
           </div>
         </section>
@@ -1385,6 +1566,8 @@
               <button class="btn-ghost" id="contestCreateChannelOpen">Create contest channel</button>
             </div>
           </div>
+          <div class="muted" id="contestHelp">Create and run contests for a channel. Missing data will show an alert with a quick fix.</div>
+          <div class="section-divider"></div>
           <h3>Create Contest</h3>
           <div class="row">
             <div>
@@ -1428,11 +1611,19 @@
               <button id="contestCreate">Create contest</button>
             </div>
           </div>
-          <div class="status" id="contestCreateStatus">Ready.</div>
-          <h3>All contests</h3>
-          <div class="list" id="contestAllList">No contests loaded.</div>
-          <h3>Ended contests</h3>
-          <div class="list" id="contestEndedList">No ended contests yet.</div>
+          <div class="status" id="contestCreateStatus">Select a channel to create a contest.</div>
+          <h3>Contest overview</h3>
+          <div class="contest-grid">
+            <div>
+              <div class="list-header">Active</div>
+              <div class="list" id="contestAllList">No contests loaded.</div>
+            </div>
+            <div>
+              <div class="list-header">Ended</div>
+              <div class="list" id="contestEndedList">No ended contests yet.</div>
+            </div>
+          </div>
+          <div class="section-divider"></div>
           <h3>TarotCards</h3>
           <div class="row">
             <div>
@@ -1458,7 +1649,7 @@
               <button id="tarotClaimsPost">Post TarotCards board</button>
             </div>
           </div>
-          <div class="status" id="tarotClaimsStatus">Ready.</div>
+          <div class="status" id="tarotClaimsStatus">Pick a deck and channel to post.</div>
         </section>
         <div class="modal" id="contestChannelModal">
           <div class="modal-card">
@@ -1480,11 +1671,11 @@
               <div>
                 <label for="contestEmojiSelect">Channel emoji</label>
                 <select id="contestEmojiSelect">
-                  <option value="🎃">🎃</option>
-                  <option value="🌲">🌲</option>
-                  <option value="🔮">🔮</option>
-                  <option value="✨">✨</option>
-                  <option value="🍂">🍂</option>
+                  <option value="ðŸŽƒ">ðŸŽƒ</option>
+                  <option value="ðŸŒ²">ðŸŒ²</option>
+                  <option value="ðŸ”®">ðŸ”®</option>
+                  <option value="âœ¨">âœ¨</option>
+                  <option value="ðŸ‚">ðŸ‚</option>
                 </select>
               </div>
               <div>
@@ -1495,7 +1686,7 @@
             <div class="row">
               <div>
                 <label>Preview</label>
-                <div class="status" id="contestChannelPreview">🎃︱elfoween</div>
+                <div class="status" id="contestChannelPreview">ðŸŽƒï¸±elfoween</div>
               </div>
               <div>
                 <label>&nbsp;</label>
@@ -2338,7 +2529,7 @@
       }
 
       function renderCalendarPreview(){
-        const preview = $("calendarPreview");
+        const preview = `${emoji} | ${name}`;
         preview.innerHTML = "";
         if (!calendarSelected.image){
           preview.textContent = "No image selected.";
@@ -2567,6 +2758,13 @@
         if (data && Array.isArray(data.cards)){
           if (!data.cards.length){
             el.textContent = "No cards loaded.";
+            if (el.id === "taDeckList"){
+              window.taDeckData = data;
+              const deckLabel = (data.deck && (data.deck.name || data.deck.deck_id)) || "Deck";
+              setTarotStatus(`Deck loaded: ${deckLabel} (0 cards)`, "ok");
+              taUpdateContext(null);
+              taDirty = false;
+            }
             return;
           }
           const deckLabel = (data.deck && (data.deck.name || data.deck.deck_id)) || "";
@@ -2581,6 +2779,10 @@
           if (el.id === "taDeckList"){
             window.taDeckData = data;
             taSyncCardSelection();
+            const deckName = deckLabel || (data.deck && data.deck.deck_id) || "Deck";
+            setTarotStatus(`Deck loaded: ${deckName} (${data.cards.length} cards)`, "ok");
+            taUpdateContext(null);
+            taDirty = false;
           }
           return;
         }
@@ -3072,6 +3274,15 @@
           $("contestChannelModal").classList.remove("show");
         }
       });
+      $("contestPanel").addEventListener("click", (event) => {
+        const btn = event.target.closest(".contest-init");
+        if (!btn) return;
+        const channelId = btn.dataset.channel || "";
+        if (channelId){
+          $("contestChannel").value = channelId;
+          setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
+        }
+      });
       $("tarotClaimsRefresh").addEventListener("click", () => {
         loadTarotClaimsDecks();
         loadTarotClaimsChannels();
@@ -3143,9 +3354,9 @@
       }
 
       function updateContestChannelPreview(){
-        const emoji = ($("contestEmojiSelect") && $("contestEmojiSelect").value) || "🎃";
+        const emoji = ($("contestEmojiSelect") && $("contestEmojiSelect").value) || "*";
         const name = sanitizeChannelLabel($("contestChannelName").value || "elfoween") || "elfoween";
-        const preview = `${emoji}︱${name}`;
+        const preview = `${emoji} | ${name}`;
         const el = $("contestChannelPreview");
         if (el){
           el.textContent = preview;
@@ -3389,14 +3600,23 @@
             const entries = counts.entries !== undefined ? `${counts.entries} entries` : "entries unknown";
             const statusLabel = status === "ended" ? "Ended" : status === "active" ? "Active" : "Unknown";
             const error = info.exists === false ? (info.error || "contest db missing") : info.error;
-            const errorLine = error ? `<div class="list-warn">${error}</div>` : "";
-            const card = `<div class="list-card"><strong>${label}</strong><div class="muted">${statusLabel} · ${entries}</div>${errorLine}</div>`;
-            allCards.push(card);
+            const deadline = meta ? (meta.deadline || meta.ends_at || meta.end || "") : "";
+            const deadlineLine = deadline ? `<div class=\"muted\">Deadline: ${deadline}</div>` : "";
+            let errorLine = "";
+            if (error){
+              const hint = error.includes("contest db") ? "Contest database missing. Initialize to create metadata." : error;
+              const action = channelId ? `<button class=\"btn-ghost contest-init\" data-channel=\"${channelId}\">Initialize</button>` : "";
+              const actionLine = action ? `<div class=\"contest-actions\">${action}</div>` : "";
+              errorLine = `<div class=\"status alert\">${hint}</div>${actionLine}`;
+            }
+            const card = `<div class=\"list-card\"><strong>${label}</strong><div class=\"muted\">${statusLabel} - ${entries}</div>${deadlineLine}${errorLine}</div>`;
             if (status === "ended"){
               endedCards.push(card);
+            } else {
+              allCards.push(card);
             }
           });
-          allEl.innerHTML = allCards.length ? allCards.join("") : "No contests yet.";
+          allEl.innerHTML = allCards.length ? allCards.join("") : "No active contests.";
           endedEl.innerHTML = endedCards.length ? endedCards.join("") : "No ended contests yet.";
         }catch(err){
           allEl.textContent = "Failed to load contests.";
@@ -3727,14 +3947,14 @@
         librarySelectHandler = (item) => {
           $("deckCreateBackPick").dataset.backUrl = item.url || "";
           $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
-          const preview = $("deckCreateBackPreview");
+          const preview = `${emoji} | ${name}`;
           preview.innerHTML = '<span class="preview-label">Back</span>';
           if (item.url){
             const img = document.createElement("img");
             img.src = item.url;
             preview.appendChild(img);
           }
-          setStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+          setTarotStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
         };
         showLibraryModal(true);
         loadLibrary("media");
@@ -3743,12 +3963,12 @@
       $("deckCreateSubmit").addEventListener("click", async () => {
         const id = $("deckCreateId").value.trim();
         if (!id){
-          setStatus("Deck id is required.", "err");
+          setTarotStatus("Deck id is required.", "err");
           return;
         }
         const backUrl = $("deckCreateBackPick").dataset.backUrl || "";
         if (!backUrl){
-          setStatus("Pick a deck back before creating the deck.", "err");
+          setTarotStatus("Pick a deck back before creating the deck.", "err");
           return;
         }
         const name = $("deckCreateName").value.trim();
@@ -3782,10 +4002,10 @@
           }
           await loadTarotDeckList(id);
           $("deckCreateModal").classList.remove("show");
-          setStatus("Deck created.", "ok");
+          setTarotStatus("Deck created.", "ok");
           await loadTarotDeck();
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       });
 
@@ -3800,7 +4020,8 @@
               taRenderPreviews(card);
             }
           }
-          setStatus("Card image selected from library.", "ok");
+          taSetDirty(true);
+          setTarotStatus("Card image selected from library.", "ok");
         };
         showLibraryModal(true);
         loadLibrary("media");
@@ -4251,6 +4472,63 @@
         return num ? taToRoman(num) || String(value || "") : "";
       }
 
+      let taDirty = false;
+      let taSuppressDirty = false;
+
+      function setTarotStatus(msg, kind){
+        const el = $("taDeckStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function taSetDirty(state){
+        if (taSuppressDirty) return;
+        taDirty = !!state;
+        if (taDirty){
+          setTarotStatus("Unsaved changes", "alert");
+        }
+      }
+
+      function taUpdateThemeRow(row, value){
+        const fill = row.querySelector(".theme-fill");
+        const valueEl = row.querySelector(".theme-value");
+        const weight = Math.max(0, Math.min(5, parseInt(value, 10) || 0));
+        if (fill){
+          fill.style.width = `${(weight / 5) * 100}%`;
+        }
+        if (valueEl){
+          valueEl.textContent = `${weight} / 5`;
+        }
+      }
+
+      function taSnippet(text, limit = 120){
+        const clean = String(text || "").trim();
+        if (!clean) return "";
+        if (clean.length <= limit) return clean;
+        return clean.slice(0, limit - 3) + "...";
+      }
+
+      function taUpdateContext(card){
+        const deckName = window.taDeckData && window.taDeckData.deck
+          ? (window.taDeckData.deck.name || window.taDeckData.deck.deck_id || "")
+          : "";
+        const deckId = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.deck_id : "";
+        const cardLabel = card && (card.name || card.card_id) ? (card.name || card.card_id) : "No card selected";
+        const path = $("taContextPath");
+        const meta = $("taContextMeta");
+        const deckMeta = $("taContextDeck");
+        if (path){
+          path.textContent = `Deck Editor / Forest / ${cardLabel}`;
+        }
+        if (meta){
+          meta.textContent = card ? `Editing ${cardLabel}` : "Pick a card to edit.";
+        }
+        if (deckMeta){
+          deckMeta.textContent = deckId ? `${deckName} (${deckId})` : "";
+        }
+      }
+
       function taRenderThemeWeights(weights, houseId){
         const grid = $("taCardThemes");
         const hint = $("taCardThemesHint");
@@ -4273,14 +4551,28 @@
           row.dataset.theme = theme;
           const label = document.createElement("label");
           label.textContent = taThemeLabel(theme);
+          const bar = document.createElement("div");
+          bar.className = "theme-bar";
+          const fill = document.createElement("div");
+          fill.className = "theme-fill";
+          bar.appendChild(fill);
           const input = document.createElement("input");
-          input.type = "number";
+          input.type = "range";
           input.min = "0";
           input.max = "5";
           input.step = "1";
           input.value = weights && weights[theme] ? weights[theme] : 0;
+          const value = document.createElement("div");
+          value.className = "theme-value";
           row.appendChild(label);
+          row.appendChild(bar);
           row.appendChild(input);
+          row.appendChild(value);
+          taUpdateThemeRow(row, input.value);
+          input.addEventListener("input", () => {
+            taUpdateThemeRow(row, input.value);
+            taSetDirty(true);
+          });
           grid.appendChild(row);
         });
       }
@@ -4299,6 +4591,7 @@
           const input = row.querySelector("input");
           if (!input) return;
           input.value = weights && weights[theme] ? weights[theme] : 0;
+          taUpdateThemeRow(row, input.value);
         });
       }
 
@@ -4375,6 +4668,8 @@
         const backUrl = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.back_image : "";
         const theme = (window.taDeckData && window.taDeckData.deck && window.taDeckData.deck.theme) || "classic";
         front.dataset.cardTheme = theme;
+        front.classList.add("card-object", "hover-flip");
+        back.classList.add("card-object");
         front.innerHTML = '<span class="preview-label">Front</span>';
         back.innerHTML = '<span class="preview-label">Back</span>';
         if (card && card.image){
@@ -4394,6 +4689,19 @@
           title.textContent = card.name;
           front.appendChild(title);
         }
+        if (card && (card.upright || card.reversed)){
+          const meaning = document.createElement("div");
+          meaning.className = "card-meaning";
+          const up = document.createElement("div");
+          up.className = "meaning-line upright";
+          up.textContent = "Upright: " + taSnippet(card.upright || "", 120);
+          const rev = document.createElement("div");
+          rev.className = "meaning-line reversed";
+          rev.textContent = "Reversed: " + taSnippet(card.reversed || "", 120);
+          meaning.appendChild(up);
+          meaning.appendChild(rev);
+          front.appendChild(meaning);
+        }
         if (backUrl){
           const img = document.createElement("img");
           img.src = backUrl;
@@ -4403,6 +4711,7 @@
 
       function taLoadCard(card){
         if (!card) return;
+        taSuppressDirty = true;
         taSelectedCardId = card.card_id || "";
         $("taCardId").value = card.card_id || "";
         $("taCardName").value = card.name || "";
@@ -4421,6 +4730,9 @@
         taApplyHouseThemeDefaults(card.house || "");
         taRenderPreviews(card);
         taSyncCardSelection();
+        taUpdateContext(card);
+        taDirty = false;
+        taSuppressDirty = false;
       }
 
       function taSyncCardSelection(){
@@ -4435,6 +4747,8 @@
           if (match){
             taRenderPreviews(match);
           }
+        } else {
+          taUpdateContext(null);
         }
       }
 
@@ -4457,7 +4771,7 @@
           });
           taRenderThemeWeights({}, taActiveHouse);
         }catch(err){
-          setStatus("Failed to load houses.", "err");
+          setTarotStatus("Failed to load houses.", "err");
         }
       }
 
@@ -4478,7 +4792,7 @@
           input.value = current;
           taRenderNumberInfo(input.value);
         }catch(err){
-          setStatus("Failed to load numbers.", "err");
+          setTarotStatus("Failed to load numbers.", "err");
         }
       }
 
@@ -4631,6 +4945,7 @@
         taRenderHouseInfo(taActiveHouse);
         taRenderThemeWeights({}, taActiveHouse);
         taApplyHouseThemeDefaults(taActiveHouse);
+        taSetDirty(true);
       });
       $("taCardNumber").addEventListener("input", (ev) => {
         taRenderNumberInfo(ev.target.value);
@@ -4638,6 +4953,21 @@
           name: $("taCardName").value.trim(),
           number: ev.target.value,
           image: window.taUploadedImageUrl || ""
+        });
+        taSetDirty(true);
+      });
+      ["taCardId", "taCardName", "taCardTags", "taCardFlavor", "taCardUpright", "taCardReversed"].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("input", () => {
+          taSetDirty(true);
+          if (id === "taCardName"){
+            taRenderPreviews({
+              name: $("taCardName").value.trim(),
+              number: $("taCardNumber").value.trim(),
+              image: window.taUploadedImageUrl || ""
+            });
+          }
         });
       });
       $("taDeckList").addEventListener("click", (ev) => {
@@ -4654,9 +4984,13 @@
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
           taRenderPreviews(null);
-          setStatus("Deck loaded.", "ok");
+          const deckName = (data.deck && (data.deck.name || data.deck.deck_id)) || deck;
+          const count = Array.isArray(data.cards) ? data.cards.length : 0;
+          setTarotStatus(`Deck loaded: ${deckName} (${count} cards)`, "ok");
+          taUpdateContext(null);
+          taDirty = false;
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       }
 
@@ -4680,7 +5014,7 @@
       $("taEditDeck").addEventListener("click", async () => {
         const deck = $("taDeck").value.trim();
         if (!deck){
-          setStatus("Pick a deck to edit.", "err");
+          setTarotStatus("Pick a deck to edit.", "err");
           return;
         }
         try{
@@ -4692,7 +5026,7 @@
           $("deckEditName").value = deckData.name || "";
           $("deckEditTheme").value = deckData.theme || "classic";
           const backUrl = deckData.back_image || "";
-          const preview = $("deckEditBackPreview");
+          const preview = `${emoji} | ${name}`;
           preview.innerHTML = '<span class="preview-label">Back</span>';
           if (backUrl){
             const img = document.createElement("img");
@@ -4703,7 +5037,7 @@
           $("deckEditBackPick").dataset.artistId = deckData.back_artist_id || "";
           $("deckEditModal").classList.add("show");
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       });
 
@@ -4719,7 +5053,7 @@
         librarySelectHandler = (item) => {
           $("deckEditBackPick").dataset.backUrl = item.url || "";
           $("deckEditBackPick").dataset.artistId = item.artist_id || "";
-          const preview = $("deckEditBackPreview");
+          const preview = `${emoji} | ${name}`;
           preview.innerHTML = '<span class="preview-label">Back</span>';
           if (item.url){
             const img = document.createElement("img");
@@ -4747,7 +5081,7 @@
       $("deckEditSubmit").addEventListener("click", async () => {
         const deck = $("taDeck").value.trim();
         if (!deck){
-          setStatus("Pick a deck to edit.", "err");
+          setTarotStatus("Pick a deck to edit.", "err");
           return;
         }
         const name = $("deckEditName").value.trim();
@@ -4769,34 +5103,34 @@
           }
           $("deckEditModal").classList.remove("show");
           await loadTarotDeck();
-          setStatus("Deck updated.", "ok");
+          setTarotStatus("Deck updated.", "ok");
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       });
 
       $("taDeleteDeck").addEventListener("click", async () => {
         if (!authUserIsElfmin){
-          setStatus("Only elfministrators can delete decks.", "err");
+          setTarotStatus("Only elfministrators can delete decks.", "err");
           return;
         }
         const deck = $("taDeck").value.trim();
         if (!deck){
-          setStatus("Pick a deck to delete.", "err");
+          setTarotStatus("Pick a deck to delete.", "err");
           return;
         }
-        if (!confirm(`Delete deck ${deck} and all its cards?`)){
+        if (!confirm("This deck will fall from the forest. Continue?")){
           return;
         }
         try{
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"DELETE"}, true);
-          setStatus("Deck deleted.", "ok");
+          setTarotStatus("Deck deleted.", "ok");
           await loadTarotDeckList();
           $("taDeckList").textContent = "No deck loaded.";
           taSelectedCardId = "";
           taRenderPreviews(null);
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       });
 
@@ -4823,7 +5157,6 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
           });
-          setStatus("Card saved.", "ok");
           $("taCardId").value = "";
           $("taCardName").value = "";
           $("taCardHouse").value = "";
@@ -4837,9 +5170,11 @@
           taRenderNumberInfo("");
           taSetCardThemeWeights({});
           taSelectedCardId = body.card_id || "";
+          taDirty = false;
           await loadTarotDeck();
+          setTarotStatus("Saved", "ok");
         }catch(err){
-          setStatus(err.message, "err");
+          setTarotStatus(err.message, "err");
         }
       });
 
@@ -4897,6 +5232,11 @@
     </script>
   </body>
 </html>
+
+
+
+
+
 
 
 
