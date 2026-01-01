@@ -159,7 +159,7 @@ class AuthCog(commands.Cog):
         async def copy_token(self, interaction: discord.Interaction, _button: discord.ui.Button):
             await interaction.response.send_message(f"```{self.token}```", ephemeral=True)
 
-    @bot.tree.command(
+    @app_commands.command(
         name="auth",
         description="Generate a 24h web API token for the overlay client."
     )
