@@ -4350,7 +4350,26 @@
           body.appendChild(cardHeader);
           const grid = document.createElement("div");
           grid.className = "bingo-grid";
-          (card.numbers || []).forEach((row, r) => {
+          let numbers = card.numbers;
+          if (typeof numbers === "string"){
+            try{
+              numbers = JSON.parse(numbers);
+            }catch(err){
+              numbers = null;
+            }
+          }
+          if (!Array.isArray(numbers)){
+            numbers = Array.isArray(card.grid)
+              ? card.grid
+              : (Array.isArray(card.card) ? card.card : []);
+          }
+          if (!numbers.length){
+            const empty = document.createElement("div");
+            empty.className = "status";
+            empty.textContent = "No numbers available for this card.";
+            body.appendChild(empty);
+          }
+          numbers.forEach((row, r) => {
             (row || []).forEach((value, c) => {
               const cell = document.createElement("div");
               cell.className = "bingo-cell";
@@ -4371,7 +4390,9 @@
               grid.appendChild(cell);
             });
           });
-          body.appendChild(grid);
+          if (numbers.length){
+            body.appendChild(grid);
+          }
           headerRow.addEventListener("click", () => {
             wrap.classList.toggle("collapsed");
           });
