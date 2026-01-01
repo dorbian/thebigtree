@@ -937,6 +937,7 @@
       sessionOverlay.classList.remove("show");
     }
     try{
+      await waitForImages();
       const canvas = await window.html2canvas(document.body, {backgroundColor: null});
       return canvas.toDataURL("image/png");
     }finally{
@@ -944,5 +945,18 @@
         sessionOverlay.classList.add("show");
       }
     }
+  }
+
+  async function waitForImages(){
+    const images = Array.from(document.images || []).filter(img => img && img.src);
+    if (!images.length) return;
+    await Promise.all(images.map(img => {
+      if (img.complete && img.naturalWidth) return Promise.resolve();
+      return new Promise(resolve => {
+        const done = () => resolve();
+        img.addEventListener("load", done, {once:true});
+        img.addEventListener("error", done, {once:true});
+      });
+    }));
   }
 </script>
