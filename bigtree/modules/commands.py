@@ -9,6 +9,9 @@ from discord import app_commands
 from discord import Permissions
 from bigtree.modules.permissions import is_bigtree_operator
 import bigtree.modules.contest as contesta
+from bigtree.modules import gallery as gallery_mod
+from bigtree.modules import media as media_mod
+from bigtree.modules import artists as artist_mod
 import re
 import asyncio
 from collections import defaultdict, deque
@@ -17,9 +20,70 @@ import bigtree.inc.ai as ai
 PRIEST_ROLE_NAME = "Priest/ess"
 
 bot = bigtree.bot
+_GALLERY_IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 # Simple per-user rolling memory (volatile)
 _user_hist = defaultdict(lambda: deque(maxlen=8))
+
+def _can_edit_gallery_upload(member, uploader_id: str) -> bool:
+    if not member:
+        return False
+    if str(getattr(member, "id", "")) == str(uploader_id):
+        return True
+    perms = getattr(member, "guild_permissions", None)
+    return bool(perms and (perms.administrator or perms.manage_guild))
+
+class GalleryUploadModal(discord.ui.Modal, title="Gallery: Add Details"):
+    def __init__(self, filename: str, artist_id: str, default_title: str, default_name: str):
+        super().__init__()
+        self.filename = filename
+        self.artist_id = artist_id
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            required=False,
+            max_length=120,
+            default=default_title or ""
+        )
+        self.artist_input = discord.ui.TextInput(
+            label="Artist name",
+            required=False,
+            max_length=80,
+            default=default_name or ""
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.artist_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        title = (self.title_input.value or "").strip()
+        artist_name = (self.artist_input.value or "").strip()
+        if not artist_name:
+            artist_name = getattr(interaction.user, "display_name", "") or interaction.user.name
+        try:
+            artist_mod.upsert_artist(self.artist_id, artist_name, {})
+            media_mod.add_media(self.filename, title=title or None, artist_id=self.artist_id)
+        except Exception as exc:
+            await interaction.response.send_message(f"Could not save details: {exc}", ephemeral=True)
+            return
+        await interaction.response.send_message("Gallery details saved.", ephemeral=True)
+
+class GalleryUploadView(discord.ui.View):
+    def __init__(self, filename: str, artist_id: str):
+        super().__init__(timeout=3600)
+        self.filename = filename
+        self.artist_id = artist_id
+
+    @discord.ui.button(label="Add details", style=discord.ButtonStyle.secondary)
+    async def add_details(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not _can_edit_gallery_upload(interaction.user, self.artist_id):
+            await interaction.response.send_message("Only the uploader can edit this entry.", ephemeral=True)
+            return
+        artist = artist_mod.get_artist(self.artist_id) or {}
+        media = media_mod.get_media(self.filename) or {}
+        default_title = media.get("title") or ""
+        default_name = artist.get("name") or getattr(interaction.user, "display_name", "") or interaction.user.name
+        await interaction.response.send_modal(
+            GalleryUploadModal(self.filename, self.artist_id, default_title, default_name)
+        )
 
 def _resolve_contest_view():
     """
@@ -111,6 +175,38 @@ async def colour(ctx):
 async def receive(message):
     try:
         if message.author.id == bot.user.id:
+            return
+
+        upload_channel_id = gallery_mod.get_upload_channel_id()
+        if upload_channel_id and message.channel.id == upload_channel_id:
+            if message.attachments:
+                for idx, attachment in enumerate(message.attachments):
+                    filename = attachment.filename or ""
+                    ext = Path(filename).suffix.lower()
+                    content_type = (attachment.content_type or "").lower()
+                    if ext not in _GALLERY_IMG_EXTS and not content_type.startswith("image/"):
+                        continue
+                    safe_ext = ext if ext in _GALLERY_IMG_EXTS else ".png"
+                    author_id = str(message.author.id)
+                    save_name = f"gallery_{message.id}_{idx}{safe_ext}"
+                    try:
+                        await attachment.save(fp=os.path.join(media_mod.get_media_dir(), save_name))
+                    except Exception:
+                        continue
+                    display_name = getattr(message.author, "display_name", None) or message.author.name
+                    artist_mod.upsert_artist(author_id, display_name, {})
+                    base_title = (message.content or "").strip() or filename
+                    title = base_title if idx == 0 else f"{base_title} ({idx + 1})"
+                    media_mod.add_media(save_name, original_name=filename, artist_id=author_id, title=title)
+                    try:
+                        view = GalleryUploadView(save_name, author_id)
+                        await message.reply(
+                            "Upload saved. Add details if needed.",
+                            view=view,
+                            mention_author=False
+                        )
+                    except Exception:
+                        pass
             return
 
         # contest channel handling

@@ -650,6 +650,63 @@
       .role-table tbody tr:hover{
         background:rgba(60,207,142,.08);
       }
+      .gallery-admin-list{
+        max-height:320px;
+        overflow:auto;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(6,10,18,.6);
+        padding:8px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .gallery-admin-row{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:8px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.08);
+        background:rgba(8,12,18,.45);
+      }
+      .gallery-thumb{
+        width:46px;
+        height:62px;
+        border-radius:8px;
+        background:rgba(12,18,16,.7);
+        border:1px solid rgba(255,255,255,.08);
+        object-fit:cover;
+        flex:0 0 auto;
+      }
+      .gallery-meta{
+        flex:1;
+        min-width:0;
+      }
+      .gallery-title{
+        font-size:12px;
+        font-weight:600;
+        color:var(--ink);
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }
+      .gallery-sub{
+        font-size:11px;
+        color:var(--muted);
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }
+      .gallery-actions{
+        display:flex;
+        gap:6px;
+        flex:0 0 auto;
+      }
+      .gallery-actions .btn-ghost{
+        padding:4px 8px;
+        font-size:11px;
+      }
       .role-name{
         font-weight:600;
         color:var(--ink);
@@ -1323,6 +1380,11 @@
             <button class="menu-icon" id="menuCalendar" title="Gallery calendar" aria-label="Gallery calendar">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h4V2zm-3 6v12h16V8H4zm2 2h4v4H6v-4z"/>
+              </svg>
+            </button>
+            <button class="menu-icon" id="menuGallery" title="Gallery admin" aria-label="Gallery admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2v8h16V8H4zm3 6 3-4 3 3 2-2 3 4H7z"/>
               </svg>
             </button>
             <button class="menu-icon" id="menuAuthRoles" title="Auth roles" aria-label="Auth roles">
@@ -2268,6 +2330,87 @@
           </div>
         </div>
         <div class="status" id="calendarStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="galleryModal">
+      <div class="modal-card modal-card--wide">
+        <div class="modal-header">
+          <div class="modal-title">Gallery Admin</div>
+          <button class="btn-ghost" id="galleryClose">Close</button>
+        </div>
+        <h3>Upload Channel</h3>
+        <div class="row">
+          <div>
+            <label for="galleryUploadChannel">Upload channel</label>
+            <select id="galleryUploadChannel"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryChannelRefresh">Refresh channels</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="galleryChannelSave">Save channel</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="galleryChannelName">Create channel name</label>
+            <input id="galleryChannelName" placeholder="forest-gallery-uploads">
+          </div>
+          <div>
+            <label for="galleryChannelCategory">Category ID</label>
+            <input id="galleryChannelCategory" placeholder="1234567890">
+          </div>
+          <div>
+            <label for="galleryChannelTemplate">Template channel</label>
+            <select id="galleryChannelTemplate"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryChannelCreate">Create channel</button>
+          </div>
+        </div>
+        <div class="status" id="galleryChannelStatus">Pick a channel to use for uploads.</div>
+        <div class="section-divider"></div>
+        <h3>Gallery Items</h3>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryItemsRefresh">Refresh items</button>
+          </div>
+        </div>
+        <div class="gallery-admin-list" id="galleryItemsList">No items loaded.</div>
+        <div class="status" id="galleryItemsStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="galleryEditModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Edit Gallery Item</div>
+          <button class="btn-ghost" id="galleryEditClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="galleryEditTitle">Title</label>
+            <input id="galleryEditTitle" placeholder="Untitled Offering">
+          </div>
+          <div>
+            <label for="galleryEditArtist">Artist</label>
+            <select id="galleryEditArtist"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="galleryEditArtistName">Artist name</label>
+            <input id="galleryEditArtistName" placeholder="Display name">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="galleryEditSave">Save</button>
+          </div>
+        </div>
+        <div class="status" id="galleryEditStatus">Ready.</div>
       </div>
     </div>
     <div class="modal" id="authRolesModal">
@@ -3512,6 +3655,13 @@
         $("calendarModal").classList.add("show");
         loadCalendarAdmin();
       });
+      $("menuGallery").addEventListener("click", () => {
+        $("galleryModal").classList.add("show");
+        loadGalleryChannels();
+        loadGallerySettings();
+        loadGalleryItems();
+        loadTarotArtists();
+      });
       $("menuAuthRoles").addEventListener("click", () => {
         if (!authUserIsElfmin){
           setStatus("Only elfministrators can manage auth roles.", "err");
@@ -3810,6 +3960,176 @@
         }
       }
 
+      let galleryItemsCache = [];
+      let galleryEditItem = null;
+
+      async function loadGallerySettings(){
+        try{
+          const data = await jsonFetch("/api/gallery/settings", {method:"GET"}, true);
+          const channelId = data.upload_channel_id ? String(data.upload_channel_id) : "";
+          const select = $("galleryUploadChannel");
+          if (select && channelId){
+            select.value = channelId;
+          }
+          setGalleryChannelStatus(channelId ? "Upload channel set." : "Pick a channel to use for uploads.", channelId ? "ok" : "");
+        }catch(err){
+          setGalleryChannelStatus(err.message, "err");
+        }
+      }
+
+      async function loadGalleryChannels(){
+        const select = $("galleryUploadChannel");
+        const templateSelect = $("galleryChannelTemplate");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        if (templateSelect){
+          templateSelect.innerHTML = `<option value="">Loading...</option>`;
+        }
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          if (templateSelect){
+            templateSelect.innerHTML = "";
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = "(no template)";
+            templateSelect.appendChild(none);
+          }
+          channels.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            const parts = [];
+            if (c.guild_name) parts.push(c.guild_name);
+            if (c.category) parts.push(c.category);
+            const label = parts.length ? `${parts.join(" / ")} / #${c.name}` : `#${c.name}`;
+            opt.textContent = label;
+            select.appendChild(opt);
+            if (templateSelect){
+              const clone = document.createElement("option");
+              clone.value = c.id;
+              clone.textContent = label;
+              templateSelect.appendChild(clone);
+            }
+          });
+          if (!channels.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No channels found.";
+            select.appendChild(opt);
+            if (templateSelect){
+              const opt2 = document.createElement("option");
+              opt2.value = "";
+              opt2.textContent = "No channels found.";
+              templateSelect.appendChild(opt2);
+            }
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load channels</option>`;
+          if (templateSelect){
+            templateSelect.innerHTML = `<option value="">Failed to load channels</option>`;
+          }
+          setGalleryChannelStatus(err.message, "err");
+        }
+      }
+
+      function setGalleryChannelStatus(msg, kind){
+        const el = $("galleryChannelStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setGalleryItemsStatus(msg, kind){
+        const el = $("galleryItemsStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function renderGalleryItems(items){
+        const list = $("galleryItemsList");
+        if (!list) return;
+        galleryItemsCache = items || [];
+        if (!galleryItemsCache.length){
+          list.textContent = "No items found.";
+          return;
+        }
+        list.innerHTML = "";
+        galleryItemsCache.forEach(item => {
+          const row = document.createElement("div");
+          row.className = "gallery-admin-row";
+          const thumb = document.createElement(item.url ? "img" : "div");
+          thumb.className = "gallery-thumb";
+          if (item.url){
+            thumb.src = item.url;
+            thumb.alt = item.title || "Gallery item";
+          }
+          const meta = document.createElement("div");
+          meta.className = "gallery-meta";
+          const title = document.createElement("div");
+          title.className = "gallery-title";
+          title.textContent = item.title || item.url || "Untitled";
+          const sub = document.createElement("div");
+          sub.className = "gallery-sub";
+          const artistName = (item.artist && item.artist.name) ? item.artist.name : "Forest";
+          const source = item.source || item.type || "gallery";
+          sub.textContent = `${artistName} - ${source}`;
+          meta.appendChild(title);
+          meta.appendChild(sub);
+          const actions = document.createElement("div");
+          actions.className = "gallery-actions";
+          const toggle = document.createElement("button");
+          toggle.className = "btn-ghost";
+          toggle.textContent = item.hidden ? "Show" : "Hide";
+          toggle.addEventListener("click", async () => {
+            try{
+              await jsonFetch("/api/gallery/hidden", {
+                method:"POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({item_id: item.item_id, hidden: !item.hidden})
+              }, true);
+              await loadGalleryItems();
+            }catch(err){
+              setGalleryItemsStatus(err.message, "err");
+            }
+          });
+          const canEdit = String(item.item_id || "").startsWith("media:");
+          const edit = document.createElement("button");
+          edit.className = "btn-ghost";
+          edit.textContent = "Edit";
+          edit.disabled = !canEdit;
+          edit.addEventListener("click", () => openGalleryEdit(item));
+          actions.appendChild(toggle);
+          actions.appendChild(edit);
+          row.appendChild(thumb);
+          row.appendChild(meta);
+          row.appendChild(actions);
+          list.appendChild(row);
+        });
+      }
+
+      async function loadGalleryItems(){
+        setGalleryItemsStatus("Loading items...", "");
+        try{
+          const data = await jsonFetch("/api/gallery/admin/items", {method:"GET"}, true);
+          renderGalleryItems(data.items || []);
+          setGalleryItemsStatus("Ready.", "ok");
+        }catch(err){
+          setGalleryItemsStatus(err.message, "err");
+        }
+      }
+
+      function openGalleryEdit(item){
+        galleryEditItem = item;
+        $("galleryEditTitle").value = item.title || "";
+        const artist = item.artist || {};
+        $("galleryEditArtist").value = artist.artist_id || "";
+        $("galleryEditArtistName").value = artist.name || "";
+        $("galleryEditStatus").textContent = "Ready.";
+        $("galleryEditModal").classList.add("show");
+      }
+
       async function createContest(){
         let channelId = $("contestChannel").value;
         if (!channelId){
@@ -4097,6 +4417,96 @@
       });
       $("calendarClose").addEventListener("click", () => {
         $("calendarModal").classList.remove("show");
+      });
+      $("galleryClose").addEventListener("click", () => {
+        $("galleryModal").classList.remove("show");
+      });
+      $("galleryModal").addEventListener("click", (event) => {
+        if (event.target === $("galleryModal")){
+          $("galleryModal").classList.remove("show");
+        }
+      });
+      $("galleryEditClose").addEventListener("click", () => {
+        $("galleryEditModal").classList.remove("show");
+      });
+      $("galleryEditModal").addEventListener("click", (event) => {
+        if (event.target === $("galleryEditModal")){
+          $("galleryEditModal").classList.remove("show");
+        }
+      });
+      $("galleryChannelRefresh").addEventListener("click", () => loadGalleryChannels());
+      $("galleryItemsRefresh").addEventListener("click", () => loadGalleryItems());
+      $("galleryChannelSave").addEventListener("click", async () => {
+        const channelId = $("galleryUploadChannel").value || "";
+        try{
+          await jsonFetch("/api/gallery/settings", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({upload_channel_id: channelId || null})
+          }, true);
+          setGalleryChannelStatus("Upload channel saved.", "ok");
+        }catch(err){
+          setGalleryChannelStatus(err.message, "err");
+        }
+      });
+      $("galleryChannelCreate").addEventListener("click", async () => {
+        const name = $("galleryChannelName").value.trim();
+        const categoryId = $("galleryChannelCategory").value.trim();
+        const templateId = $("galleryChannelTemplate").value || "";
+        if (!name){
+          setGalleryChannelStatus("Enter a channel name.", "err");
+          return;
+        }
+        if (!categoryId){
+          setGalleryChannelStatus("Enter a category ID.", "err");
+          return;
+        }
+        setGalleryChannelStatus("Creating channel...", "");
+        try{
+          const data = await jsonFetch("/api/gallery/upload-channel", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+              name,
+              category_id: categoryId,
+              template_channel_id: templateId || undefined
+            })
+          }, true);
+          setGalleryChannelStatus(`Channel created: ${data.name}`, "ok");
+          await loadGalleryChannels();
+          $("galleryUploadChannel").value = String(data.channel_id || "");
+        }catch(err){
+          setGalleryChannelStatus(err.message, "err");
+        }
+      });
+      $("galleryEditArtist").addEventListener("change", (ev) => {
+        const pick = (window.taArtists || []).find(a => a.artist_id === ev.target.value);
+        if (pick && $("galleryEditArtistName")){
+          $("galleryEditArtistName").value = pick.name || "";
+        }
+      });
+      $("galleryEditSave").addEventListener("click", async () => {
+        if (!galleryEditItem){
+          return;
+        }
+        try{
+          await jsonFetch("/api/gallery/media/update", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+              item_id: galleryEditItem.item_id,
+              title: $("galleryEditTitle").value.trim(),
+              artist_id: $("galleryEditArtist").value.trim() || undefined,
+              artist_name: $("galleryEditArtistName").value.trim()
+            })
+          }, true);
+          $("galleryEditModal").classList.remove("show");
+          await loadGalleryItems();
+          setGalleryItemsStatus("Item updated.", "ok");
+        }catch(err){
+          $("galleryEditStatus").textContent = err.message;
+          $("galleryEditStatus").className = "status err";
+        }
       });
       $("calendarRefresh").addEventListener("click", () => loadCalendarAdmin());
       $("calendarMonth").addEventListener("change", (ev) => {
@@ -5143,7 +5553,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-          const selects = ["uploadLibraryArtist", "artistIndexSelect"];
+          const selects = ["uploadLibraryArtist", "artistIndexSelect", "galleryEditArtist"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;

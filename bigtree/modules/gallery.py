@@ -12,6 +12,8 @@ except Exception:
 
 _CALENDAR_DB_PATH: Optional[str] = None
 _REACTIONS_DB_PATH: Optional[str] = None
+_HIDDEN_DB_PATH: Optional[str] = None
+_SETTINGS_DB_PATH: Optional[str] = None
 _REACTION_TYPES = ("appreciation", "inspired", "gratitude", "craft")
 
 def _now() -> float:
@@ -50,6 +52,26 @@ def _reactions_path() -> str:
 
 def _reactions_db() -> TinyDB:
     return TinyDB(_reactions_path())
+
+def _hidden_path() -> str:
+    global _HIDDEN_DB_PATH
+    if _HIDDEN_DB_PATH:
+        return _HIDDEN_DB_PATH
+    _HIDDEN_DB_PATH = os.path.join(_get_base_dir(), "gallery_hidden.json")
+    return _HIDDEN_DB_PATH
+
+def _hidden_db() -> TinyDB:
+    return TinyDB(_hidden_path())
+
+def _settings_path() -> str:
+    global _SETTINGS_DB_PATH
+    if _SETTINGS_DB_PATH:
+        return _SETTINGS_DB_PATH
+    _SETTINGS_DB_PATH = os.path.join(_get_base_dir(), "gallery_settings.json")
+    return _SETTINGS_DB_PATH
+
+def _settings_db() -> TinyDB:
+    return TinyDB(_settings_path())
 
 def reaction_types() -> List[str]:
     return list(_REACTION_TYPES)
@@ -93,6 +115,55 @@ def increment_reaction(item_id: str, reaction_id: str, amount: int = 1) -> Dict[
     else:
         db.insert(payload)
     return get_reactions(item_id)
+
+def is_hidden(item_id: str) -> bool:
+    if not item_id:
+        return False
+    db = _hidden_db(); q = Query()
+    row = db.get((q._type == "hidden") & (q.item_id == item_id))
+    return bool(row and row.get("hidden") is True)
+
+def set_hidden(item_id: str, hidden: bool) -> Dict[str, int | str | bool]:
+    if not item_id:
+        raise ValueError("item_id required")
+    db = _hidden_db(); q = Query()
+    payload = {
+        "_type": "hidden",
+        "item_id": item_id,
+        "hidden": bool(hidden),
+        "updated_at": _now(),
+    }
+    existing = db.get((q._type == "hidden") & (q.item_id == item_id))
+    if existing:
+        db.update(payload, (q._type == "hidden") & (q.item_id == item_id))
+    else:
+        db.insert(payload)
+    return payload
+
+def get_upload_channel_id() -> Optional[int]:
+    db = _settings_db(); q = Query()
+    row = db.get(q._type == "settings")
+    if not row:
+        return None
+    try:
+        value = int(row.get("upload_channel_id") or 0)
+    except Exception:
+        value = 0
+    return value or None
+
+def set_upload_channel_id(channel_id: Optional[int]) -> Dict:
+    db = _settings_db(); q = Query()
+    payload = {
+        "_type": "settings",
+        "upload_channel_id": int(channel_id) if channel_id else None,
+        "updated_at": _now(),
+    }
+    existing = db.get(q._type == "settings")
+    if existing:
+        db.update(payload, q._type == "settings")
+    else:
+        db.insert(payload)
+    return payload
 
 def list_calendar() -> List[Dict]:
     db = _db(); q = Query()
