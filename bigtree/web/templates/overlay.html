@@ -441,6 +441,109 @@
       .dashboard-readme strong{
         color:var(--ink);
       }
+      .dash-toc{
+        padding:12px;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(8,12,16,.55);
+        margin-bottom:16px;
+      }
+      .dash-toc ul{
+        margin:6px 0 0;
+        padding-left:18px;
+        color:var(--muted);
+        font-size:13px;
+      }
+      .dash-toc a{
+        color:var(--accent);
+        text-decoration:none;
+      }
+      .dash-toc a:hover{text-decoration:underline}
+      .dash-section{
+        border:1px solid var(--line);
+        border-radius:12px;
+        background:rgba(8,12,16,.55);
+        padding:10px 12px;
+        margin-bottom:12px;
+      }
+      .dash-section summary{
+        cursor:pointer;
+        font-size:14px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--accent-2);
+      }
+      .dash-section-body{
+        padding-top:10px;
+        color:var(--muted);
+      }
+      .dash-blocks{
+        display:grid;
+        grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+        gap:12px;
+        margin-bottom:12px;
+      }
+      .dash-block{
+        border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;
+        padding:10px;
+        background:rgba(6,10,18,.4);
+      }
+      .dash-label{
+        font-size:10px;
+        letter-spacing:.12em;
+        text-transform:uppercase;
+        color:rgba(155,182,167,.8);
+        margin-bottom:6px;
+      }
+      .dash-links a{
+        display:inline-block;
+        margin:2px 8px 2px 0;
+        color:var(--accent);
+        text-decoration:none;
+        font-size:12px;
+      }
+      .dash-links a:hover{text-decoration:underline}
+      .cmd{
+        font-family:Consolas, "Courier New", monospace;
+        font-size:12px;
+        padding:2px 6px;
+        border-radius:6px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(8,12,16,.6);
+        color:#d6ffe9;
+      }
+      .dash-note{
+        border-left:3px solid rgba(224,176,125,.6);
+        padding:8px 10px;
+        background:rgba(30,18,14,.5);
+        border-radius:8px;
+        color:#f3d7c4;
+        margin:8px 0;
+      }
+      .dash-list{
+        margin:6px 0 10px 18px;
+        color:var(--muted);
+      }
+      .dash-tool{
+        margin-bottom:10px;
+        padding:8px 10px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.08);
+        background:rgba(6,10,18,.35);
+      }
+      .dash-tool-title{
+        font-weight:700;
+        color:var(--ink);
+        margin-bottom:4px;
+      }
+      .dash-issue{
+        border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;
+        padding:8px 10px;
+        margin-bottom:8px;
+        background:rgba(6,10,18,.35);
+      }
       .dashboard-grid{
         display:grid;
         grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
@@ -1766,51 +1869,329 @@
           <h2>Forest Dashboard</h2>
           <p class="muted">Welcome to the forest control room. This is a quick start and reference for the bot and site.</p>
           <div class="dashboard-readme" style="margin-top:12px">
-            <h3>Quick Start</h3>
-            <p>1) Use /auth in Discord to get a 24h web token if your role allows it.</p>
-            <p>2) Paste the token on this page to unlock the tools.</p>
-            <p>3) Pick a panel on the left to open the manager you need.</p>
+            <div class="dash-toc">
+              <strong>Table of contents</strong>
+              <ul>
+                <li><a href="#dash-overview">Welcome & System Overview</a></li>
+                <li><a href="#dash-auth">Authentication & Access</a></li>
+                <li><a href="#dash-downloads">Downloadable Software & Installations</a></li>
+                <li><a href="#dash-commands">Discord Bot Commands</a></li>
+                <li><a href="#dash-tools">Web Dashboard Tools</a></li>
+                <li><a href="#dash-workflows">Workflows</a></li>
+                <li><a href="#dash-gallery">Gallery & Archival Flow</a></li>
+                <li><a href="#dash-troubleshoot">Troubleshooting</a></li>
+                <li><a href="#dash-credits">Credits & Acknowledgements</a></li>
+              </ul>
+            </div>
 
-            <h3>Discord Bot Commands</h3>
-            <p><strong>Bingo:</strong> /bingo, /bingo-menu, /bingo-stage, /call, /bingo-status, /bingo-end, /bingo-url, /bingo-owner-url, /buycard, /buycards, /bingo-upload-bg.</p>
-            <p><strong>Tarot:</strong> /tarot_start, /tarot_draw, /tarot_flip, /tarot_end, /tarot_stream, /tarot_add_card, /tarot_addcard, /tarot_session, /tarot_template_init, /tarot_deck_from_template, /tarot_claims_post.</p>
-            <p><strong>Contests:</strong> /contest to start, /contest_stop to end.</p>
-            <p><strong>Permissions:</strong> /permissions list, add-role, remove-role, add-user, remove-user, refresh.</p>
-            <p><strong>Announcements:</strong> /commune to craft an official post.</p>
-            <p><strong>AI helper:</strong> /quickpost for a short draft with approve/retry.</p>
+            <details class="dash-section" id="dash-overview" open>
+              <summary>Welcome & System Overview</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>Forest is a coordinated system of Discord commands, web tools, and overlays used to run games, rituals, and archives.</p>
+                    <ul class="dash-list">
+                      <li>Discord Bot</li>
+                      <li>Web Dashboard</li>
+                      <li>OBS Overlay</li>
+                      <li>Media & Gallery System</li>
+                    </ul>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Use this page for onboarding, daily operations, and troubleshooting during live events.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="/overlay">Web Dashboard</a>
+                      <a href="/tarot/gallery" target="_blank" rel="noreferrer">Forest Gallery</a>
+                      <a href="/tarot/calendar" target="_blank" rel="noreferrer">Gallery Calendar</a>
+                      <a href="/tarot/overlay" target="_blank" rel="noreferrer">Tarot Overlay</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
 
-            <h3>Site & Overlay Features</h3>
-            <p><strong>Dashboard:</strong> home base, quick reference, and credits.</p>
-            <p><strong>Session Manager:</strong> create and run tarot sessions, open player and priestess views.</p>
-            <p><strong>Deck Editor:</strong> build decks and cards, edit meanings, suits, numbers, and art.</p>
-            <p><strong>Bingo Manager:</strong> manage live games, claims, and stage changes.</p>
-            <p><strong>Overlay Mode:</strong> OBS-friendly layouts for stream scenes.</p>
-            <p><strong>Admin Tools:</strong> auth roles, auth keys, media library, artist index, gallery calendar.</p>
+            <details class="dash-section" id="dash-auth" open>
+              <summary>Authentication & Access</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>Authentication protects admin tools. Tokens are short-lived and tied to your Discord role permissions.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Use this whenever tools are locked, permissions are missing, or a token expires.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="/overlay">Dashboard Login</a>
+                    </div>
+                  </div>
+                </div>
+                <h3>How authentication works</h3>
+                <ul class="dash-list">
+                  <li><span class="cmd">/auth</span> generates a 24-hour token.</li>
+                  <li>Tokens unlock tools based on role permissions.</li>
+                  <li>Expired tokens must be regenerated.</li>
+                </ul>
+                <h3>Step-by-step</h3>
+                <ol class="dash-list">
+                  <li>Run <span class="cmd">/auth</span> in Discord.</li>
+                  <li>Copy the generated token.</li>
+                  <li>Paste the token into the Dashboard auth field.</li>
+                  <li>Tools unlock based on role permissions.</li>
+                </ol>
+                <div class="dash-note">Security warning: never share tokens. Treat them like passwords.</div>
+                <p><strong>Who can generate tokens:</strong> only members with approved roles or permissions.</p>
+                <p><strong>When a token expires:</strong> tools lock until a new token is generated.</p>
+              </div>
+            </details>
 
-            <h3>Tarot Workflow</h3>
-            <p>1) Create a session with a deck and spread.</p>
-            <p>2) Use Draw to pull cards and Reveal to flip them.</p>
-            <p>3) Click a card to reveal or fullscreen it.</p>
-            <p>4) Finish closes the session and enables screenshots.</p>
+            <details class="dash-section" id="dash-downloads">
+              <summary>Downloadable Software & Installations</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>Use OBS to display overlays for live Tarot and Bingo sessions.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Required for streaming, screen capture, and in-scene overlays.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="{{OBS_DOWNLOAD_URL}}" target="_blank" rel="noreferrer">Download OBS Studio</a>
+                    </div>
+                  </div>
+                </div>
+                <h3>Overlay Mode (OBS)</h3>
+                <ol class="dash-list">
+                  <li>Install OBS Studio.</li>
+                  <li>Add a Browser Source.</li>
+                  <li>Paste the overlay URL.</li>
+                  <li>Set resolution and FPS to match your stream.</li>
+                  <li>Enable “Refresh browser when scene becomes active”.</li>
+                </ol>
+              </div>
+            </details>
 
-            <h3>Deck Editor Workflow</h3>
-            <p>1) Pick a deck to load, then select a card or create a new one.</p>
-            <p>2) Set number, suit, meanings, flavor text, and art.</p>
-            <p>3) Theme weights apply only to the selected suit.</p>
-            <p>4) Use Edit Deck to change name, theme, and back art.</p>
+            <details class="dash-section" id="dash-commands">
+              <summary>Discord Bot Commands (Task-Based)</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>Commands are grouped by task to support live operations.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Use this during live events and when training new operators.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="#dash-workflows">Workflows</a>
+                    </div>
+                  </div>
+                </div>
+                <h3>Bingo Commands</h3>
+                <p>Used to run live Bingo games.</p>
+                <ul class="dash-list">
+                  <li><span class="cmd">/bingo</span> — start a game</li>
+                  <li><span class="cmd">/call</span> — call the next number</li>
+                  <li><span class="cmd">/bingo-stage</span> — advance game stage</li>
+                  <li><span class="cmd">/bingo-end</span> — end the game</li>
+                  <li><span class="cmd">/buycard</span> or <span class="cmd">/buycards</span> — sell cards</li>
+                </ul>
+                <p><strong>Typical Bingo flow:</strong> start game → sell cards → call numbers → manage claims → end game.</p>
 
-            <h3>Troubleshooting</h3>
-            <p>If the overlay is blank, check your auth token.</p>
-            <p>If cards do not update, refresh the reading view.</p>
-            <p>Bad gateway means the main server is still starting.</p>
-            <p>If images fail, reopen the media library.</p>
+                <h3>Tarot Commands</h3>
+                <p>Used during tarot readings and rituals.</p>
+                <ul class="dash-list">
+                  <li><span class="cmd">/tarot_start</span> — open a session</li>
+                  <li><span class="cmd">/tarot_draw</span> — draw cards</li>
+                  <li><span class="cmd">/tarot_flip</span> — reveal cards</li>
+                  <li><span class="cmd">/tarot_end</span> — close session and archive</li>
+                  <li><span class="cmd">/tarot_stream</span> — generate overlay link</li>
+                </ul>
+                <p><strong>Session vs overlay:</strong> session view is operator control, overlay view is for streaming.</p>
 
-            <h3>Thanks & Credits</h3>
-            <p>Yamaneko Chi - my one true love and steady anchor.</p>
-            <p>Asgorath White - without whom the games would never have grown to what it is today.</p>
-            <p>Malady La'niaiserie - party planner and forest hype master.</p>
-            <p>Labreska Vaalkihar - tireless work on the forest mysticism.</p>
-            <p>Levi Anvunin/Cesare - the one and only priest to have walked the forest.</p>
+                <h3>Contest Commands</h3>
+                <p>Use contests to collect entries that move into the Gallery.</p>
+                <ul class="dash-list">
+                  <li><span class="cmd">/contest</span> — start a contest</li>
+                  <li><span class="cmd">/contest_stop</span> — end the contest</li>
+                </ul>
+
+                <h3>Permissions & Admin Commands</h3>
+                <ul class="dash-list">
+                  <li><span class="cmd">/permissions list</span> — inspect current access</li>
+                  <li><span class="cmd">/permissions refresh</span> — sync permissions</li>
+                </ul>
+                <p>Roles define access. Users inherit from roles. Refresh after role updates.</p>
+              </div>
+            </details>
+
+            <details class="dash-section" id="dash-tools">
+              <summary>Web Dashboard Tools</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>Each tool is purpose-built; use the right one to avoid unintended changes.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Use this when deciding where to make a change or troubleshoot behavior.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="/overlay">Dashboard</a>
+                    </div>
+                  </div>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Dashboard</div>
+                  <p>For onboarding, reference, and troubleshooting. Does not change data.</p>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Session Manager</div>
+                  <p>Run tarot sessions, open player/priestess views. Does not edit deck content.</p>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Deck Editor</div>
+                  <p>Create and maintain decks and cards. Changes are permanent. Does not alter active sessions until selected.</p>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Bingo Manager</div>
+                  <p>Run live Bingo games, manage claims and stage changes. Does not create Discord channels.</p>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Overlay Mode</div>
+                  <p>OBS-friendly layout for streaming. Does not change game state.</p>
+                </div>
+                <div class="dash-tool">
+                  <div class="dash-tool-title">Admin Tools</div>
+                  <p>Auth roles/keys, media library, artist index, gallery calendar. Use with care.</p>
+                </div>
+              </div>
+            </details>
+
+            <details class="dash-section" id="dash-workflows">
+              <summary>Workflows</summary>
+              <div class="dash-section-body">
+                <h3>Tarot Workflow</h3>
+                <ul class="dash-list">
+                  <li><strong>Why:</strong> ensures sessions are structured and archived.</li>
+                  <li><strong>Steps:</strong> create session → draw → reveal → narrate → finish.</li>
+                  <li><strong>Expect:</strong> cards appear in the spread and meaning panel updates.</li>
+                  <li><strong>Common mistakes:</strong> forgetting to reveal, using wrong deck.</li>
+                </ul>
+
+                <h3>Deck Editor Workflow</h3>
+                <ul class="dash-list">
+                  <li><strong>Why:</strong> maintain a clean, reusable deck library.</li>
+                  <li><strong>Steps:</strong> pick deck → edit card → set art → save.</li>
+                  <li><strong>Expect:</strong> previews update immediately; changes persist.</li>
+                  <li><strong>Common mistakes:</strong> editing the wrong deck, missing back art.</li>
+                </ul>
+
+                <h3>Bingo Workflow</h3>
+                <ul class="dash-list">
+                  <li><strong>Why:</strong> run a fair, synchronized live game.</li>
+                  <li><strong>Steps:</strong> create game → sell cards → call numbers → manage claims → close.</li>
+                  <li><strong>Expect:</strong> called numbers update across views.</li>
+                  <li><strong>Common mistakes:</strong> calling before game start, ignoring pending claims.</li>
+                </ul>
+              </div>
+            </details>
+
+            <details class="dash-section" id="dash-gallery">
+              <summary>Gallery & Archival Flow</summary>
+              <div class="dash-section-body">
+                <div class="dash-blocks">
+                  <div class="dash-block">
+                    <div class="dash-label">Overview</div>
+                    <p>When games end, their artwork is preserved in the Forest Gallery as a shrine to contributors.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">When to use this</div>
+                    <p>Use this to verify artist attribution and manage visibility.</p>
+                  </div>
+                  <div class="dash-block">
+                    <div class="dash-label">Links</div>
+                    <div class="dash-links">
+                      <a href="/tarot/gallery" target="_blank" rel="noreferrer">Forest Gallery</a>
+                    </div>
+                  </div>
+                </div>
+                <p>Artist names and links are preserved. The gallery exists to honor work, not rank it.</p>
+              </div>
+            </details>
+
+            <details class="dash-section" id="dash-troubleshoot">
+              <summary>Troubleshooting (Decision Guide)</summary>
+              <div class="dash-section-body">
+                <h3>Authentication Issues</h3>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Tools locked or login fails.</p>
+                  <p><strong>Likely cause:</strong> Token expired or missing permissions.</p>
+                  <p><strong>Action:</strong> Run <span class="cmd">/auth</span> again and re-login.</p>
+                </div>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Overlay is blank.</p>
+                  <p><strong>Likely cause:</strong> Missing token or wrong URL.</p>
+                  <p><strong>Action:</strong> Re-open overlay link, ensure auth is valid.</p>
+                </div>
+
+                <h3>Sync Issues</h3>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Cards not updating.</p>
+                  <p><strong>Likely cause:</strong> Client stale state.</p>
+                  <p><strong>Action:</strong> Refresh the view and re-open the session.</p>
+                </div>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Bingo numbers desynced.</p>
+                  <p><strong>Likely cause:</strong> Calls not announced or stale game ID.</p>
+                  <p><strong>Action:</strong> Refresh Bingo Manager and verify active game.</p>
+                </div>
+
+                <h3>Media Issues</h3>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Images not loading.</p>
+                  <p><strong>Likely cause:</strong> Missing media file or bad URL.</p>
+                  <p><strong>Action:</strong> Re-open Media Library and re-select.</p>
+                </div>
+                <div class="dash-issue">
+                  <p><strong>Symptom:</strong> Wrong image used.</p>
+                  <p><strong>Likely cause:</strong> Incorrect selection.</p>
+                  <p><strong>Action:</strong> Re-select image and save the deck/card.</p>
+                </div>
+              </div>
+            </details>
+
+            <details class="dash-section" id="dash-credits">
+              <summary>Credits & Acknowledgements</summary>
+              <div class="dash-section-body">
+                <p>Credits recognize artists, moderators, maintainers, and contributors who sustain the Forest.</p>
+                <ul class="dash-list">
+                  <li>Yamaneko Chi</li>
+                  <li>Asgorath White</li>
+                  <li>Malady La'naiserie</li>
+                  <li>Labreska Vaalkihar</li>
+                  <li>Levi Anvunin/Cesare</li>
+                </ul>
+              </div>
+            </details>
           </div>
         </section>
         <section class="panel" style="animation-delay:.05s" id="bingoPanel">
