@@ -1009,8 +1009,8 @@
         <h3>Tarot</h3>
         <div class="menu-item" id="menuTarotLinks">Session Manager</div>
         <div class="menu-item" id="menuTarotDecks">Deck Editor</div>
-        <h3>Contests</h3>
-        <div class="menu-item" id="menuContests">Management</div>
+        <h3>Discord</h3>
+        <div class="menu-item" id="menuContests">Contests</div>
         <h3>Administration</h3>
           <div class="menu-icons">
             <button class="menu-icon" id="menuMedia" title="Media management" aria-label="Media management">
@@ -1374,7 +1374,7 @@
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">
-          <h2>Contest Management</h2>
+          <h2>Discord</h2>
           <div class="row">
             <div>
               <label>&nbsp;</label>
@@ -1433,6 +1433,32 @@
           <div class="list" id="contestAllList">No contests loaded.</div>
           <h3>Ended contests</h3>
           <div class="list" id="contestEndedList">No ended contests yet.</div>
+          <h3>TarotCards</h3>
+          <div class="row">
+            <div>
+              <label for="tarotClaimsDeck">Deck</label>
+              <select id="tarotClaimsDeck"></select>
+            </div>
+            <div>
+              <label for="tarotClaimsChannel">Channel</label>
+              <select id="tarotClaimsChannel"></select>
+            </div>
+            <div>
+              <label for="tarotClaimsLimit">Claim limit</label>
+              <input id="tarotClaimsLimit" type="number" value="2" min="1" max="10">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tarotClaimsRefresh">Refresh lists</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="tarotClaimsPost">Post TarotCards board</button>
+            </div>
+          </div>
+          <div class="status" id="tarotClaimsStatus">Ready.</div>
         </section>
         <div class="modal" id="contestChannelModal">
           <div class="modal-card">
@@ -2978,6 +3004,8 @@
         showPanel("contests");
         loadContestManagement();
         loadContestChannels();
+        loadTarotClaimsDecks();
+        loadTarotClaimsChannels();
       });
       $("bAnnounceToggle").addEventListener("change", async (ev) => {
         const gid = getGameId();
@@ -3044,6 +3072,11 @@
           $("contestChannelModal").classList.remove("show");
         }
       });
+      $("tarotClaimsRefresh").addEventListener("click", () => {
+        loadTarotClaimsDecks();
+        loadTarotClaimsChannels();
+      });
+      $("tarotClaimsPost").addEventListener("click", () => postTarotClaims());
       $("contestChannelCreate").addEventListener("click", async () => {
         try{
           const channelId = await createContestChannel();
@@ -3125,6 +3158,94 @@
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setTarotClaimsStatus(msg, kind){
+        const el = $("tarotClaimsStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      async function loadTarotClaimsDecks(){
+        const select = $("tarotClaimsDeck");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          if (!decks.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No decks found.";
+            select.appendChild(opt);
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load decks</option>`;
+          setTarotClaimsStatus(err.message, "err");
+        }
+      }
+
+      async function loadTarotClaimsChannels(){
+        const select = $("tarotClaimsChannel");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          channels.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            const parts = [];
+            if (c.guild_name) parts.push(c.guild_name);
+            if (c.category) parts.push(c.category);
+            const label = parts.length ? `${parts.join(" / ")} / #${c.name}` : `#${c.name}`;
+            opt.textContent = label;
+            select.appendChild(opt);
+          });
+          if (!channels.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No channels found.";
+            select.appendChild(opt);
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load channels</option>`;
+          setTarotClaimsStatus(err.message, "err");
+        }
+      }
+
+      async function postTarotClaims(){
+        const deckId = $("tarotClaimsDeck").value || "";
+        const channelId = $("tarotClaimsChannel").value || "";
+        const claimLimit = Number($("tarotClaimsLimit").value || 2);
+        if (!deckId){
+          setTarotClaimsStatus("Pick a deck first.", "err");
+          return;
+        }
+        if (!channelId){
+          setTarotClaimsStatus("Pick a channel first.", "err");
+          return;
+        }
+        setTarotClaimsStatus("Posting TarotCards board...", "");
+        try{
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deckId) + "/claims/post", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({channel_id: channelId, claim_limit: claimLimit})
+          }, true);
+          setTarotClaimsStatus("TarotCards board posted.", "ok");
+        }catch(err){
+          setTarotClaimsStatus(err.message, "err");
+        }
       }
 
       async function loadContestChannels(){

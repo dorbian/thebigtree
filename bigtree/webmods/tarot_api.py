@@ -10,11 +10,13 @@ import json as _json
 import imghdr
 from pathlib import Path
 import bigtree
+import discord
 from bigtree.inc.logging import upload_logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import tarot as tar
 from bigtree.modules import artists
 from bigtree.webmods import uploads as upload_mod
+from bigtree.cmds import tarot_claims as tarot_claims_cmd
 
 log = getattr(bigtree, "logger", logging.getLogger("bigtree"))
 
@@ -588,6 +590,36 @@ async def seed_deck(req: web.Request):
 async def seed_deck_template(req: web.Request):
     deck_id = req.match_info["deck_id"]
     tar.seed_deck_from_seed_file(deck_id)
+    return web.json_response({"ok": True})
+
+@route("POST", "/api/tarot/decks/{deck_id}/claims/post", scopes=["tarot:admin"])
+async def post_claims_board(req: web.Request):
+    deck_id = req.match_info["deck_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    channel_id = body.get("channel_id")
+    if not channel_id:
+        return _json_error("channel_id required")
+    try:
+        channel_id = int(channel_id)
+    except Exception:
+        return _json_error("channel_id must be an integer")
+    claim_limit = body.get("claim_limit")
+    try:
+        claim_limit = int(claim_limit) if claim_limit is not None else 2
+    except Exception:
+        claim_limit = 2
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return _json_error("bot not ready", status=503)
+    channel = bot.get_channel(channel_id)
+    if not channel or not isinstance(channel, discord.TextChannel):
+        return _json_error("channel not found", status=404)
+    if not tar.get_deck(deck_id):
+        tar.seed_deck_from_seed_file(deck_id)
+    await tarot_claims_cmd.post_claim_board(channel, deck_id, claim_limit=claim_limit)
     return web.json_response({"ok": True})
 
 @route("PUT", "/api/tarot/decks/{deck_id}/back", scopes=["tarot:admin"])

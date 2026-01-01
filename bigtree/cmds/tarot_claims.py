@@ -202,6 +202,11 @@ class RefreshButton(discord.ui.Button):
             return
         await view.update_message(interaction)
 
+async def post_claim_board(channel: discord.TextChannel, deck_id: str, claim_limit: int = 2) -> discord.Message:
+    view = TarotClaimsView(deck_id, claim_limit=claim_limit)
+    embed = _build_embed(deck_id, view.page)
+    return await channel.send(embed=embed, view=view)
+
 async def _deck_autocomplete(interaction: discord.Interaction, current: str):
     decks = tar.list_decks()
     choices = []
