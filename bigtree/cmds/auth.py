@@ -150,6 +150,15 @@ class AuthCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    class _TokenView(discord.ui.View):
+        def __init__(self, token: str):
+            super().__init__(timeout=300)
+            self.token = token
+
+        @discord.ui.button(label="Copy token", style=discord.ButtonStyle.secondary)
+        async def copy_token(self, interaction: discord.Interaction, _button: discord.ui.Button):
+            await interaction.response.send_message(f"```{self.token}```", ephemeral=True)
+
     @bot.tree.command(
         name="auth",
         description="Generate a 24h web API token for the overlay client.",
@@ -182,6 +191,7 @@ class AuthCog(commands.Cog):
         await interaction.response.send_message(
             f"Here is your 24h web token (keep it private):\n`{doc['token']}`\n"
             f"Expires: {expires_at.isoformat()}",
+            view=self._TokenView(doc["token"]),
             ephemeral=True,
         )
 

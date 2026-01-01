@@ -22,7 +22,11 @@ class TheBigTree(commands.Bot):
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="listening to elves"))
         bigtree.loch.logger.info(f'Logged in as {self.user} (ID: {bigtree.bot.user.id})')
         guild = discord.Object(id=bigtree.guildid)
-        # Add awesomeies to the server
+        # Remove global commands to avoid duplicates, then sync guild-only
+        if not getattr(bigtree.bot, "_commands_cleaned", False):
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            bigtree.bot._commands_cleaned = True
         synced = await self.tree.sync(guild=guild)
         # add near your other imports
         if getattr(bigtree.bot, "_web_started", False):
