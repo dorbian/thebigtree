@@ -202,19 +202,18 @@ class RefreshButton(discord.ui.Button):
             return
         await view.update_message(interaction)
 
+async def _deck_autocomplete(interaction: discord.Interaction, current: str):
+    decks = tar.list_decks()
+    choices = []
+    for d in decks:
+        deck_id = d.get("deck_id") or ""
+        if current.lower() in deck_id.lower():
+            choices.append(app_commands.Choice(name=deck_id, value=deck_id))
+    return choices[:25]
+
 class TarotClaims(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    @staticmethod
-    async def deck_autocomplete(interaction: discord.Interaction, current: str):
-        decks = tar.list_decks()
-        choices = []
-        for d in decks:
-            deck_id = d.get("deck_id") or ""
-            if current.lower() in deck_id.lower():
-                choices.append(app_commands.Choice(name=deck_id, value=deck_id))
-        return choices[:25]
 
     @app_commands.command(name="tarot_template_init", description="Create or refresh the tarot template deck.")
     async def tarot_template_init(self, interaction: discord.Interaction):
@@ -226,7 +225,7 @@ class TarotClaims(commands.Cog):
 
     @app_commands.command(name="tarot_deck_from_template", description="Seed a deck with the standard tarot template.")
     @app_commands.describe(deck_id="Deck id to seed")
-    @app_commands.autocomplete(deck_id=deck_autocomplete)
+    @app_commands.autocomplete(deck_id=_deck_autocomplete)
     async def tarot_deck_from_template(self, interaction: discord.Interaction, deck_id: str):
         if not tar.user_is_priestish(interaction.user):
             await interaction.response.send_message("Not allowed.", ephemeral=True)
@@ -240,7 +239,7 @@ class TarotClaims(commands.Cog):
 
     @app_commands.command(name="tarot_claims_post", description="Post a tarot deck claim board in a channel.")
     @app_commands.describe(deck_id="Deck to staff with artists", channel="Channel to post the claim board", claim_limit="Max claims per user (default 2)")
-    @app_commands.autocomplete(deck_id=deck_autocomplete)
+    @app_commands.autocomplete(deck_id=_deck_autocomplete)
     async def tarot_claims_post(
         self,
         interaction: discord.Interaction,
