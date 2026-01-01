@@ -386,10 +386,52 @@
     font-size:11px;
     color:var(--muted);
   }
-.notice{
+  .notice{
   margin-bottom:10px;
   font-size:12px;
   color:var(--muted);
+}
+.session-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(5,10,8,.82);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:80;
+  padding:24px;
+}
+.session-overlay.show{
+  display:flex;
+}
+.session-card{
+  width:min(420px, 92vw);
+  background:rgba(12,18,14,.92);
+  border:1px solid rgba(214,178,110,.3);
+  border-radius:16px;
+  padding:18px;
+  text-align:center;
+  box-shadow:0 18px 40px rgba(0,0,0,.4);
+}
+.session-card h2{
+  margin:0 0 8px 0;
+  font-size:18px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--neutral);
+}
+.session-card p{
+  margin:0 0 14px 0;
+  font-size:13px;
+  color:var(--muted);
+}
+.session-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.session-actions .btn{
+  width:100%;
 }
 .status-note{
   font-size:12px;
@@ -463,6 +505,16 @@
   <div class="panel light">
     <h2 style="margin-top:0;font-size:14px;letter-spacing:.08em;color:var(--muted)">Narration</h2>
     <div class="narration" id="narrationFeed"></div>
+  </div>
+</div>
+<div class="session-overlay" id="sessionOverlay" aria-hidden="true">
+  <div class="session-card">
+    <h2>Reading Complete</h2>
+    <p>Would you like to photograph this session before you leave?</p>
+    <div class="session-actions">
+      <button class="btn" id="downloadSession">Download session image</button>
+      <button class="btn" id="continueSession">Continue</button>
+    </div>
   </div>
 </div>
 
@@ -551,6 +603,9 @@
   const downloadShot = document.getElementById("downloadShot");
   const listenIndicator = document.getElementById("listenIndicator");
   const statusNote = document.getElementById("statusNote");
+  const sessionOverlay = document.getElementById("sessionOverlay");
+  const downloadSession = document.getElementById("downloadSession");
+  const continueSession = document.getElementById("continueSession");
   let currentState = null;
   let sse = null;
   let redirected = false;
@@ -558,6 +613,7 @@
   const pendingReveals = new Set();
   let listenTimer = null;
   let statusTimer = null;
+  let overlayTimer = null;
 
   joinEl.textContent = joinCode;
 
@@ -582,12 +638,10 @@
     }
     deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
-    if (!redirected && ["finished", "ended", "closed"].includes(status)){
-      redirected = true;
-      showStatusNote("Reading finished.");
-      setTimeout(() => {
-        window.location.assign("/");
-      }, 1500);
+    if (["finished", "ended", "closed"].includes(status)){
+      showSessionOverlay();
+    } else {
+      hideSessionOverlay();
     }
     grid.innerHTML = "";
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
@@ -757,6 +811,30 @@
     }, 2000);
   }
 
+  function showSessionOverlay(){
+    if (!sessionOverlay) return;
+    sessionOverlay.classList.add("show");
+    sessionOverlay.setAttribute("aria-hidden", "false");
+    if (overlayTimer){
+      clearTimeout(overlayTimer);
+    }
+    overlayTimer = setTimeout(() => {
+      if (redirected) return;
+      redirected = true;
+      window.location.assign("/");
+    }, 30000);
+  }
+
+  function hideSessionOverlay(){
+    if (!sessionOverlay) return;
+    sessionOverlay.classList.remove("show");
+    sessionOverlay.setAttribute("aria-hidden", "true");
+    if (overlayTimer){
+      clearTimeout(overlayTimer);
+      overlayTimer = null;
+    }
+  }
+
   function connectSSE(){
     if (sse){
       sse.close();
@@ -808,6 +886,31 @@
       }catch(err){}
       downloadShot.disabled = false;
       downloadShot.textContent = "Download screenshot";
+    });
+  }
+
+  if (downloadSession){
+    downloadSession.addEventListener("click", async () => {
+      if (!window.html2canvas) return;
+      downloadSession.disabled = true;
+      downloadSession.textContent = "Rendering...";
+      try{
+        const canvas = await window.html2canvas(document.body, {backgroundColor: null});
+        const link = document.createElement("a");
+        link.download = `tarot-session-${joinCode}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      }catch(err){}
+      downloadSession.disabled = false;
+      downloadSession.textContent = "Download session image";
+    });
+  }
+
+  if (continueSession){
+    continueSession.addEventListener("click", () => {
+      if (redirected) return;
+      redirected = true;
+      window.location.assign("/");
     });
   }
 </script>
