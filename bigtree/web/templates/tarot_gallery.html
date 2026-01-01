@@ -2,21 +2,25 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Forest Gallery</title>
-<meta name="description" content="The home of the Forest — where elves gather to play games together, share art, and weave stories under the Big Tree.">
+<meta name="description" content="A shrine of offerings left by those who sustain the Forest.">
 <meta property="og:title" content="Forest Gallery">
-<meta property="og:description" content="The home of the Forest — where elves gather to play games together, share art, and weave stories under the Big Tree.">
+<meta property="og:description" content="A shrine of offerings left by those who sustain the Forest.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://rites.thebigtree.life/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Forest Gallery">
-<meta name="twitter:description" content="The home of the Forest — where elves gather to play games together, share art, and weave stories under the Big Tree.">
+<meta name="twitter:description" content="A shrine of offerings left by those who sustain the Forest.">
 <style>
   :root{
     --bg:#0b1310;
     --panel:#101a15;
+    --panel-2:#0c1511;
     --text:#e7f2ea;
     --muted:#9fb4a6;
     --accent:#6bd4a2;
+    --accent-2:#d6b26e;
+    --neutral:#e7ddc7;
+    --neutral-2:#c8bfae;
     --line:rgba(255,255,255,.08);
   }
   *{box-sizing:border-box}
@@ -31,6 +35,29 @@
     background-size:cover;
     background-attachment:fixed;
   }
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background:radial-gradient(circle at 50% 20%, rgba(214,178,110,.12), transparent 55%);
+    opacity:.5;
+    pointer-events:none;
+    animation:breath 18s ease-in-out infinite;
+    z-index:0;
+  }
+  body::after{
+    content:"";
+    position:fixed;
+    inset:0;
+    background:linear-gradient(120deg, rgba(255,255,255,.04), transparent 60%);
+    opacity:.15;
+    pointer-events:none;
+    z-index:0;
+  }
+  @keyframes breath{
+    0%, 100%{opacity:.35}
+    50%{opacity:.7}
+  }
   header{
     padding:22px;
     border-bottom:1px solid var(--line);
@@ -38,6 +65,8 @@
     align-items:center;
     justify-content:space-between;
     gap:16px;
+    position:relative;
+    z-index:1;
   }
   .header-actions{
     display:flex;
@@ -60,8 +89,17 @@
     height:18px;
     fill:currentColor;
   }
-  header h1{margin:0 0 6px 0;letter-spacing:.05em}
+  header h1{margin:0 0 6px 0;letter-spacing:.08em;text-transform:uppercase}
   header p{margin:0;color:var(--muted)}
+  .header-subtitle{
+    font-size:13px;
+    color:var(--neutral);
+  }
+  .header-context{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:4px;
+  }
   .admin-link{
     color:var(--accent);
     text-decoration:none;
@@ -90,9 +128,14 @@
     margin-top:16px;
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
-    gap:14px;
+    column-gap:14px;
+    row-gap:20px;
     grid-auto-rows:1fr;
+    position:relative;
+    z-index:1;
   }
+  .grid.filtering .card{opacity:.5}
+  .grid.filtering .card.active{opacity:1}
   .artist-link{
     color:var(--accent);
     text-decoration:none;
@@ -110,6 +153,19 @@
     flex-direction:column;
     gap:6px;
     min-height:100%;
+    position:relative;
+    overflow:hidden;
+    transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    box-shadow:0 12px 22px rgba(0,0,0,.22);
+  }
+  .card:hover{
+    transform:translateY(-3px);
+    border-color:rgba(214,178,110,.35);
+    box-shadow:0 16px 28px rgba(0,0,0,.3);
+  }
+  .card:hover .origin,
+  .card:hover .muted{
+    color:var(--neutral-2);
   }
   .card img{
     width:100%;
@@ -117,18 +173,121 @@
     margin:0;
     aspect-ratio:3/4.2;
     object-fit:cover;
-    background:#0c1511;
+    background:var(--panel-2);
+  }
+  .card-media{
+    position:relative;
+    border-radius:12px;
+    overflow:hidden;
+  }
+  .card-media::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    box-shadow:inset 0 -40px 50px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.06);
+    pointer-events:none;
+  }
+  .card-media::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:radial-gradient(circle at 50% 20%, rgba(255,255,255,.08), transparent 55%);
+    opacity:.6;
+    pointer-events:none;
+  }
+  .card-body{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .artist-name{
+    font-size:15px;
+    letter-spacing:.04em;
+    color:var(--neutral);
+  }
+  .work-title{
+    font-size:13px;
+    color:var(--text);
+  }
+  .origin{
+    font-size:11px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.06em;
+  }
+  .pill-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  .type-pill{
+    display:inline-flex;
+    padding:3px 8px;
+    border-radius:999px;
+    border:1px solid rgba(214,178,110,.4);
+    color:var(--accent-2);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
+  .tag-pill{
+    display:inline-flex;
+    padding:3px 8px;
+    border-radius:999px;
+    border:1px solid rgba(107,212,162,.3);
+    color:var(--accent);
+    font-size:11px;
+  }
+  .reaction-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:4px;
+  }
+  .reaction{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.1);
+    background:rgba(8,14,12,.45);
+    padding:4px 8px;
+    font-size:11px;
+    color:var(--neutral-2);
+    cursor:pointer;
+  }
+  .reaction span{
+    color:var(--accent);
+  }
+  .card-actions{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:4px;
+  }
+  .view-btn{
+    border-radius:999px;
+    border:1px solid rgba(214,178,110,.4);
+    background:rgba(18,22,18,.6);
+    color:var(--neutral);
+    padding:6px 12px;
+    font-size:12px;
+    cursor:pointer;
+  }
+  .view-btn:disabled{
+    opacity:.5;
+    cursor:not-allowed;
   }
   .muted{color:var(--muted);font-size:12px}
   .links a{color:var(--accent);text-decoration:none;margin-right:8px;font-size:12px}
-  .contest-pill{
-    display:inline-block;
-    margin-top:6px;
-    padding:3px 8px;
-    border-radius:999px;
-    border:1px solid rgba(107,212,162,.35);
-    color:var(--accent);
-    font-size:11px;
+  .skeleton-card{
+    height:320px;
+    border-radius:14px;
+    background:linear-gradient(110deg, rgba(12,18,15,.8) 8%, rgba(20,28,23,.9) 18%, rgba(12,18,15,.8) 33%);
+    background-size:200% 100%;
+    animation:shimmer 1.4s infinite;
+  }
+  @keyframes shimmer{
+    to{background-position:-200% 0}
   }
   .modal{
     position:fixed;
@@ -150,6 +309,38 @@
     padding:18px;
   }
   .modal-card h2{margin:0 0 10px 0;font-size:20px}
+  .artist-focus{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .artist-filter{
+    border-radius:999px;
+    padding:6px 12px;
+    border:1px solid rgba(214,178,110,.35);
+    background:rgba(12,18,15,.6);
+    color:var(--neutral);
+    font-size:12px;
+    cursor:pointer;
+  }
+  .filter-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    border:1px solid rgba(214,178,110,.35);
+    color:var(--neutral);
+    font-size:12px;
+  }
+  .filter-chip button{
+    background:transparent;
+    border:none;
+    color:var(--neutral);
+    cursor:pointer;
+  }
   .modal-links a{
     display:inline-block;
     margin:0 8px 8px 0;
@@ -209,7 +400,8 @@
 <header>
   <div>
     <h1>Forest Gallery</h1>
-    <p>Public art archive.</p>
+    <p class="header-subtitle">A shrine of offerings left by those who sustain the Forest.</p>
+    <p class="header-context">All works here were offered during rites, gatherings, or games.</p>
   </div>
   <div class="header-actions">
     <a class="icon-link" href="/tarot/calendar" aria-label="Forest calendar">
@@ -231,19 +423,25 @@
 </header>
 
 <main>
+  <div class="row" id="filterRow" style="margin-bottom:10px;display:none">
+    <div class="filter-chip">Artist: <span id="filterName">-</span> <button id="filterClear" aria-label="Clear filter">x</button></div>
+  </div>
   <div class="grid" id="grid"></div>
 </main>
 
 <div class="modal" id="artistModal" role="dialog" aria-modal="true" aria-hidden="true">
   <div class="modal-card">
-    <h2 id="artistName">Artist</h2>
+    <div class="artist-focus">
+      <h2 id="artistName">Artist</h2>
+      <button class="artist-filter" id="artistFilterBtn">View all works</button>
+    </div>
     <div class="modal-links" id="artistLinks"></div>
     <button class="modal-close" id="artistClose">Close</button>
   </div>
 </div>
 <div class="image-modal" id="imageModal" aria-hidden="true">
   <div class="info" id="imageInfo"></div>
-  <button class="close" id="imageClose" aria-label="Close">×</button>
+  <button class="close" id="imageClose" aria-label="Close">X</button>
   <img id="imageModalImg" alt="">
 </div>
 
@@ -252,10 +450,22 @@
   const artistModal = document.getElementById("artistModal");
   const artistName = document.getElementById("artistName");
   const artistLinks = document.getElementById("artistLinks");
+  const artistFilterBtn = document.getElementById("artistFilterBtn");
+  const filterRow = document.getElementById("filterRow");
+  const filterName = document.getElementById("filterName");
+  const filterClear = document.getElementById("filterClear");
   const imageModal = document.getElementById("imageModal");
   const imageModalImg = document.getElementById("imageModalImg");
   const imageInfo = document.getElementById("imageInfo");
   let imageInfoTimer = null;
+  let galleryItems = [];
+  let activeArtistFilter = null;
+  const REACTIONS = [
+    {id:"appreciation", label:"Appreciation"},
+    {id:"inspired", label:"Inspired"},
+    {id:"gratitude", label:"Gratitude"},
+    {id:"craft", label:"Craft"}
+  ];
 
   function link(label, url){
     if (!url) return "";
@@ -264,10 +474,13 @@
 
   function openArtistModal(name, links){
     artistName.textContent = name || "Forest";
+    if (artistFilterBtn){
+      artistFilterBtn.dataset.artist = name || "Forest";
+    }
     const linkItems = Object.entries(links || {})
       .filter(([, url]) => url)
       .map(([label, url]) => `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`);
-    artistLinks.innerHTML = linkItems.length ? linkItems.join("") : "<span class='muted'>Forest</span>";
+    artistLinks.innerHTML = linkItems.length ? linkItems.join("") : "<span class='muted'>No external links shared.</span>";
     artistModal.classList.add("show");
     artistModal.setAttribute("aria-hidden", "false");
   }
@@ -302,50 +515,35 @@
   }
 
   async function load(){
+    grid.innerHTML = Array.from({length: 8}).map(() => `<div class="skeleton-card"></div>`).join("");
     const res = await fetch(`/api/gallery/images`);
     const data = await res.json();
     if (!data.ok){
       grid.innerHTML = "<div class='muted'>Gallery unavailable.</div>";
       return;
     }
-    const items = data.items || [];
-    if (!items.length){
-      grid.innerHTML = "<div class='muted'>No images yet.</div>";
-      return;
-    }
-    grid.innerHTML = items.map(c => {
-      const artist = c.artist || {};
-      const artistName = artist.name || "Forest";
-      const artistLinks = artist.links || {};
-      const infoParts = [c.title || "Untitled", artistName];
-      if (c.contest) infoParts.push(c.contest);
-      const infoText = infoParts.filter(Boolean).join(" \u2014 ");
-      const artistPayload = encodeURIComponent(JSON.stringify({
-        name: artistName,
-        links: artistLinks
-      }));
-      return `
-        <div class="card">
-          ${c.url ? `<img src="${c.url}" alt="${c.title || ""}" data-full='${encodeURIComponent(JSON.stringify({url: c.url, info: infoText, title: c.title || ""}))}'>` : ""}
-          <div><strong>${c.title || ""}</strong></div>
-          <div><a class="artist-link" href="#" data-artist="${artistPayload}">${artistName}</a></div>
-          ${c.contest ? `<div class="contest-pill">${c.contest}</div>` : ""}
-          <div class="links">
-            ${link("Instagram", artistLinks.instagram)}
-            ${link("Bluesky", artistLinks.bluesky)}
-            ${link("X", artistLinks.x)}
-            ${link("ArtStation", artistLinks.artstation)}
-            ${link("Website", artistLinks.website)}
-          </div>
-        </div>
-      `;
-    }).join("");
+    galleryItems = data.items || [];
+    activeArtistFilter = null;
+    if (filterRow) filterRow.style.display = "none";
+    renderGrid();
   }
 
   document.getElementById("artistClose").addEventListener("click", closeArtistModal);
   artistModal.addEventListener("click", (event) => {
     if (event.target === artistModal) closeArtistModal();
   });
+  if (artistFilterBtn){
+    artistFilterBtn.addEventListener("click", () => {
+      const name = artistFilterBtn.dataset.artist || "";
+      closeArtistModal();
+      if (name){
+        applyArtistFilter(name);
+      }
+    });
+  }
+  if (filterClear){
+    filterClear.addEventListener("click", () => applyArtistFilter(null));
+  }
   document.getElementById("imageClose").addEventListener("click", closeImageModal);
   imageModal.addEventListener("click", (event) => {
     if (event.target === imageModal) closeImageModal();
@@ -353,14 +551,26 @@
   imageModal.addEventListener("mousemove", showImageInfo);
   grid.addEventListener("click", (event) => {
     const target = event.target;
-    if (target.tagName === "IMG" && target.getAttribute("data-full")){
+    if (target.classList && target.classList.contains("view-btn")){
       event.preventDefault();
+      const payload = target.getAttribute("data-full");
+      if (!payload) return;
       try{
-        const payload = JSON.parse(decodeURIComponent(target.getAttribute("data-full")));
-        openImageModal(payload);
-      }catch (err){
-        return;
-      }
+        const parsed = JSON.parse(decodeURIComponent(payload));
+        openImageModal(parsed);
+      }catch (err){}
+      return;
+    }
+    if (target.classList && target.classList.contains("reaction")){
+      event.preventDefault();
+      const reactionId = target.getAttribute("data-reaction");
+      const itemKey = target.getAttribute("data-item");
+      if (!reactionId || !itemKey) return;
+      const decodedKey = decodeURIComponent(itemKey);
+      const local = getLocalReactions(decodedKey);
+      local[reactionId] = (local[reactionId] || 0) + 1;
+      setLocalReactions(decodedKey, local);
+      renderGrid();
       return;
     }
     if (!target.classList || !target.classList.contains("artist-link")) return;
@@ -381,3 +591,126 @@
   });
   load();
 </script>
+  function getItemKey(item){
+    return item.id || item.image_id || item.url || `${item.title || "offering"}-${item.artist && item.artist.name ? item.artist.name : "forest"}`;
+  }
+
+  function getLocalReactions(itemKey){
+    try{
+      const raw = localStorage.getItem(`gallery_react_${itemKey}`);
+      return raw ? JSON.parse(raw) : {};
+    }catch(err){
+      return {};
+    }
+  }
+
+  function setLocalReactions(itemKey, data){
+    try{
+      localStorage.setItem(`gallery_react_${itemKey}`, JSON.stringify(data));
+    }catch(err){}
+  }
+
+  function getYear(item){
+    if (item.year) return item.year;
+    const ts = item.created_at || item.timestamp || item.created || null;
+    if (!ts) return "";
+    const value = Number(ts);
+    if (!Number.isFinite(value)) return "";
+    const ms = value > 1000000000000 ? value : value * 1000;
+    const year = new Date(ms).getFullYear();
+    return Number.isFinite(year) ? year : "";
+  }
+
+  function getOrigin(item){
+    const eventName = item.event_name || item.event || item.rite || item.contest || item.origin || "";
+    const year = getYear(item);
+    const base = eventName ? `Offered during ${eventName}` : "Offered during the Forest rites";
+    return year ? `${base} - ${year}` : base;
+  }
+
+  function getTypeBadge(item){
+    const raw = item.type || item.origin_type || item.kind || item.category || "";
+    if (raw) return raw;
+    if (item.contest) return "Contest";
+    if (item.rite) return "Rite";
+    if (item.tarot || item.deck_id) return "Tarot";
+    if (item.artifact) return "Artifact";
+    return "";
+  }
+
+  function getTags(item){
+    if (Array.isArray(item.tags)) return item.tags;
+    if (Array.isArray(item.tag_list)) return item.tag_list;
+    return [];
+  }
+
+  function applyArtistFilter(name){
+    activeArtistFilter = name;
+    if (filterRow){
+      filterRow.style.display = name ? "flex" : "none";
+    }
+    if (filterName){
+      filterName.textContent = name || "-";
+    }
+    renderGrid();
+  }
+
+  function renderGrid(){
+    const items = Array.isArray(galleryItems) ? galleryItems : [];
+    if (!items.length){
+      grid.innerHTML = "<div class='muted'>The Forest awaits its next contribution.</div>";
+      return;
+    }
+    grid.classList.toggle("filtering", !!activeArtistFilter);
+    grid.innerHTML = items.map(item => {
+      const artist = item.artist || {};
+      const artistName = artist.name || "Forest";
+      const title = item.title || "Untitled Offering";
+      const artistLinks = artist.links || {};
+      const origin = getOrigin(item);
+      const type = getTypeBadge(item);
+      const tags = getTags(item);
+      const infoText = [title, artistName, origin].filter(Boolean).join(" - ");
+      const artistPayload = encodeURIComponent(JSON.stringify({
+        name: artistName,
+        links: artistLinks
+      }));
+      const itemKey = getItemKey(item);
+      const localCounts = getLocalReactions(itemKey);
+      const baseCounts = item.reactions || {};
+      const isActive = !activeArtistFilter || activeArtistFilter === artistName;
+      const reactionRow = REACTIONS.map(reaction => {
+        const count = Number(baseCounts[reaction.id] || 0) + Number(localCounts[reaction.id] || 0);
+        return `
+          <button class="reaction" data-reaction="${reaction.id}" data-item="${encodeURIComponent(itemKey)}" aria-label="${reaction.label}">
+            <span>${reaction.label}</span> ${count}
+          </button>
+        `;
+      }).join("");
+      const media = item.url
+        ? `<img src="${item.url}" alt="${title}">`
+        : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
+      const viewButton = item.url
+        ? `<button class="view-btn" data-full="${encodeURIComponent(JSON.stringify({url: item.url, info: infoText, title: title}))}">View</button>`
+        : `<button class="view-btn" disabled>View</button>`;
+      return `
+        <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}">
+          <div class="card-media">
+            ${media}
+          </div>
+          <div class="card-body">
+            <div class="artist-name">${artistName}</div>
+            <div class="work-title">${title}</div>
+            <div class="origin">${origin}</div>
+            ${type ? `<div class="pill-row"><span class="type-pill">${type}</span></div>` : ""}
+            ${tags.length ? `<div class="pill-row">${tags.map(t => `<span class="tag-pill">${t}</span>`).join("")}</div>` : ""}
+            <a class="artist-link" href="#" data-artist="${artistPayload}">Artist details</a>
+            <div class="reaction-row">${reactionRow}</div>
+            <div class="card-actions">
+              ${viewButton}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
