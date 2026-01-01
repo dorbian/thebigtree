@@ -551,6 +551,65 @@
         font-size:10px;
         line-height:1.1;
       }
+      .owner-card-list{
+        max-height:60vh;
+        overflow:auto;
+        padding:12px;
+        border-radius:14px;
+        border:1px solid var(--line);
+        background:rgba(6,10,18,.6);
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .owner-card{
+        border:1px solid rgba(233,226,210,.16);
+        border-radius:14px;
+        background:rgba(8,12,18,.55);
+        overflow:hidden;
+      }
+      .owner-card-header{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:8px 12px;
+        background:linear-gradient(120deg, rgba(157,224,125,.12), rgba(10,16,22,.8));
+        border-bottom:1px solid rgba(233,226,210,.12);
+      }
+      .owner-card-title{
+        font-size:11px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--neutral-2);
+      }
+      .owner-card-id{
+        font-size:11px;
+        color:var(--muted);
+      }
+      .owner-card-toggle{
+        width:32px;
+        height:32px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.16);
+        background:rgba(8,12,16,.5);
+        color:var(--ink);
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        cursor:pointer;
+      }
+      .owner-card-toggle svg{
+        width:14px;
+        height:14px;
+        fill:currentColor;
+      }
+      .owner-card-body{
+        padding:10px 12px 12px;
+      }
+      .owner-card.collapsed .owner-card-body{
+        display:none;
+      }
       .role-table-wrap{
         border-radius:12px;
         border:1px solid var(--line);
@@ -1094,16 +1153,31 @@
         padding:6px 0;
       }
       .bingo-cell{
+        position:relative;
         padding:10px 0;
         border-radius:8px;
         background:rgba(12,18,32,.9);
         border:1px solid rgba(255,255,255,.05);
         color:var(--ink);
+        font-weight:600;
       }
       .bingo-cell.marked{
         background:rgba(60,207,142,.2);
         border-color:rgba(60,207,142,.7);
         color:#d6ffe9;
+      }
+      .bingo-cell.called{
+        background:rgba(157,224,125,.18);
+        border-color:rgba(157,224,125,.55);
+        color:#e9ffe9;
+      }
+      .bingo-cell .cell-mark{
+        position:absolute;
+        top:4px;
+        right:6px;
+        font-size:10px;
+        color:var(--accent);
+        opacity:.9;
       }
       .bingo-called{
         font-size:12px;
@@ -1884,7 +1958,17 @@
           <div class="modal-title">Player Cards</div>
           <button class="btn-ghost" id="bOwnerClose">Close</button>
         </div>
-        <div class="list" id="bOwnerCards">No tickets loaded.</div>
+        <div class="context-header" id="bOwnerSummary">
+          <div>
+            <div class="context-path">Viewing cards for: -</div>
+            <div class="context-meta">Total cards: 0</div>
+          </div>
+          <div class="context-meta" id="bOwnerLegend">
+            <span class="status-badge good">Called</span>
+            <span class="status-badge">Uncalled</span>
+          </div>
+        </div>
+        <div class="owner-card-list" id="bOwnerCards">No tickets loaded.</div>
       </div>
     </div>
     <div class="modal" id="bPurchaseModal">
@@ -3889,39 +3973,93 @@
 
       function renderOwnerCards(owner, cards, called, header){
         const el = $("bOwnerCards");
+        const summary = $("bOwnerSummary");
+        if (summary){
+          const path = summary.querySelector(".context-path");
+          const meta = summary.querySelector(".context-meta");
+          if (path) path.textContent = `Viewing cards for: ${owner || "-"}`;
+          if (meta) meta.textContent = `Total cards: ${Array.isArray(cards) ? cards.length : 0}`;
+        }
+        const legend = $("bOwnerLegend");
+        if (legend){
+          legend.innerHTML = `
+            <span class="status-badge good">Called</span>
+            <span class="status-badge">Uncalled</span>
+          `;
+        }
         if (!Array.isArray(cards) || cards.length === 0){
           el.textContent = "No tickets for this player.";
           return;
         }
         el.innerHTML = "";
-        cards.forEach(card => {
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        const headerText = (header || "BING").slice(0, 4).split("");
+        while (headerText.length < 4) headerText.push(" ");
+        cards.forEach((card, index) => {
           const wrap = document.createElement("div");
-          wrap.style.margin = "10px 0";
-          wrap.style.padding = "8px";
-          wrap.style.border = "1px solid rgba(255,255,255,0.08)";
-          wrap.style.borderRadius = "10px";
+          wrap.className = "owner-card";
+          const headerRow = document.createElement("div");
+          headerRow.className = "owner-card-header";
+          const titleWrap = document.createElement("div");
           const title = document.createElement("div");
-          title.style.fontSize = "12px";
-          title.style.color = "var(--muted)";
-          title.innerHTML = `Card <code>${card.card_id}</code>`;
-          wrap.appendChild(title);
+          title.className = "owner-card-title";
+          title.textContent = `Card ${index + 1}`;
+          const id = document.createElement("div");
+          id.className = "owner-card-id";
+          const cardId = String(card.card_id || "");
+          id.textContent = cardId.length > 8 ? `${cardId.slice(0, 4)}...${cardId.slice(-4)}` : cardId;
+          titleWrap.appendChild(title);
+          titleWrap.appendChild(id);
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "owner-card-toggle";
+          toggle.setAttribute("aria-label", "Collapse card");
+          toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>';
+          headerRow.appendChild(titleWrap);
+          headerRow.appendChild(toggle);
+          const body = document.createElement("div");
+          body.className = "owner-card-body";
+          const cardHeader = document.createElement("div");
+          cardHeader.className = "bingo-header";
+          headerText.forEach(h => {
+            const label = document.createElement("div");
+            label.textContent = h;
+            cardHeader.appendChild(label);
+          });
+          body.appendChild(cardHeader);
           const grid = document.createElement("div");
           grid.className = "bingo-grid";
-          const calledSet = new Set(Array.isArray(called) ? called : []);
           (card.numbers || []).forEach((row, r) => {
             (row || []).forEach((value, c) => {
               const cell = document.createElement("div");
               cell.className = "bingo-cell";
-              const marked = (card.marks && card.marks[r] && card.marks[r][c]) || calledSet.has(value);
+              const isCalled = calledSet.has(value);
+              const marked = (card.marks && card.marks[r] && card.marks[r][c]) || isCalled;
               if (marked) cell.classList.add("marked");
+              if (isCalled) cell.classList.add("called");
               cell.textContent = value;
+              if (isCalled){
+                const mark = document.createElement("span");
+                mark.className = "cell-mark";
+                mark.textContent = "✓";
+                cell.appendChild(mark);
+              }
               cell.onclick = () => {
                 renderCard(card, called, header);
               };
               grid.appendChild(cell);
             });
           });
-          wrap.appendChild(grid);
+          body.appendChild(grid);
+          headerRow.addEventListener("click", () => {
+            wrap.classList.toggle("collapsed");
+          });
+          toggle.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            wrap.classList.toggle("collapsed");
+          });
+          wrap.appendChild(headerRow);
+          wrap.appendChild(body);
           el.appendChild(wrap);
         });
       }
@@ -3929,7 +4067,7 @@
       async function loadOwnerCards(ownerName){
         const gid = getGameId();
         if (!gid || !ownerName){
-          setStatus("Enter game id and owner name.", "err");
+          setBingoStatus("Enter game id and owner name.", "err");
           return;
         }
         try{
@@ -3937,9 +4075,9 @@
           const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/cards", {method:"GET"}, false);
           renderBingoState(state);
           renderOwnerCards(ownerName, data.cards || [], state.game && state.game.called, state.game && state.game.header);
-          setStatus("Tickets loaded.", "ok");
+          setBingoStatus("Tickets loaded.", "ok");
         }catch(err){
-          setStatus(err.message, "err");
+          setBingoStatus(err.message, "err");
         }
       }
 

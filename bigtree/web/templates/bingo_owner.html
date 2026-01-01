@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bingo — My Cards</title>
+<title>Bingo / My Cards</title>
 <style>
   :root{
     --bg:#0b1611;
@@ -11,49 +11,282 @@
     --muted:#9bb6a7;
     --accent:#9de07d;
     --accent-2:#3ccf8e;
+    --neutral:#e9e2d2;
+    --neutral-2:#c7bfae;
+    --shadow:0 18px 40px rgba(0,0,0,.35);
   }
   body{
     font-family:"Palatino Linotype","Book Antiqua",serif;
     margin:0;
-    padding:16px;
-    background:var(--bg);
+    padding:18px;
+    min-height:100vh;
+    background:
+      radial-gradient(1000px 600px at 10% -10%, rgba(157,224,125,.16), transparent 60%),
+      radial-gradient(900px 650px at 110% 20%, rgba(60,207,142,.16), transparent 60%),
+      linear-gradient(160deg, #0b1611, #0f2418 55%, #102c1d);
     color:var(--ink);
     background-size:cover;
     background-position:center;
     background-attachment:fixed;
   }
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-  .card{border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(15,30,22,.7)}
-  .card.selected{border-color:rgba(157,224,125,.7);box-shadow:0 0 0 2px rgba(157,224,125,.2) inset}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+  .card{
+    border:1px solid rgba(233,226,210,.18);
+    border-radius:14px;
+    background:rgba(10,16,18,.7);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .card.selected{
+    border-color:rgba(157,224,125,.7);
+    box-shadow:0 0 0 2px rgba(157,224,125,.2) inset, var(--shadow);
+  }
+  .card-winning{
+    border-color:rgba(157,224,125,.7);
+    box-shadow:0 0 0 1px rgba(157,224,125,.3), 0 10px 24px rgba(20,40,30,.45);
+  }
   .muted{opacity:.7}
-  .summary{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px}
-  .topbar{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
-  .panel{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel)}
-  .panel-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-  .payouts{display:grid;grid-template-columns:repeat(3, minmax(120px, 1fr));gap:8px;font-size:13px}
+  .context-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 14px;
+    border-radius:14px;
+    border:1px solid rgba(233,226,210,.18);
+    background:rgba(6,10,18,.55);
+    margin-bottom:14px;
+  }
+  .context-path{
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--neutral);
+  }
+  .context-meta{
+    font-size:12px;
+    color:var(--muted);
+  }
+  .summary{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    color:var(--muted);
+    font-size:13px;
+    margin-bottom:6px;
+  }
+  .topbar{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    align-items:stretch;
+    margin-bottom:12px;
+  }
+  .badge-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 12px;
+    border-radius:999px;
+    border:1px solid rgba(233,226,210,.2);
+    background:rgba(10,16,18,.6);
+    color:var(--neutral);
+    font-size:12px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+  }
+  .badge span{
+    color:var(--accent);
+    font-weight:700;
+  }
+  .panel{
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px 12px;
+    background:var(--panel);
+  }
+  .panel-title{
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .payouts{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(120px, 1fr));
+    gap:8px;
+    font-size:13px;
+  }
   button{
     width:100%;
     border-radius:10px;
     border:1px solid var(--line);
     background:linear-gradient(135deg, rgba(157,224,125,.9), rgba(60,207,142,.75));
     color:#0a1510;
-    padding:8px 10px;
+    padding:10px 12px;
     font-family:"Palatino Linotype","Book Antiqua",serif;
     font-size:14px;
     font-weight:700;
     letter-spacing:.04em;
     cursor:pointer;
   }
+  button:disabled{
+    opacity:.55;
+    cursor:not-allowed;
+    box-shadow:none;
+  }
   .btn-ghost{
     background:transparent;
     border:1px solid var(--line);
     color:var(--ink);
   }
-  .header, .bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
-  .header div{font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-  .cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
-  .cell.marked{background:rgba(60,207,142,.2);border-color:rgba(60,207,142,.7);color:#d6ffe9}
-  .called{font-size:12px;color:var(--muted);margin:10px 0;padding:8px;border:1px dashed rgba(255,255,255,.12);border-radius:10px}
+  .btn-claim{
+    padding:12px;
+    font-size:15px;
+    border-radius:12px;
+    background:linear-gradient(135deg, rgba(157,224,125,1), rgba(60,207,142,.85));
+    box-shadow:0 10px 22px rgba(0,0,0,.25);
+  }
+  .status-msg{
+    margin-top:6px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .card-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 12px;
+    background:linear-gradient(120deg, rgba(157,224,125,.12), rgba(10,16,22,.8));
+    border-bottom:1px solid rgba(233,226,210,.12);
+  }
+  .card-id{
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--neutral-2);
+  }
+  .card-meta{
+    font-size:11px;
+    color:var(--muted);
+  }
+  .card-body{
+    padding:10px 12px 12px;
+  }
+  .header, .bingo-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:6px;
+    text-align:center;
+  }
+  .header div{
+    font-weight:700;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .cell{
+    position:relative;
+    padding:12px 0;
+    border-radius:8px;
+    background:#0a1510;
+    border:1px solid rgba(255,255,255,.06);
+    cursor:pointer;
+    font-weight:600;
+  }
+  .cell.marked{
+    background:rgba(60,207,142,.2);
+    border-color:rgba(60,207,142,.7);
+    color:#d6ffe9;
+  }
+  .cell.called{
+    background:rgba(157,224,125,.18);
+    border-color:rgba(157,224,125,.55);
+    color:#e9ffe9;
+  }
+  .cell.recent{
+    animation:cell-glow .8s ease;
+  }
+  .cell .cell-mark{
+    position:absolute;
+    top:4px;
+    right:6px;
+    font-size:10px;
+    color:var(--accent);
+  }
+  .cell .cell-dot{
+    position:absolute;
+    bottom:4px;
+    right:6px;
+    font-size:10px;
+    color:var(--neutral);
+  }
+  @keyframes cell-glow{
+    0%{box-shadow:0 0 0 rgba(157,224,125,.0)}
+    40%{box-shadow:0 0 16px rgba(157,224,125,.6)}
+    100%{box-shadow:0 0 0 rgba(157,224,125,.0)}
+  }
+  .called{
+    font-size:12px;
+    color:var(--muted);
+    margin:10px 0 6px;
+    padding:8px 10px;
+    border:1px dashed rgba(255,255,255,.12);
+    border-radius:10px;
+    background:rgba(10,16,18,.5);
+  }
+  .called-title{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--neutral-2);
+    margin-bottom:6px;
+  }
+  .called-list{
+    color:var(--neutral);
+  }
+  .legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    font-size:11px;
+    color:var(--muted);
+    margin-bottom:12px;
+  }
+  .legend-item{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:4px 8px;
+    border-radius:999px;
+    border:1px solid rgba(233,226,210,.15);
+    background:rgba(10,16,18,.55);
+  }
+  .legend-dot{
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    display:inline-block;
+    background:rgba(255,255,255,.2);
+  }
+  .legend-dot.called{background:var(--accent)}
+  .legend-dot.marked{background:#5bd5a1}
+  .legend-dot.win{background:#f2d7b3}
+  @media (max-width: 720px){
+    .topbar{flex-direction:column}
+    .badge-row{justify-content:flex-start}
+  }
   .bingo-overlay{
     position:fixed;
     inset:0;
@@ -113,19 +346,19 @@
     or ?game=<id>&owner=<url-encoded name>
   This view stores local marks in localStorage.
 -->
-<h1>Bingo — My Cards</h1>
+<h1>Bingo / My Cards</h1>
+<div class="context-header" id="contextHeader">
+  <div>
+    <div class="context-path" id="contextPath">Bingo / My Cards / -</div>
+    <div class="context-meta" id="contextMeta">Waiting for game...</div>
+  </div>
+  <div class="context-meta" id="contextStatus">No game loaded.</div>
+</div>
 <div class="topbar">
-  <div class="panel" id="potPanel">
-    <div class="panel-title">Pot</div>
-    <div id="potValue">-</div>
-  </div>
-  <div class="panel" id="stagePanel">
-    <div class="panel-title">Stage</div>
-    <div id="stageValue">-</div>
-  </div>
-  <div class="panel" id="headerPanel">
-    <div class="panel-title">Header</div>
-    <div id="headerValue">-</div>
+  <div class="badge-row">
+    <div class="badge">Pot <span id="potValue">-</span></div>
+    <div class="badge">Stage <span id="stageValue">-</span></div>
+    <div class="badge">Header <span id="headerValue">-</span></div>
   </div>
   <div class="panel" style="flex:1 1 280px">
     <div class="panel-title">Payouts</div>
@@ -135,17 +368,25 @@
       <div>Full: <span id="payoutFull">-</span></div>
     </div>
   </div>
-  <div class="panel" style="min-width:200px">
+  <div class="panel" style="min-width:220px">
     <div class="panel-title">Actions</div>
-    <button id="claimBtn">I have BINGO!</button>
-    <div class="muted" id="claimMsg" style="margin-top:6px;font-size:12px"></div>
-    <label class="muted" style="display:block;margin-top:10px;font-size:12px">
+    <button id="claimBtn" class="btn-claim">I have BINGO!</button>
+    <div class="status-msg" id="claimMsg"></div>
+    <label class="muted" style="display:block;margin-top:10px;font-size:12px" title="Auto-mark fills in any numbers that have already been called.">
       <input type="checkbox" id="autoDab"> Auto-mark called numbers
     </label>
   </div>
 </div>
 <div class="summary" id="summary"></div>
-<div class="called" id="called">Called numbers: -</div>
+<div class="called">
+  <div class="called-title">Called numbers</div>
+  <div class="called-list" id="called">No numbers called yet.</div>
+</div>
+<div class="legend" id="legend">
+  <span class="legend-item"><span class="legend-dot called"></span> Called</span>
+  <span class="legend-item"><span class="legend-dot marked"></span> Marked</span>
+  <span class="legend-item"><span class="legend-dot win"></span> Winning line</span>
+</div>
 <div id="list" class="grid"></div>
 <div class="bingo-overlay" id="bingoOverlay">BINGO</div>
 <div class="call-ball" id="callBall"></div>
@@ -159,6 +400,9 @@
   const grid = document.getElementById('list');
   const summary = document.getElementById('summary');
   const calledEl = document.getElementById('called');
+  const contextPath = document.getElementById('contextPath');
+  const contextMeta = document.getElementById('contextMeta');
+  const contextStatus = document.getElementById('contextStatus');
   const potValue = document.getElementById('potValue');
   const stageValue = document.getElementById('stageValue');
   const headerValue = document.getElementById('headerValue');
@@ -205,6 +449,56 @@
     return marks;
   }
 
+  function buildDisplayMarks(card, calledSet, localMarks, autoMark){
+    const nums = card.numbers || [];
+    const marks = [];
+    for(let r=0;r<nums.length;r++){
+      marks[r] = [];
+      for(let c=0;c<nums[r].length;c++){
+        const local = localMarks[r] && localMarks[r][c];
+        const called = autoMark && calledSet.has(nums[r][c]);
+        marks[r][c] = !!local || called;
+      }
+    }
+    return marks;
+  }
+
+  function hasWinningLine(marks){
+    const size = marks.length;
+    if (!size) return false;
+    const width = marks[0].length;
+    for(let r=0;r<size;r++){
+      if (marks[r] && marks[r].every(Boolean)) return true;
+    }
+    for(let c=0;c<width;c++){
+      let ok = true;
+      for(let r=0;r<size;r++){
+        if (!marks[r] || !marks[r][c]){
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return true;
+    }
+    if (size === width){
+      let diag1 = true;
+      let diag2 = true;
+      for(let i=0;i<size;i++){
+        if (!marks[i][i]) diag1 = false;
+        if (!marks[i][size - 1 - i]) diag2 = false;
+      }
+      if (diag1 || diag2) return true;
+    }
+    return false;
+  }
+
+  function shortenCardId(cardId){
+    const raw = String(cardId || "");
+    if (!raw) return "-";
+    if (raw.length <= 8) return raw;
+    return `${raw.slice(0, 4)}...${raw.slice(-4)}`;
+  }
+
   async function fetchOwnerCards(){
     if (token){
       const r = await fetch(`/bingo/owner-token/${encodeURIComponent(token)}`);
@@ -223,18 +517,27 @@
   }
 
   function render(data, state){
-    if(!data || !state){ grid.innerHTML = '<p>Missing or invalid query parameters.</p>'; return; }
+    if(!data || !state){
+      grid.innerHTML = '<p>Missing or invalid query parameters.</p>';
+      if (contextMeta) contextMeta.textContent = "Missing game data.";
+      if (contextStatus) contextStatus.textContent = "No game loaded.";
+      return;
+    }
     const cards = data.cards || [];
     const g = state.game || {};
     const called = Array.isArray(g.called) ? g.called : [];
     const bg = g.background ? new URL(g.background, location.origin).toString() : "";
     document.body.style.backgroundImage = bg
-      ? `linear-gradient(160deg, rgba(11,22,17,.95), rgba(11,22,17,.7)), url('${bg}')`
+      ? `linear-gradient(160deg, rgba(11,22,17,.97), rgba(11,22,17,.88)), url('${bg}')`
       : "";
     applyTheme(g.theme_color || null);
     owner = data.owner || owner;
     resolvedGame = (g.game_id || resolvedGame);
-    summary.textContent = `${g.title || "Bingo"} · ${owner} · ${cards.length} card(s)`;
+    const title = g.title || "Bingo";
+    const cardCount = cards.length;
+    if (contextPath) contextPath.textContent = `Bingo / My Cards / ${title}`;
+    if (contextMeta) contextMeta.textContent = `Viewing cards for ${owner || "-"} (${cardCount} card(s))`;
+    summary.textContent = `Loaded ${cardCount} card(s) for ${owner || "-"}.`;
     potValue.textContent = `${formatGil(g.pot != null ? g.pot : 0)} ${g.currency || ""}`.trim();
     payoutSingle.textContent = g.payouts && g.payouts.single != null ? `${formatGil(g.payouts.single)} ${g.currency || ""}`.trim() : "-";
     payoutDouble.textContent = g.payouts && g.payouts.double != null ? `${formatGil(g.payouts.double)} ${g.currency || ""}`.trim() : "-";
@@ -245,9 +548,8 @@
       selectedCardId = cards[0].card_id;
     }
     const gameActive = g.active !== false;
-    claimBtn.disabled = !(gameActive && selectedCardId);
+    if (contextStatus) contextStatus.textContent = gameActive ? "Game running." : "Game closed.";
     if (!gameActive){
-      claimMsg.textContent = "Game ended.";
       if (!redirected){
         redirected = true;
         setTimeout(() => {
@@ -259,46 +561,93 @@
     const hasPending = claims.some(c => c.pending);
     const ownerClaims = claims.filter(c => (c.owner_name || "") === owner);
     const deniedClaim = ownerClaims.find(c => !c.pending && c.denied);
-    if (deniedClaim){
-      claimMsg.textContent = "Claim denied.";
+    const deniedMessage = deniedClaim ? "Claim denied." : "";
+    if (deniedMessage){
+      claimMsg.textContent = deniedMessage;
       localBingoPressed = false;
     } else if (!hasPending){
       localBingoPressed = false;
     }
     bingoOverlay.classList.toggle("show", hasPending || localBingoPressed);
-    calledEl.textContent = called.length ? ("Called numbers: " + called.join(", ")) : "Called numbers: -";
+    calledEl.textContent = called.length ? called.join(", ") : "No numbers called yet.";
     const lastCalled = g.last_called || (called.length ? called[called.length - 1] : null);
     if (lastCalled && lastCalled !== lastBallNumber){
       showCallBall(lastCalled);
       lastBallNumber = lastCalled;
     }
     grid.innerHTML = '';
+    if (!cards.length){
+      grid.innerHTML = '<p class="muted">No cards loaded.</p>';
+      return;
+    }
     const header = (g.header || "BING").slice(0,4).split("");
     while(header.length < 4) header.push(" ");
-    cards.forEach(card=>{
-      const el = document.createElement('div'); el.className='card';
+    const calledSet = new Set(called);
+    let selectedWin = false;
+    cards.forEach((card, index)=>{
+      const el = document.createElement('div');
+      el.className = 'card';
+      const localMarks = loadLocalMarks(card.card_id);
+      const displayMarks = buildDisplayMarks(card, calledSet, localMarks, autoDabEl.checked);
+      const win = hasWinningLine(buildMarksForCard(card, calledSet));
+      if (win) el.classList.add('card-winning');
       if (card.card_id === selectedCardId){
         el.classList.add('selected');
+        selectedWin = win;
       }
-      const nums = card.numbers || [];
-      const localMarks = loadLocalMarks(card.card_id);
+      const cardHeader = document.createElement('div');
+      cardHeader.className = 'card-header';
+      const title = document.createElement('div');
+      title.className = 'card-id';
+      title.textContent = `Card ${index + 1}`;
+      const meta = document.createElement('div');
+      meta.className = 'card-meta';
+      const cardIdLabel = shortenCardId(card.card_id);
+      meta.textContent = `ID ${cardIdLabel}`;
+      if (card.card_id === selectedCardId){
+        meta.textContent += " | Selected";
+      }
+      cardHeader.appendChild(title);
+      cardHeader.appendChild(meta);
+      el.appendChild(cardHeader);
+      const body = document.createElement('div');
+      body.className = 'card-body';
       const headerRow = document.createElement('div');
       headerRow.className = 'header';
       header.forEach(h=>{
-        const d = document.createElement('div'); d.textContent = h; headerRow.appendChild(d);
+        const d = document.createElement('div');
+        d.textContent = h;
+        headerRow.appendChild(d);
       });
-      el.appendChild(headerRow);
-      const gridEl = document.createElement('div'); gridEl.className = 'bingo-grid';
-      const calledSet = new Set(called);
-      const displayCalledSet = autoDabEl.checked ? calledSet : new Set();
+      body.appendChild(headerRow);
+      const gridEl = document.createElement('div');
+      gridEl.className = 'bingo-grid';
+      const nums = card.numbers || [];
       for(let r=0;r<nums.length;r++){
         for(let c=0;c<nums[r].length;c++){
           const n = nums[r][c];
-          const cell = document.createElement('div'); cell.className='cell';
-          const isMarked = (localMarks[r] && localMarks[r][c]) || displayCalledSet.has(n);
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          const isCalled = calledSet.has(n);
+          const isMarked = displayMarks[r] && displayMarks[r][c];
+          const isLocal = localMarks[r] && localMarks[r][c];
           if (isMarked) cell.classList.add('marked');
+          if (isCalled) cell.classList.add('called');
+          if (lastCalled && lastCalled === n) cell.classList.add('recent');
           cell.textContent = n;
-          cell.onclick = () => {
+          if (isCalled){
+            const mark = document.createElement('span');
+            mark.className = 'cell-mark';
+            mark.textContent = 'v';
+            cell.appendChild(mark);
+          } else if (isLocal){
+            const dot = document.createElement('span');
+            dot.className = 'cell-dot';
+            dot.textContent = 'o';
+            cell.appendChild(dot);
+          }
+          cell.onclick = (ev) => {
+            ev.stopPropagation();
             localMarks[r] = localMarks[r] || [];
             localMarks[r][c] = !localMarks[r][c];
             saveLocalMarks(card.card_id, localMarks);
@@ -307,7 +656,8 @@
           gridEl.appendChild(cell);
         }
       }
-      el.appendChild(gridEl);
+      body.appendChild(gridEl);
+      el.appendChild(body);
       el.onclick = () => {
         selectedCardId = card.card_id;
         claimMsg.textContent = "";
@@ -315,6 +665,19 @@
       };
       grid.appendChild(el);
     });
+    const claimReady = gameActive && selectedCardId && selectedWin;
+    claimBtn.disabled = !claimReady;
+    if (deniedMessage){
+      claimMsg.textContent = deniedMessage;
+    } else if (!gameActive){
+      claimMsg.textContent = "Game ended.";
+    } else if (!selectedCardId){
+      claimMsg.textContent = "Select a card to claim.";
+    } else if (!selectedWin){
+      claimMsg.textContent = "No winning line yet.";
+    } else {
+      claimMsg.textContent = "";
+    }
   }
 
   claimBtn.addEventListener('click', async () => {
@@ -411,3 +774,4 @@
     }, 2100);
   }
 </script>
+
