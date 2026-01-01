@@ -1329,6 +1329,11 @@
         flex-direction:column;
         gap:10px;
       }
+      .library-grid-scroll{
+        max-height:520px;
+        overflow:auto;
+        padding-right:6px;
+      }
       .library-toolbar{
         display:flex;
         justify-content:flex-end;
@@ -2431,7 +2436,9 @@
             <div class="library-toolbar">
               <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
             </div>
-            <div class="preview-grid" id="uploadLibraryGrid"></div>
+            <div class="library-grid-scroll">
+              <div class="preview-grid" id="uploadLibraryGrid"></div>
+            </div>
           </section>
         </div>
       </div>
@@ -2965,6 +2972,7 @@
             const actions = document.createElement("div");
             actions.className = "library-actions";
             const useBtn = document.createElement("button");
+            useBtn.type = "button";
             useBtn.className = "btn-primary";
             useBtn.textContent = "Use";
             useBtn.addEventListener("click", () => {
@@ -2977,6 +2985,7 @@
 
             if (authUserIsElfmin && item.delete_url){
               const del = document.createElement("button");
+              del.type = "button";
               del.className = "btn-ghost btn-danger";
               del.textContent = "Delete";
               del.addEventListener("click", async () => {
