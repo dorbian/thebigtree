@@ -79,7 +79,7 @@ async def delete_auth_token(req: web.Request):
     web_tokens.save_tokens(kept)
     return web.json_response({"ok": True})
 
-@route("GET", "/discord/channels", scopes=["bingo:admin"])
+@route("GET", "/discord/channels", scopes=["bingo:admin", "tarot:admin"])
 async def discord_channels(req: web.Request):
     bot = getattr(bigtree, "bot", None)
     if not bot:
@@ -108,7 +108,7 @@ async def discord_channels(req: web.Request):
     channels.sort(key=lambda c: (c.get("guild_name") or "", c.get("category") or "", c.get("position") or 0, c.get("name") or ""))
     return web.json_response({"ok": True, "channels": channels})
 
-@route("GET", "/discord/roles", scopes=["bingo:admin"])
+@route("GET", "/discord/roles", scopes=["bingo:admin", "tarot:admin"])
 async def discord_roles(req: web.Request):
     bot = getattr(bigtree, "bot", None)
     if not bot:
