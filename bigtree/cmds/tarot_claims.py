@@ -20,8 +20,17 @@ def _status_line(card: dict) -> str:
         return f"CLAIMED - {name} ({who})"
     return f"OPEN - {name}"
 
+def _eligible_cards(deck_id: str) -> list[dict]:
+    cards = []
+    for card in tar.list_cards(deck_id):
+        image = (card.get("image") or "").strip()
+        if image:
+            continue
+        cards.append(card)
+    return cards
+
 def _build_embed(deck_id: str, page: int) -> discord.Embed:
-    cards = tar.list_cards(deck_id)
+    cards = _eligible_cards(deck_id)
     total = len(cards)
     pages = max(1, math.ceil(total / _PAGE_SIZE))
     page = max(0, min(page, pages - 1))
@@ -50,7 +59,7 @@ class CardSelect(discord.ui.Select):
     def __init__(self, deck_id: str, page: int):
         self.deck_id = deck_id
         self.page = page
-        cards = tar.list_cards(deck_id)
+        cards = _eligible_cards(deck_id)
         start = page * _PAGE_SIZE
         end = start + _PAGE_SIZE
         options = []
