@@ -287,13 +287,18 @@ async def receive(message):
                     media_mod.add_media(save_name, original_name=filename, artist_id=author_id, title=title)
                     try:
                         view = GalleryUploadView(save_name, author_id)
-                        await message.reply(
+                        await message.author.send(
                             "Upload saved. Add details if needed.",
-                            view=view,
-                            mention_author=False
+                            view=view
                         )
                     except Exception:
-                        pass
+                        try:
+                            await message.reply(
+                                "Upload saved. I couldn't DM you; enable DMs to add details.",
+                                mention_author=False
+                            )
+                        except Exception:
+                            pass
             return
 
         # contest channel handling
