@@ -577,6 +577,10 @@
         padding:8px 12px;
         background:linear-gradient(120deg, rgba(157,224,125,.12), rgba(10,16,22,.8));
         border-bottom:1px solid rgba(233,226,210,.12);
+        cursor:pointer;
+      }
+      .owner-card-header:hover{
+        background:linear-gradient(120deg, rgba(157,224,125,.2), rgba(10,16,22,.9));
       }
       .owner-card-title{
         font-size:11px;
@@ -587,6 +591,46 @@
       .owner-card-id{
         font-size:11px;
         color:var(--muted);
+      }
+      .owner-card-summary{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        font-size:12px;
+        color:var(--neutral-2);
+      }
+      .owner-card-count{
+        font-weight:700;
+        color:var(--accent);
+      }
+      .owner-card-progress{
+        width:84px;
+        height:6px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        overflow:hidden;
+      }
+      .owner-card-progress-fill{
+        height:100%;
+        background:rgba(157,224,125,.7);
+        border-radius:999px;
+      }
+      .owner-card-flag{
+        font-size:10px;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+        padding:2px 6px;
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.16);
+        color:var(--neutral-2);
+      }
+      .owner-card-flag.near{
+        border-color:rgba(224,176,125,.5);
+        color:#f2d7b3;
+      }
+      .owner-card-flag.complete{
+        border-color:rgba(60,207,142,.6);
+        color:#c6f7da;
       }
       .owner-card-toggle{
         width:32px;
@@ -604,12 +648,41 @@
         width:14px;
         height:14px;
         fill:currentColor;
+        transition:transform .2s ease;
+      }
+      .owner-card:not(.collapsed) .owner-card-toggle svg{
+        transform:rotate(180deg);
       }
       .owner-card-body{
         padding:10px 12px 12px;
       }
       .owner-card.collapsed .owner-card-body{
         display:none;
+      }
+      .owner-card-list[data-filter="called"] .bingo-cell.filtered-out,
+      .owner-card-list[data-filter="uncalled"] .bingo-cell.filtered-out{
+        display:none;
+      }
+      .owner-filter{
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
+      .owner-filter-btn{
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.2);
+        padding:4px 10px;
+        font-size:11px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--muted);
+        background:rgba(8,12,16,.4);
+        cursor:pointer;
+      }
+      .owner-filter-btn.active{
+        border-color:rgba(157,224,125,.6);
+        color:#d6ffe9;
+        background:rgba(60,207,142,.12);
       }
       .role-table-wrap{
         border-radius:12px;
@@ -1213,11 +1286,13 @@
       .bingo-cell{
         position:relative;
         padding:10px 0;
+        min-height:34px;
         border-radius:8px;
         background:rgba(12,18,32,.9);
         border:1px solid rgba(255,255,255,.05);
         color:var(--ink);
         font-weight:600;
+        font-size:12px;
       }
       .bingo-cell.marked{
         background:rgba(60,207,142,.2);
@@ -2026,9 +2101,9 @@
             <div class="context-path">Viewing cards for: -</div>
             <div class="context-meta">Total cards: 0</div>
           </div>
-          <div class="context-meta" id="bOwnerLegend">
-            <span class="status-badge good">Called</span>
-            <span class="status-badge">Uncalled</span>
+          <div class="context-meta owner-filter" id="bOwnerLegend">
+            <button class="owner-filter-btn" id="bOwnerFilterCalled" type="button">Called (0)</button>
+            <button class="owner-filter-btn" id="bOwnerFilterUncalled" type="button">Uncalled (0)</button>
           </div>
         </div>
         <div class="owner-card-list" id="bOwnerCards">No tickets loaded.</div>
@@ -3963,6 +4038,8 @@
 
       let galleryItemsCache = [];
       let galleryEditItem = null;
+      let ownerFilter = "all";
+      let ownerFilterData = {owner: "", cards: [], called: [], header: ""};
 
       async function loadGallerySettings(){
         try{
@@ -4295,19 +4372,15 @@
       function renderOwnerCards(owner, cards, called, header){
         const el = $("bOwnerCards");
         const summary = $("bOwnerSummary");
+        ownerFilterData = {owner, cards, called, header};
         if (summary){
           const path = summary.querySelector(".context-path");
           const meta = summary.querySelector(".context-meta");
           if (path) path.textContent = `Viewing cards for: ${owner || "-"}`;
           if (meta) meta.textContent = `Total cards: ${Array.isArray(cards) ? cards.length : 0}`;
         }
-        const legend = $("bOwnerLegend");
-        if (legend){
-          legend.innerHTML = `
-            <span class="status-badge good">Called</span>
-            <span class="status-badge">Uncalled</span>
-          `;
-        }
+        let totalCalledCells = 0;
+        let totalCells = 0;
         if (!Array.isArray(cards) || cards.length === 0){
           el.textContent = "No tickets for this player.";
           return;
@@ -4319,6 +4392,7 @@
         cards.forEach((card, index) => {
           const wrap = document.createElement("div");
           wrap.className = "owner-card";
+          wrap.classList.add("collapsed");
           const headerRow = document.createElement("div");
           headerRow.className = "owner-card-header";
           const titleWrap = document.createElement("div");
@@ -4328,28 +4402,17 @@
           const id = document.createElement("div");
           id.className = "owner-card-id";
           const cardId = String(card.card_id || "");
-          id.textContent = cardId.length > 8 ? `${cardId.slice(0, 4)}...${cardId.slice(-4)}` : cardId;
+          const suffix = cardId.length > 4 ? cardId.slice(-4) : cardId;
+          id.textContent = suffix ? `...${suffix}` : "-";
+          if (cardId){
+            id.title = cardId;
+          }
           titleWrap.appendChild(title);
           titleWrap.appendChild(id);
-          const toggle = document.createElement("button");
-          toggle.type = "button";
-          toggle.className = "owner-card-toggle";
-          toggle.setAttribute("aria-label", "Collapse card");
-          toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>';
-          headerRow.appendChild(titleWrap);
-          headerRow.appendChild(toggle);
-          const body = document.createElement("div");
-          body.className = "owner-card-body";
-          const cardHeader = document.createElement("div");
-          cardHeader.className = "bingo-header";
-          headerText.forEach(h => {
-            const label = document.createElement("div");
-            label.textContent = h;
-            cardHeader.appendChild(label);
-          });
-          body.appendChild(cardHeader);
-          const grid = document.createElement("div");
-          grid.className = "bingo-grid";
+          const summaryWrap = document.createElement("div");
+          summaryWrap.className = "owner-card-summary";
+          const countEl = document.createElement("div");
+          countEl.className = "owner-card-count";
           let numbers = card.numbers;
           if (typeof numbers === "string"){
             try{
@@ -4363,6 +4426,62 @@
               ? card.grid
               : (Array.isArray(card.card) ? card.card : []);
           }
+          let cardCalled = 0;
+          let cardTotal = 0;
+          numbers.forEach((row) => {
+            (row || []).forEach((value) => {
+              cardTotal += 1;
+              if (calledSet.has(value)){
+                cardCalled += 1;
+              }
+            });
+          });
+          totalCells += cardTotal;
+          totalCalledCells += cardCalled;
+          countEl.textContent = `${cardCalled} / ${cardTotal || 0} called`;
+          const progress = document.createElement("div");
+          progress.className = "owner-card-progress";
+          const fill = document.createElement("div");
+          fill.className = "owner-card-progress-fill";
+          const ratio = cardTotal ? (cardCalled / cardTotal) : 0;
+          fill.style.width = `${Math.round(ratio * 100)}%`;
+          progress.appendChild(fill);
+          summaryWrap.appendChild(countEl);
+          summaryWrap.appendChild(progress);
+          if (cardTotal && cardCalled === cardTotal){
+            const flag = document.createElement("span");
+            flag.className = "owner-card-flag complete";
+            flag.textContent = "Complete";
+            summaryWrap.appendChild(flag);
+          }else if (cardTotal && ratio >= 0.75){
+            const flag = document.createElement("span");
+            flag.className = "owner-card-flag near";
+            flag.textContent = "Near-win";
+            summaryWrap.appendChild(flag);
+          }
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "owner-card-toggle";
+          toggle.setAttribute("aria-label", "Collapse card");
+          toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>';
+          headerRow.appendChild(titleWrap);
+          headerRow.appendChild(summaryWrap);
+          headerRow.appendChild(toggle);
+          const body = document.createElement("div");
+          body.className = "owner-card-body";
+          const cardHeader = document.createElement("div");
+          cardHeader.className = "bingo-header";
+          headerText.forEach((h, idx) => {
+            const label = document.createElement("div");
+            label.textContent = h;
+            if (idx > 0){
+              label.style.borderLeft = "1px solid rgba(255,255,255,.08)";
+            }
+            cardHeader.appendChild(label);
+          });
+          body.appendChild(cardHeader);
+          const grid = document.createElement("div");
+          grid.className = "bingo-grid";
           if (!numbers.length){
             const empty = document.createElement("div");
             empty.className = "status";
@@ -4377,11 +4496,20 @@
               const marked = (card.marks && card.marks[r] && card.marks[r][c]) || isCalled;
               if (marked) cell.classList.add("marked");
               if (isCalled) cell.classList.add("called");
+              if (ownerFilter === "called" && !isCalled){
+                cell.classList.add("filtered-out");
+              }
+              if (ownerFilter === "uncalled" && isCalled){
+                cell.classList.add("filtered-out");
+              }
+              if (c > 0){
+                cell.style.borderLeft = "1px solid rgba(255,255,255,.08)";
+              }
               cell.textContent = value;
               if (isCalled){
                 const mark = document.createElement("span");
                 mark.className = "cell-mark";
-                mark.textContent = "✓";
+                mark.textContent = "x";
                 cell.appendChild(mark);
               }
               cell.onclick = () => {
@@ -4394,24 +4522,47 @@
             body.appendChild(grid);
           }
           headerRow.addEventListener("click", () => {
-            wrap.classList.toggle("collapsed");
+            const isCollapsed = wrap.classList.contains("collapsed");
+            const cardsEls = el.querySelectorAll(".owner-card");
+            cardsEls.forEach((cardEl) => {
+              cardEl.classList.add("collapsed");
+            });
+            if (isCollapsed){
+              wrap.classList.remove("collapsed");
+            }
           });
           toggle.addEventListener("click", (ev) => {
             ev.stopPropagation();
-            wrap.classList.toggle("collapsed");
+            const isCollapsed = wrap.classList.contains("collapsed");
+            const cardsEls = el.querySelectorAll(".owner-card");
+            cardsEls.forEach((cardEl) => {
+              cardEl.classList.add("collapsed");
+            });
+            if (isCollapsed){
+              wrap.classList.remove("collapsed");
+            }
           });
           wrap.appendChild(headerRow);
           wrap.appendChild(body);
           el.appendChild(wrap);
         });
+        const calledBtn = $("bOwnerFilterCalled");
+        const uncalledBtn = $("bOwnerFilterUncalled");
+        if (calledBtn && uncalledBtn){
+          calledBtn.textContent = `Called (${totalCalledCells})`;
+          uncalledBtn.textContent = `Uncalled (${Math.max(0, totalCells - totalCalledCells)})`;
+          calledBtn.classList.toggle("active", ownerFilter === "called");
+          uncalledBtn.classList.toggle("active", ownerFilter === "uncalled");
+        }
+        el.dataset.filter = ownerFilter;
       }
-
       async function loadOwnerCards(ownerName){
         const gid = getGameId();
         if (!gid || !ownerName){
           setBingoStatus("Enter game id and owner name.", "err");
           return;
         }
+        ownerFilter = "all";
         try{
           const state = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
           const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/cards", {method:"GET"}, false);
@@ -4455,6 +4606,24 @@
         if (event.target === $("galleryEditModal")){
           $("galleryEditModal").classList.remove("show");
         }
+      });
+      $("bOwnerFilterCalled").addEventListener("click", () => {
+        ownerFilter = ownerFilter === "called" ? "all" : "called";
+        renderOwnerCards(
+          ownerFilterData.owner,
+          ownerFilterData.cards,
+          ownerFilterData.called,
+          ownerFilterData.header
+        );
+      });
+      $("bOwnerFilterUncalled").addEventListener("click", () => {
+        ownerFilter = ownerFilter === "uncalled" ? "all" : "uncalled";
+        renderOwnerCards(
+          ownerFilterData.owner,
+          ownerFilterData.cards,
+          ownerFilterData.called,
+          ownerFilterData.header
+        );
       });
       $("galleryChannelRefresh").addEventListener("click", () => loadGalleryChannels());
       $("galleryItemsRefresh").addEventListener("click", () => loadGalleryItems());
@@ -6006,6 +6175,7 @@
     </script>
   </body>
 </html>
+
 
 
 
