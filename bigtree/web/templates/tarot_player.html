@@ -614,6 +614,8 @@
   let listenTimer = null;
   let statusTimer = null;
   let overlayTimer = null;
+  let sessionImageData = null;
+  let capturePending = false;
 
   joinEl.textContent = joinCode;
 
@@ -639,9 +641,23 @@
     deckEl.textContent = currentState.deck ? (currentState.deck.name || currentState.deck.deck_id || "-") : "-";
     spreadEl.textContent = currentState.spread ? (currentState.spread.name || currentState.spread.id || "-") : "-";
     if (["finished", "ended", "closed"].includes(status)){
-      showSessionOverlay();
+      if (sessionImageData){
+        showSessionOverlay();
+      } else if (!capturePending){
+        capturePending = true;
+        captureSessionImage().then((dataUrl) => {
+          sessionImageData = dataUrl || null;
+          showSessionOverlay();
+        }).catch(() => {
+          showSessionOverlay();
+        }).finally(() => {
+          capturePending = false;
+        });
+      }
     } else {
       hideSessionOverlay();
+      sessionImageData = null;
+      capturePending = false;
     }
     grid.innerHTML = "";
     const backUrl = currentState.deck && currentState.deck.back_image ? currentState.deck.back_image : "";
@@ -815,12 +831,16 @@
     if (!sessionOverlay) return;
     sessionOverlay.classList.add("show");
     sessionOverlay.setAttribute("aria-hidden", "false");
+    if (downloadSession){
+      downloadSession.disabled = !sessionImageData;
+    }
     if (overlayTimer){
       clearTimeout(overlayTimer);
     }
     overlayTimer = setTimeout(() => {
       if (redirected) return;
       redirected = true;
+      sessionImageData = null;
       window.location.assign("/");
     }, 30000);
   }
@@ -891,18 +911,11 @@
 
   if (downloadSession){
     downloadSession.addEventListener("click", async () => {
-      if (!window.html2canvas) return;
-      downloadSession.disabled = true;
-      downloadSession.textContent = "Rendering...";
-      try{
-        const canvas = await window.html2canvas(document.body, {backgroundColor: null});
-        const link = document.createElement("a");
-        link.download = `tarot-session-${joinCode}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-      }catch(err){}
-      downloadSession.disabled = false;
-      downloadSession.textContent = "Download session image";
+      if (!sessionImageData) return;
+      const link = document.createElement("a");
+      link.download = `tarot-session-${joinCode}.png`;
+      link.href = sessionImageData;
+      link.click();
     });
   }
 
@@ -910,7 +923,24 @@
     continueSession.addEventListener("click", () => {
       if (redirected) return;
       redirected = true;
+      sessionImageData = null;
       window.location.assign("/");
     });
+  }
+
+  async function captureSessionImage(){
+    if (!window.html2canvas) return null;
+    const overlayWasVisible = sessionOverlay && sessionOverlay.classList.contains("show");
+    if (overlayWasVisible){
+      sessionOverlay.classList.remove("show");
+    }
+    try{
+      const canvas = await window.html2canvas(document.body, {backgroundColor: null});
+      return canvas.toDataURL("image/png");
+    }finally{
+      if (overlayWasVisible){
+        sessionOverlay.classList.add("show");
+      }
+    }
   }
 </script>
