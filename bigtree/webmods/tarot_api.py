@@ -589,7 +589,7 @@ async def seed_deck(req: web.Request):
 @route("POST", "/api/tarot/decks/{deck_id}/seed-template", scopes=["tarot:admin"])
 async def seed_deck_template(req: web.Request):
     deck_id = req.match_info["deck_id"]
-    tar.seed_deck_from_seed_file(deck_id)
+    await asyncio.to_thread(tar.seed_deck_from_seed_file, deck_id)
     return web.json_response({"ok": True})
 
 @route("POST", "/api/tarot/decks/{deck_id}/claims/post", scopes=["tarot:admin"])
@@ -618,7 +618,7 @@ async def post_claims_board(req: web.Request):
     if not channel or not isinstance(channel, discord.TextChannel):
         return _json_error("channel not found", status=404)
     if not tar.get_deck(deck_id):
-        tar.seed_deck_from_seed_file(deck_id)
+        await asyncio.to_thread(tar.seed_deck_from_seed_file, deck_id)
     await tarot_claims_cmd.post_claim_board(channel, deck_id, claim_limit=claim_limit)
     return web.json_response({"ok": True})
 
