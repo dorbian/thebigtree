@@ -161,39 +161,44 @@ class AuthCog(commands.Cog):
 
     @bot.tree.command(
         name="auth",
-        description="Generate a 24h web API token for the overlay client.",
-        guild=discord.Object(id=bigtree.guildid),
+        description="Generate a 24h web API token for the overlay client."
     )
     async def auth(self, interaction: discord.Interaction):
-        member = interaction.user
-        if not isinstance(member, discord.Member):
-            member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
-        scopes = _get_scopes_for_member(member) if member else []
-        if not member or not scopes:
-            auth_logger.warning("[auth] denied user=%s", getattr(interaction.user, "id", "unknown"))
-            await interaction.response.send_message("Not allowed.", ephemeral=True)
-            return
-        display_name = member.display_name or member.name
-        avatar_url = getattr(member, "display_avatar", None)
-        avatar_url = getattr(avatar_url, "url", None)
-        doc = web_tokens.issue_token(
-            user_id=member.id,
-            scopes=scopes,
-            user_name=display_name,
-            user_icon=avatar_url,
-        )
-        auth_logger.info(
-            "[auth] issued user=%s scopes=%s",
-            member.id,
-            ",".join(doc.get("scopes") or []),
-        )
-        expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
-        await interaction.response.send_message(
-            f"Here is your 24h web token (keep it private):\n`{doc['token']}`\n"
-            f"Expires: {expires_at.isoformat()}",
-            view=self._TokenView(doc["token"]),
-            ephemeral=True,
-        )
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            member = interaction.user
+            if not isinstance(member, discord.Member):
+                member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
+            scopes = _get_scopes_for_member(member) if member else []
+            if not member or not scopes:
+                auth_logger.warning("[auth] denied user=%s", getattr(interaction.user, "id", "unknown"))
+                await interaction.followup.send("Not allowed.", ephemeral=True)
+                return
+            display_name = member.display_name or member.name
+            avatar_url = getattr(member, "display_avatar", None)
+            avatar_url = getattr(avatar_url, "url", None)
+            doc = web_tokens.issue_token(
+                user_id=member.id,
+                scopes=scopes,
+                user_name=display_name,
+                user_icon=avatar_url,
+            )
+            auth_logger.info(
+                "[auth] issued user=%s scopes=%s",
+                member.id,
+                ",".join(doc.get("scopes") or []),
+            )
+            expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
+            await interaction.followup.send(
+                f"Here is your 24h web token (keep it private):\n`{doc['token']}`\n"
+                f"Expires: {expires_at.isoformat()}",
+                view=self._TokenView(doc["token"]),
+                ephemeral=True,
+            )
+        except Exception as exc:
+            auth_logger.exception("[auth] error")
+            await interaction.followup.send(f"Auth failed: {exc}", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
