@@ -645,14 +645,16 @@
         showSessionOverlay();
       } else if (!capturePending){
         capturePending = true;
-        captureSessionImage().then((dataUrl) => {
-          sessionImageData = dataUrl || null;
-          showSessionOverlay();
-        }).catch(() => {
-          showSessionOverlay();
-        }).finally(() => {
-          capturePending = false;
-        });
+        setTimeout(() => {
+          captureSessionImage().then((dataUrl) => {
+            sessionImageData = dataUrl || null;
+            showSessionOverlay();
+          }).catch(() => {
+            showSessionOverlay();
+          }).finally(() => {
+            capturePending = false;
+          });
+        }, 5000);
       }
     } else {
       hideSessionOverlay();
