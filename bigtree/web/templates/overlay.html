@@ -1302,6 +1302,124 @@
       .preview-card.library-card .btn-ghost{
         margin:0 8px 8px;
       }
+      .library-layout{
+        display:grid;
+        grid-template-columns:minmax(240px, 320px) 1fr;
+        gap:16px;
+        align-items:start;
+      }
+      .library-section-title{
+        font-size:12px;
+        letter-spacing:.14em;
+        text-transform:uppercase;
+        color:var(--neutral-2);
+        margin-bottom:8px;
+      }
+      .library-upload{
+        padding:12px;
+        border-radius:14px;
+        border:1px solid var(--line);
+        background:rgba(6,10,18,.45);
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .library-browser{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .library-toolbar{
+        display:flex;
+        justify-content:flex-end;
+      }
+      .upload-drop{
+        border:1px dashed rgba(255,255,255,.2);
+        border-radius:14px;
+        padding:14px;
+        text-align:center;
+        background:rgba(8,12,16,.45);
+        cursor:pointer;
+        transition:border-color .15s ease, background .15s ease;
+      }
+      .upload-drop.dragover{
+        border-color:rgba(157,224,125,.7);
+        background:rgba(60,207,142,.12);
+      }
+      .upload-drop-title{
+        font-size:13px;
+        color:var(--ink);
+      }
+      .upload-drop-meta{
+        font-size:11px;
+        color:var(--muted);
+        margin-top:4px;
+      }
+      .upload-drop-cta{
+        font-size:11px;
+        color:var(--accent);
+        margin-top:6px;
+        letter-spacing:.06em;
+        text-transform:uppercase;
+      }
+      .library-card-title{
+        font-size:13px;
+        font-weight:700;
+        color:var(--ink);
+        padding:6px 10px 0;
+      }
+      .library-card-artist{
+        font-size:11px;
+        color:var(--muted);
+        padding:0 10px 4px;
+      }
+      .library-card-artist button{
+        background:none;
+        border:none;
+        padding:0;
+        font-size:11px;
+        color:var(--accent);
+        cursor:pointer;
+      }
+      .library-badges{
+        display:flex;
+        flex-wrap:wrap;
+        gap:6px;
+        padding:0 10px 4px;
+      }
+      .library-badge{
+        font-size:10px;
+        letter-spacing:.06em;
+        text-transform:uppercase;
+        padding:3px 8px;
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.12);
+        color:var(--neutral-2);
+        background:rgba(8,12,16,.4);
+      }
+      .library-actions{
+        display:flex;
+        gap:8px;
+        padding:6px 10px 10px;
+      }
+      .library-actions button{
+        width:auto;
+        flex:1;
+      }
+      .btn-danger{
+        border:1px solid rgba(210,92,92,.45);
+        color:#f1b1b1;
+        background:transparent;
+      }
+      .btn-danger:hover{
+        border-color:rgba(210,92,92,.75);
+        color:#ffd6d6;
+      }
+      @media (max-width: 920px){
+        .library-layout{
+          grid-template-columns:1fr;
+        }
+      }
       .preview-card img{
         width:100%;
         height:100%;
@@ -2288,30 +2406,34 @@
           <div class="modal-title" id="uploadLibraryTitle">Image Library</div>
           <button class="btn-ghost" id="uploadLibraryClose">Close</button>
         </div>
-        <div class="row">
-          <div>
-            <label for="uploadLibraryFile">Upload image</label>
-            <input id="uploadLibraryFile" type="file" accept="image/*">
-          </div>
-          <div>
-            <label for="uploadLibraryTitleInput">Title</label>
-            <input id="uploadLibraryTitleInput" placeholder="Image title">
-          </div>
-          <div>
-            <label for="uploadLibraryArtist">Artist</label>
-            <select id="uploadLibraryArtist"></select>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="uploadLibraryUpload">Upload</button>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
-          </div>
+        <div class="library-layout">
+          <section class="library-upload">
+            <div class="library-section-title">Add new media</div>
+            <div class="upload-drop" id="uploadLibraryDrop" role="button" tabindex="0">
+              <div class="upload-drop-title" id="uploadLibraryDropTitle">Drag &amp; drop an image</div>
+              <div class="upload-drop-meta" id="uploadLibraryDropMeta">PNG, JPG, GIF, WEBP</div>
+              <div class="upload-drop-cta" id="uploadLibraryDropCta">or click to choose</div>
+            </div>
+            <input id="uploadLibraryFile" type="file" accept="image/*" class="hidden">
+            <div>
+              <label for="uploadLibraryTitleInput">Title</label>
+              <input id="uploadLibraryTitleInput" placeholder="Image title">
+            </div>
+            <div>
+              <label for="uploadLibraryArtist">Artist</label>
+              <select id="uploadLibraryArtist"></select>
+            </div>
+            <button id="uploadLibraryUpload" disabled>Upload</button>
+            <div class="status" id="uploadLibraryStatus">Ready.</div>
+          </section>
+          <section class="library-browser">
+            <div class="library-section-title">Existing media</div>
+            <div class="library-toolbar">
+              <button class="btn-ghost" id="uploadLibraryRefresh">Refresh</button>
+            </div>
+            <div class="preview-grid" id="uploadLibraryGrid"></div>
+          </section>
         </div>
-        <div class="preview-grid" id="uploadLibraryGrid"></div>
-        <div class="status" id="uploadLibraryStatus">Ready.</div>
       </div>
     </div>
     <div class="modal" id="deckCreateModal">
@@ -2740,11 +2862,37 @@
 
       let librarySelectHandler = null;
       let libraryKind = "";
+      let libraryUploadFile = null;
 
       function setLibraryStatus(msg, kind){
         const el = $("uploadLibraryStatus");
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function updateUploadDropDisplay(file){
+        const title = $("uploadLibraryDropTitle");
+        const meta = $("uploadLibraryDropMeta");
+        const cta = $("uploadLibraryDropCta");
+        if (!title || !meta || !cta) return;
+        if (file){
+          title.textContent = `Selected: ${file.name}`;
+          meta.textContent = `${Math.round(file.size / 1024)} KB`;
+          cta.textContent = "Click to replace";
+        }else{
+          title.textContent = "Drag & drop an image";
+          meta.textContent = "PNG, JPG, GIF, WEBP";
+          cta.textContent = "or click to choose";
+        }
+      }
+
+      function updateUploadState(){
+        const file = libraryUploadFile || ($("uploadLibraryFile").files[0] || null);
+        const title = $("uploadLibraryTitleInput").value.trim();
+        const btn = $("uploadLibraryUpload");
+        if (btn){
+          btn.disabled = !(file && title);
+        }
       }
 
       function showLibraryModal(show){
@@ -2753,6 +2901,8 @@
           $("mediaModal").classList.remove("show");
           $("artistModal").classList.remove("show");
           $("calendarModal").classList.remove("show");
+          updateUploadDropDisplay(libraryUploadFile);
+          updateUploadState();
         }
       }
 
@@ -2781,74 +2931,104 @@
             const card = document.createElement("div");
             card.className = "preview-card library-card";
 
-            const titleText = document.createElement("div");
-            titleText.className = "preview-label";
-            titleText.style.position = "static";
-            titleText.style.margin = "8px 8px 2px";
-            titleText.style.background = "transparent";
-            titleText.style.padding = "0";
-            titleText.textContent = item.title || item.name || "Untitled";
-
-            const meta = document.createElement("div");
-            meta.className = "muted";
-            meta.style.padding = "0 8px 6px";
-            meta.textContent = item.artist_name ? `Artist: ${item.artist_name}` : "";
-
             const img = document.createElement("img");
             img.src = item.url;
             img.alt = item.name || "image";
 
-            const btn = document.createElement("button");
-            btn.className = "btn-ghost";
-            btn.style.margin = "0 8px 8px";
-            btn.textContent = "Use";
-            btn.addEventListener("click", () => {
+            const titleText = document.createElement("div");
+            titleText.className = "library-card-title";
+            titleText.textContent = item.title || item.name || "Untitled";
+
+            const artist = document.createElement("div");
+            artist.className = "library-card-artist";
+            if (item.artist_id || item.artist_name){
+              artist.textContent = "Artist: ";
+              const artistBtn = document.createElement("button");
+              artistBtn.type = "button";
+              artistBtn.textContent = item.artist_name || item.artist_id || "Unknown";
+              artistBtn.addEventListener("click", () => openArtistIndex(item.artist_id || ""));
+              artist.appendChild(artistBtn);
+            }else{
+              artist.textContent = "Artist: Unassigned";
+            }
+
+            const badges = document.createElement("div");
+            badges.className = "library-badges";
+            const usedIn = Array.isArray(item.used_in) ? item.used_in : [];
+            usedIn.forEach(label => {
+              const badge = document.createElement("span");
+              badge.className = "library-badge";
+              badge.textContent = label;
+              badges.appendChild(badge);
+            });
+
+            const actions = document.createElement("div");
+            actions.className = "library-actions";
+            const useBtn = document.createElement("button");
+            useBtn.className = "btn-primary";
+            useBtn.textContent = "Use";
+            useBtn.addEventListener("click", () => {
               if (librarySelectHandler){
                 librarySelectHandler(item);
               }
               showLibraryModal(false);
             });
+            actions.appendChild(useBtn);
 
-            const del = document.createElement("button");
-            del.className = "btn-ghost";
-            del.style.margin = "0 8px 8px";
-            del.textContent = "Delete";
-            del.addEventListener("click", async () => {
-              if (!authUserIsElfmin){
-                setLibraryStatus("Only elfministrators can delete media.", "err");
-                return;
-              }
-              if (!confirm("Delete this file? This cannot be undone.")) return;
-              try{
-                const delUrl = item.delete_url || "";
-                if (!delUrl){
-                  throw new Error("Delete not available");
+            if (authUserIsElfmin && item.delete_url){
+              const del = document.createElement("button");
+              del.className = "btn-ghost btn-danger";
+              del.textContent = "Delete";
+              del.addEventListener("click", async () => {
+                const usage = usedIn.length ? `This image is used in: ${usedIn.join(", ")}.` : "";
+                const prompt = usage
+                  ? `${usage} This image may be used elsewhere. Continue?`
+                  : "This image may be used elsewhere. Continue?";
+                if (!confirm(prompt)) return;
+                try{
+                  const delUrl = item.delete_url || "";
+                  if (!delUrl){
+                    throw new Error("Delete not available");
+                  }
+                  const res = await fetch(delUrl, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok || data.ok === false){
+                    throw new Error(data.error || "Delete failed");
+                  }
+                  await loadLibrary(libraryKind);
+                }catch(err){
+                  setLibraryStatus(err.message, "err");
                 }
-                const res = await fetch(delUrl, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || data.ok === false){
-                  throw new Error(data.error || "Delete failed");
-                }
-                await loadLibrary(libraryKind);
-              }catch(err){
-                setLibraryStatus(err.message, "err");
-              }
-            });
-
-            card.appendChild(titleText);
-            if (meta.textContent){
-              card.appendChild(meta);
+              });
+              actions.appendChild(del);
             }
+
             card.appendChild(img);
-            card.appendChild(btn);
-            if (authUserIsElfmin){
-              card.appendChild(del);
+            card.appendChild(titleText);
+            card.appendChild(artist);
+            if (usedIn.length){
+              card.appendChild(badges);
             }
+            card.appendChild(actions);
             grid.appendChild(card);
           });
           setLibraryStatus("Pick an image.", "ok");
         }catch(err){
           setLibraryStatus(err.message, "err");
+        }
+      }
+
+      async function openArtistIndex(artistId){
+        if (!artistId){
+          setLibraryStatus("No artist assigned.", "alert");
+          return;
+        }
+        $("artistModal").classList.add("show");
+        await loadTarotArtists();
+        const select = $("artistIndexSelect");
+        if (select){
+          select.value = artistId;
+          select.dispatchEvent(new Event("change"));
         }
       }
 
@@ -6050,17 +6230,57 @@
         loadTarotArtists();
       });
 
+      $("uploadLibraryFile").addEventListener("change", (ev) => {
+        const file = ev.target.files[0] || null;
+        libraryUploadFile = file;
+        updateUploadDropDisplay(file);
+        updateUploadState();
+      });
+      $("uploadLibraryTitleInput").addEventListener("input", () => updateUploadState());
+
+      const uploadDrop = $("uploadLibraryDrop");
+      if (uploadDrop){
+        uploadDrop.addEventListener("click", () => $("uploadLibraryFile").click());
+        uploadDrop.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " "){
+            ev.preventDefault();
+            $("uploadLibraryFile").click();
+          }
+        });
+        uploadDrop.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          uploadDrop.classList.add("dragover");
+        });
+        uploadDrop.addEventListener("dragleave", () => uploadDrop.classList.remove("dragover"));
+        uploadDrop.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          uploadDrop.classList.remove("dragover");
+          const file = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+          if (file){
+            libraryUploadFile = file;
+            updateUploadDropDisplay(file);
+            updateUploadState();
+          }
+        });
+      }
+
       $("uploadLibraryUpload").addEventListener("click", async () => {
-        const file = $("uploadLibraryFile").files[0];
+        const file = libraryUploadFile || $("uploadLibraryFile").files[0];
         if (!file){
-          setStatus("Select an image to upload.", "err");
+          setLibraryStatus("Select an image to upload.", "err");
+          return;
+        }
+        const title = $("uploadLibraryTitleInput").value.trim();
+        if (!title){
+          setLibraryStatus("Enter a title before uploading.", "err");
           return;
         }
         try{
+          $("uploadLibraryUpload").disabled = true;
+          setLibraryStatus("Uploading...", "");
           const fd = new FormData();
           fd.append("file", file);
-          const title = $("uploadLibraryTitleInput").value.trim();
-          if (title) fd.append("title", title);
+          fd.append("title", title);
           const artistId = $("uploadLibraryArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
           const res = await fetch("/api/media/upload", {
@@ -6072,10 +6292,14 @@
           if (!data.ok) throw new Error(data.error || "Failed");
           $("uploadLibraryFile").value = "";
           $("uploadLibraryTitleInput").value = "";
-          setStatus("Media uploaded.", "ok");
+          libraryUploadFile = null;
+          updateUploadDropDisplay(null);
+          setLibraryStatus("Upload complete.", "ok");
           await loadLibrary("media");
         }catch(err){
-          setStatus(err.message, "err");
+          setLibraryStatus(err.message, "err");
+        }finally{
+          updateUploadState();
         }
       });
 

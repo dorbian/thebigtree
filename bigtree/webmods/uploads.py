@@ -54,6 +54,28 @@ def _list_dir(path: str, prefix: str) -> list[dict]:
 def _strip_query(url: str) -> str:
     return url.split("?", 1)[0]
 
+def _add_usage(usage: dict[str, set[str]], filename: str, label: str):
+    if not filename:
+        return
+    usage.setdefault(filename, set()).add(label)
+
+def _build_usage_map() -> dict[str, set[str]]:
+    usage: dict[str, set[str]] = {}
+    for deck in tarot_mod.list_decks():
+        back = (deck.get("back_image") or "").strip()
+        if back:
+            name = os.path.basename(_strip_query(back))
+            _add_usage(usage, name, "Tarot Back")
+    for deck in tarot_mod.list_decks():
+        deck_id = deck.get("deck_id") or "elf-classic"
+        for c in tarot_mod.list_cards(deck_id):
+            img = (c.get("image") or "").strip()
+            if not img:
+                continue
+            name = os.path.basename(_strip_query(img))
+            _add_usage(usage, name, "Tarot Card")
+    return usage
+
 def _artist_info(artist_id: str | None) -> dict:
     if not artist_id:
         return {}
@@ -71,6 +93,7 @@ def _media_item(
     artist_id: str | None,
     original_name: str = "",
     title: str = "",
+    used_in: list[str] | None = None,
 ) -> dict:
     item = {
         "name": filename,
@@ -79,6 +102,7 @@ def _media_item(
         "original_name": original_name,
         "title": title,
         "delete_url": f"/api/media/{filename}",
+        "used_in": used_in or [],
     }
     item.update(_artist_info(artist_id))
     if artist_id and not item.get("artist_id"):
@@ -223,6 +247,7 @@ async def upload_media(req: web.Request):
 async def list_media(_req: web.Request):
     items: list[dict] = []
     seen: set[str] = set()
+    usage_map = _build_usage_map()
     for entry in media_mod.list_media():
         filename = entry.get("filename")
         if not filename or filename in seen:
@@ -233,6 +258,7 @@ async def list_media(_req: web.Request):
             entry.get("artist_id"),
             entry.get("original_name") or "",
             entry.get("title") or "",
+            used_in=sorted(usage_map.get(filename, set())),
         ))
 
     for deck in tarot_mod.list_decks():
@@ -246,6 +272,7 @@ async def list_media(_req: web.Request):
                     "url": url,
                     "source": "tarot-back",
                     "delete_url": f"/api/uploads/tarot/backs/{name}",
+                    "used_in": sorted(usage_map.get(name, {"Tarot Back"})),
                 }
                 entry.update(_artist_info(deck.get("back_artist_id")))
                 items.append(entry)
@@ -264,6 +291,7 @@ async def list_media(_req: web.Request):
                 "url": url,
                 "source": "tarot-card",
                 "delete_url": f"/api/uploads/tarot/cards/{name}",
+                "used_in": sorted(usage_map.get(name, {"Tarot Card"})),
             }
             entry.update(_artist_info(c.get("artist_id")))
             items.append(entry)
