@@ -1402,6 +1402,9 @@
         border-radius:10px;
         margin:0 8px;
       }
+      #mediaPanel .preview-card.library-card img{
+        height:120px;
+      }
       .preview-card.library-card .btn-ghost{
         margin:0 8px 8px;
       }
@@ -2621,6 +2624,46 @@
           </div>
           <div class="status" id="tarotClaimsStatus">Pick a deck and channel to post.</div>
         </section>
+        <section class="panel hidden" style="animation-delay:.1s" id="mediaPanel">
+          <h2>Media Library</h2>
+          <p>Upload, review, and manage images used across the Forest.</p>
+          <div class="library-layout">
+            <div>
+              <div class="library-section-title">Add new media</div>
+              <div class="upload-drop" id="mediaUploadDrop" role="button" tabindex="0">
+                <div class="upload-drop-title" id="mediaUploadDropTitle">Drag &amp; drop an image</div>
+                <div class="upload-drop-meta" id="mediaUploadDropMeta">PNG, JPG, GIF, WEBP</div>
+                <div class="upload-drop-cta" id="mediaUploadDropCta">or click to choose</div>
+              </div>
+              <input id="mediaUploadFile" type="file" accept="image/*" class="hidden">
+              <div class="row">
+                <div>
+                  <label for="mediaUploadTitleInput">Title</label>
+                  <input id="mediaUploadTitleInput" placeholder="Image title">
+                </div>
+                <div>
+                  <label for="mediaUploadArtist">Artist</label>
+                  <select id="mediaUploadArtist"></select>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>&nbsp;</label>
+                  <button id="mediaUploadUpload" disabled>Upload</button>
+                </div>
+              </div>
+              <div class="status" id="mediaUploadStatus">Ready.</div>
+            </div>
+            <div>
+              <div class="row" style="justify-content:space-between;align-items:center;">
+                <div class="library-section-title">Existing media</div>
+                <button class="btn-ghost" id="mediaLibraryRefresh">Refresh</button>
+              </div>
+              <div class="status" id="mediaLibraryStatus">Ready.</div>
+              <div class="preview-grid" id="mediaLibraryGrid"></div>
+            </div>
+          </div>
+        </section>
         <div class="modal" id="contestChannelModal">
           <div class="modal-card">
             <div class="modal-header">
@@ -3245,9 +3288,24 @@
       let librarySelectHandler = null;
       let libraryKind = "";
       let libraryUploadFile = null;
+      let mediaUploadFile = null;
 
       function setLibraryStatus(msg, kind){
         const el = $("uploadLibraryStatus");
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setMediaUploadStatus(msg, kind){
+        const el = $("mediaUploadStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setMediaLibraryStatus(msg, kind){
+        const el = $("mediaLibraryStatus");
+        if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
       }
@@ -3277,6 +3335,31 @@
         }
       }
 
+      function updateMediaUploadDropDisplay(file){
+        const title = $("mediaUploadDropTitle");
+        const meta = $("mediaUploadDropMeta");
+        const cta = $("mediaUploadDropCta");
+        if (!title || !meta || !cta) return;
+        if (file){
+          title.textContent = `Selected: ${file.name}`;
+          meta.textContent = `${Math.round(file.size / 1024)} KB`;
+          cta.textContent = "Click to replace";
+        }else{
+          title.textContent = "Drag & drop an image";
+          meta.textContent = "PNG, JPG, GIF, WEBP";
+          cta.textContent = "or click to choose";
+        }
+      }
+
+      function updateMediaUploadState(){
+        const file = mediaUploadFile || ($("mediaUploadFile") ? $("mediaUploadFile").files[0] : null);
+        const title = $("mediaUploadTitleInput") ? $("mediaUploadTitleInput").value.trim() : "";
+        const btn = $("mediaUploadUpload");
+        if (btn){
+          btn.disabled = !(file && title);
+        }
+      }
+
       function showLibraryModal(show){
         $("uploadLibraryModal").classList.toggle("show", !!show);
         if (show){
@@ -3288,13 +3371,24 @@
         }
       }
 
-      async function loadLibrary(kind){
+      async function loadLibrary(kind, opts){
         libraryKind = kind;
-        const grid = $("uploadLibraryGrid");
-        const title = $("uploadLibraryTitle");
-        title.textContent = "Media Library";
-        setLibraryStatus("Loading...", "");
+        const config = opts || {};
+        const grid = config.grid || $("uploadLibraryGrid");
+        const title = Object.prototype.hasOwnProperty.call(config, "title") ? config.title : $("uploadLibraryTitle");
+        const setStatus = config.setStatus || setLibraryStatus;
+        const onSelect = config.onSelect || librarySelectHandler;
+        const showUse = Object.prototype.hasOwnProperty.call(config, "showUse") ? config.showUse : !!onSelect;
+        const showCopy = !!config.showCopy;
+        const closeOnUse = config.closeOnUse !== false;
+        if (title){
+          title.textContent = config.titleText || "Media Library";
+        }
+        if (!grid){
+          return;
+        }
         grid.innerHTML = "";
+        setStatus("Loading...", "");
         const path = "/api/media/list";
         try{
           const res = await fetch(path, {headers: {"X-API-Key": apiKeyEl.value.trim()}});
@@ -3306,7 +3400,7 @@
           if (!data.ok) throw new Error(data.error || "Failed");
           const items = data.items || [];
           if (!items.length){
-            setLibraryStatus("No images found.", "err");
+            setStatus("No images found.", "err");
             return;
           }
           items.forEach(item => {
@@ -3328,7 +3422,7 @@
               const artistBtn = document.createElement("button");
               artistBtn.type = "button";
               artistBtn.textContent = item.artist_name || item.artist_id || "Unknown";
-              artistBtn.addEventListener("click", () => openArtistIndex(item.artist_id || ""));
+              artistBtn.addEventListener("click", () => openArtistIndex(item.artist_id || "", setStatus));
               artist.appendChild(artistBtn);
             }else{
               artist.textContent = "Artist: Unassigned";
@@ -3346,17 +3440,36 @@
 
             const actions = document.createElement("div");
             actions.className = "library-actions";
-            const useBtn = document.createElement("button");
-            useBtn.type = "button";
-            useBtn.className = "btn-primary";
-            useBtn.textContent = "Use";
-            useBtn.addEventListener("click", () => {
-              if (librarySelectHandler){
-                librarySelectHandler(item);
-              }
-              showLibraryModal(false);
-            });
-            actions.appendChild(useBtn);
+            if (showUse){
+              const useBtn = document.createElement("button");
+              useBtn.type = "button";
+              useBtn.className = "btn-primary";
+              useBtn.textContent = "Use";
+              useBtn.addEventListener("click", () => {
+                if (onSelect){
+                  onSelect(item);
+                }
+                if (closeOnUse){
+                  showLibraryModal(false);
+                }
+              });
+              actions.appendChild(useBtn);
+            }
+            if (showCopy){
+              const copyBtn = document.createElement("button");
+              copyBtn.type = "button";
+              copyBtn.className = "btn-ghost";
+              copyBtn.textContent = "Copy URL";
+              copyBtn.addEventListener("click", async () => {
+                try{
+                  await navigator.clipboard.writeText(item.url || "");
+                  setStatus("Image URL copied.", "ok");
+                }catch(err){
+                  setStatus("Copy failed.", "err");
+                }
+              });
+              actions.appendChild(copyBtn);
+            }
 
             if (authUserIsElfmin && item.delete_url){
               const del = document.createElement("button");
@@ -3379,9 +3492,9 @@
                   if (!res.ok || data.ok === false){
                     throw new Error(data.error || "Delete failed");
                   }
-                  await loadLibrary(libraryKind);
+                  await loadLibrary(libraryKind, config);
                 }catch(err){
-                  setLibraryStatus(err.message, "err");
+                  setStatus(err.message, "err");
                 }
               });
               actions.appendChild(del);
@@ -3396,15 +3509,16 @@
             card.appendChild(actions);
             grid.appendChild(card);
           });
-          setLibraryStatus("Pick an image.", "ok");
+          setStatus(showUse && onSelect ? "Pick an image." : "Library loaded.", "ok");
         }catch(err){
-          setLibraryStatus(err.message, "err");
+          setStatus(err.message, "err");
         }
       }
 
-      async function openArtistIndex(artistId){
+      async function openArtistIndex(artistId, statusFn){
+        const notify = statusFn || setLibraryStatus;
         if (!artistId){
-          setLibraryStatus("No artist assigned.", "alert");
+          notify("No artist assigned.", "alert");
           return;
         }
         $("artistModal").classList.add("show");
@@ -3420,6 +3534,20 @@
         const el = $("calendarStatus");
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      async function loadMediaLibrary(){
+        const grid = $("mediaLibraryGrid");
+        if (!grid) return;
+        await loadLibrary("media", {
+          grid,
+          title: null,
+          setStatus: setMediaLibraryStatus,
+          showUse: false,
+          showCopy: true,
+          closeOnUse: false,
+          onSelect: null
+        });
       }
 
       function setAuthRolesStatus(msg, kind){
@@ -4367,11 +4495,19 @@
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
         $("menuContests").classList.toggle("active", which === "contests");
+        $("menuMedia").classList.toggle("active", which === "media");
         $("dashboardPanel").classList.toggle("hidden", which !== "dashboard");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
         $("contestPanel").classList.toggle("hidden", which !== "contests");
+        $("mediaPanel").classList.toggle("hidden", which !== "media");
+        if (which === "media"){
+          loadMediaLibrary();
+          loadTarotArtists();
+          updateMediaUploadDropDisplay(mediaUploadFile);
+          updateMediaUploadState();
+        }
       }
 
       function getSavedPanel(){
@@ -4454,6 +4590,7 @@
       bindMenuKey("menuTarotLinks");
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
+      bindMenuKey("menuMedia");
       $("bAnnounceToggle").addEventListener("change", async (ev) => {
         const gid = getGameId();
         if (!gid){
@@ -4478,10 +4615,7 @@
         }
       });
       $("menuMedia").addEventListener("click", () => {
-        librarySelectHandler = null;
-        showLibraryModal(true);
-        loadLibrary("media");
-        loadTarotArtists();
+        showPanel("media");
       });
       $("menuArtists").addEventListener("click", () => {
         $("artistModal").classList.add("show");
@@ -6447,7 +6581,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-          const selects = ["uploadLibraryArtist", "artistIndexSelect", "galleryEditArtist"];
+        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "artistIndexSelect", "galleryEditArtist"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;
@@ -6555,6 +6689,80 @@
         showLibraryModal(true);
         loadLibrary("media");
         loadTarotArtists();
+      });
+
+      $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
+      $("mediaUploadFile").addEventListener("change", (ev) => {
+        const file = ev.target.files[0] || null;
+        mediaUploadFile = file;
+        updateMediaUploadDropDisplay(file);
+        updateMediaUploadState();
+      });
+      $("mediaUploadTitleInput").addEventListener("input", () => updateMediaUploadState());
+
+      const mediaDrop = $("mediaUploadDrop");
+      if (mediaDrop){
+        mediaDrop.addEventListener("click", () => $("mediaUploadFile").click());
+        mediaDrop.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " "){
+            ev.preventDefault();
+            $("mediaUploadFile").click();
+          }
+        });
+        mediaDrop.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          mediaDrop.classList.add("dragover");
+        });
+        mediaDrop.addEventListener("dragleave", () => mediaDrop.classList.remove("dragover"));
+        mediaDrop.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          mediaDrop.classList.remove("dragover");
+          const file = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+          if (file){
+            mediaUploadFile = file;
+            updateMediaUploadDropDisplay(file);
+            updateMediaUploadState();
+          }
+        });
+      }
+
+      $("mediaUploadUpload").addEventListener("click", async () => {
+        const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
+        if (!file){
+          setMediaUploadStatus("Select an image to upload.", "err");
+          return;
+        }
+        const title = $("mediaUploadTitleInput").value.trim();
+        if (!title){
+          setMediaUploadStatus("Enter a title before uploading.", "err");
+          return;
+        }
+        try{
+          $("mediaUploadUpload").disabled = true;
+          setMediaUploadStatus("Uploading...", "");
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("title", title);
+          const artistId = $("mediaUploadArtist").value.trim();
+          if (artistId) fd.append("artist_id", artistId);
+          const res = await fetch("/api/media/upload", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("mediaUploadFile").value = "";
+          $("mediaUploadTitleInput").value = "";
+          mediaUploadFile = null;
+          updateMediaUploadDropDisplay(null);
+          setMediaUploadStatus("Upload complete.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaUploadStatus(err.message, "err");
+        }finally{
+          updateMediaUploadState();
+        }
       });
 
       $("uploadLibraryFile").addEventListener("change", (ev) => {
