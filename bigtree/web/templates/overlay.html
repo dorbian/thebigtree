@@ -2999,6 +2999,25 @@
             <button id="deckEditSubmit">Save changes</button>
           </div>
         </div>
+        <div class="section-divider"></div>
+        <h3>Suit Themes</h3>
+        <div class="row">
+          <div>
+            <label for="deckEditSuitPreset">Suit preset</label>
+            <select id="deckEditSuitPreset">
+              <option value="forest">Forest (Roots/Canopy/Ember/Whisper/Crown)</option>
+              <option value="tarot">Tarot (Major/Wands/Cups/Swords/Pentacles)</option>
+              <option value="playing">Playing Cards (Hearts/Spades/Clubs/Diamonds)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="deckEditSuitJson">Suit definitions (JSON)</label>
+            <textarea id="deckEditSuitJson" rows="6" placeholder='[{"id":"Roots","name":"Roots","themes":{"foundation":3,"memory":2,"stability":3},"keywords":["home","tradition","endurance","belonging"]}]'></textarea>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal" id="sessionCreateModal">
@@ -3372,6 +3391,7 @@
       let libraryKind = "";
       let libraryUploadFile = null;
       let mediaUploadFile = null;
+      let deckEditHadSuits = false;
 
       function setLibraryStatus(msg, kind){
         const el = $("uploadLibraryStatus");
@@ -5930,6 +5950,18 @@
           $("deckCreateSuitPreset").value = "custom";
         }
       });
+      $("deckEditSuitPreset").addEventListener("change", (ev) => {
+        const value = ev.target.value || "custom";
+        if (value === "custom"){
+          return;
+        }
+        $("deckEditSuitJson").value = formatSuitPresetJson(value);
+      });
+      $("deckEditSuitJson").addEventListener("input", () => {
+        if ($("deckEditSuitPreset").value !== "custom"){
+          $("deckEditSuitPreset").value = "custom";
+        }
+      });
 
       $("deckCreateSubmit").addEventListener("click", async () => {
         const id = $("deckCreateId").value.trim();
@@ -7155,6 +7187,15 @@
           const deckData = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : {};
           $("deckEditName").value = deckData.name || "";
           $("deckEditTheme").value = deckData.theme || "classic";
+          const suits = Array.isArray(deckData.suits) ? deckData.suits : [];
+          deckEditHadSuits = suits.length > 0;
+          if (suits.length){
+            $("deckEditSuitPreset").value = "custom";
+            $("deckEditSuitJson").value = JSON.stringify(suits, null, 2);
+          }else{
+            $("deckEditSuitPreset").value = "forest";
+            $("deckEditSuitJson").value = formatSuitPresetJson("forest");
+          }
           const backUrl = deckData.back_image || "";
           const preview = $("deckEditBackPreview");
           if (preview){
@@ -7222,11 +7263,26 @@
         const theme = $("deckEditTheme").value || "classic";
         const backUrl = $("deckEditBackPick").dataset.backUrl || "";
         const artistId = $("deckEditBackPick").dataset.artistId || "";
+        let suits = null;
+        try{
+          suits = parseSuitJson($("deckEditSuitJson").value);
+        }catch(err){
+          setTarotStatus(err.message, "err");
+          return;
+        }
+        if (!deckEditHadSuits && (!suits || !suits.length)){
+          setTarotStatus("Choose a suit preset to migrate this deck.", "err");
+          return;
+        }
         try{
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {
             method:"PUT",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({name: name || undefined, theme})
+            body: JSON.stringify({
+              name: name || undefined,
+              theme,
+              suits: suits && suits.length ? suits : []
+            })
           }, true);
           if (backUrl){
             await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
