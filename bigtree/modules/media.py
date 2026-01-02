@@ -66,6 +66,7 @@ def add_media(
     original_name: Optional[str] = None,
     artist_id: Optional[str] = None,
     title: Optional[str] = None,
+    discord_url: Optional[str] = None,
 ) -> Dict:
     db = _db(); q = Query()
     payload = {
@@ -74,6 +75,7 @@ def add_media(
         "original_name": original_name or "",
         "artist_id": artist_id or None,
         "title": title or "",
+        "discord_url": discord_url or "",
         "created_at": _now(),
     }
     existing = get_media(filename)
@@ -82,6 +84,7 @@ def add_media(
             "original_name": payload["original_name"] or existing.get("original_name", ""),
             "artist_id": payload["artist_id"],
             "title": payload["title"] or existing.get("title", ""),
+            "discord_url": payload["discord_url"] or existing.get("discord_url", ""),
         })
         db.update(existing, (q._type == "media") & (q.filename == filename))
         return existing

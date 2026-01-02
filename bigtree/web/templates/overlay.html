@@ -3410,6 +3410,14 @@
             const img = document.createElement("img");
             img.src = item.url;
             img.alt = item.name || "image";
+            if (item.fallback_url){
+              img.dataset.fallback = item.fallback_url;
+              img.addEventListener("error", () => {
+                if (img.dataset.fallback && img.src !== img.dataset.fallback){
+                  img.src = img.dataset.fallback;
+                }
+              });
+            }
 
             const titleText = document.createElement("div");
             titleText.className = "library-card-title";
@@ -5036,6 +5044,14 @@
           if (item.url){
             thumb.src = item.url;
             thumb.alt = item.title || "Gallery item";
+            if (item.fallback_url){
+              thumb.dataset.fallback = item.fallback_url;
+              thumb.addEventListener("error", () => {
+                if (thumb.dataset.fallback && thumb.src !== thumb.dataset.fallback){
+                  thumb.src = thumb.dataset.fallback;
+                }
+              });
+            }
           }
           const meta = document.createElement("div");
           meta.className = "gallery-meta";

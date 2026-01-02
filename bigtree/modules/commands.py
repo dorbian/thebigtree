@@ -284,7 +284,14 @@ async def receive(message):
                     artist_mod.upsert_artist(author_id, display_name, {})
                     base_title = (message.content or "").strip() or filename
                     title = base_title if idx == 0 else f"{base_title} ({idx + 1})"
-                    media_mod.add_media(save_name, original_name=filename, artist_id=author_id, title=title)
+                    discord_url = getattr(attachment, "url", None)
+                    media_mod.add_media(
+                        save_name,
+                        original_name=filename,
+                        artist_id=author_id,
+                        title=title,
+                        discord_url=discord_url,
+                    )
                     try:
                         view = GalleryUploadView(save_name, author_id)
                         await message.author.send(

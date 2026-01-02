@@ -94,10 +94,15 @@ def _media_item(
     original_name: str = "",
     title: str = "",
     used_in: list[str] | None = None,
+    discord_url: str | None = None,
+    prefer_discord: bool = True,
 ) -> dict:
+    url = (discord_url if (prefer_discord and discord_url) else f"/media/{filename}")
     item = {
         "name": filename,
-        "url": f"/media/{filename}",
+        "url": url,
+        "fallback_url": f"/media/{filename}" if discord_url else "",
+        "discord_url": discord_url or "",
         "source": "media",
         "original_name": original_name,
         "title": title,
@@ -240,6 +245,8 @@ async def upload_media(req: web.Request):
         entry.get("artist_id"),
         entry.get("original_name") or "",
         entry.get("title") or "",
+        discord_url=entry.get("discord_url") or None,
+        prefer_discord=False,
     )
     return web.json_response({"ok": True, "item": item})
 
@@ -259,6 +266,8 @@ async def list_media(_req: web.Request):
             entry.get("original_name") or "",
             entry.get("title") or "",
             used_in=sorted(usage_map.get(filename, set())),
+            discord_url=entry.get("discord_url") or None,
+            prefer_discord=False,
         ))
 
     for deck in tarot_mod.list_decks():

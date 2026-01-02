@@ -57,9 +57,10 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
         filename = entry.get("filename")
         if not filename:
             continue
-        if not os.path.exists(_media_path(filename)):
+        if not os.path.exists(_media_path(filename)) and not entry.get("discord_url"):
             continue
-        url = f"/media/{filename}"
+        discord_url = entry.get("discord_url") or ""
+        url = discord_url or f"/media/{filename}"
         item_id = _item_id("media", filename)
         if not include_hidden and gallery_mod.is_hidden(item_id):
             continue
@@ -68,6 +69,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "item_id": item_id,
             "title": entry.get("title") or entry.get("original_name") or filename,
             "url": url,
+            "fallback_url": f"/media/{filename}" if discord_url else "",
             "source": "media",
             "type": "Artifact",
             "artist": _artist_payload(entry.get("artist_id")),
