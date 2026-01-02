@@ -7156,12 +7156,14 @@
           $("deckEditName").value = deckData.name || "";
           $("deckEditTheme").value = deckData.theme || "classic";
           const backUrl = deckData.back_image || "";
-          const preview = `${emoji} | ${name}`;
-          preview.innerHTML = '<span class="preview-label">Back</span>';
-          if (backUrl){
-            const img = document.createElement("img");
-            img.src = backUrl;
-            preview.appendChild(img);
+          const preview = $("deckEditBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (backUrl){
+              const img = document.createElement("img");
+              img.src = backUrl;
+              preview.appendChild(img);
+            }
           }
           $("deckEditBackPick").dataset.backUrl = backUrl;
           $("deckEditBackPick").dataset.artistId = deckData.back_artist_id || "";
