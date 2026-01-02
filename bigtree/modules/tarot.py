@@ -668,7 +668,12 @@ def seed_deck_from_seed_file(deck_id: str) -> Dict[str, Any]:
         add_or_update_card(deck_id, payload)
     return deck
 
-def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Dict[str, Any]:
+def create_deck(
+    deck_id: str,
+    name: Optional[str] = None,
+    theme: Optional[str] = None,
+    suits: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
     _migrate_decks_to_files()
     existing, cards, path = _load_deck_bundle(deck_id)
@@ -680,6 +685,7 @@ def create_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] =
         "name": (name or deck_id),
         "theme": _normalize_theme(theme),
         "back_image": None,
+        "suits": suits or [],
         "created_at": _now(),
     }
     path = path or _deck_file_path(deck_id)
@@ -712,7 +718,12 @@ def delete_deck(deck_id: str) -> bool:
         return False
     return True
 
-def update_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def update_deck(
+    deck_id: str,
+    name: Optional[str] = None,
+    theme: Optional[str] = None,
+    suits: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
     deck_id = (deck_id or "").strip()
     if not deck_id:
         return None
@@ -723,6 +734,8 @@ def update_deck(deck_id: str, name: Optional[str] = None, theme: Optional[str] =
         deck["name"] = (name or deck_id)
     if theme is not None:
         deck["theme"] = _normalize_theme(theme)
+    if suits is not None:
+        deck["suits"] = suits
     _save_deck_bundle(deck, cards, path or _deck_file_path(deck_id))
     return deck
 

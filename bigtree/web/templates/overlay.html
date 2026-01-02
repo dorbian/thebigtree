@@ -2440,7 +2440,18 @@
               <div class="row">
                 <div>
                   <label for="taCardSuit">Suit</label>
-                  <input id="taCardSuit" placeholder="Major">
+                  <input id="taCardSuit" list="taSuitList" placeholder="Major">
+                  <datalist id="taSuitList">
+                    <option value="Major"></option>
+                    <option value="Wands"></option>
+                    <option value="Cups"></option>
+                    <option value="Swords"></option>
+                    <option value="Pentacles"></option>
+                    <option value="Hearts"></option>
+                    <option value="Spades"></option>
+                    <option value="Clubs"></option>
+                    <option value="Diamonds"></option>
+                  </datalist>
                 </div>
                 <div>
                   <label for="taCardNumber">Number</label>
@@ -2482,7 +2493,13 @@
                 <div>
                   <label>Theme weights</label>
                   <div class="theme-grid" id="taCardThemes"></div>
-                  <div class="muted" id="taCardThemesHint">No theme weights set for this card.</div>
+                  <div class="muted" id="taCardThemesHint">Select a suit to see theme weights.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Suit info</label>
+                  <div class="list" id="taSuitInfo">Pick a suit to see details.</div>
                 </div>
               </div>
               <div class="row">
@@ -2921,6 +2938,25 @@
             <button id="deckCreateSubmit">Create deck</button>
           </div>
         </div>
+        <div class="section-divider"></div>
+        <h3>Suit Themes</h3>
+        <div class="row">
+          <div>
+            <label for="deckCreateSuitPreset">Suit preset</label>
+            <select id="deckCreateSuitPreset">
+              <option value="forest">Forest (Roots/Canopy/Ember/Whisper/Crown)</option>
+              <option value="tarot">Tarot (Major/Wands/Cups/Swords/Pentacles)</option>
+              <option value="playing">Playing Cards (Hearts/Spades/Clubs/Diamonds)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="deckCreateSuitJson">Suit definitions (JSON)</label>
+            <textarea id="deckCreateSuitJson" rows="6" placeholder='[{"id":"Roots","name":"Roots","themes":{"foundation":3,"memory":2,"stability":3},"keywords":["home","tradition","endurance","belonging"]}]'></textarea>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal" id="deckEditModal">
@@ -3280,6 +3316,53 @@
         {id: "admin:web", label: "Admin web"},
         {id: "hunt:admin", label: "Hunt admin"}
       ];
+      const SUIT_PRESETS = {
+        forest: [
+          {
+            id: "Roots",
+            name: "Roots",
+            themes: {foundation: 3, memory: 2, stability: 3},
+            keywords: ["home", "tradition", "endurance", "belonging"]
+          },
+          {
+            id: "Canopy",
+            name: "Canopy",
+            themes: {growth: 3, connection: 3, hope: 2},
+            keywords: ["healing", "community", "relationships", "renewal"]
+          },
+          {
+            id: "Ember",
+            name: "Ember",
+            themes: {will: 3, conflict: 2, passion: 3},
+            keywords: ["drive", "courage", "ambition", "trial"]
+          },
+          {
+            id: "Whisper",
+            name: "Whisper",
+            themes: {secrets: 2, change: 3, curiosity: 3},
+            keywords: ["insight", "illusion", "trickery", "exploration"]
+          },
+          {
+            id: "Crown",
+            name: "Crown of the Tree",
+            themes: {fate: 3, cycles: 3, balance: 2},
+            keywords: ["destiny", "turning point", "world forces"]
+          }
+        ],
+        tarot: [
+          {id: "Major", name: "Major", themes: {}, keywords: []},
+          {id: "Wands", name: "Wands", themes: {}, keywords: []},
+          {id: "Cups", name: "Cups", themes: {}, keywords: []},
+          {id: "Swords", name: "Swords", themes: {}, keywords: []},
+          {id: "Pentacles", name: "Pentacles", themes: {}, keywords: []}
+        ],
+        playing: [
+          {id: "Hearts", name: "Hearts", themes: {}, keywords: []},
+          {id: "Spades", name: "Spades", themes: {}, keywords: []},
+          {id: "Clubs", name: "Clubs", themes: {}, keywords: []},
+          {id: "Diamonds", name: "Diamonds", themes: {}, keywords: []}
+        ]
+      };
 
       function getBase(){
         return window.location.origin;
@@ -3333,6 +3416,23 @@
         if (btn){
           btn.disabled = !(file && title);
         }
+      }
+
+      function formatSuitPresetJson(key){
+        const preset = SUIT_PRESETS[key] || [];
+        return JSON.stringify(preset, null, 2);
+      }
+
+      function parseSuitJson(raw){
+        const text = (raw || "").trim();
+        if (!text){
+          return [];
+        }
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)){
+          throw new Error("Suit definitions must be a JSON array.");
+        }
+        return parsed;
       }
 
       function updateMediaUploadDropDisplay(file){
@@ -4052,8 +4152,24 @@
           const items = data.cards.map(c => {
             const name = c.name || c.card_id || "Untitled";
             const id = c.card_id ? ` (${c.card_id})` : "";
-            const suit = c.suit ? `<div class="muted">${c.suit}</div>` : "";
-            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${suit}</div>`;
+            const suit = c.suit || "";
+            const suitLower = suit.toLowerCase();
+            const suitMap = {
+              wands: "Clubs",
+              cups: "Hearts",
+              swords: "Spades",
+              pentacles: "Diamonds",
+              clubs: "Clubs",
+              hearts: "Hearts",
+              spades: "Spades",
+              diamonds: "Diamonds"
+            };
+            const playingSuit = suitLower === "major" ? "" : (suitMap[suitLower] || "");
+            const playingLabel = playingSuit && playingSuit.toLowerCase() !== suitLower ? playingSuit : "";
+            const suitMeta = suit || playingLabel
+              ? `<div class="muted">${suit || "-"}${playingLabel ? ` · ${playingLabel}` : ""}</div>`
+              : "";
+            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${suitMeta}</div>`;
           }).join("");
           el.innerHTML = header + items;
           if (el.id === "taDeckList"){
@@ -5802,6 +5918,19 @@
         loadLibrary("media");
       });
 
+      $("deckCreateSuitPreset").addEventListener("change", (ev) => {
+        const value = ev.target.value || "custom";
+        if (value === "custom"){
+          return;
+        }
+        $("deckCreateSuitJson").value = formatSuitPresetJson(value);
+      });
+      $("deckCreateSuitJson").addEventListener("input", () => {
+        if ($("deckCreateSuitPreset").value !== "custom"){
+          $("deckCreateSuitPreset").value = "custom";
+        }
+      });
+
       $("deckCreateSubmit").addEventListener("click", async () => {
         const id = $("deckCreateId").value.trim();
         if (!id){
@@ -5819,11 +5948,23 @@
         const perHouse = Number($("deckCreatePerHouse").value || 0);
         const crownCount = Number($("deckCreateCrown").value || 0);
         const artistId = $("deckCreateBackPick").dataset.artistId || "";
+        let suits = null;
+        try{
+          suits = parseSuitJson($("deckCreateSuitJson").value);
+        }catch(err){
+          setTarotStatus(err.message, "err");
+          return;
+        }
         try{
           await jsonFetch("/api/tarot/decks", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({deck_id: id, name: name || undefined, theme})
+            body: JSON.stringify({
+              deck_id: id,
+              name: name || undefined,
+              theme,
+              suits: suits && suits.length ? suits : []
+            })
           }, true);
           await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/back", {
             method:"PUT",
@@ -6267,9 +6408,43 @@
       });
 
       let taNumbers = [];
+      let taSuitDefs = [];
+      let taSuitLookup = {};
 
       function taThemeLabel(theme){
         return (theme || "").replace(/_/g, " ");
+      }
+
+      function taNormalizeSuitKey(value){
+        return String(value || "").trim().toLowerCase();
+      }
+
+      function taSetSuitDefinitions(defs){
+        taSuitDefs = Array.isArray(defs) ? defs : [];
+        taSuitLookup = {};
+        taSuitDefs.forEach(def => {
+          if (!def) return;
+          const id = taNormalizeSuitKey(def.id);
+          const name = taNormalizeSuitKey(def.name);
+          if (id) taSuitLookup[id] = def;
+          if (name) taSuitLookup[name] = def;
+        });
+        taUpdateSuitList();
+      }
+
+      function taUpdateSuitList(){
+        const list = $("taSuitList");
+        if (!list) return;
+        const defaults = ["Major", "Wands", "Cups", "Swords", "Pentacles", "Hearts", "Spades", "Clubs", "Diamonds"];
+        const extra = taSuitDefs.map(def => def && (def.name || def.id)).filter(Boolean);
+        const combined = Array.from(new Set(defaults.concat(extra)));
+        list.innerHTML = combined.map(value => `<option value="${value}"></option>`).join("");
+      }
+
+      function taFindSuitDef(value){
+        const key = taNormalizeSuitKey(value);
+        if (!key) return null;
+        return taSuitLookup[key] || null;
       }
 
       function taParseRoman(value){
@@ -6381,14 +6556,23 @@
         }
       }
 
-      function taRenderThemeWeights(weights){
+      function taRenderThemeWeights(weights, suitValue){
         const grid = $("taCardThemes");
         const hint = $("taCardThemesHint");
         if (!grid) return;
         grid.innerHTML = "";
-        const themes = weights ? Object.keys(weights) : [];
+        const suitDef = taFindSuitDef(suitValue);
+        const themes = suitDef && suitDef.themes ? Object.keys(suitDef.themes) : [];
+        if (!suitValue){
+          if (hint) hint.textContent = "Select a suit to see theme weights.";
+          return;
+        }
+        if (!suitDef){
+          if (hint) hint.textContent = "Suit not defined for this deck.";
+          return;
+        }
         if (!themes.length){
-          if (hint) hint.textContent = "No theme weights set for this card.";
+          if (hint) hint.textContent = "No theme weights available for this suit.";
           return;
         }
         if (hint) hint.textContent = "Adjust theme weights for this card.";
@@ -6430,7 +6614,7 @@
           return;
         }
         if (!grid.children.length){
-          taRenderThemeWeights(weights || {});
+          taRenderThemeWeights(weights || {}, $("taCardSuit").value.trim());
           return;
         }
         grid.querySelectorAll(".theme-weight").forEach(row => {
@@ -6456,6 +6640,33 @@
           }
         });
         return out;
+      }
+
+      function taApplySuitThemeDefaults(suitValue){
+        if (!suitValue) return;
+        const current = taGetCardThemeWeights();
+        if (Object.keys(current).length){
+          return;
+        }
+        const suitDef = taFindSuitDef(suitValue);
+        if (!suitDef || !suitDef.themes) return;
+        taSetCardThemeWeights(suitDef.themes);
+      }
+
+      function taRenderSuitInfo(value){
+        const box = $("taSuitInfo");
+        if (!box) return;
+        const suitDef = taFindSuitDef(value);
+        if (!suitDef){
+          box.textContent = value ? "Suit not defined for this deck." : "Pick a suit to see details.";
+          return;
+        }
+        const themes = Object.entries(suitDef.themes || {}).map(([k, v]) => `${k} (${v})`).join(", ");
+        const keywords = (suitDef.keywords || []).join(", ");
+        const upright = keywords ? `Upright: ${keywords}.` : "Upright: -";
+        const reversed = keywords ? `Reversed: blocked or twisted ${keywords}.` : "Reversed: -";
+        const title = suitDef.name || suitDef.id || "Suit";
+        box.innerHTML = `<strong>${title}</strong><br><span class="muted">${themes || "No themes set."}</span><br><span class="muted">${keywords || "No keywords set."}</span><br>${upright}<br>${reversed}`;
       }
 
       function taRenderNumberInfo(value){
@@ -6545,8 +6756,10 @@
         $("taCardReversed").value = card.reversed || "";
         $("taCardArtist").value = card.artist_id || "";
         window.taUploadedImageUrl = card.image || "";
-        taRenderThemeWeights(card.themes || {});
+        taRenderThemeWeights(card.themes || {}, card.suit || "");
+        taRenderSuitInfo(card.suit || "");
         taRenderNumberInfo($("taCardNumber").value);
+        taApplySuitThemeDefaults(card.suit || "");
         taRenderPreviews(card);
         taSyncCardSelection();
         taUpdateContext(card);
@@ -6855,6 +7068,10 @@
       });
 
       $("taCardSuit").addEventListener("input", () => {
+        const suitValue = $("taCardSuit").value.trim();
+        taRenderSuitInfo(suitValue);
+        taRenderThemeWeights({}, suitValue);
+        taApplySuitThemeDefaults(suitValue);
         taSetDirty(true);
       });
       $("taCardNumber").addEventListener("input", (ev) => {
@@ -6893,6 +7110,7 @@
           const deck = $("taDeck").value.trim() || "elf-classic";
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
+          taSetSuitDefinitions(data.deck && Array.isArray(data.deck.suits) ? data.deck.suits : []);
           taRenderPreviews(null);
           const deckName = (data.deck && (data.deck.name || data.deck.deck_id)) || deck;
           const count = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -6915,6 +7133,8 @@
         $("deckCreateSeed").value = "none";
         $("deckCreatePerHouse").value = "4";
         $("deckCreateCrown").value = "1";
+        $("deckCreateSuitPreset").value = "forest";
+        $("deckCreateSuitJson").value = formatSuitPresetJson("forest");
         $("deckCreateBackPick").dataset.backUrl = "";
         $("deckCreateBackPick").dataset.artistId = "";
         $("deckCreateBackPreview").innerHTML = '<span class="preview-label">Back</span>';
