@@ -29,6 +29,7 @@ namespace Forest
         public string? BingoApiKey { get; set; } = null;
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;
+        public Dictionary<string, List<string>> BingoRandomAllowListByGameId { get; set; } = new();
 
         // Store the index of the current game instead of the object reference
         public int CurrentGameIndex { get; set; } = -1;

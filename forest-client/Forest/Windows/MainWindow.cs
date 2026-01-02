@@ -77,6 +77,9 @@ public class MainWindow : Window, IDisposable
     private string _bingoManualOwner = "";
     private const int BingoRandomMax = 40;
     private int _bingoRollAttempts = 0;
+    private DateTime _bingoRandomCooldownUntil = DateTime.MinValue;
+    private string _bingoRandomAllowPick = "";
+    private string _bingoRandomAllowManual = "";
     private bool _bingoShowBuyLink = false;
     private string _bingoBuyLink = "";
     private string _bingoBuyOwner = "";
@@ -1257,6 +1260,55 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Random /random allowlist:");
+        var allowGameId = g.game_id;
+        var allowList = Bingo_GetRandomAllowList(allowGameId);
+        if (allowList.Count == 0)
+        {
+            ImGui.TextDisabled("No extra players allowed.");
+        }
+        else
+        {
+            for (int i = allowList.Count - 1; i >= 0; i--)
+            {
+                var name = allowList[i];
+                ImGui.TextUnformatted(name);
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"Remove##allow-{name}-{i}"))
+                    Bingo_RemoveRandomAllow(allowGameId, name);
+            }
+        }
+
+        if (_bingoOwners.Count > 0)
+        {
+            if (string.IsNullOrWhiteSpace(_bingoRandomAllowPick))
+                _bingoRandomAllowPick = _bingoOwners[0].owner_name;
+            ImGui.SetNextItemWidth(240);
+            if (ImGui.BeginCombo("Owner", _bingoRandomAllowPick))
+            {
+                foreach (var owner in _bingoOwners)
+                {
+                    var selected = string.Equals(_bingoRandomAllowPick, owner.owner_name, StringComparison.OrdinalIgnoreCase);
+                    if (ImGui.Selectable(owner.owner_name, selected))
+                        _bingoRandomAllowPick = owner.owner_name;
+                    if (selected) ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Allow /random"))
+                Bingo_AddRandomAllow(allowGameId, _bingoRandomAllowPick);
+        }
+
+        ImGui.SetNextItemWidth(240);
+        ImGui.InputText("Add name", ref _bingoRandomAllowManual, 64);
+        ImGui.SameLine();
+        if (ImGui.Button("Add##manual"))
+        {
+            Bingo_AddRandomAllow(allowGameId, _bingoRandomAllowManual);
+            _bingoRandomAllowManual = "";
+        }
 
         foreach (var kv in _bingoOwnerCards)
         {
@@ -3106,8 +3158,62 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private List<string> Bingo_GetRandomAllowList(string? gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return new List<string>();
+        if (Plugin.Config.BingoRandomAllowListByGameId == null)
+            Plugin.Config.BingoRandomAllowListByGameId = new Dictionary<string, List<string>>();
+        if (!Plugin.Config.BingoRandomAllowListByGameId.TryGetValue(gameId, out var list) || list == null)
+        {
+            list = new List<string>();
+            Plugin.Config.BingoRandomAllowListByGameId[gameId] = list;
+        }
+        return list;
+    }
+
+    private void Bingo_AddRandomAllow(string? gameId, string name)
+    {
+        if (string.IsNullOrWhiteSpace(gameId)) return;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var list = Bingo_GetRandomAllowList(gameId);
+        if (list.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+            return;
+        list.Add(name.Trim());
+        Plugin.Config.Save();
+    }
+
+    private void Bingo_RemoveRandomAllow(string? gameId, string name)
+    {
+        if (string.IsNullOrWhiteSpace(gameId)) return;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var list = Bingo_GetRandomAllowList(gameId);
+        list.RemoveAll(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+        Plugin.Config.Save();
+    }
+
+    private bool Bingo_IsRandomAllowedSender(string senderText, string messageText)
+    {
+        var gameId = _bingoState?.game.game_id ?? _bingoGameId;
+        var list = Bingo_GetRandomAllowList(gameId);
+        if (list.Count == 0) return false;
+        foreach (var entry in list)
+        {
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            if (!string.IsNullOrWhiteSpace(senderText) &&
+                string.Equals(senderText, entry, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (!string.IsNullOrWhiteSpace(messageText) &&
+                messageText.IndexOf(entry, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
+    }
+
     private bool TryHandleBingoRandom(string senderText, string messageText)
     {
+        if (DateTime.UtcNow < _bingoRandomCooldownUntil)
+            return false;
         if (string.IsNullOrWhiteSpace(messageText)) return false;
         var lower = messageText.ToLowerInvariant();
         if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
@@ -3118,14 +3224,15 @@ public class MainWindow : Window, IDisposable
             lower.Contains("you roll") ||
             lower.Contains("you rolled") ||
             lower.StartsWith("you ");
+        var senderMatchesLocal = false;
         if (!string.IsNullOrWhiteSpace(localLower))
         {
-            var senderMatches = !string.IsNullOrWhiteSpace(senderText) &&
-                                string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
+            senderMatchesLocal = !string.IsNullOrWhiteSpace(senderText) &&
+                                 string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
             messageMatches = messageMatches || lower.Contains(localLower);
-            if (!senderMatches && !messageMatches)
-                return false;
         }
+        if (!senderMatchesLocal && !messageMatches && !Bingo_IsRandomAllowedSender(senderText, messageText))
+            return false;
         var matches = Regex.Matches(messageText, "\\d+");
         if (matches.Count == 0) return false;
         if (!int.TryParse(matches[0].Value, out var rolled)) return false;
@@ -3172,6 +3279,7 @@ public class MainWindow : Window, IDisposable
             _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled, last_called = rolled } };
             _bingoStatus = $"Rolled {rolled}.";
             Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
+            _bingoRandomCooldownUntil = DateTime.UtcNow.AddSeconds(5);
         }
         catch (Exception ex)
         {
