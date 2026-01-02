@@ -789,7 +789,6 @@
   let lastDrawCount = 0;
   const pendingDraws = [];
   const pendingReveals = new Set();
-  let houseThemes = {};
   let numberDefs = {};
 
   function parseRoman(value){
@@ -1174,19 +1173,6 @@
     return ".";
   }
 
-  function sumThemes(cardThemes, suitThemes){
-    const out = {};
-    [cardThemes, suitThemes].forEach(src => {
-      if (!src) return;
-      Object.entries(src).forEach(([key, value]) => {
-        const num = Number(value) || 0;
-        if (!num) return;
-        out[key] = (out[key] || 0) + num;
-      });
-    });
-    return out;
-  }
-
   function updateMeaning(positionId){
     const draw = currentState.draw.find(d => d.position_id === positionId);
     const pos = currentState.spread.positions.find(p => p.id === positionId);
@@ -1199,12 +1185,9 @@
     const orientation = draw.reversed ? "Reversed" : "Upright";
     const upright = card.upright || "";
     const reversed = card.reversed || "";
-    const house = card.house ? `<div class="muted">Suit: ${card.house}</div>` : "<div class=\"muted\">Suit: -</div>";
+    const suit = card.suit ? `<div class="muted">Suit: ${card.suit}</div>` : "<div class=\"muted\">Suit: -</div>";
     const prompt = pos ? `<div class="muted">${pos.label} - ${pos.prompt || "No prompt."}</div>` : "";
-    const suitThemes = card.house && houseThemes[card.house] ? houseThemes[card.house] : {};
-    const highlight = card.house && suitThemes ? new Set(Object.keys(suitThemes)) : null;
-    const combinedThemes = sumThemes(card.themes, suitThemes);
-    const themes = renderThemeBars(combinedThemes, highlight);
+    const themes = renderThemeBars(card.themes || {}, null);
     const numbers = renderNumberInfo(card.number);
     const meaningBlock = `
       <div class="meaning-block">
@@ -1222,7 +1205,7 @@
         <div class="meaning-pill">${orientation}</div>
       </div>
       ${prompt}
-      <div class="meaning-meta">${house}</div>
+      <div class="meaning-meta">${suit}</div>
       ${themes}
       ${numbers}
       <div style="margin-top:6px">${meaningBlock}</div>
@@ -1244,17 +1227,11 @@
       const card = draw.card || {};
       const name = card.name || "Card";
       const flavor = card.flavor_text ? `<div class="muted meaning-text">${card.flavor_text}</div>` : "";
-      const house = card.house ? `Suit: ${card.house}` : "Suit: -";
+      const suit = card.suit ? `Suit: ${card.suit}` : "Suit: -";
       const number = (card.number !== undefined && card.number !== null) ? `Number: ${formatCardNumber(card.number)}` : "Number: -";
-      const suitThemes = card.house && houseThemes[card.house] ? houseThemes[card.house] : {};
-      const highlight = card.house && suitThemes ? new Set(Object.keys(suitThemes)) : null;
-      const combinedThemes = sumThemes(card.themes, suitThemes);
-      const themeItems = Object.entries(combinedThemes || {}).filter(([, v]) => Number(v) > 0);
+      const themeItems = Object.entries(card.themes || {}).filter(([, v]) => Number(v) > 0);
       const themeList = themeItems.map(([k, v]) => {
         const label = (k || "").replace(/_/g, " ");
-        if (highlight && highlight.has(k)){
-          return `<strong>${label} (${v})</strong>`;
-        }
         return `${label} (${v})`;
       }).join(", ");
       const numbers = renderNumberInfo(card.number);
@@ -1267,7 +1244,7 @@
         <div class="analysis-card">
           <div><strong>${name}</strong> ${draw.reversed ? "(reversed)" : ""}</div>
           ${flavor}
-          <div class="muted">${house} - ${number}</div>
+          <div class="muted">${suit} - ${number}</div>
           ${themeList ? `<div class="muted">Focus: ${themeList}</div>` : ""}
           ${numbers}
           ${meaningLine}
@@ -1426,19 +1403,6 @@
     }
   }
 
-  async function loadHouses(){
-    try{
-      const res = await fetch("/api/tarot/houses");
-      const data = await res.json();
-      houseThemes = {};
-      (data.houses || []).forEach(h => {
-        houseThemes[h.id] = h.themes || {};
-      });
-    }catch(err){
-      houseThemes = {};
-    }
-  }
-
   async function loadSessionOptions(){
     try{
       const decksRes = await fetch("/api/tarot/decks/public");
@@ -1533,7 +1497,6 @@
   fetchState();
   connectSSE();
   loadNumbers();
-  loadHouses();
 </script>
 
 

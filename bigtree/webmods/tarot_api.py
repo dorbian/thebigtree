@@ -6,7 +6,6 @@ import logging
 from aiohttp import web
 import os
 import uuid
-import json as _json
 import imghdr
 from pathlib import Path
 import bigtree
@@ -77,70 +76,20 @@ def _safe_name(name: str) -> str:
             keep.append(ch)
     return "".join(keep)
 
-_HOUSES_CACHE: dict | None = None
-_HOUSES_WARNED = False
-
-def _read_json(path: Path) -> dict | None:
-    try:
-        return _json.loads(path.read_text("utf-8"))
-    except Exception:
-        return None
-
-def _load_houses() -> dict:
-    global _HOUSES_CACHE
-    global _HOUSES_WARNED
-    if _HOUSES_CACHE is not None:
-        return _HOUSES_CACHE
-    candidates: list[Path] = []
-    env_path = os.getenv("BIGTREE_TAROT_HOUSES")
-    if env_path:
-        candidates.append(Path(env_path))
-    data_dir = Path(_data_dir())
-    candidates.extend([
-        data_dir / "tarot" / "houses.json",
-        data_dir / "tarot" / "tarrot_help.json",
-        data_dir / "tarrot_help.json",
-        data_dir / "houses.json",
-    ])
-    try:
-        repo_root = Path(__file__).resolve().parents[2]
-        candidates.extend([
-            repo_root / "houses.json",
-            repo_root / "tarrot_help.json",
-            repo_root / "defaults" / "tarrot_help.json",
-        ])
-    except Exception:
-        pass
-    candidates.append(Path(__file__).resolve().parent / "tarrot_help.json")
-    for path in candidates:
-        if path.exists():
-            data = _read_json(path)
-            if data:
-                _HOUSES_CACHE = data
-                return _HOUSES_CACHE
-    if not _HOUSES_WARNED:
-        _HOUSES_WARNED = True
-        log.warning("[tarot] houses file not found; checked: %s", ", ".join(str(p) for p in candidates))
-    _HOUSES_CACHE = {"houses": []}
-    return _HOUSES_CACHE
-
 def _dummy_cards(deck_id: str, per_house: int, crown_count: int) -> list[dict]:
-    houses = _load_houses().get("houses", [])
+    suits = ["Major", "Wands", "Cups", "Swords", "Pentacles"]
     cards = []
-    for house in houses:
-        hid = house.get("id") or ""
-        hname = house.get("name") or hid
-        keywords = ", ".join(house.get("keywords") or [])
-        count = crown_count if hid == "crown" else per_house
+    for suit in suits:
+        count = crown_count if suit == "Major" else per_house
         for idx in range(max(0, int(count))):
-            title = f"{hname} - Echo {idx + 1}"
+            title = f"{suit} - Echo {idx + 1}"
             card = {
-                "card_id": f"{hid}_dummy_{idx + 1}",
+                "card_id": f"{suit.lower()}_dummy_{idx + 1}",
                 "name": title,
-                "house": hid,
-                "upright": f"Upright: {keywords}.",
-                "reversed": f"Reversed: blocked or twisted {keywords}.",
-                "tags": house.get("keywords") or [],
+                "suit": suit,
+                "upright": f"Upright: {suit} placeholder.",
+                "reversed": f"Reversed: {suit} placeholder.",
+                "tags": [suit.lower()],
                 "image": "",
                 "artist_links": {},
             }
@@ -195,7 +144,7 @@ async def tarot_back_file(req: web.Request):
 
 @route("GET", "/api/tarot/houses", allow_public=True)
 async def tarot_houses(_req: web.Request):
-    return web.json_response({"ok": True, "houses": _load_houses().get("houses", [])})
+    return web.json_response({"ok": True, "houses": []})
 
 @route("GET", "/overlay/session/{join_code}", allow_public=True)
 async def tarot_overlay_page(req: web.Request):
@@ -488,7 +437,7 @@ async def get_deck_public(req: web.Request):
         cards.append({
             "card_id": c.get("card_id"),
             "name": c.get("name"),
-            "house": c.get("house"),
+            "suit": c.get("suit"),
             "tags": c.get("tags", []),
             "number": c.get("number"),
             "image": c.get("image"),

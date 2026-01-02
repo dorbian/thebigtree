@@ -2436,8 +2436,8 @@
               </div>
               <div class="row">
                 <div>
-                  <label for="taCardHouse">Suit</label>
-                  <select id="taCardHouse"></select>
+                  <label for="taCardSuit">Suit</label>
+                  <input id="taCardSuit" placeholder="Major">
                 </div>
                 <div>
                   <label for="taCardNumber">Number</label>
@@ -2479,13 +2479,7 @@
                 <div>
                   <label>Theme weights</label>
                   <div class="theme-grid" id="taCardThemes"></div>
-                  <div class="muted" id="taCardThemesHint">Select a suit to preload weights.</div>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label>Suit info</label>
-                  <div class="list" id="taHouseInfo">Pick a suit to see details.</div>
+                  <div class="muted" id="taCardThemesHint">No theme weights set for this card.</div>
                 </div>
               </div>
               <div class="row">
@@ -3922,8 +3916,8 @@
           const items = data.cards.map(c => {
             const name = c.name || c.card_id || "Untitled";
             const id = c.card_id ? ` (${c.card_id})` : "";
-            const house = c.house ? `<div class="muted">${c.house}</div>` : "";
-            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${house}</div>`;
+            const suit = c.suit ? `<div class="muted">${c.suit}</div>` : "";
+            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${suit}</div>`;
           }).join("");
           el.innerHTML = header + items;
           if (el.id === "taDeckList"){
@@ -5612,7 +5606,6 @@
         loadTarotDeckList();
         loadTarotSessionDecks();
         loadTarotSessions();
-        loadTarotHouses();
         loadTarotNumbers();
         const saved = getSavedPanel();
         if (!getSeenDashboard()){
@@ -6123,9 +6116,7 @@
         }
       });
 
-      let taHouses = [];
       let taNumbers = [];
-      let taActiveHouse = "";
 
       function taThemeLabel(theme){
         return (theme || "").replace(/_/g, " ");
@@ -6240,22 +6231,17 @@
         }
       }
 
-      function taRenderThemeWeights(weights, houseId){
+      function taRenderThemeWeights(weights){
         const grid = $("taCardThemes");
         const hint = $("taCardThemesHint");
         if (!grid) return;
         grid.innerHTML = "";
-        const house = taHouses.find(h => h.id === houseId);
-        const themes = house && house.themes ? Object.keys(house.themes) : [];
-        if (!houseId){
-          if (hint) hint.textContent = "Select a suit to see theme weights.";
-          return;
-        }
+        const themes = weights ? Object.keys(weights) : [];
         if (!themes.length){
-          if (hint) hint.textContent = "No theme weights available for this suit.";
+          if (hint) hint.textContent = "No theme weights set for this card.";
           return;
         }
-        if (hint) hint.textContent = "Set theme weights for this suit.";
+        if (hint) hint.textContent = "Adjust theme weights for this card.";
         themes.forEach(theme => {
           const row = document.createElement("div");
           row.className = "theme-weight";
@@ -6294,7 +6280,7 @@
           return;
         }
         if (!grid.children.length){
-          taRenderThemeWeights(weights || {}, taActiveHouse);
+          taRenderThemeWeights(weights || {});
           return;
         }
         grid.querySelectorAll(".theme-weight").forEach(row => {
@@ -6320,31 +6306,6 @@
           }
         });
         return out;
-      }
-
-      function taApplyHouseThemeDefaults(houseId){
-        if (!houseId) return;
-        const current = taGetCardThemeWeights();
-        if (Object.keys(current).length){
-          return;
-        }
-        const house = taHouses.find(h => h.id === houseId);
-        if (!house || !house.themes) return;
-        taSetCardThemeWeights(house.themes);
-      }
-
-      function taRenderHouseInfo(id){
-        const box = $("taHouseInfo");
-        const house = taHouses.find(h => h.id === id);
-        if (!house){
-          box.textContent = "Pick a suit to see details.";
-          return;
-        }
-        const themes = Object.entries(house.themes || {}).map(([k,v]) => `${k} (${v})`).join(", ");
-        const keywords = (house.keywords || []).join(", ");
-        const upright = `Upright: ${keywords}.`;
-        const reversed = `Reversed: blocked or twisted ${keywords}.`;
-        box.innerHTML = `<strong>${house.name}</strong><br><span class="muted">${themes}</span><br><span class="muted">${keywords}</span><br>${upright}<br>${reversed}`;
       }
 
       function taRenderNumberInfo(value){
@@ -6426,8 +6387,7 @@
         taSelectedCardId = card.card_id || "";
         $("taCardId").value = card.card_id || "";
         $("taCardName").value = card.name || "";
-        taActiveHouse = card.house || "";
-        $("taCardHouse").value = taActiveHouse;
+        $("taCardSuit").value = card.suit || "";
         $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
         $("taCardTags").value = (card.tags || []).join(", ");
         $("taCardFlavor").value = card.flavor_text || "";
@@ -6435,10 +6395,8 @@
         $("taCardReversed").value = card.reversed || "";
         $("taCardArtist").value = card.artist_id || "";
         window.taUploadedImageUrl = card.image || "";
-        taRenderThemeWeights(card.themes || {}, taActiveHouse);
-        taRenderHouseInfo(card.house || "");
+        taRenderThemeWeights(card.themes || {});
         taRenderNumberInfo($("taCardNumber").value);
-        taApplyHouseThemeDefaults(card.house || "");
         taRenderPreviews(card);
         taSyncCardSelection();
         taUpdateContext(card);
@@ -6460,29 +6418,6 @@
           }
         } else {
           taUpdateContext(null);
-        }
-      }
-
-      async function loadTarotHouses(){
-        try{
-          const data = await jsonFetch("/api/tarot/houses", {method:"GET"}, true);
-          taHouses = data.houses || [];
-          taActiveHouse = taActiveHouse || "";
-          const select = $("taCardHouse");
-          select.innerHTML = "";
-          const none = document.createElement("option");
-          none.value = "";
-          none.textContent = "(none)";
-          select.appendChild(none);
-          taHouses.forEach(h => {
-            const opt = document.createElement("option");
-            opt.value = h.id;
-            opt.textContent = h.name;
-            select.appendChild(opt);
-          });
-          taRenderThemeWeights({}, taActiveHouse);
-        }catch(err){
-          setTarotStatus("Failed to load houses.", "err");
         }
       }
 
@@ -6695,11 +6630,7 @@
         }
       });
 
-      $("taCardHouse").addEventListener("change", (ev) => {
-        taActiveHouse = ev.target.value;
-        taRenderHouseInfo(taActiveHouse);
-        taRenderThemeWeights({}, taActiveHouse);
-        taApplyHouseThemeDefaults(taActiveHouse);
+      $("taCardSuit").addEventListener("input", () => {
         taSetDirty(true);
       });
       $("taCardNumber").addEventListener("input", (ev) => {
@@ -6898,7 +6829,7 @@
           const body = {
             card_id: $("taCardId").value.trim() || undefined,
             name: $("taCardName").value.trim(),
-            house: $("taCardHouse").value.trim(),
+            suit: $("taCardSuit").value.trim(),
             number: $("taCardNumber").value.trim() || undefined,
             image: window.taUploadedImageUrl || undefined,
             artist_id: $("taCardArtist").value.trim() || undefined,
@@ -6916,7 +6847,7 @@
           });
           $("taCardId").value = "";
           $("taCardName").value = "";
-          $("taCardHouse").value = "";
+          $("taCardSuit").value = "";
           $("taCardNumber").value = "";
           window.taUploadedImageUrl = "";
           $("taCardTags").value = "";
@@ -6981,7 +6912,6 @@
         loadTarotDeckList();
         loadTarotSessionDecks();
         loadTarotSessions();
-        loadTarotHouses();
         loadTarotNumbers();
         loadTarotArtists();
       }

@@ -648,7 +648,6 @@ def seed_deck_from_template(deck_id: str, template_id: Optional[str] = None) -> 
             "card_id": card.get("card_id"),
             "name": card.get("name"),
             "tags": card.get("tags", []),
-            "house": card.get("house"),
         }
         add_or_update_card(deck_id, payload)
     return deck
@@ -847,7 +846,6 @@ def add_or_update_card(deck_id: str, card: Dict[str, Any]) -> Dict[str, Any]:
         "card_id": card_id,
         "name": name,
         "suit": (card.get("suit") if "suit" in card else (existing.get("suit") if existing else None)),
-        "house": (card.get("house") or "").strip() or None,
         "upright": (card.get("upright") or card.get("meaning") or "").strip(),
         "reversed": (card.get("reversed") or "").strip(),
         "tags": card.get("tags") if isinstance(card.get("tags"), list) else [],
