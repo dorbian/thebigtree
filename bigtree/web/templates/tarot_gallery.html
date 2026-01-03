@@ -137,6 +137,14 @@
     position:relative;
     z-index:1;
   }
+  .grid.virtualized{
+    position:relative;
+  }
+  .grid.virtualized .card{
+    position:absolute;
+    width:var(--card-width, 220px);
+    height:var(--card-height, 420px);
+  }
   .grid.filtering .card{opacity:.5}
   .grid.filtering .card.active{opacity:1}
   .artist-link{
@@ -464,6 +472,13 @@
   const imageInfo = document.getElementById("imageInfo");
   let imageInfoTimer = null;
   let galleryItems = [];
+  let galleryRenderItems = [];
+  let virtualCardHeight = 0;
+  let virtualCols = 0;
+  let virtualFrame = null;
+  let virtualListening = false;
+  const CARD_MIN_WIDTH = 220;
+  const VIRTUAL_BUFFER_ROWS = 2;
   let activeArtistFilter = null;
   const REACTIONS = [
     {id:"appreciation", label:"Appreciation"},
@@ -679,51 +694,44 @@
     renderGrid();
   }
 
-  function renderGrid(){
-    const items = Array.isArray(galleryItems) ? galleryItems : [];
-    if (!items.length){
-      grid.innerHTML = "<div class='muted'>The Forest awaits its next contribution.</div>";
-      return;
-    }
-    grid.classList.toggle("filtering", !!activeArtistFilter);
-    grid.innerHTML = items.map(item => {
-      const artist = item.artist || {};
-      const artistName = artist.name || "Forest";
-      const title = item.title || "Untitled Offering";
-      const artistLinks = artist.links || {};
-      const origin = (item.origin || "").trim() || getOrigin(item);
-      const type = getTypeBadge(item);
-      const tags = getTags(item);
-      const infoText = [title, artistName, origin].filter(Boolean).join(" - ");
-      const artistPayload = encodeURIComponent(JSON.stringify({
-        name: artistName,
-        links: artistLinks
-      }));
-      const itemKey = getItemKey(item);
-      const baseCounts = item.reactions || {};
-      const isActive = !activeArtistFilter || activeArtistFilter === artistName;
-      const reactionRow = REACTIONS.map(reaction => {
-        const count = Number(baseCounts[reaction.id] || 0);
-        return `
+  function buildCardHtml(item){
+    const artist = item.artist || {};
+    const artistName = artist.name || "Forest";
+    const title = item.title || "Untitled Offering";
+    const artistLinks = artist.links || {};
+    const origin = (item.origin || "").trim() || getOrigin(item);
+    const type = getTypeBadge(item);
+    const tags = getTags(item);
+    const infoText = [title, artistName, origin].filter(Boolean).join(" - ");
+    const artistPayload = encodeURIComponent(JSON.stringify({
+      name: artistName,
+      links: artistLinks
+    }));
+    const itemKey = getItemKey(item);
+    const baseCounts = item.reactions || {};
+    const reactionRow = REACTIONS.map(reaction => {
+      const count = Number(baseCounts[reaction.id] || 0);
+      return `
           <button class="reaction" data-reaction="${reaction.id}" data-item="${encodeURIComponent(itemKey)}" aria-label="${reaction.label}">
             <span>${reaction.label}</span> ${count}
           </button>
         `;
-      }).join("");
-      const fallbackAttr = item.fallback_url ? ` data-fallback="${item.fallback_url}"` : "";
-      const fullPayload = encodeURIComponent(JSON.stringify({
-        url: item.url,
-        fallback_url: item.fallback_url || "",
-        info: infoText,
-        title: title
-      }));
-      const media = item.url
-        ? `<img src="${item.url}" alt="${title}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
-        : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
-      const viewButton = item.url
-        ? `<button class="view-btn" data-full="${fullPayload}">View</button>`
-        : `<button class="view-btn" disabled>View</button>`;
-      return `
+    }).join("");
+    const fallbackAttr = item.fallback_url ? ` data-fallback="${item.fallback_url}"` : "";
+    const fullPayload = encodeURIComponent(JSON.stringify({
+      url: item.url,
+      fallback_url: item.fallback_url || "",
+      info: infoText,
+      title: title
+    }));
+    const media = item.url
+      ? `<img src="${item.url}" alt="${title}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+      : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
+    const viewButton = item.url
+      ? `<button class="view-btn" data-full="${fullPayload}">View</button>`
+      : `<button class="view-btn" disabled>View</button>`;
+    const isActive = !activeArtistFilter || activeArtistFilter === artistName;
+    return `
         <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}">
           <div class="card-media">
             ${media}
@@ -742,7 +750,105 @@
           </div>
         </div>
       `;
-    }).join("");
+  }
+
+  function scheduleVirtualRender(){
+    if (virtualFrame) return;
+    virtualFrame = requestAnimationFrame(() => {
+      virtualFrame = null;
+      renderVirtualGrid();
+    });
+  }
+
+  function computeVirtualMetrics(){
+    const style = getComputedStyle(grid);
+    const colGap = parseFloat(style.columnGap) || 14;
+    const rowGap = parseFloat(style.rowGap) || 20;
+    const width = grid.clientWidth || grid.offsetWidth || 0;
+    const cols = Math.max(1, Math.floor((width + colGap) / (CARD_MIN_WIDTH + colGap)));
+    const colWidth = Math.max(CARD_MIN_WIDTH, Math.floor((width - colGap * (cols - 1)) / cols));
+    return {cols, colWidth, colGap, rowGap};
+  }
+
+  function measureCardHeight(colWidth){
+    if (!galleryRenderItems.length) return 420;
+    const html = buildCardHtml(galleryRenderItems[0]);
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    const card = temp.firstElementChild;
+    if (!card) return 420;
+    card.style.visibility = "hidden";
+    card.style.position = "absolute";
+    card.style.pointerEvents = "none";
+    card.style.width = `${colWidth}px`;
+    grid.appendChild(card);
+    const height = card.offsetHeight || 420;
+    grid.removeChild(card);
+    return height;
+  }
+
+  function renderVirtualGrid(){
+    const items = galleryRenderItems;
+    if (!items.length){
+      grid.innerHTML = "<div class='muted'>The Forest awaits its next contribution.</div>";
+      grid.style.height = "";
+      return;
+    }
+    grid.classList.add("virtualized");
+    const {cols, colWidth, colGap, rowGap} = computeVirtualMetrics();
+    if (cols !== virtualCols || !virtualCardHeight){
+      virtualCols = cols;
+      virtualCardHeight = measureCardHeight(colWidth);
+      grid.style.setProperty("--card-width", `${colWidth}px`);
+      grid.style.setProperty("--card-height", `${virtualCardHeight}px`);
+    }
+    const rowHeight = virtualCardHeight + rowGap;
+    const totalRows = Math.ceil(items.length / cols);
+    const totalHeight = Math.max(0, totalRows * rowHeight - rowGap);
+    grid.style.height = `${totalHeight}px`;
+
+    const scrollTop = window.scrollY;
+    const gridTop = grid.getBoundingClientRect().top + scrollTop;
+    const viewTop = Math.max(0, scrollTop - gridTop);
+    const viewBottom = viewTop + window.innerHeight;
+    const startRow = Math.max(0, Math.floor(viewTop / rowHeight) - VIRTUAL_BUFFER_ROWS);
+    const endRow = Math.min(totalRows - 1, Math.ceil(viewBottom / rowHeight) + VIRTUAL_BUFFER_ROWS);
+    const startIndex = startRow * cols;
+    const endIndex = Math.min(items.length, (endRow + 1) * cols);
+
+    grid.innerHTML = "";
+    for (let i = startIndex; i < endIndex; i += 1){
+      const item = items[i];
+      const html = buildCardHtml(item);
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
+      const card = temp.firstElementChild;
+      if (!card) continue;
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      card.style.top = `${row * rowHeight}px`;
+      card.style.left = `${col * (colWidth + colGap)}px`;
+      card.style.width = `${colWidth}px`;
+      card.style.height = `${virtualCardHeight}px`;
+      grid.appendChild(card);
+    }
+  }
+
+  function renderGrid(){
+    const items = Array.isArray(galleryItems) ? galleryItems : [];
+    if (!items.length){
+      grid.innerHTML = "<div class='muted'>The Forest awaits its next contribution.</div>";
+      grid.style.height = "";
+      return;
+    }
+    galleryRenderItems = items;
+    grid.classList.toggle("filtering", !!activeArtistFilter);
+    scheduleVirtualRender();
+    if (!virtualListening){
+      virtualListening = true;
+      window.addEventListener("scroll", scheduleVirtualRender, {passive: true});
+      window.addEventListener("resize", scheduleVirtualRender);
+    }
   }
 </script>
 </body>
