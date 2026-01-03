@@ -3214,6 +3214,12 @@
         </div>
         <div class="gallery-admin-list" id="galleryItemsList">No items loaded.</div>
         <div class="status" id="galleryItemsStatus">Ready.</div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryImportOpen">Import from Discord channel</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal" id="galleryEditModal">
@@ -3243,6 +3249,31 @@
           </div>
         </div>
         <div class="status" id="galleryEditStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="galleryImportModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Import Gallery Images</div>
+          <button class="btn-ghost" id="galleryImportClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="galleryImportChannel">Source channel</label>
+            <select id="galleryImportChannel"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryImportRefresh">Refresh channels</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="galleryImportRun">Import images</button>
+          </div>
+        </div>
+        <div class="status" id="galleryImportStatus">Pick a channel to import.</div>
       </div>
     </div>
     <div class="modal" id="authRolesModal">
@@ -5096,10 +5127,14 @@
       async function loadGalleryChannels(){
         const select = $("galleryUploadChannel");
         const templateSelect = $("galleryChannelTemplate");
+        const importSelect = $("galleryImportChannel");
         if (!select) return;
         select.innerHTML = `<option value="">Loading...</option>`;
         if (templateSelect){
           templateSelect.innerHTML = `<option value="">Loading...</option>`;
+        }
+        if (importSelect){
+          importSelect.innerHTML = `<option value="">Loading...</option>`;
         }
         try{
           const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
@@ -5111,6 +5146,13 @@
             none.value = "";
             none.textContent = "(no template)";
             templateSelect.appendChild(none);
+          }
+          if (importSelect){
+            importSelect.innerHTML = "";
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = "(select channel)";
+            importSelect.appendChild(none);
           }
           channels.forEach(c => {
             const opt = document.createElement("option");
@@ -5127,6 +5169,12 @@
               clone.textContent = label;
               templateSelect.appendChild(clone);
             }
+            if (importSelect){
+              const clone = document.createElement("option");
+              clone.value = c.id;
+              clone.textContent = label;
+              importSelect.appendChild(clone);
+            }
           });
           if (!channels.length){
             const opt = document.createElement("option");
@@ -5139,11 +5187,20 @@
               opt2.textContent = "No channels found.";
               templateSelect.appendChild(opt2);
             }
+            if (importSelect){
+              const opt3 = document.createElement("option");
+              opt3.value = "";
+              opt3.textContent = "No channels found.";
+              importSelect.appendChild(opt3);
+            }
           }
         }catch(err){
           select.innerHTML = `<option value="">Failed to load channels</option>`;
           if (templateSelect){
             templateSelect.innerHTML = `<option value="">Failed to load channels</option>`;
+          }
+          if (importSelect){
+            importSelect.innerHTML = `<option value="">Failed to load channels</option>`;
           }
           setGalleryChannelStatus(err.message, "err");
         }
@@ -5158,6 +5215,13 @@
 
       function setGalleryItemsStatus(msg, kind){
         const el = $("galleryItemsStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setGalleryImportStatus(msg, kind){
+        const el = $("galleryImportStatus");
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
@@ -5651,6 +5715,41 @@
       $("galleryEditModal").addEventListener("click", (event) => {
         if (event.target === $("galleryEditModal")){
           $("galleryEditModal").classList.remove("show");
+        }
+      });
+      $("galleryImportOpen").addEventListener("click", () => {
+        $("galleryImportModal").classList.add("show");
+        setGalleryImportStatus("Pick a channel to import.", "");
+        loadGalleryChannels();
+      });
+      $("galleryImportClose").addEventListener("click", () => {
+        $("galleryImportModal").classList.remove("show");
+      });
+      $("galleryImportModal").addEventListener("click", (event) => {
+        if (event.target === $("galleryImportModal")){
+          $("galleryImportModal").classList.remove("show");
+        }
+      });
+      $("galleryImportRefresh").addEventListener("click", () => loadGalleryChannels());
+      $("galleryImportRun").addEventListener("click", async () => {
+        const channelId = $("galleryImportChannel").value || "";
+        if (!channelId){
+          setGalleryImportStatus("Pick a channel first.", "err");
+          return;
+        }
+        setGalleryImportStatus("Importing...", "");
+        try{
+          const res = await jsonFetch("/api/gallery/import-channel", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({channel_id: channelId})
+          }, true);
+          const imported = res.imported || 0;
+          const skipped = res.skipped || 0;
+          setGalleryImportStatus(`Imported ${imported}. Skipped ${skipped}.`, "ok");
+          await loadGalleryItems();
+        }catch(err){
+          setGalleryImportStatus(err.message, "err");
         }
       });
       $("bOwnerFilterCalled").addEventListener("click", () => {

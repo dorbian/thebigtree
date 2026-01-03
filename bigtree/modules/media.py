@@ -61,6 +61,12 @@ def get_media(filename: str) -> Optional[Dict]:
     db = _db(); q = Query()
     return db.get((q._type == "media") & (q.filename == filename))
 
+def get_media_by_discord_url(url: str) -> Optional[Dict]:
+    if not url:
+        return None
+    db = _db(); q = Query()
+    return db.get((q._type == "media") & (q.discord_url == url))
+
 def add_media(
     filename: str,
     original_name: Optional[str] = None,

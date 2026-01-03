@@ -16,6 +16,14 @@ from bigtree.webmods import contest as contest_mod
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _REACTION_TYPES = set(gallery_mod.reaction_types())
 
+def _is_image_attachment(att: discord.Attachment) -> bool:
+    filename = (att.filename or "")
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in _IMG_EXTS:
+        return True
+    content_type = (att.content_type or "").lower()
+    return content_type.startswith("image/")
+
 def _artist_payload(artist_id: str | None) -> Dict[str, Any]:
     if artist_id:
         artist = artist_mod.get_artist(artist_id)
@@ -256,6 +264,70 @@ async def gallery_upload_channel_create(req: web.Request):
         return web.json_response({"ok": False, "error": str(exc)}, status=500)
     gallery_mod.set_upload_channel_id(channel.id)
     return web.json_response({"ok": True, "channel_id": channel.id, "name": channel.name})
+
+@route("POST", "/api/gallery/import-channel", scopes=["tarot:admin"])
+async def gallery_import_channel(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    channel_id = body.get("channel_id")
+    try:
+        channel_id = int(channel_id) if channel_id else None
+    except Exception:
+        channel_id = None
+    if not channel_id:
+        return web.json_response({"ok": False, "error": "channel_id required"}, status=400)
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+    channel = bot.get_channel(channel_id)
+    if not channel or not isinstance(channel, discord.TextChannel):
+        return web.json_response({"ok": False, "error": "channel not found"}, status=404)
+
+    imported = 0
+    skipped = 0
+    try:
+        async for message in channel.history(limit=None, oldest_first=True):
+            if not message.attachments:
+                continue
+            author = message.author
+            artist_id = str(author.id)
+            display_name = getattr(author, "display_name", None) or author.name
+            artist_mod.upsert_artist(artist_id, display_name, {})
+            base_title = (message.content or "").strip()
+            for idx, att in enumerate(message.attachments):
+                if not _is_image_attachment(att):
+                    continue
+                discord_url = getattr(att, "url", None) or ""
+                if discord_url and media_mod.get_media_by_discord_url(discord_url):
+                    skipped += 1
+                    continue
+                filename = att.filename or "image"
+                ext = os.path.splitext(filename)[1].lower()
+                if ext not in _IMG_EXTS:
+                    ext = ".png"
+                save_name = f"discord_{message.id}_{idx}{ext}"
+                try:
+                    await att.save(fp=os.path.join(media_mod.get_media_dir(), save_name))
+                except Exception:
+                    skipped += 1
+                    continue
+                title = base_title or filename
+                if idx > 0 and base_title:
+                    title = f"{base_title} ({idx + 1})"
+                media_mod.add_media(
+                    save_name,
+                    original_name=filename,
+                    artist_id=artist_id,
+                    title=title,
+                    discord_url=discord_url,
+                )
+                imported += 1
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+    return web.json_response({"ok": True, "imported": imported, "skipped": skipped})
 
 @route("GET", "/api/gallery/reactions", allow_public=True)
 async def gallery_reactions(req: web.Request):
