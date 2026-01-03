@@ -681,7 +681,7 @@
       const artistName = artist.name || "Forest";
       const title = item.title || "Untitled Offering";
       const artistLinks = artist.links || {};
-      const origin = getOrigin(item);
+      const origin = (item.origin || "").trim() || getOrigin(item);
       const type = getTypeBadge(item);
       const tags = getTags(item);
       const infoText = [title, artistName, origin].filter(Boolean).join(" - ");

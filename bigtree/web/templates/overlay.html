@@ -2654,15 +2654,30 @@
               </div>
               <input id="mediaUploadFile" type="file" accept="image/*" class="hidden">
               <div class="row">
-                <div>
-                  <label for="mediaUploadTitleInput">Title</label>
-                  <input id="mediaUploadTitleInput" placeholder="Image title">
-                </div>
-                <div>
-                  <label for="mediaUploadArtist">Artist</label>
-                  <select id="mediaUploadArtist"></select>
-                </div>
-              </div>
+          <div>
+            <label for="mediaUploadTitleInput">Title</label>
+            <input id="mediaUploadTitleInput" placeholder="Image title">
+          </div>
+          <div>
+            <label for="mediaUploadArtist">Artist</label>
+            <select id="mediaUploadArtist"></select>
+          </div>
+          <div>
+            <label for="mediaUploadOriginType">Origin type</label>
+            <select id="mediaUploadOriginType">
+              <option value="Artifact">Artifact</option>
+              <option value="Rite">Rite</option>
+              <option value="Contest">Contest</option>
+              <option value="Tarot">Tarot</option>
+              <option value="Bingo">Bingo</option>
+              <option value="Gallery">Gallery</option>
+            </select>
+          </div>
+          <div>
+            <label for="mediaUploadOriginLabel">Origin label</label>
+            <input id="mediaUploadOriginLabel" placeholder="Offered during...">
+          </div>
+        </div>
               <div class="row">
                 <div>
                   <label>&nbsp;</label>
@@ -3265,6 +3280,23 @@
           <div>
             <label>&nbsp;</label>
             <button class="btn-ghost" id="galleryImportRefresh">Refresh channels</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="galleryImportOriginType">Origin type</label>
+            <select id="galleryImportOriginType">
+              <option value="Artifact">Artifact</option>
+              <option value="Rite">Rite</option>
+              <option value="Contest">Contest</option>
+              <option value="Tarot">Tarot</option>
+              <option value="Bingo">Bingo</option>
+              <option value="Gallery">Gallery</option>
+            </select>
+          </div>
+          <div>
+            <label for="galleryImportOriginLabel">Origin label</label>
+            <input id="galleryImportOriginLabel" placeholder="Offered during...">
           </div>
         </div>
         <div class="row">
@@ -5738,11 +5770,17 @@
           return;
         }
         setGalleryImportStatus("Importing...", "");
+        const originType = $("galleryImportOriginType").value.trim();
+        const originLabel = $("galleryImportOriginLabel").value.trim();
         try{
           const res = await jsonFetch("/api/gallery/import-channel", {
             method:"POST",
             headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({channel_id: channelId})
+            body: JSON.stringify({
+              channel_id: channelId,
+              origin_type: originType,
+              origin_label: originLabel
+            })
           }, true);
           const imported = res.imported || 0;
           const skipped = res.skipped || 0;
@@ -7105,6 +7143,10 @@
           fd.append("title", title);
           const artistId = $("mediaUploadArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
+          const originType = $("mediaUploadOriginType").value.trim();
+          const originLabel = $("mediaUploadOriginLabel").value.trim();
+          if (originType) fd.append("origin_type", originType);
+          if (originLabel) fd.append("origin_label", originLabel);
           const res = await fetch("/api/media/upload", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
@@ -7114,6 +7156,7 @@
           if (!data.ok) throw new Error(data.error || "Failed");
           $("mediaUploadFile").value = "";
           $("mediaUploadTitleInput").value = "";
+          $("mediaUploadOriginLabel").value = "";
           mediaUploadFile = null;
           updateMediaUploadDropDisplay(null);
           setMediaUploadStatus("Upload complete.", "ok");

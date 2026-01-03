@@ -12,6 +12,7 @@ from bigtree.modules import tarot as tarot_mod
 from bigtree.modules import gallery as gallery_mod
 from bigtree.modules import artists as artist_mod
 from bigtree.webmods import contest as contest_mod
+import random
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _REACTION_TYPES = set(gallery_mod.reaction_types())
@@ -79,7 +80,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "url": url,
             "fallback_url": f"/media/{filename}" if discord_url else "",
             "source": "media",
-            "type": "Artifact",
+            "type": entry.get("origin_type") or "Artifact",
+            "origin": entry.get("origin_label") or "",
             "artist": _artist_payload(entry.get("artist_id")),
             "reactions": gallery_mod.get_reactions(item_id),
             "hidden": gallery_mod.is_hidden(item_id),
@@ -161,6 +163,7 @@ async def contest_media_file(req: web.Request):
 @route("GET", "/api/gallery/images", allow_public=True)
 async def gallery_images(_req: web.Request):
     items = _collect_gallery_items(include_hidden=False)
+    random.shuffle(items)
     return web.json_response({"ok": True, "items": items})
 
 @route("GET", "/api/gallery/admin/items", scopes=["tarot:admin"])
@@ -272,6 +275,8 @@ async def gallery_import_channel(req: web.Request):
     except Exception:
         body = {}
     channel_id = body.get("channel_id")
+    origin_type = str(body.get("origin_type") or "").strip() or "Artifact"
+    origin_label = str(body.get("origin_label") or "").strip()
     try:
         channel_id = int(channel_id) if channel_id else None
     except Exception:
@@ -322,6 +327,8 @@ async def gallery_import_channel(req: web.Request):
                     artist_id=artist_id,
                     title=title,
                     discord_url=discord_url,
+                    origin_type=origin_type,
+                    origin_label=origin_label,
                 )
                 imported += 1
     except Exception as exc:

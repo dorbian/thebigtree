@@ -96,6 +96,8 @@ def _media_item(
     used_in: list[str] | None = None,
     discord_url: str | None = None,
     prefer_discord: bool = True,
+    origin_type: str | None = None,
+    origin_label: str | None = None,
 ) -> dict:
     url = (discord_url if (prefer_discord and discord_url) else f"/media/{filename}")
     item = {
@@ -104,6 +106,8 @@ def _media_item(
         "fallback_url": f"/media/{filename}" if discord_url else "",
         "discord_url": discord_url or "",
         "source": "media",
+        "origin_type": origin_type or "",
+        "origin_label": origin_label or "",
         "original_name": original_name,
         "title": title,
         "delete_url": f"/api/media/{filename}",
@@ -210,6 +214,8 @@ async def upload_media(req: web.Request):
         return web.json_response({"ok": False, "error": "file required"}, status=400)
     artist_id = (fields.get("artist_id") or "").strip() or None
     title = (fields.get("title") or "").strip() or None
+    origin_type = (fields.get("origin_type") or "").strip() or None
+    origin_label = (fields.get("origin_label") or "").strip() or None
     kind = imghdr.what(None, h=data)
     ext_map = {
         "jpeg": ".jpg",
@@ -239,6 +245,8 @@ async def upload_media(req: web.Request):
         original_name=filename_hint,
         artist_id=artist_id,
         title=title,
+        origin_type=origin_type,
+        origin_label=origin_label,
     )
     item = _media_item(
         filename,
@@ -247,6 +255,8 @@ async def upload_media(req: web.Request):
         entry.get("title") or "",
         discord_url=entry.get("discord_url") or None,
         prefer_discord=False,
+        origin_type=entry.get("origin_type") or "",
+        origin_label=entry.get("origin_label") or "",
     )
     return web.json_response({"ok": True, "item": item})
 
@@ -268,6 +278,8 @@ async def list_media(_req: web.Request):
             used_in=sorted(usage_map.get(filename, set())),
             discord_url=entry.get("discord_url") or None,
             prefer_discord=False,
+            origin_type=entry.get("origin_type") or "",
+            origin_label=entry.get("origin_label") or "",
         ))
 
     for deck in tarot_mod.list_decks():
