@@ -15,6 +15,9 @@ _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 def _media_dir() -> str:
     return media_mod.get_media_dir()
 
+def _media_thumbs_dir() -> str:
+    return media_mod.get_media_thumbs_dir()
+
 async def read_multipart(req: web.Request, *, file_field: str = "file") -> tuple[dict, str, bytes]:
     reader = await req.multipart()
     fields: dict[str, str] = {}
@@ -206,6 +209,44 @@ async def media_file(req: web.Request):
     if not os.path.exists(path):
         return web.Response(status=404)
     return web.FileResponse(path)
+
+@route("GET", "/media/thumbs/{filename}", allow_public=True)
+async def media_thumb(req: web.Request):
+    filename = req.match_info["filename"]
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _IMG_EXTS:
+        return web.Response(status=404)
+    thumb_path = os.path.join(_media_thumbs_dir(), filename)
+    if os.path.exists(thumb_path):
+        return web.FileResponse(thumb_path)
+    source = os.path.join(_media_dir(), filename)
+    if not os.path.exists(source):
+        return web.Response(status=404)
+    try:
+        from PIL import Image
+        with Image.open(source) as img:
+            try:
+                img.seek(0)
+            except Exception:
+                pass
+            img.thumbnail((480, 672))
+            fmt = {
+                ".jpg": "JPEG",
+                ".jpeg": "JPEG",
+                ".png": "PNG",
+                ".gif": "GIF",
+                ".bmp": "BMP",
+                ".webp": "WEBP",
+            }.get(ext, "PNG")
+            save_kwargs = {}
+            if fmt == "JPEG":
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                save_kwargs = {"quality": 82, "optimize": True, "progressive": True}
+            img.save(thumb_path, fmt, **save_kwargs)
+    except Exception:
+        return web.Response(status=404)
+    return web.FileResponse(thumb_path)
 
 @route("POST", "/api/media/upload", scopes=["tarot:admin"])
 async def upload_media(req: web.Request):

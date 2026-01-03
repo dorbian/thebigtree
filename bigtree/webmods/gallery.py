@@ -13,6 +13,7 @@ from bigtree.modules import gallery as gallery_mod
 from bigtree.modules import artists as artist_mod
 from bigtree.webmods import contest as contest_mod
 import random
+import time
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _REACTION_TYPES = set(gallery_mod.reaction_types())
@@ -79,6 +80,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "title": entry.get("title") or entry.get("original_name") or filename,
             "url": url,
             "fallback_url": f"/media/{filename}" if discord_url else "",
+            "thumb_url": f"/media/thumbs/{filename}",
             "source": "media",
             "type": entry.get("origin_type") or "Artifact",
             "origin": entry.get("origin_label") or "",
@@ -163,8 +165,36 @@ async def contest_media_file(req: web.Request):
 @route("GET", "/api/gallery/images", allow_public=True)
 async def gallery_images(_req: web.Request):
     items = _collect_gallery_items(include_hidden=False)
-    random.shuffle(items)
-    return web.json_response({"ok": True, "items": items})
+    total = len(items)
+    seed_raw = _req.query.get("seed")
+    try:
+        seed = int(seed_raw) if seed_raw is not None else None
+    except Exception:
+        seed = None
+    if seed is None:
+        seed = int(time.time() * 1000) & 0x7FFFFFFF
+    rng = random.Random(seed)
+    rng.shuffle(items)
+    try:
+        limit = int(_req.query.get("limit") or 0)
+    except Exception:
+        limit = 0
+    try:
+        offset = int(_req.query.get("offset") or 0)
+    except Exception:
+        offset = 0
+    if offset < 0:
+        offset = 0
+    if limit and limit > 0:
+        items = items[offset:offset + limit]
+    return web.json_response({
+        "ok": True,
+        "items": items,
+        "total": total,
+        "seed": seed,
+        "offset": offset,
+        "limit": limit,
+    })
 
 @route("GET", "/api/gallery/admin/items", scopes=["tarot:admin"])
 async def gallery_admin_items(_req: web.Request):

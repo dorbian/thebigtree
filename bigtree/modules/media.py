@@ -39,6 +39,12 @@ def get_media_dir() -> str:
     os.makedirs(path, exist_ok=True)
     return path
 
+def get_media_thumbs_dir() -> str:
+    base = get_media_dir()
+    path = os.path.join(base, "thumbs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
 def _get_db_path() -> str:
     global _MEDIA_DB_PATH
     if _MEDIA_DB_PATH:
