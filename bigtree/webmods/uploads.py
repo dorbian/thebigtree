@@ -208,7 +208,9 @@ async def media_file(req: web.Request):
     path = os.path.join(_media_dir(), filename)
     if not os.path.exists(path):
         return web.Response(status=404)
-    return web.FileResponse(path)
+    resp = web.FileResponse(path)
+    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return resp
 
 @route("GET", "/media/thumbs/{filename}", allow_public=True)
 async def media_thumb(req: web.Request):
@@ -218,7 +220,9 @@ async def media_thumb(req: web.Request):
         return web.Response(status=404)
     thumb_path = os.path.join(_media_thumbs_dir(), filename)
     if os.path.exists(thumb_path):
-        return web.FileResponse(thumb_path)
+        resp = web.FileResponse(thumb_path)
+        resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+        return resp
     source = os.path.join(_media_dir(), filename)
     if not os.path.exists(source):
         return web.Response(status=404)
@@ -246,7 +250,9 @@ async def media_thumb(req: web.Request):
             img.save(thumb_path, fmt, **save_kwargs)
     except Exception:
         return web.Response(status=404)
-    return web.FileResponse(thumb_path)
+    resp = web.FileResponse(thumb_path)
+    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return resp
 
 @route("POST", "/api/media/upload", scopes=["tarot:admin"])
 async def upload_media(req: web.Request):

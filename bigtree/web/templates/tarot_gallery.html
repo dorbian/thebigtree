@@ -494,6 +494,7 @@
   let virtualFrame = null;
   let virtualListening = false;
   const CARD_MIN_WIDTH = 220;
+  const CARD_HEIGHT = 300;
   const VIRTUAL_BUFFER_ROWS = 2;
   const PAGE_SIZE = 120;
   let gallerySeed = null;
@@ -829,21 +830,8 @@
     return {cols, colWidth, colGap, rowGap};
   }
 
-  function measureCardHeight(colWidth){
-    if (!galleryRenderItems.length) return 420;
-    const html = buildCardHtml(galleryRenderItems[0]);
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-    const card = temp.firstElementChild;
-    if (!card) return 420;
-    card.style.visibility = "hidden";
-    card.style.position = "absolute";
-    card.style.pointerEvents = "none";
-    card.style.width = `${colWidth}px`;
-    grid.appendChild(card);
-    const height = card.offsetHeight || 420;
-    grid.removeChild(card);
-    return height;
+  function measureCardHeight(_colWidth){
+    return CARD_HEIGHT;
   }
 
   function renderVirtualGrid(){

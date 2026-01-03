@@ -187,7 +187,7 @@ async def gallery_images(_req: web.Request):
         offset = 0
     if limit and limit > 0:
         items = items[offset:offset + limit]
-    return web.json_response({
+    resp = web.json_response({
         "ok": True,
         "items": items,
         "total": total,
@@ -195,6 +195,8 @@ async def gallery_images(_req: web.Request):
         "offset": offset,
         "limit": limit,
     })
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    return resp
 
 @route("GET", "/api/gallery/admin/items", scopes=["tarot:admin"])
 async def gallery_admin_items(_req: web.Request):
