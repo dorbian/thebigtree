@@ -567,6 +567,16 @@
   imageModal.addEventListener("mousemove", showImageInfo);
   grid.addEventListener("click", (event) => {
     const target = event.target;
+    if (target.tagName === "IMG" && target.getAttribute("data-full")){
+      event.preventDefault();
+      const payload = target.getAttribute("data-full");
+      if (!payload) return;
+      try{
+        const parsed = JSON.parse(decodeURIComponent(payload));
+        openImageModal(parsed);
+      }catch (err){}
+      return;
+    }
     if (target.classList && target.classList.contains("view-btn")){
       event.preventDefault();
       const payload = target.getAttribute("data-full");
@@ -701,11 +711,17 @@
         `;
       }).join("");
       const fallbackAttr = item.fallback_url ? ` data-fallback="${item.fallback_url}"` : "";
+      const fullPayload = encodeURIComponent(JSON.stringify({
+        url: item.url,
+        fallback_url: item.fallback_url || "",
+        info: infoText,
+        title: title
+      }));
       const media = item.url
-        ? `<img src="${item.url}" alt="${title}"${fallbackAttr} onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+        ? `<img src="${item.url}" alt="${title}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
         : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
       const viewButton = item.url
-        ? `<button class="view-btn" data-full="${encodeURIComponent(JSON.stringify({url: item.url, fallback_url: item.fallback_url || "", info: infoText, title: title}))}">View</button>`
+        ? `<button class="view-btn" data-full="${fullPayload}">View</button>`
         : `<button class="view-btn" disabled>View</button>`;
       return `
         <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}">
