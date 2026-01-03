@@ -496,6 +496,7 @@
   const CARD_MIN_WIDTH = 220;
   const CARD_HEIGHT = 380;
   const VIRTUAL_BUFFER_ROWS = 2;
+  const USE_VIRTUAL = false;
   const PAGE_SIZE = 120;
   let gallerySeed = null;
   let galleryTotal = 0;
@@ -890,12 +891,18 @@
     }
     galleryRenderItems = items;
     grid.classList.toggle("filtering", !!activeArtistFilter);
-    scheduleVirtualRender();
-    if (!virtualListening){
-      virtualListening = true;
-      window.addEventListener("scroll", scheduleVirtualRender, {passive: true});
-      window.addEventListener("resize", scheduleVirtualRender);
+    if (USE_VIRTUAL){
+      scheduleVirtualRender();
+      if (!virtualListening){
+        virtualListening = true;
+        window.addEventListener("scroll", scheduleVirtualRender, {passive: true});
+        window.addEventListener("resize", scheduleVirtualRender);
+      }
+      return;
     }
+    grid.classList.remove("virtualized");
+    grid.style.height = "";
+    grid.innerHTML = galleryRenderItems.map(buildCardHtml).join("");
   }
 </script>
 </body>
