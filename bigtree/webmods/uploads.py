@@ -219,37 +219,9 @@ async def media_thumb(req: web.Request):
     if ext not in _IMG_EXTS:
         return web.Response(status=404)
     thumb_path = os.path.join(_media_thumbs_dir(), filename)
-    if os.path.exists(thumb_path):
-        resp = web.FileResponse(thumb_path)
-        resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
-        return resp
-    source = os.path.join(_media_dir(), filename)
-    if not os.path.exists(source):
-        return web.Response(status=404)
-    try:
-        from PIL import Image
-        with Image.open(source) as img:
-            try:
-                img.seek(0)
-            except Exception:
-                pass
-            img.thumbnail((480, 672))
-            fmt = {
-                ".jpg": "JPEG",
-                ".jpeg": "JPEG",
-                ".png": "PNG",
-                ".gif": "GIF",
-                ".bmp": "BMP",
-                ".webp": "WEBP",
-            }.get(ext, "PNG")
-            save_kwargs = {}
-            if fmt == "JPEG":
-                if img.mode not in ("RGB", "L"):
-                    img = img.convert("RGB")
-                save_kwargs = {"quality": 82, "optimize": True, "progressive": True}
-            img.save(thumb_path, fmt, **save_kwargs)
-    except Exception:
-        return web.Response(status=404)
+    if not os.path.exists(thumb_path):
+        if not media_mod.ensure_thumb(filename):
+            return web.Response(status=404)
     resp = web.FileResponse(thumb_path)
     resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
     return resp
@@ -295,6 +267,11 @@ async def upload_media(req: web.Request):
         origin_type=origin_type,
         origin_label=origin_label,
     )
+    try:
+        from bigtree.webmods import gallery as gallery_web
+        gallery_web.invalidate_gallery_cache()
+    except Exception:
+        pass
     item = _media_item(
         filename,
         entry.get("artist_id"),
@@ -378,6 +355,11 @@ async def delete_media(req: web.Request):
             return web.json_response({"ok": False, "error": "delete failed"}, status=500)
     media_mod.delete_media(filename)
     tarot_mod.clear_image_references(f"/media/{filename}")
+    try:
+        from bigtree.webmods import gallery as gallery_web
+        gallery_web.invalidate_gallery_cache()
+    except Exception:
+        pass
     return web.json_response({"ok": True})
 
 @route("DELETE", "/api/uploads/tarot/cards/{filename}", scopes=["tarot:admin"])
@@ -391,6 +373,11 @@ async def delete_tarot_card_file(req: web.Request):
     except Exception:
         return web.json_response({"ok": False, "error": "delete failed"}, status=500)
     tarot_mod.clear_image_references(f"/tarot/cards/{filename}")
+    try:
+        from bigtree.webmods import gallery as gallery_web
+        gallery_web.invalidate_gallery_cache()
+    except Exception:
+        pass
     return web.json_response({"ok": True})
 
 @route("DELETE", "/api/uploads/tarot/backs/{filename}", scopes=["tarot:admin"])
@@ -404,6 +391,11 @@ async def delete_tarot_back_file(req: web.Request):
     except Exception:
         return web.json_response({"ok": False, "error": "delete failed"}, status=500)
     tarot_mod.clear_image_references(f"/tarot/backs/{filename}")
+    try:
+        from bigtree.webmods import gallery as gallery_web
+        gallery_web.invalidate_gallery_cache()
+    except Exception:
+        pass
     return web.json_response({"ok": True})
 
 @route("DELETE", "/api/uploads/bingo/backgrounds/{game_id}", scopes=["bingo:admin"])

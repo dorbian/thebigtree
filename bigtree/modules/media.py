@@ -16,6 +16,7 @@ except Exception:
     logger = logging.getLogger("bigtree")
 
 _MEDIA_DB_PATH: Optional[str] = None
+_IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 def _now() -> float:
     return time.time()
@@ -44,6 +45,47 @@ def get_media_thumbs_dir() -> str:
     path = os.path.join(base, "thumbs")
     os.makedirs(path, exist_ok=True)
     return path
+
+def ensure_thumb(filename: str, size: tuple[int, int] = (480, 672)) -> bool:
+    if not filename:
+        return False
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _IMG_EXTS:
+        return False
+    thumb_path = os.path.join(get_media_thumbs_dir(), filename)
+    if os.path.exists(thumb_path):
+        return True
+    source = os.path.join(get_media_dir(), filename)
+    if not os.path.exists(source):
+        return False
+    try:
+        from PIL import Image
+    except Exception:
+        return False
+    try:
+        with Image.open(source) as img:
+            try:
+                img.seek(0)
+            except Exception:
+                pass
+            img.thumbnail(size)
+            fmt = {
+                ".jpg": "JPEG",
+                ".jpeg": "JPEG",
+                ".png": "PNG",
+                ".gif": "GIF",
+                ".bmp": "BMP",
+                ".webp": "WEBP",
+            }.get(ext, "PNG")
+            save_kwargs = {}
+            if fmt == "JPEG":
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                save_kwargs = {"quality": 82, "optimize": True, "progressive": True}
+            img.save(thumb_path, fmt, **save_kwargs)
+    except Exception:
+        return False
+    return True
 
 def _get_db_path() -> str:
     global _MEDIA_DB_PATH
