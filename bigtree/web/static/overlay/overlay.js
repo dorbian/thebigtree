@@ -472,14 +472,15 @@
         $("mediaEditCopy").disabled = false;
         $("mediaEditOpen").disabled = false;
         $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
+        const isHidden = currentMediaEdit.hidden === true;
         $("mediaEditHide").disabled = false;
-        $("mediaEditHide").textContent = currentMediaEdit.hidden ? "Show in gallery" : "Hide in gallery";
+        $("mediaEditHide").textContent = isHidden ? "Show in gallery" : "Hide in gallery";
         if (identity) identity.textContent = currentMediaEdit.title || currentMediaEdit.name || "-";
         if (artistDisplay) artistDisplay.textContent = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "Forest";
         const originText = [currentMediaEdit.origin_type || "", currentMediaEdit.origin_label || ""].filter(Boolean).join(" - ");
         if (originDisplay) originDisplay.textContent = originText || "Unlabeled";
         if (meta){
-          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nhidden: ${currentMediaEdit.hidden ? "yes" : "no"}`;
+          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nhidden: ${isHidden ? "yes" : "no"}`;
         }
         const preview = $("mediaEditPreview");
         if (preview){
@@ -633,8 +634,10 @@
           artist.className = "library-card-artist";
           artist.textContent = item.artist_name || item.artist_id || "Forest";
 
+          const isHidden = item.hidden === true;
+          item.hidden = isHidden;
           const origin = document.createElement("div");
-          origin.className = "muted";
+          origin.className = "library-card-origin muted";
           origin.textContent = [item.origin_type, item.origin_label].filter(Boolean).join(" - ") || "Unlabeled";
 
           const actions = document.createElement("div");
@@ -643,14 +646,14 @@
           const hideBtn = document.createElement("button");
           hideBtn.type = "button";
           hideBtn.className = "btn-ghost icon-action";
-          hideBtn.title = item.hidden ? "Show in gallery" : "Hide from gallery";
-          hideBtn.innerHTML = item.hidden
+          hideBtn.title = isHidden ? "Show in gallery" : "Hide from gallery";
+          hideBtn.innerHTML = isHidden
             ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 5c5 0 9 4 10 7-1 3-5 7-10 7S3 15 2 12c1-3 5-7 10-7zm0 2c-3.4 0-6.4 2.4-7.7 5 1.3 2.6 4.3 5 7.7 5s6.4-2.4 7.7-5c-1.3-2.6-4.3-5-7.7-5zm0 2.5A2.5 2.5 0 1 1 12 15a2.5 2.5 0 0 1 0-5z\"/></svg>"
             : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 5l2-2 18 18-2 2-3.5-3.5A10.9 10.9 0 0 1 12 19c-5 0-9-4-10-7a12.5 12.5 0 0 1 5.4-5.8L2 5zm5.7 5.7A3.5 3.5 0 0 0 12 15a3.4 3.4 0 0 0 2-.6l-1.5-1.5a1.5 1.5 0 0 1-1.9-1.9L7.7 10.7zM12 7c1 0 2 .4 2.7 1l-1.4 1.4A1.5 1.5 0 0 0 12 8.5c-.2 0-.4 0-.6.1L9.6 7.2A6.4 6.4 0 0 1 12 7zm6.3 2.1A11 11 0 0 1 22 12c-1 3-5 7-10 7-1.2 0-2.4-.2-3.4-.6l1.6-1.6c.6.1 1.2.2 1.8.2 3.4 0 6.4-2.4 7.7-5-.6-1.2-1.6-2.5-3-3.6l1.3-1.4z\"/></svg>";
           hideBtn.addEventListener("click", async (ev) => {
             ev.stopPropagation();
             try{
-              await setMediaHidden(item, !item.hidden);
+              await setMediaHidden(item, !isHidden);
               showToast(item.hidden ? "Hidden from gallery." : "Shown in gallery.", "ok");
               applyMediaFilters();
             }catch(err){
@@ -705,7 +708,7 @@
           card.appendChild(origin);
           card.appendChild(actions);
 
-          if (item.hidden){
+          if (isHidden){
             card.classList.add("hidden-item");
           }
           const hiddenBadge = document.createElement("div");
