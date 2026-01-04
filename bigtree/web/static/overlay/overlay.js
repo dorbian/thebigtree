@@ -425,20 +425,22 @@
         const artistDisplay = $("mediaEditArtistDisplay");
         const originDisplay = $("mediaEditOriginDisplay");
         const hasSingle = count === 1 && currentMediaEdit;
-          if (!hasSingle){
-            if (card) card.classList.add("hidden");
-            if (empty){
-              empty.classList.remove("hidden");
-              empty.textContent = count
-                ? "Multiple images selected. Use bulk actions or select a single image to edit."
-                : "Select an image to edit.";
-            }
-            $("mediaEditSave").disabled = true;
+        if (!hasSingle){
+          if (card) card.classList.add("hidden");
+          if (empty){
+            empty.classList.remove("hidden");
+            empty.textContent = count
+              ? "Multiple images selected. Use bulk actions or select a single image to edit."
+              : "Select an image to edit.";
+          }
+          $("mediaEditSave").disabled = true;
           $("mediaEditClear").disabled = count === 0;
           $("mediaEditCopy").disabled = true;
           $("mediaEditOpen").disabled = true;
           $("mediaEditDelete").disabled = true;
           if (meta) meta.textContent = "";
+          const preview = $("mediaEditPreview");
+          if (preview) preview.innerHTML = "";
           if (identity) identity.textContent = "-";
           if (artistDisplay) artistDisplay.textContent = "-";
           if (originDisplay) originDisplay.textContent = "-";
@@ -691,7 +693,6 @@
         const key = mediaKey(item);
         if (!key) return;
         const shift = opts && opts.shift;
-        const multi = opts && opts.multi;
         const toggleOnly = opts && opts.toggle;
         if (shift && mediaLastIndex !== null){
           const [start, end] = index > mediaLastIndex ? [mediaLastIndex, index] : [index, mediaLastIndex];
@@ -700,18 +701,15 @@
             if (!target) continue;
             mediaSelected.add(mediaKey(target));
           }
-        }else if (toggleOnly || multi){
+        }else{
           if (mediaSelected.has(key)){
             mediaSelected.delete(key);
           }else{
             mediaSelected.add(key);
           }
-        }else{
-          mediaSelected.clear();
-          mediaSelected.add(key);
         }
         mediaLastIndex = index;
-        currentMediaEdit = item;
+        currentMediaEdit = mediaSelected.size ? item : null;
         updateMediaSelectionUI();
       }
 

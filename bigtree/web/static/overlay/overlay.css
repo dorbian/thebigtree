@@ -1626,27 +1626,14 @@
         text-align:center;
         font-size:13px;
       }
-      .media-toolbar{
-        display:flex;
-        flex-wrap:wrap;
+      .media-filters{
+        display:grid;
         gap:8px;
-        align-items:center;
-        justify-content:space-between;
-        margin-bottom:10px;
+        margin-bottom:12px;
       }
-      .media-toolbar .toolbar-left{
-        display:flex;
-        flex-wrap:wrap;
-        gap:8px;
-        align-items:center;
-        flex:1;
-      }
-      .media-toolbar input,
-      .media-toolbar select{
-        min-width:140px;
-      }
-      .media-toolbar .btn-ghost{
-        white-space:nowrap;
+      .media-filters input,
+      .media-filters select{
+        width:100%;
       }
       .bulk-bar{
         display:none;

@@ -963,7 +963,7 @@
                 <div class="library-section-title">Edit</div>
                 <div class="media-empty" id="mediaEditEmpty">Select an image to edit.</div>
                 <div class="media-edit-card hidden" id="mediaEditCard">
-                  <div class="media-edit-preview" id="mediaEditPreview"><span class="preview-label">Preview</span></div>
+                  <div class="media-edit-preview" id="mediaEditPreview"></div>
                   <div class="row">
                     <div>
                       <label>&nbsp;</label>
@@ -1035,35 +1035,37 @@
                   <div class="status" id="mediaEditStatus">Select an image to edit.</div>
                 </div>
               </div>
+              <div class="library-section-title">Filters</div>
+              <div class="media-filters">
+                <input id="mediaSearch" placeholder="Search title, artist, label">
+                <select id="mediaFilterArtist">
+                  <option value="">All artists</option>
+                </select>
+                <select id="mediaFilterOriginType">
+                  <option value="">All origins</option>
+                  <option value="Artifact">Artifact</option>
+                  <option value="Rite">Rite</option>
+                  <option value="Contest">Contest</option>
+                  <option value="Tarot">Tarot</option>
+                  <option value="Bingo">Bingo</option>
+                  <option value="Gallery">Gallery</option>
+                </select>
+                <select id="mediaFilterLabel">
+                  <option value="any">Any label</option>
+                  <option value="has">Has label</option>
+                  <option value="none">Untagged</option>
+                </select>
+                <select id="mediaSort">
+                  <option value="new">Newest first</option>
+                  <option value="old">Oldest first</option>
+                  <option value="title">Title A-Z</option>
+                  <option value="artist">Artist A-Z</option>
+                </select>
+              </div>
             </div>
             <div>
-              <div class="media-toolbar">
-                <div class="toolbar-left">
-                  <input id="mediaSearch" placeholder="Search title, artist, label">
-                  <select id="mediaFilterArtist">
-                    <option value="">All artists</option>
-                  </select>
-                  <select id="mediaFilterOriginType">
-                    <option value="">All origins</option>
-                    <option value="Artifact">Artifact</option>
-                    <option value="Rite">Rite</option>
-                    <option value="Contest">Contest</option>
-                    <option value="Tarot">Tarot</option>
-                    <option value="Bingo">Bingo</option>
-                    <option value="Gallery">Gallery</option>
-                  </select>
-                  <select id="mediaFilterLabel">
-                    <option value="any">Any label</option>
-                    <option value="has">Has label</option>
-                    <option value="none">Untagged</option>
-                  </select>
-                  <select id="mediaSort">
-                    <option value="new">Newest first</option>
-                    <option value="old">Oldest first</option>
-                    <option value="title">Title A-Z</option>
-                    <option value="artist">Artist A-Z</option>
-                  </select>
-                </div>
+              <div class="row" style="justify-content:space-between;align-items:center;">
+                <div class="library-section-title">Existing media</div>
                 <button class="btn-ghost" id="mediaLibraryRefresh">Refresh</button>
               </div>
               <div class="bulk-bar" id="mediaBulkBar">
@@ -1085,7 +1087,6 @@
                 <button id="mediaBulkApplyLabel">Set label</button>
                 <button class="btn-ghost" id="mediaBulkClearLabel">Clear label</button>
               </div>
-              <div class="library-section-title">Existing media</div>
               <div class="status" id="mediaLibraryStatus">Ready.</div>
               <div class="preview-grid" id="mediaLibraryGrid"></div>
             </div>
