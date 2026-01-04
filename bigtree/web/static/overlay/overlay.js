@@ -421,15 +421,15 @@
         editPanel.classList.toggle("active", tab === "edit");
       }
 
-      function updateMediaEditPanel(){
-        const count = mediaSelected.size;
-        const editBtn = $("mediaTabEditBtn");
-        if (editBtn){
-          editBtn.disabled = count === 0;
-          if (editBtn.disabled && editBtn.classList.contains("active")){
-            setMediaTab("upload");
+        function updateMediaEditPanel(){
+          const count = mediaSelected.size;
+          const editBtn = $("mediaTabEditBtn");
+          if (editBtn){
+            editBtn.disabled = count === 0;
+            if (editBtn.disabled && editBtn.classList.contains("active")){
+              setMediaTab("upload");
+            }
           }
-        }
         const empty = $("mediaEditEmpty");
         const card = $("mediaEditCard");
         const meta = $("mediaEditMeta");
@@ -437,14 +437,14 @@
         const artistDisplay = $("mediaEditArtistDisplay");
         const originDisplay = $("mediaEditOriginDisplay");
         const hasSingle = count === 1 && currentMediaEdit;
-        if (!hasSingle){
-          if (card) card.classList.add("hidden");
-          if (empty){
-            empty.classList.remove("hidden");
-            empty.textContent = count
-              ? "Multiple images selected. Use bulk actions or select a single image to edit."
-              : "Select an image to edit.";
-          }
+          if (!hasSingle){
+            if (card) card.classList.add("hidden");
+            if (empty){
+              empty.classList.remove("hidden");
+              empty.textContent = count
+                ? "Multiple images selected. Use bulk actions or select a single image to edit."
+                : "Select an image to edit.";
+            }
           $("mediaEditSave").disabled = true;
           $("mediaEditClear").disabled = count === 0;
           $("mediaEditCopy").disabled = true;
@@ -457,22 +457,28 @@
           if (identity) identity.textContent = "-";
           if (artistDisplay) artistDisplay.textContent = "-";
           if (originDisplay) originDisplay.textContent = "-";
-          setMediaEditStatus(count ? "Multiple selected." : "Select an image to edit.", "");
-          return;
-        }
-        if (empty) empty.classList.add("hidden");
-        if (card) card.classList.remove("hidden");
-        $("mediaEditFilename").value = currentMediaEdit.name || "";
-        $("mediaEditTitle").value = currentMediaEdit.title || "";
-        $("mediaEditArtist").value = currentMediaEdit.artist_id || "";
-        $("mediaEditOriginType").value = currentMediaEdit.origin_type || "Artifact";
-        $("mediaEditOriginLabel").value = currentMediaEdit.origin_label || "";
-        $("mediaEditSave").disabled = false;
-        $("mediaEditClear").disabled = false;
-        $("mediaEditCopy").disabled = false;
-        $("mediaEditOpen").disabled = false;
-        $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
-        const isHidden = currentMediaEdit.hidden === true;
+            setMediaEditStatus(count ? "Multiple selected." : "Select an image to edit.", "");
+            return;
+          }
+          if (editBtn && !editBtn.disabled){
+            setMediaTab("edit");
+          }
+          if (empty) empty.classList.add("hidden");
+          if (card) card.classList.remove("hidden");
+          $("mediaEditFilename").value = currentMediaEdit.name || "";
+          $("mediaEditTitle").value = currentMediaEdit.title || "";
+          $("mediaEditArtist").value = currentMediaEdit.artist_id || "";
+          $("mediaEditOriginType").value = currentMediaEdit.origin_type || "Artifact";
+          $("mediaEditOriginLabel").value = currentMediaEdit.origin_label || "";
+          $("mediaEditSave").disabled = false;
+          $("mediaEditClear").disabled = false;
+          $("mediaEditCopy").disabled = false;
+          $("mediaEditOpen").disabled = false;
+          $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
+          const isHidden = currentMediaEdit.hidden === true
+            || currentMediaEdit.hidden === "true"
+            || currentMediaEdit.hidden === 1
+            || currentMediaEdit.hidden === "1";
         $("mediaEditHide").disabled = false;
         $("mediaEditHide").textContent = isHidden ? "Show in gallery" : "Hide in gallery";
         if (identity) identity.textContent = currentMediaEdit.title || currentMediaEdit.name || "-";
@@ -634,11 +640,21 @@
           artist.className = "library-card-artist";
           artist.textContent = item.artist_name || item.artist_id || "Forest";
 
-          const isHidden = item.hidden === true;
+          const isHidden = item.hidden === true || item.hidden === "true" || item.hidden === 1 || item.hidden === "1";
           item.hidden = isHidden;
           const origin = document.createElement("div");
           origin.className = "library-card-origin muted";
-          origin.textContent = [item.origin_type, item.origin_label].filter(Boolean).join(" - ") || "Unlabeled";
+          const originText = document.createElement("span");
+          originText.className = "library-origin-text";
+          originText.textContent = [item.origin_type, item.origin_label].filter(Boolean).join(" - ") || "Unlabeled";
+          origin.appendChild(originText);
+
+          if (isHidden){
+            const hiddenBadge = document.createElement("span");
+            hiddenBadge.className = "hidden-badge";
+            hiddenBadge.textContent = "Hidden";
+            origin.appendChild(hiddenBadge);
+          }
 
           const actions = document.createElement("div");
           actions.className = "library-actions";
@@ -711,10 +727,6 @@
           if (isHidden){
             card.classList.add("hidden-item");
           }
-          const hiddenBadge = document.createElement("div");
-          hiddenBadge.className = "hidden-badge";
-          hiddenBadge.textContent = "Hidden";
-          card.appendChild(hiddenBadge);
 
           card.addEventListener("click", (ev) => {
             toggleMediaSelection(item, idx, {shift: ev.shiftKey, multi: ev.ctrlKey || ev.metaKey});
