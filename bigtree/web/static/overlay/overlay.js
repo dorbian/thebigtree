@@ -132,6 +132,18 @@
         }, 2400);
       }
 
+      async function setMediaHidden(item, hidden){
+        if (!item) return;
+        const itemId = item.item_id || (item.name ? `media:${item.name}` : "");
+        if (!itemId) return;
+        await jsonFetch("/api/gallery/hidden", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({item_id: itemId, hidden: !!hidden})
+        }, true);
+        item.hidden = !!hidden;
+      }
+
       function updateUploadDropDisplay(file){
         const title = $("uploadLibraryDropTitle");
         const meta = $("uploadLibraryDropMeta");
@@ -438,6 +450,7 @@
           $("mediaEditCopy").disabled = true;
           $("mediaEditOpen").disabled = true;
           $("mediaEditDelete").disabled = true;
+          $("mediaEditHide").disabled = true;
           if (meta) meta.textContent = "";
           const preview = $("mediaEditPreview");
           if (preview) preview.innerHTML = "";
@@ -459,12 +472,14 @@
         $("mediaEditCopy").disabled = false;
         $("mediaEditOpen").disabled = false;
         $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
+        $("mediaEditHide").disabled = false;
+        $("mediaEditHide").textContent = currentMediaEdit.hidden ? "Show in gallery" : "Hide in gallery";
         if (identity) identity.textContent = currentMediaEdit.title || currentMediaEdit.name || "-";
         if (artistDisplay) artistDisplay.textContent = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "Forest";
         const originText = [currentMediaEdit.origin_type || "", currentMediaEdit.origin_label || ""].filter(Boolean).join(" - ");
         if (originDisplay) originDisplay.textContent = originText || "Unlabeled";
         if (meta){
-          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}`;
+          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nhidden: ${currentMediaEdit.hidden ? "yes" : "no"}`;
         }
         const preview = $("mediaEditPreview");
         if (preview){
@@ -625,6 +640,25 @@
           const actions = document.createElement("div");
           actions.className = "library-actions";
 
+          const hideBtn = document.createElement("button");
+          hideBtn.type = "button";
+          hideBtn.className = "btn-ghost icon-action";
+          hideBtn.title = item.hidden ? "Show in gallery" : "Hide from gallery";
+          hideBtn.innerHTML = item.hidden
+            ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 5c5 0 9 4 10 7-1 3-5 7-10 7S3 15 2 12c1-3 5-7 10-7zm0 2c-3.4 0-6.4 2.4-7.7 5 1.3 2.6 4.3 5 7.7 5s6.4-2.4 7.7-5c-1.3-2.6-4.3-5-7.7-5zm0 2.5A2.5 2.5 0 1 1 12 15a2.5 2.5 0 0 1 0-5z\"/></svg>"
+            : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 5l2-2 18 18-2 2-3.5-3.5A10.9 10.9 0 0 1 12 19c-5 0-9-4-10-7a12.5 12.5 0 0 1 5.4-5.8L2 5zm5.7 5.7A3.5 3.5 0 0 0 12 15a3.4 3.4 0 0 0 2-.6l-1.5-1.5a1.5 1.5 0 0 1-1.9-1.9L7.7 10.7zM12 7c1 0 2 .4 2.7 1l-1.4 1.4A1.5 1.5 0 0 0 12 8.5c-.2 0-.4 0-.6.1L9.6 7.2A6.4 6.4 0 0 1 12 7zm6.3 2.1A11 11 0 0 1 22 12c-1 3-5 7-10 7-1.2 0-2.4-.2-3.4-.6l1.6-1.6c.6.1 1.2.2 1.8.2 3.4 0 6.4-2.4 7.7-5-.6-1.2-1.6-2.5-3-3.6l1.3-1.4z\"/></svg>";
+          hideBtn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            try{
+              await setMediaHidden(item, !item.hidden);
+              showToast(item.hidden ? "Hidden from gallery." : "Shown in gallery.", "ok");
+              applyMediaFilters();
+            }catch(err){
+              showToast("Hide failed.", "err");
+            }
+          });
+          actions.appendChild(hideBtn);
+
           const copyBtn = document.createElement("button");
           copyBtn.type = "button";
           copyBtn.className = "btn-ghost icon-action";
@@ -670,6 +704,14 @@
           card.appendChild(artist);
           card.appendChild(origin);
           card.appendChild(actions);
+
+          if (item.hidden){
+            card.classList.add("hidden-item");
+          }
+          const hiddenBadge = document.createElement("div");
+          hiddenBadge.className = "hidden-badge";
+          hiddenBadge.textContent = "Hidden";
+          card.appendChild(hiddenBadge);
 
           card.addEventListener("click", (ev) => {
             toggleMediaSelection(item, idx, {shift: ev.shiftKey, multi: ev.ctrlKey || ev.metaKey});
@@ -1873,7 +1915,7 @@
         $("galleryModal").classList.add("show");
         loadGalleryChannels();
         loadGallerySettings();
-        loadGalleryItems();
+        // Gallery items are managed from Media Library.
         loadTarotArtists();
       });
       $("menuAuthRoles").addEventListener("click", () => {
@@ -2174,8 +2216,6 @@
         }
       }
 
-      let galleryItemsCache = [];
-      let galleryEditItem = null;
       let ownerFilter = "all";
       let ownerFilterData = {owner: "", cards: [], called: [], header: ""};
 
@@ -2282,109 +2322,11 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
-      function setGalleryItemsStatus(msg, kind){
-        const el = $("galleryItemsStatus");
-        if (!el) return;
-        el.textContent = msg;
-        el.className = "status" + (kind ? " " + kind : "");
-      }
-
       function setGalleryImportStatus(msg, kind){
         const el = $("galleryImportStatus");
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
-      }
-
-      function renderGalleryItems(items){
-        const list = $("galleryItemsList");
-        if (!list) return;
-        galleryItemsCache = items || [];
-        if (!galleryItemsCache.length){
-          list.textContent = "No items found.";
-          return;
-        }
-        list.innerHTML = "";
-        galleryItemsCache.forEach(item => {
-          const row = document.createElement("div");
-          row.className = "gallery-admin-row";
-          const thumb = document.createElement(item.url ? "img" : "div");
-          thumb.className = "gallery-thumb";
-          if (item.url){
-            thumb.src = item.url;
-            thumb.alt = item.title || "Gallery item";
-            if (item.fallback_url){
-              thumb.dataset.fallback = item.fallback_url;
-              thumb.addEventListener("error", () => {
-                if (thumb.dataset.fallback && thumb.src !== thumb.dataset.fallback){
-                  thumb.src = thumb.dataset.fallback;
-                }
-              });
-            }
-          }
-          const meta = document.createElement("div");
-          meta.className = "gallery-meta";
-          const title = document.createElement("div");
-          title.className = "gallery-title";
-          title.textContent = item.title || item.url || "Untitled";
-          const sub = document.createElement("div");
-          sub.className = "gallery-sub";
-          const artistName = (item.artist && item.artist.name) ? item.artist.name : "Forest";
-          const source = item.source || item.type || "gallery";
-          sub.textContent = `${artistName} - ${source}`;
-          meta.appendChild(title);
-          meta.appendChild(sub);
-          const actions = document.createElement("div");
-          actions.className = "gallery-actions";
-          const toggle = document.createElement("button");
-          toggle.className = "btn-ghost";
-          toggle.textContent = item.hidden ? "Show" : "Hide";
-          toggle.addEventListener("click", async () => {
-            try{
-              await jsonFetch("/api/gallery/hidden", {
-                method:"POST",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify({item_id: item.item_id, hidden: !item.hidden})
-              }, true);
-              await loadGalleryItems();
-            }catch(err){
-              setGalleryItemsStatus(err.message, "err");
-            }
-          });
-          const canEdit = String(item.item_id || "").startsWith("media:");
-          const edit = document.createElement("button");
-          edit.className = "btn-ghost";
-          edit.textContent = "Edit";
-          edit.disabled = !canEdit;
-          edit.addEventListener("click", () => openGalleryEdit(item));
-          actions.appendChild(toggle);
-          actions.appendChild(edit);
-          row.appendChild(thumb);
-          row.appendChild(meta);
-          row.appendChild(actions);
-          list.appendChild(row);
-        });
-      }
-
-      async function loadGalleryItems(){
-        setGalleryItemsStatus("Loading items...", "");
-        try{
-          const data = await jsonFetch("/api/gallery/admin/items", {method:"GET"}, true);
-          renderGalleryItems(data.items || []);
-          setGalleryItemsStatus("Ready.", "ok");
-        }catch(err){
-          setGalleryItemsStatus(err.message, "err");
-        }
-      }
-
-      function openGalleryEdit(item){
-        galleryEditItem = item;
-        $("galleryEditTitle").value = item.title || "";
-        const artist = item.artist || {};
-        $("galleryEditArtist").value = artist.artist_id || "";
-        $("galleryEditArtistName").value = artist.name || "";
-        $("galleryEditStatus").textContent = "Ready.";
-        $("galleryEditModal").classList.add("show");
       }
 
       async function createContest(){
@@ -2778,14 +2720,6 @@
           $("galleryModal").classList.remove("show");
         }
       });
-      $("galleryEditClose").addEventListener("click", () => {
-        $("galleryEditModal").classList.remove("show");
-      });
-      $("galleryEditModal").addEventListener("click", (event) => {
-        if (event.target === $("galleryEditModal")){
-          $("galleryEditModal").classList.remove("show");
-        }
-      });
       $("galleryImportOpen").addEventListener("click", () => {
         $("galleryImportModal").classList.add("show");
         setGalleryImportStatus("Pick a channel to import.", "");
@@ -2822,7 +2756,6 @@
           const imported = res.imported || 0;
           const skipped = res.skipped || 0;
           setGalleryImportStatus(`Imported ${imported}. Skipped ${skipped}.`, "ok");
-          await loadGalleryItems();
         }catch(err){
           setGalleryImportStatus(err.message, "err");
         }
@@ -2846,7 +2779,6 @@
         );
       });
       $("galleryChannelRefresh").addEventListener("click", () => loadGalleryChannels());
-      $("galleryItemsRefresh").addEventListener("click", () => loadGalleryItems());
       $("galleryChannelSave").addEventListener("click", async () => {
         const channelId = $("galleryUploadChannel").value || "";
         try{
@@ -2888,35 +2820,6 @@
           $("galleryUploadChannel").value = String(data.channel_id || "");
         }catch(err){
           setGalleryChannelStatus(err.message, "err");
-        }
-      });
-      $("galleryEditArtist").addEventListener("change", (ev) => {
-        const pick = (window.taArtists || []).find(a => a.artist_id === ev.target.value);
-        if (pick && $("galleryEditArtistName")){
-          $("galleryEditArtistName").value = pick.name || "";
-        }
-      });
-      $("galleryEditSave").addEventListener("click", async () => {
-        if (!galleryEditItem){
-          return;
-        }
-        try{
-          await jsonFetch("/api/gallery/media/update", {
-            method:"POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({
-              item_id: galleryEditItem.item_id,
-              title: $("galleryEditTitle").value.trim(),
-              artist_id: $("galleryEditArtist").value.trim() || undefined,
-              artist_name: $("galleryEditArtistName").value.trim()
-            })
-          }, true);
-          $("galleryEditModal").classList.remove("show");
-          await loadGalleryItems();
-          setGalleryItemsStatus("Item updated.", "ok");
-        }catch(err){
-          $("galleryEditStatus").textContent = err.message;
-          $("galleryEditStatus").className = "status err";
         }
       });
       $("calendarRefresh").addEventListener("click", () => loadCalendarAdmin());
@@ -4016,7 +3919,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "mediaBulkArtist", "artistIndexSelect", "galleryEditArtist"];
+        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "mediaBulkArtist", "artistIndexSelect"];
         selects.forEach(id => {
           const sel = $(id);
           if (!sel) return;
@@ -4172,6 +4075,36 @@
           }
           showToast("Images deleted.", "ok");
           await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkHide").addEventListener("click", async () => {
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        try{
+          setMediaLibraryStatus("Hiding...", "");
+          for (const item of items){
+            await setMediaHidden(item, true);
+          }
+          showToast("Images hidden.", "ok");
+          applyMediaFilters();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkShow").addEventListener("click", async () => {
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        try{
+          setMediaLibraryStatus("Showing...", "");
+          for (const item of items){
+            await setMediaHidden(item, false);
+          }
+          showToast("Images shown.", "ok");
+          applyMediaFilters();
         }catch(err){
           setMediaLibraryStatus(err.message, "err");
           showToast(err.message, "err");
@@ -4396,6 +4329,17 @@
           await loadMediaLibrary();
         }catch(err){
           showToast(err.message, "err");
+        }
+      });
+
+      $("mediaEditHide").addEventListener("click", async () => {
+        if (!currentMediaEdit) return;
+        try{
+          await setMediaHidden(currentMediaEdit, !currentMediaEdit.hidden);
+          showToast(currentMediaEdit.hidden ? "Hidden from gallery." : "Shown in gallery.", "ok");
+          applyMediaFilters();
+        }catch(err){
+          showToast("Hide failed.", "err");
         }
       });
 

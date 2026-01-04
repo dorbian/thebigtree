@@ -977,6 +977,10 @@
                       <label>&nbsp;</label>
                       <button class="btn-ghost btn-danger" id="mediaEditDelete" disabled>Delete</button>
                     </div>
+                    <div>
+                      <label>&nbsp;</label>
+                      <button class="btn-ghost" id="mediaEditHide" disabled>Hide in gallery</button>
+                    </div>
                   </div>
                   <div class="row">
                     <div>
@@ -1064,13 +1068,15 @@
               </div>
             </div>
             <div>
-              <div class="row" style="justify-content:space-between;align-items:center;">
+              <div class="media-header">
                 <div class="library-section-title">Existing media</div>
                 <button class="btn-ghost" id="mediaLibraryRefresh">Refresh</button>
               </div>
               <div class="bulk-bar" id="mediaBulkBar">
                 <span class="count" id="mediaBulkCount">0 selected</span>
                 <button class="btn-ghost btn-danger" id="mediaBulkDelete">Delete</button>
+                <button class="btn-ghost" id="mediaBulkHide">Hide</button>
+                <button class="btn-ghost" id="mediaBulkShow">Show</button>
                 <select id="mediaBulkArtist"></select>
                 <button id="mediaBulkSetArtist">Set artist</button>
                 <select id="mediaBulkOriginType">
@@ -1616,50 +1622,12 @@
         </div>
         <div class="status" id="galleryChannelStatus">Pick a channel to use for uploads.</div>
         <div class="section-divider"></div>
-        <h3>Gallery Items</h3>
-        <div class="row">
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="galleryItemsRefresh">Refresh items</button>
-          </div>
-        </div>
-        <div class="gallery-admin-list" id="galleryItemsList">No items loaded.</div>
-        <div class="status" id="galleryItemsStatus">Ready.</div>
         <div class="row">
           <div>
             <label>&nbsp;</label>
             <button class="btn-ghost" id="galleryImportOpen">Import from Discord channel</button>
           </div>
         </div>
-      </div>
-    </div>
-    <div class="modal" id="galleryEditModal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <div class="modal-title">Edit Gallery Item</div>
-          <button class="btn-ghost" id="galleryEditClose">Close</button>
-        </div>
-        <div class="row">
-          <div>
-            <label for="galleryEditTitle">Title</label>
-            <input id="galleryEditTitle" placeholder="Untitled Offering">
-          </div>
-          <div>
-            <label for="galleryEditArtist">Artist</label>
-            <select id="galleryEditArtist"></select>
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label for="galleryEditArtistName">Artist name</label>
-            <input id="galleryEditArtistName" placeholder="Display name">
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="galleryEditSave">Save</button>
-          </div>
-        </div>
-        <div class="status" id="galleryEditStatus">Ready.</div>
       </div>
     </div>
     <div class="modal" id="galleryImportModal">

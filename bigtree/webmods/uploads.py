@@ -7,6 +7,7 @@ from bigtree.modules import bingo as bingo_mod
 from bigtree.modules import tarot as tarot_mod
 from bigtree.modules import artists as artist_mod
 from bigtree.modules import media as media_mod
+from bigtree.modules import gallery as gallery_mod
 import uuid
 import imghdr
 
@@ -103,7 +104,9 @@ def _media_item(
     origin_label: str | None = None,
 ) -> dict:
     url = (discord_url if (prefer_discord and discord_url) else f"/media/{filename}")
+    item_id = f"media:{filename}" if filename else ""
     item = {
+        "item_id": item_id,
         "name": filename,
         "url": url,
         "fallback_url": f"/media/{filename}" if discord_url else "",
@@ -115,6 +118,7 @@ def _media_item(
         "title": title,
         "delete_url": f"/api/media/{filename}",
         "used_in": used_in or [],
+        "hidden": gallery_mod.is_hidden(item_id) if item_id else False,
     }
     item.update(_artist_info(artist_id))
     if artist_id and not item.get("artist_id"):
