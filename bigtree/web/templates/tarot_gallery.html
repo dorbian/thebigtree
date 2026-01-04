@@ -501,6 +501,7 @@
   let gallerySeed = null;
   let galleryTotal = 0;
   let galleryLoading = false;
+  const GALLERY_CACHE_KEY = "forest_gallery_cache_v1";
   let activeArtistFilter = null;
   const REACTIONS = [
     {id:"appreciation", label:"Appreciation"},
@@ -567,6 +568,41 @@
     imageInfo.textContent = "";
   }
 
+  function preloadThumbnails(items){
+    if (!items || !items.length) return;
+    const head = document.head || document.getElementsByTagName("head")[0];
+    if (!head) return;
+    const max = Math.min(12, items.length);
+    for (let i = 0; i < max; i += 1){
+      const item = items[i] || {};
+      const href = item.thumb_url || item.url;
+      if (!href) continue;
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      head.appendChild(link);
+    }
+  }
+
+  function readCachedGallery(){
+    try{
+      const raw = localStorage.getItem(GALLERY_CACHE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.items)) return null;
+      return data;
+    }catch(err){
+      return null;
+    }
+  }
+
+  function writeCachedGallery(payload){
+    try{
+      localStorage.setItem(GALLERY_CACHE_KEY, JSON.stringify(payload));
+    }catch(err){}
+  }
+
   async function loadBatch(offset){
     if (galleryLoading) return;
     galleryLoading = true;
@@ -587,6 +623,12 @@
       const batch = data.items || [];
       if (offset === 0){
         galleryItems = batch;
+        preloadThumbnails(galleryItems);
+        writeCachedGallery({
+          seed: gallerySeed,
+          total: galleryTotal,
+          items: galleryItems
+        });
       }else{
         galleryItems = galleryItems.concat(batch);
       }
@@ -609,7 +651,19 @@
   }
 
   async function load(){
-    grid.innerHTML = Array.from({length: 8}).map(() => `<div class="skeleton-card"></div>`).join("");
+    const cached = readCachedGallery();
+    if (cached && Array.isArray(cached.items) && cached.items.length){
+      galleryItems = cached.items;
+      gallerySeed = Number.isFinite(cached.seed) ? cached.seed : null;
+      galleryTotal = Number(cached.total) || 0;
+      preloadThumbnails(galleryItems);
+      activeArtistFilter = null;
+      if (filterRow) filterRow.style.display = "none";
+      renderGrid();
+      requestAnimationFrame(() => loadBatch(0));
+      return;
+    }
+    grid.innerHTML = Array.from({length: 4}).map(() => `<div class="skeleton-card"></div>`).join("");
     galleryItems = [];
     gallerySeed = null;
     galleryTotal = 0;
