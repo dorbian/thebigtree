@@ -542,11 +542,13 @@
       }
 
         function applyMediaFilters(){
-          const searchRaw = ($("mediaToolbarSearch").value || "").trim().toLowerCase();
+          const searchEl = $("mediaToolbarSearch");
+          const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
           const artistFilter = ($("mediaFilterArtist").value || "").trim();
           const originFilter = ($("mediaFilterOriginType").value || "").trim();
           const labelFilter = ($("mediaFilterLabel").value || "any").trim();
-          const sortMode = ($("mediaToolbarSort").value || "new").trim();
+          const sortEl = $("mediaToolbarSort");
+          const sortMode = (sortEl ? sortEl.value : "new").trim();
           let items = mediaLibraryItems.slice();
           if (searchRaw){
             items = items.filter(item => {
@@ -4115,17 +4117,26 @@
       $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
       $("mediaTabUploadBtn").addEventListener("click", () => setMediaTab("upload"));
       $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
-      $("mediaToolbarSearch").addEventListener("input", () => applyMediaFilters());
+      const mediaToolbarSearch = $("mediaToolbarSearch");
+      if (mediaToolbarSearch){
+        mediaToolbarSearch.addEventListener("input", () => applyMediaFilters());
+      }
       $("mediaFilterArtist").addEventListener("change", () => applyMediaFilters());
       $("mediaFilterOriginType").addEventListener("change", () => applyMediaFilters());
       $("mediaFilterLabel").addEventListener("change", () => applyMediaFilters());
-      $("mediaToolbarSort").addEventListener("change", () => applyMediaFilters());
-      $("mediaFilterClear").addEventListener("click", () => {
-        $("mediaFilterArtist").value = "";
-        $("mediaFilterOriginType").value = "";
-        $("mediaFilterLabel").value = "any";
-        applyMediaFilters();
-      });
+      const mediaToolbarSort = $("mediaToolbarSort");
+      if (mediaToolbarSort){
+        mediaToolbarSort.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterClear = $("mediaFilterClear");
+      if (mediaFilterClear){
+        mediaFilterClear.addEventListener("click", () => {
+          $("mediaFilterArtist").value = "";
+          $("mediaFilterOriginType").value = "";
+          $("mediaFilterLabel").value = "any";
+          applyMediaFilters();
+        });
+      }
       $("mediaBulkDelete").addEventListener("click", async () => {
         const items = getSelectedMediaItems();
         if (!items.length) return;
