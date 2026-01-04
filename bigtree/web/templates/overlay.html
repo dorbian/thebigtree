@@ -1070,7 +1070,11 @@
             <div>
               <div class="media-header">
                 <div class="library-section-title">Existing media</div>
-                <button class="btn-ghost" id="mediaLibraryRefresh">Refresh</button>
+                <button class="btn-ghost icon-btn icon-btn--small" id="mediaLibraryRefresh" title="Refresh" aria-label="Refresh">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                  </svg>
+                </button>
               </div>
               <div class="bulk-bar" id="mediaBulkBar">
                 <span class="count" id="mediaBulkCount">0 selected</span>
@@ -1528,20 +1532,26 @@
             <input id="artistIndexArtstation" placeholder="https://artstation.com/...">
           </div>
         </div>
-        <div class="row">
-          <div>
-            <label for="artistIndexWebsite">Website</label>
-            <input id="artistIndexWebsite" placeholder="https://...">
+          <div class="row">
+            <div>
+              <label for="artistIndexWebsite">Website</label>
+              <input id="artistIndexWebsite" placeholder="https://...">
+            </div>
+            <div>
+              <label for="artistIndexLinktree">Linktree</label>
+              <input id="artistIndexLinktree" placeholder="https://linktr.ee/...">
+            </div>
           </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="artistIndexSave">Save artist</button>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button id="artistIndexSave">Save artist</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="artistIndexDelete">Delete artist</button>
+            </div>
           </div>
-          <div>
-            <label>&nbsp;</label>
-            <button class="btn-ghost" id="artistIndexDelete">Delete artist</button>
-          </div>
-        </div>
       </div>
     </div>
     <div class="modal" id="calendarModal">

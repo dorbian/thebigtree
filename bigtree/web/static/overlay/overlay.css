@@ -224,6 +224,12 @@
         align-items:center;
         justify-content:center;
       }
+      .icon-btn--small{
+        width:32px;
+        height:32px;
+        padding:4px;
+        border-radius:10px;
+      }
       .icon-btn svg{
         width:20px;
         height:20px;
@@ -1417,13 +1423,6 @@
         box-shadow:0 0 0 2px rgba(157,224,125,.2);
       }
       #mediaPanel .preview-card.library-card .library-actions{
-        opacity:0;
-        pointer-events:none;
-        transition:opacity .12s ease;
-      }
-      #mediaPanel .preview-card.library-card:hover .library-actions,
-      #mediaPanel .preview-card.library-card:focus-within .library-actions,
-      #mediaPanel .preview-card.library-card.selected .library-actions{
         opacity:1;
         pointer-events:auto;
       }
@@ -1672,6 +1671,9 @@
         align-items:center;
         justify-content:space-between;
         gap:8px;
+        margin-bottom:10px;
+      }
+      #mediaLibraryStatus{
         margin-bottom:10px;
       }
       .bulk-bar{

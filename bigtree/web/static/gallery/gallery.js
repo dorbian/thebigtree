@@ -33,20 +33,46 @@
     {id:"craft", label:"Craft"}
   ];
 
-  function link(label, url){
-    if (!url) return "";
-    return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
-  }
+  const LINK_ORDER = ["instagram", "bluesky", "x", "artstation", "linktree", "website"];
+  const LINK_LABELS = {
+    instagram: "Instagram",
+    bluesky: "Bluesky",
+    x: "X",
+    artstation: "ArtStation",
+    linktree: "Linktree",
+    website: "Website"
+  };
+  const LINK_ICONS = {
+    instagram: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H7zm5 3.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm4.5-3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z\"/></svg>",
+    bluesky: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4c-2.4 0-4.7 2.1-6.1 3.7C4.7 9 4 10.7 4 12c0 2.9 2.5 4.5 5 4.5 1.2 0 2.3-.4 3-1.1.7.7 1.8 1.1 3 1.1 2.5 0 5-1.6 5-4.5 0-1.3-.7-3-1.9-4.3C16.7 6.1 14.4 4 12 4zm-3.8 8.6c-1.1 0-2.2-.6-2.2-1.8 0-.7.5-1.8 1.3-2.7 1.1-1.2 2.6-2.4 3.9-2.4.2 0 .4 0 .6.1-.9.7-1.6 1.7-2.1 2.6-.6 1-.9 1.9-.9 2.7 0 .5.1 1 .3 1.5-.2 0-.5 0-.9 0zm7.6 0c-.3 0-.7 0-.9 0 .2-.5.3-1 .3-1.5 0-.8-.3-1.7-.9-2.7-.5-.9-1.2-1.9-2.1-2.6.2-.1.4-.1.6-.1 1.3 0 2.8 1.2 3.9 2.4.8.9 1.3 2 1.3 2.7 0 1.2-1.1 1.8-2.2 1.8z\"/></svg>",
+    x: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 4h4.7l4.1 5.4L17.3 4H20l-6 7.7L20.3 20h-4.7l-4.5-5.9L6.8 20H4l6.5-8.4L4 4z\"/></svg>",
+    artstation: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4l6.9 12H5.1L12 4zm-4.5 14H20l-1.7 2H9.1L7.5 18z\"/></svg>",
+    linktree: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 3-2 2h3v3h-3l2 2-3 3-3-3 2-2H6V8h3L9 6l3-3zm-1 11h2v7h-2v-7z\"/></svg>",
+    website: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm6.9 6H15a15.5 15.5 0 0 0-1.5-4.1A8.1 8.1 0 0 1 18.9 8zM12 4.1A13.7 13.7 0 0 1 13.6 8H10.4A13.7 13.7 0 0 1 12 4.1zM8.5 3.9A15.5 15.5 0 0 0 7 8H5.1a8.1 8.1 0 0 1 3.4-4.1zM4.1 10H7a16.7 16.7 0 0 0 0 4H4.1a8.1 8.1 0 0 1 0-4zm1 6H7a15.5 15.5 0 0 0 1.5 4.1A8.1 8.1 0 0 1 5.1 16zM12 19.9A13.7 13.7 0 0 1 10.4 16h3.2A13.7 13.7 0 0 1 12 19.9zm3.5.2A15.5 15.5 0 0 0 17 16h1.9a8.1 8.1 0 0 1-3.4 4.1zM16.9 14a16.7 16.7 0 0 0 0-4h2.9a8.1 8.1 0 0 1 0 4h-2.9z\"/></svg>"
+  };
+  const DEFAULT_LINK_ICON = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M10 3h10v10h-2V7.4l-9.3 9.3-1.4-1.4L16.6 6H10V3zM5 5h4v2H7v10h10v-2h2v4H5V5z\"/></svg>";
 
   function openArtistModal(name, links){
     artistName.textContent = name || "Forest";
     if (artistFilterBtn){
       artistFilterBtn.dataset.artist = name || "Forest";
     }
-    const linkItems = Object.entries(links || {})
-      .filter(([, url]) => url)
-      .map(([label, url]) => `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`);
-    artistLinks.innerHTML = linkItems.length ? linkItems.join("") : "<span class='muted'>No external links shared.</span>";
+    const rawLinks = links || {};
+    const ordered = LINK_ORDER.filter(key => rawLinks[key]);
+    const extras = Object.keys(rawLinks)
+      .filter(key => !LINK_ORDER.includes(key))
+      .filter(key => rawLinks[key]);
+    const allKeys = ordered.concat(extras);
+    const linkItems = allKeys.map((key) => {
+      const url = rawLinks[key];
+      if (!url) return "";
+      const label = LINK_LABELS[key] || key;
+      const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
+      return `<a class="modal-link" href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
+    }).filter(Boolean);
+    artistLinks.innerHTML = linkItems.length
+      ? linkItems.join("")
+      : "<span class='muted'>No external links shared.</span>";
     artistModal.classList.add("show");
     artistModal.setAttribute("aria-hidden", "false");
   }

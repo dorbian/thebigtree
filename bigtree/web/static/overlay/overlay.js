@@ -3989,6 +3989,7 @@
           $("artistIndexX").value = "";
           $("artistIndexArtstation").value = "";
           $("artistIndexWebsite").value = "";
+          $("artistIndexLinktree").value = "";
           return;
         }
         $("artistIndexId").value = pick.artist_id || "";
@@ -3999,6 +4000,7 @@
         $("artistIndexX").value = links.x || "";
         $("artistIndexArtstation").value = links.artstation || "";
         $("artistIndexWebsite").value = links.website || "";
+        $("artistIndexLinktree").value = links.linktree || "";
       });
       $("artistIndexSave").addEventListener("click", async () => {
         try{
@@ -4010,7 +4012,8 @@
               bluesky: $("artistIndexBluesky").value.trim(),
               x: $("artistIndexX").value.trim(),
               artstation: $("artistIndexArtstation").value.trim(),
-              website: $("artistIndexWebsite").value.trim()
+              website: $("artistIndexWebsite").value.trim(),
+              linktree: $("artistIndexLinktree").value.trim()
             }
           };
           const res = await fetch("/api/tarot/artists", {
@@ -4052,6 +4055,7 @@
           $("artistIndexX").value = "";
           $("artistIndexArtstation").value = "";
           $("artistIndexWebsite").value = "";
+          $("artistIndexLinktree").value = "";
           await loadTarotArtists();
           setStatus("Artist deleted.", "ok");
         }catch(err){
