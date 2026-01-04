@@ -2,6 +2,7 @@
 from __future__ import annotations
 from aiohttp import web
 from typing import Dict, Any, List
+import asyncio
 import os
 import discord
 import bigtree
@@ -14,6 +15,32 @@ from bigtree.modules import artists as artist_mod
 from bigtree.webmods import contest as contest_mod
 import random
 import time
+
+_GALLERY_CACHE: dict | None = None
+_GALLERY_CACHE_AT = 0.0
+_GALLERY_CACHE_TTL = 600.0
+_THUMB_WARM_AT = 0.0
+_THUMB_WARM_TTL = 30.0
+
+def invalidate_gallery_cache() -> None:
+    global _GALLERY_CACHE, _GALLERY_CACHE_AT
+    _GALLERY_CACHE = None
+    _GALLERY_CACHE_AT = 0.0
+
+def _get_gallery_cached(include_hidden: bool) -> list[dict]:
+    global _GALLERY_CACHE, _GALLERY_CACHE_AT
+    now = time.time()
+    if _GALLERY_CACHE is not None and (now - _GALLERY_CACHE_AT) < _GALLERY_CACHE_TTL:
+        cached = _GALLERY_CACHE.get("items", [])
+        if include_hidden:
+            return list(cached)
+        return [item for item in cached if not item.get("hidden")]
+    items = _collect_gallery_items(include_hidden=True)
+    _GALLERY_CACHE = {"items": items}
+    _GALLERY_CACHE_AT = now
+    if include_hidden:
+        return list(items)
+    return [item for item in items if not item.get("hidden")]
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _REACTION_TYPES = set(gallery_mod.reaction_types())
@@ -77,6 +104,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
         seen.add(url)
         items.append({
             "item_id": item_id,
+            "filename": filename,
             "title": entry.get("title") or entry.get("original_name") or filename,
             "url": url,
             "fallback_url": f"/media/{filename}" if discord_url else "",
@@ -151,6 +179,45 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
 
     return items
 
+def _schedule_thumb_warm(items: list[dict]) -> None:
+    global _THUMB_WARM_AT
+    now = time.time()
+    if (now - _THUMB_WARM_AT) < _THUMB_WARM_TTL:
+        return
+    _THUMB_WARM_AT = now
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(_warm_thumbnails(items))
+
+def _thumb_filenames(items: list[dict], limit: int = 36) -> list[str]:
+    names: list[str] = []
+    for item in items:
+        item_id = item.get("item_id") or ""
+        if not item_id.startswith("media:"):
+            continue
+        filename = item.get("filename") or item_id.split(":", 1)[1]
+        if not filename:
+            continue
+        names.append(filename)
+        if len(names) >= limit:
+            break
+    return names
+
+async def _warm_thumbnails(items: list[dict]) -> None:
+    names = _thumb_filenames(items)
+    if not names:
+        return
+    await asyncio.to_thread(_ensure_thumbs, names)
+
+def _ensure_thumbs(names: list[str]) -> None:
+    for name in names:
+        try:
+            media_mod.ensure_thumb(name)
+        except Exception:
+            continue
+
 @route("GET", "/contest/media/{filename}", allow_public=True)
 async def contest_media_file(req: web.Request):
     filename = os.path.basename(req.match_info["filename"])
@@ -164,7 +231,7 @@ async def contest_media_file(req: web.Request):
 
 @route("GET", "/api/gallery/images", allow_public=True)
 async def gallery_images(_req: web.Request):
-    items = _collect_gallery_items(include_hidden=False)
+    items = _get_gallery_cached(include_hidden=False)
     total = len(items)
     seed_raw = _req.query.get("seed")
     try:
@@ -175,6 +242,7 @@ async def gallery_images(_req: web.Request):
         seed = int(time.time() * 1000) & 0x7FFFFFFF
     rng = random.Random(seed)
     rng.shuffle(items)
+    _schedule_thumb_warm(items)
     try:
         limit = int(_req.query.get("limit") or 0)
     except Exception:
@@ -200,7 +268,7 @@ async def gallery_images(_req: web.Request):
 
 @route("GET", "/api/gallery/admin/items", scopes=["tarot:admin"])
 async def gallery_admin_items(_req: web.Request):
-    items = _collect_gallery_items(include_hidden=True)
+    items = _get_gallery_cached(include_hidden=True)
     return web.json_response({"ok": True, "items": items})
 
 @route("POST", "/api/gallery/hidden", scopes=["tarot:admin"])
@@ -217,6 +285,7 @@ async def gallery_hidden_set(req: web.Request):
         payload = gallery_mod.set_hidden(item_id, hidden)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    invalidate_gallery_cache()
     return web.json_response({"ok": True, "hidden": payload})
 
 @route("GET", "/api/gallery/settings", scopes=["tarot:admin"])
@@ -366,6 +435,7 @@ async def gallery_import_channel(req: web.Request):
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=500)
 
+    invalidate_gallery_cache()
     return web.json_response({"ok": True, "imported": imported, "skipped": skipped})
 
 @route("GET", "/api/gallery/reactions", allow_public=True)
@@ -414,6 +484,7 @@ async def gallery_media_update(req: web.Request):
             artist_mod.upsert_artist(artist_id, artist_name, {})
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    invalidate_gallery_cache()
     return web.json_response({"ok": True, "filename": filename})
 
 @route("GET", "/api/gallery/calendar", allow_public=True)
