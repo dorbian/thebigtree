@@ -426,6 +426,7 @@
           const editBtn = $("mediaTabEditBtn");
           if (editBtn){
             editBtn.disabled = count === 0;
+            editBtn.title = editBtn.disabled ? "Select an image to edit" : "";
             if (editBtn.disabled && editBtn.classList.contains("active")){
               setMediaTab("upload");
             }
@@ -510,7 +511,7 @@
       async function loadMediaLibrary(){
         const grid = $("mediaLibraryGrid");
         if (!grid) return;
-        setMediaLibraryStatus("Loading...", "");
+          setMediaLibraryStatus("Refreshing...", "");
         grid.innerHTML = "";
         for (let i = 0; i < 8; i++){
           const skel = document.createElement("div");
@@ -529,9 +530,8 @@
           mediaSelected.clear();
           mediaLastIndex = null;
           currentMediaEdit = null;
-          applyMediaFilters();
-          setMediaLibraryStatus("Ready.", "ok");
-          showToast("Library loaded.", "ok");
+            applyMediaFilters();
+            showToast("Library loaded.", "ok");
         }catch(err){
           setMediaLibraryStatus(err.message, "err");
         }
@@ -541,19 +541,19 @@
         return item.name || item.filename || item.url || "";
       }
 
-      function applyMediaFilters(){
-        const searchRaw = ($("mediaSearch").value || "").trim().toLowerCase();
-        const artistFilter = ($("mediaFilterArtist").value || "").trim();
-        const originFilter = ($("mediaFilterOriginType").value || "").trim();
-        const labelFilter = ($("mediaFilterLabel").value || "any").trim();
-        const sortMode = ($("mediaSort").value || "new").trim();
-        let items = mediaLibraryItems.slice();
-        if (searchRaw){
-          items = items.filter(item => {
-            const hay = [
-              item.title,
-              item.artist_name,
-              item.artist_id,
+        function applyMediaFilters(){
+          const searchRaw = ($("mediaToolbarSearch").value || "").trim().toLowerCase();
+          const artistFilter = ($("mediaFilterArtist").value || "").trim();
+          const originFilter = ($("mediaFilterOriginType").value || "").trim();
+          const labelFilter = ($("mediaFilterLabel").value || "any").trim();
+          const sortMode = ($("mediaToolbarSort").value || "new").trim();
+          let items = mediaLibraryItems.slice();
+          if (searchRaw){
+            items = items.filter(item => {
+              const hay = [
+                item.title,
+                item.artist_name,
+                item.artist_id,
               item.origin_label,
               item.origin_type,
               item.name
@@ -579,9 +579,36 @@
         }else if (sortMode === "artist"){
           items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
         }
-        mediaVisibleItems = items;
-        renderMediaGrid(items);
-      }
+          mediaVisibleItems = items;
+          renderMediaGrid(items);
+          updateMediaFilterSummary({searchRaw, artistFilter, originFilter, labelFilter});
+          updateMediaLibraryStatus(items.length, mediaLibraryItems.length, {searchRaw, artistFilter, originFilter, labelFilter});
+        }
+
+        function countActiveMediaFilters({searchRaw, artistFilter, originFilter, labelFilter}){
+          let count = 0;
+          if (searchRaw) count += 1;
+          if (artistFilter) count += 1;
+          if (originFilter) count += 1;
+          if (labelFilter === "has" || labelFilter === "none") count += 1;
+          return count;
+        }
+
+        function updateMediaFilterSummary(ctx){
+          const summary = $("mediaFiltersSummary");
+          if (!summary) return;
+          const activeCount = countActiveMediaFilters(ctx);
+          summary.textContent = `Filters (${activeCount} active)`;
+        }
+
+        function updateMediaLibraryStatus(visibleCount, totalCount, ctx){
+          const activeCount = countActiveMediaFilters(ctx);
+          if (activeCount > 0){
+            setMediaLibraryStatus(`Filtered · ${visibleCount} of ${totalCount} items`, "ok");
+            return;
+          }
+          setMediaLibraryStatus(`Library loaded · ${totalCount} items`, "ok");
+        }
 
       function renderMediaGrid(items){
         const grid = $("mediaLibraryGrid");
@@ -649,15 +676,21 @@
           originText.textContent = [item.origin_type, item.origin_label].filter(Boolean).join(" - ") || "Unlabeled";
           origin.appendChild(originText);
 
-          if (isHidden){
-            const hiddenBadge = document.createElement("span");
-            hiddenBadge.className = "hidden-badge";
-            hiddenBadge.textContent = "Hidden";
-            origin.appendChild(hiddenBadge);
-          }
-
           const actions = document.createElement("div");
           actions.className = "library-actions";
+
+          const openBtn = document.createElement("button");
+          openBtn.type = "button";
+          openBtn.className = "btn-ghost icon-action";
+          openBtn.title = item.url ? "Open image" : "No image available";
+          openBtn.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M10 3h10v10h-2V7.4l-9.3 9.3-1.4-1.4L16.6 6H10V3zM5 5h4v2H7v10h10v-2h2v4H5V5z\"/></svg>";
+          openBtn.disabled = !item.url;
+          openBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (openBtn.disabled) return;
+            window.open(item.url, "_blank", "noopener");
+          });
+          actions.appendChild(openBtn);
 
           const hideBtn = document.createElement("button");
           hideBtn.type = "button";
@@ -694,29 +727,29 @@
           });
           actions.appendChild(copyBtn);
 
-          if (authUserIsElfmin && item.delete_url){
-            const del = document.createElement("button");
-            del.type = "button";
-            del.className = "btn-ghost btn-danger icon-action";
-            del.title = "Delete";
-            del.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 7h12v2H6zm3 2h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z\"/></svg>";
-            del.addEventListener("click", async (ev) => {
-              ev.stopPropagation();
-              if (!confirm("Delete this image? This cannot be undone.")) return;
-              try{
-                const res = await fetch(item.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || data.ok === false){
-                  throw new Error(data.error || "Delete failed");
-                }
-                showToast("Image deleted.", "ok");
-                await loadMediaLibrary();
-              }catch(err){
-                showToast(err.message, "err");
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "btn-ghost btn-danger icon-action";
+          del.title = authUserIsElfmin && item.delete_url ? "Delete" : "Delete not available";
+          del.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 7h12v2H6zm3 2h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z\"/></svg>";
+          del.disabled = !(authUserIsElfmin && item.delete_url);
+          del.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            if (del.disabled) return;
+            if (!confirm("Delete this image? This cannot be undone.")) return;
+            try{
+              const res = await fetch(item.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.ok === false){
+                throw new Error(data.error || "Delete failed");
               }
-            });
-            actions.appendChild(del);
-          }
+              showToast("Image deleted.", "ok");
+              await loadMediaLibrary();
+            }catch(err){
+              showToast(err.message, "err");
+            }
+          });
+          actions.appendChild(del);
 
           card.appendChild(img);
           card.appendChild(titleText);
@@ -726,6 +759,11 @@
 
           if (isHidden){
             card.classList.add("hidden-item");
+            const hiddenIndicator = document.createElement("div");
+            hiddenIndicator.className = "hidden-indicator";
+            hiddenIndicator.title = "Hidden from public views";
+            hiddenIndicator.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 5l2-2 18 18-2 2-3.5-3.5A10.9 10.9 0 0 1 12 19c-5 0-9-4-10-7a12.5 12.5 0 0 1 5.4-5.8L2 5zm5.7 5.7A3.5 3.5 0 0 0 12 15a3.4 3.4 0 0 0 2-.6l-1.5-1.5a1.5 1.5 0 0 1-1.9-1.9L7.7 10.7zM12 7c1 0 2 .4 2.7 1l-1.4 1.4A1.5 1.5 0 0 0 12 8.5c-.2 0-.4 0-.6.1L9.6 7.2A6.4 6.4 0 0 1 12 7zm6.3 2.1A11 11 0 0 1 22 12c-1 3-5 7-10 7-1.2 0-2.4-.2-3.4-.6l1.6-1.6c.6.1 1.2.2 1.8.2 3.4 0 6.4-2.4 7.7-5-.6-1.2-1.6-2.5-3-3.6l1.3-1.4z\"/></svg>";
+            card.appendChild(hiddenIndicator);
           }
 
           card.addEventListener("click", (ev) => {
@@ -788,13 +826,17 @@
         updateMediaEditPanel();
       }
 
-      function updateMediaBulkBar(){
-        const bar = $("mediaBulkBar");
-        if (!bar) return;
-        const count = mediaSelected.size;
-        $("mediaBulkCount").textContent = `${count} selected`;
-        bar.classList.toggle("active", count > 0);
-      }
+        function updateMediaBulkBar(){
+          const bar = $("mediaBulkBar");
+          if (!bar) return;
+          const count = mediaSelected.size;
+          $("mediaBulkCount").textContent = `${count} selected`;
+          bar.classList.toggle("active", count > 0);
+          const indicator = $("mediaSelectionIndicator");
+          if (indicator){
+            indicator.textContent = `${count} selected`;
+          }
+        }
 
       function clearMediaSelection(){
         mediaSelected.clear();
@@ -4073,11 +4115,17 @@
       $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
       $("mediaTabUploadBtn").addEventListener("click", () => setMediaTab("upload"));
       $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
-      $("mediaSearch").addEventListener("input", () => applyMediaFilters());
+      $("mediaToolbarSearch").addEventListener("input", () => applyMediaFilters());
       $("mediaFilterArtist").addEventListener("change", () => applyMediaFilters());
       $("mediaFilterOriginType").addEventListener("change", () => applyMediaFilters());
       $("mediaFilterLabel").addEventListener("change", () => applyMediaFilters());
-      $("mediaSort").addEventListener("change", () => applyMediaFilters());
+      $("mediaToolbarSort").addEventListener("change", () => applyMediaFilters());
+      $("mediaFilterClear").addEventListener("click", () => {
+        $("mediaFilterArtist").value = "";
+        $("mediaFilterOriginType").value = "";
+        $("mediaFilterLabel").value = "any";
+        applyMediaFilters();
+      });
       $("mediaBulkDelete").addEventListener("click", async () => {
         const items = getSelectedMediaItems();
         if (!items.length) return;

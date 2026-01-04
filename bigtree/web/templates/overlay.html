@@ -914,10 +914,10 @@
           <p>Upload, review, and manage images used across the Forest.</p>
           <div class="library-layout">
             <div>
-              <div class="media-tabs">
-                <button class="media-tab active" id="mediaTabUploadBtn" data-tab="upload">Upload</button>
-                <button class="media-tab" id="mediaTabEditBtn" data-tab="edit" disabled>Edit</button>
-              </div>
+                <div class="media-tabs">
+                  <button class="media-tab active" id="mediaTabUploadBtn" data-tab="upload">Upload</button>
+                  <button class="media-tab" id="mediaTabEditBtn" data-tab="edit" disabled title="Select an image to edit">Edit</button>
+                </div>
               <div class="media-tab-panel active" id="mediaTabUpload">
                 <div class="library-section-title">Upload</div>
                 <div class="upload-drop" id="mediaUploadDrop" role="button" tabindex="0">
@@ -957,14 +957,14 @@
                     <button id="mediaUploadUpload" disabled>Upload</button>
                   </div>
                 </div>
-                <div class="status" id="mediaUploadStatus">Ready.</div>
+                  <div class="status" id="mediaUploadStatus">Upload idle.</div>
               </div>
-              <div class="media-tab-panel" id="mediaTabEdit">
-                <div class="library-section-title">Edit</div>
-                <div class="media-empty" id="mediaEditEmpty">Select an image to edit.</div>
-                <div class="media-edit-card hidden" id="mediaEditCard">
-                  <div class="media-edit-preview" id="mediaEditPreview"></div>
-                  <div class="row">
+                <div class="media-tab-panel" id="mediaTabEdit">
+                  <div class="library-section-title">Edit</div>
+                  <div class="media-empty" id="mediaEditEmpty">Select an image to edit.</div>
+                  <div class="media-edit-card hidden" id="mediaEditCard">
+                    <div class="media-edit-preview" id="mediaEditPreview"></div>
+                    <div class="row">
                     <div>
                       <label>&nbsp;</label>
                       <button class="btn-ghost" id="mediaEditCopy" disabled>Copy URL</button>
@@ -977,16 +977,22 @@
                       <label>&nbsp;</label>
                       <button class="btn-ghost btn-danger" id="mediaEditDelete" disabled>Delete</button>
                     </div>
-                    <div>
-                      <label>&nbsp;</label>
-                      <button class="btn-ghost" id="mediaEditHide" disabled>Hide in gallery</button>
+                      <div>
+                        <label>&nbsp;</label>
+                        <button class="btn-ghost" id="mediaEditHide" disabled>Hide in gallery</button>
+                      </div>
                     </div>
-                  </div>
-                  <div class="row">
-                    <div>
-                      <label>Selected</label>
-                      <div class="status" id="mediaEditIdentity">-</div>
+                    <div class="row">
+                      <div>
+                        <label>&nbsp;</label>
+                        <button class="btn-ghost" id="mediaEditClear" disabled>Clear selection</button>
+                      </div>
                     </div>
+                    <div class="row">
+                      <div>
+                        <label>Selected</label>
+                        <div class="status" id="mediaEditIdentity">-</div>
+                      </div>
                     <div>
                       <label>Artist</label>
                       <div class="status" id="mediaEditArtistDisplay">-</div>
@@ -1026,60 +1032,61 @@
                       <input id="mediaEditOriginLabel" placeholder="Offered during...">
                     </div>
                   </div>
-                  <div class="row">
-                    <div>
-                      <label>&nbsp;</label>
-                      <button id="mediaEditSave" disabled>Save changes</button>
+                    <div class="row">
+                      <div>
+                        <label>&nbsp;</label>
+                        <button id="mediaEditSave" disabled>Save changes</button>
+                      </div>
                     </div>
-                    <div>
-                      <label>&nbsp;</label>
-                      <button class="btn-ghost" id="mediaEditClear" disabled>Clear</button>
-                    </div>
+                    <div class="status" id="mediaEditStatus">Select an image to edit.</div>
                   </div>
-                  <div class="status" id="mediaEditStatus">Select an image to edit.</div>
                 </div>
+                <div class="section-divider"></div>
+                <details class="media-filters-wrap" id="mediaFiltersWrap">
+                  <summary id="mediaFiltersSummary">Filters (0 active)</summary>
+                  <div class="media-filters">
+                    <select id="mediaFilterArtist">
+                      <option value="">All artists</option>
+                    </select>
+                    <select id="mediaFilterOriginType">
+                      <option value="">All origins</option>
+                      <option value="Artifact">Artifact</option>
+                      <option value="Rite">Rite</option>
+                      <option value="Contest">Contest</option>
+                      <option value="Tarot">Tarot</option>
+                      <option value="Bingo">Bingo</option>
+                      <option value="Gallery">Gallery</option>
+                    </select>
+                    <select id="mediaFilterLabel">
+                      <option value="any">Any label</option>
+                      <option value="has">Has label</option>
+                      <option value="none">Untagged</option>
+                    </select>
+                    <button class="btn-ghost" id="mediaFilterClear" type="button">Clear filters</button>
+                  </div>
+                </details>
               </div>
-              <div class="library-section-title">Filters</div>
-              <div class="media-filters">
-                <input id="mediaSearch" placeholder="Search title, artist, label">
-                <select id="mediaFilterArtist">
-                  <option value="">All artists</option>
-                </select>
-                <select id="mediaFilterOriginType">
-                  <option value="">All origins</option>
-                  <option value="Artifact">Artifact</option>
-                  <option value="Rite">Rite</option>
-                  <option value="Contest">Contest</option>
-                  <option value="Tarot">Tarot</option>
-                  <option value="Bingo">Bingo</option>
-                  <option value="Gallery">Gallery</option>
-                </select>
-                <select id="mediaFilterLabel">
-                  <option value="any">Any label</option>
-                  <option value="has">Has label</option>
-                  <option value="none">Untagged</option>
-                </select>
-                <select id="mediaSort">
-                  <option value="new">Newest first</option>
-                  <option value="old">Oldest first</option>
-                  <option value="title">Title A-Z</option>
-                  <option value="artist">Artist A-Z</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <div class="media-header">
-                <div class="library-section-title">Existing media</div>
-                <button class="btn-ghost icon-btn icon-btn--small" id="mediaLibraryRefresh" title="Refresh" aria-label="Refresh">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                  </svg>
-                </button>
-              </div>
-              <div class="bulk-bar" id="mediaBulkBar">
-                <span class="count" id="mediaBulkCount">0 selected</span>
-                <button class="btn-ghost btn-danger" id="mediaBulkDelete">Delete</button>
-                <button class="btn-ghost" id="mediaBulkHide">Hide</button>
+              <div>
+                <div class="media-toolbar">
+                  <div class="library-section-title">Existing media</div>
+                  <button class="btn-ghost icon-btn icon-btn--small" id="mediaLibraryRefresh" title="Refresh" aria-label="Refresh">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                    </svg>
+                  </button>
+                  <input id="mediaToolbarSearch" placeholder="Search title, artist, label">
+                  <select id="mediaToolbarSort">
+                    <option value="new">Newest first</option>
+                    <option value="old">Oldest first</option>
+                    <option value="title">Title A-Z</option>
+                    <option value="artist">Artist A-Z</option>
+                  </select>
+                  <div class="media-selection" id="mediaSelectionIndicator">0 selected</div>
+                </div>
+                <div class="bulk-bar" id="mediaBulkBar">
+                  <span class="count" id="mediaBulkCount">0 selected</span>
+                  <button class="btn-ghost btn-danger" id="mediaBulkDelete">Delete</button>
+                  <button class="btn-ghost" id="mediaBulkHide">Hide</button>
                 <button class="btn-ghost" id="mediaBulkShow">Show</button>
                 <select id="mediaBulkArtist"></select>
                 <button id="mediaBulkSetArtist">Set artist</button>
@@ -1093,13 +1100,13 @@
                   <option value="Gallery">Gallery</option>
                 </select>
                 <button id="mediaBulkSetOrigin">Set origin</button>
-                <input id="mediaBulkLabel" placeholder="Origin label">
-                <button id="mediaBulkApplyLabel">Set label</button>
-                <button class="btn-ghost" id="mediaBulkClearLabel">Clear label</button>
+                  <input id="mediaBulkLabel" placeholder="Origin label">
+                  <button id="mediaBulkApplyLabel">Set label</button>
+                  <button class="btn-ghost" id="mediaBulkClearLabel">Clear label</button>
+                </div>
+                <div class="status" id="mediaLibraryStatus">Library idle.</div>
+                <div class="preview-grid" id="mediaLibraryGrid"></div>
               </div>
-              <div class="status" id="mediaLibraryStatus">Ready.</div>
-              <div class="preview-grid" id="mediaLibraryGrid"></div>
-            </div>
           </div>
         </section>
         <div class="modal" id="contestChannelModal">
