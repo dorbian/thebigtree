@@ -1408,6 +1408,18 @@
       .preview-card.library-card .btn-ghost{
         margin:0 8px 8px;
       }
+      #mediaPanel .preview-card.library-card{
+        cursor:pointer;
+        transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+      }
+      #mediaPanel .preview-card.library-card:hover{
+        transform:translateY(-2px);
+        border-color:rgba(157,224,125,.45);
+      }
+      #mediaPanel .preview-card.library-card.selected{
+        border-color:rgba(157,224,125,.85);
+        box-shadow:0 0 0 2px rgba(157,224,125,.2);
+      }
       .library-layout{
         display:grid;
         grid-template-columns:minmax(240px, 320px) 1fr;
@@ -1516,6 +1528,34 @@
       .library-actions button{
         width:auto;
         flex:1;
+      }
+      .library-actions .btn-ghost{
+        margin:0;
+      }
+      .media-edit-card{
+        margin-top:12px;
+        padding:12px;
+        border-radius:14px;
+        border:1px solid var(--line);
+        background:rgba(12,20,16,.7);
+        display:grid;
+        gap:10px;
+      }
+      .media-edit-preview{
+        width:100%;
+        height:160px;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(8,12,16,.5);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+      }
+      .media-edit-preview img{
+        width:100%;
+        height:100%;
+        object-fit:cover;
       }
       .btn-danger{
         border:1px solid rgba(210,92,92,.45);
@@ -1815,12 +1855,12 @@
                     <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
                   </svg>
                 </button>
-                <button class="menu-icon" id="menuGallery" title="Gallery admin" aria-label="Gallery admin">
+                <button class="menu-icon" id="menuGallery" title="Image uploader" aria-label="Image uploader">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2v8h16V8H4zm3 6 3-4 3 3 2-2 3 4H7z"/>
                   </svg>
                 </button>
-                <button class="menu-icon" id="menuCalendar" title="Gallery calendar" aria-label="Gallery calendar">
+                <button class="menu-icon" id="menuCalendar" title="Forest Calendar" aria-label="Forest Calendar">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h4V2zm-3 6v12h16V8H4zm2 2h4v4H6v-4z"/>
                   </svg>
@@ -1910,7 +1950,7 @@
                     <div class="dash-links">
                       <a href="/overlay">Web Dashboard</a>
                       <a href="/tarot/gallery" target="_blank" rel="noreferrer">Forest Gallery</a>
-                      <a href="/tarot/calendar" target="_blank" rel="noreferrer">Gallery Calendar</a>
+                      <a href="/tarot/calendar" target="_blank" rel="noreferrer">Forest Calendar</a>
                       <a href="/tarot/overlay" target="_blank" rel="noreferrer">Tarot Overlay</a>
                     </div>
                   </div>
@@ -2084,7 +2124,7 @@
                 </div>
                 <div class="dash-tool">
                   <div class="dash-tool-title">Admin Tools</div>
-                  <p>Auth roles/keys, media library, artist index, gallery calendar. Use with care.</p>
+                  <p>Auth roles/keys, media library, artist index, Forest Calendar. Use with care.</p>
                 </div>
               </div>
             </details>
@@ -2685,6 +2725,50 @@
                 </div>
               </div>
               <div class="status" id="mediaUploadStatus">Ready.</div>
+              <div class="media-edit-card">
+                <div class="library-section-title">Selected image</div>
+                <div class="media-edit-preview" id="mediaEditPreview"><span class="preview-label">Preview</span></div>
+                <div class="row">
+                  <div>
+                    <label for="mediaEditFilename">Filename</label>
+                    <input id="mediaEditFilename" readonly>
+                  </div>
+                  <div>
+                    <label for="mediaEditTitle">Title</label>
+                    <input id="mediaEditTitle" placeholder="Image title">
+                  </div>
+                  <div>
+                    <label for="mediaEditArtist">Artist</label>
+                    <select id="mediaEditArtist"></select>
+                  </div>
+                  <div>
+                    <label for="mediaEditOriginType">Origin type</label>
+                    <select id="mediaEditOriginType">
+                      <option value="Artifact">Artifact</option>
+                      <option value="Rite">Rite</option>
+                      <option value="Contest">Contest</option>
+                      <option value="Tarot">Tarot</option>
+                      <option value="Bingo">Bingo</option>
+                      <option value="Gallery">Gallery</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="mediaEditOriginLabel">Origin label</label>
+                    <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label>&nbsp;</label>
+                    <button id="mediaEditSave" disabled>Save changes</button>
+                  </div>
+                  <div>
+                    <label>&nbsp;</label>
+                    <button class="btn-ghost" id="mediaEditClear" disabled>Clear</button>
+                  </div>
+                </div>
+                <div class="status" id="mediaEditStatus">Select an image to edit.</div>
+              </div>
             </div>
             <div>
               <div class="row" style="justify-content:space-between;align-items:center;">
@@ -3145,7 +3229,7 @@
     <div class="modal" id="calendarModal">
       <div class="modal-card">
         <div class="modal-header">
-          <div class="modal-title">Gallery Calendar</div>
+          <div class="modal-title">Forest Calendar</div>
           <button class="btn-ghost" id="calendarClose">Close</button>
         </div>
         <div class="row">
@@ -3182,7 +3266,7 @@
     <div class="modal" id="galleryModal">
       <div class="modal-card modal-card--wide">
         <div class="modal-header">
-          <div class="modal-title">Gallery Admin</div>
+          <div class="modal-title">Image Uploader</div>
           <button class="btn-ghost" id="galleryClose">Close</button>
         </div>
         <h3>Upload Channel</h3>
@@ -3563,6 +3647,7 @@
         const onSelect = config.onSelect || librarySelectHandler;
         const showUse = Object.prototype.hasOwnProperty.call(config, "showUse") ? config.showUse : !!onSelect;
         const showCopy = !!config.showCopy;
+        const onCardClick = config.onCardClick || null;
         const closeOnUse = config.closeOnUse !== false;
         if (title){
           title.textContent = config.titleText || "Media Library";
@@ -3586,11 +3671,15 @@
             setStatus("No images found.", "err");
             return;
           }
-          items.forEach(item => {
-            const card = document.createElement("div");
-            card.className = "preview-card library-card";
+        items.forEach(item => {
+          const card = document.createElement("div");
+          card.className = "preview-card library-card";
+          card.dataset.filename = item.name || item.filename || "";
+          if (onCardClick){
+            card.addEventListener("click", () => onCardClick(item));
+          }
 
-            const img = document.createElement("img");
+          const img = document.createElement("img");
             img.src = item.url;
             img.alt = item.name || "image";
             if (item.fallback_url){
@@ -3631,48 +3720,51 @@
 
             const actions = document.createElement("div");
             actions.className = "library-actions";
-            if (showUse){
-              const useBtn = document.createElement("button");
-              useBtn.type = "button";
-              useBtn.className = "btn-primary";
-              useBtn.textContent = "Use";
-              useBtn.addEventListener("click", () => {
-                if (onSelect){
-                  onSelect(item);
-                }
-                if (closeOnUse){
-                  showLibraryModal(false);
-                }
+          if (showUse){
+            const useBtn = document.createElement("button");
+            useBtn.type = "button";
+            useBtn.className = "btn-primary";
+            useBtn.textContent = "Use";
+            useBtn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (onSelect){
+                onSelect(item);
+              }
+              if (closeOnUse){
+                showLibraryModal(false);
+              }
               });
               actions.appendChild(useBtn);
             }
-            if (showCopy){
-              const copyBtn = document.createElement("button");
-              copyBtn.type = "button";
-              copyBtn.className = "btn-ghost";
-              copyBtn.textContent = "Copy URL";
-              copyBtn.addEventListener("click", async () => {
-                try{
-                  await navigator.clipboard.writeText(item.url || "");
-                  setStatus("Image URL copied.", "ok");
-                }catch(err){
-                  setStatus("Copy failed.", "err");
+          if (showCopy){
+            const copyBtn = document.createElement("button");
+            copyBtn.type = "button";
+            copyBtn.className = "btn-ghost";
+            copyBtn.textContent = "Copy URL";
+            copyBtn.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              try{
+                await navigator.clipboard.writeText(item.url || "");
+                setStatus("Image URL copied.", "ok");
+              }catch(err){
+                setStatus("Copy failed.", "err");
                 }
               });
               actions.appendChild(copyBtn);
             }
 
-            if (authUserIsElfmin && item.delete_url){
-              const del = document.createElement("button");
-              del.type = "button";
-              del.className = "btn-ghost btn-danger";
-              del.textContent = "Delete";
-              del.addEventListener("click", async () => {
-                const usage = usedIn.length ? `This image is used in: ${usedIn.join(", ")}.` : "";
-                const prompt = usage
-                  ? `${usage} This image may be used elsewhere. Continue?`
-                  : "This image may be used elsewhere. Continue?";
-                if (!confirm(prompt)) return;
+          if (authUserIsElfmin && item.delete_url){
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "btn-ghost btn-danger";
+            del.textContent = "Delete";
+            del.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              const usage = usedIn.length ? `This image is used in: ${usedIn.join(", ")}.` : "";
+              const prompt = usage
+                ? `${usage} This image may be used elsewhere. Continue?`
+                : "This image may be used elsewhere. Continue?";
+              if (!confirm(prompt)) return;
                 try{
                   const delUrl = item.delete_url || "";
                   if (!delUrl){
@@ -3727,9 +3819,73 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      function setMediaEditStatus(msg, kind){
+        const el = $("mediaEditStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function clearMediaEdit(){
+        const preview = $("mediaEditPreview");
+        if (preview){
+          preview.innerHTML = "<span class=\"preview-label\">Preview</span>";
+        }
+        $("mediaEditFilename").value = "";
+        $("mediaEditTitle").value = "";
+        $("mediaEditArtist").value = "";
+        $("mediaEditOriginType").value = "Artifact";
+        $("mediaEditOriginLabel").value = "";
+        $("mediaEditSave").disabled = true;
+        $("mediaEditClear").disabled = true;
+        const cards = document.querySelectorAll("#mediaLibraryGrid .preview-card.library-card");
+        cards.forEach(card => card.classList.remove("selected"));
+        setMediaEditStatus("Select an image to edit.", "");
+        currentMediaEdit = null;
+      }
+
+      let currentMediaEdit = null;
+      function selectMediaEdit(item){
+        if (!item){
+          clearMediaEdit();
+          return;
+        }
+        currentMediaEdit = item;
+        $("mediaEditFilename").value = item.name || "";
+        $("mediaEditTitle").value = item.title || "";
+        $("mediaEditArtist").value = item.artist_id || "";
+        $("mediaEditOriginType").value = item.origin_type || "Artifact";
+        $("mediaEditOriginLabel").value = item.origin_label || "";
+        $("mediaEditSave").disabled = false;
+        $("mediaEditClear").disabled = false;
+        const preview = $("mediaEditPreview");
+        if (preview){
+          const img = document.createElement("img");
+          img.src = item.url || "";
+          img.alt = item.title || item.name || "Preview";
+          if (item.fallback_url){
+            img.dataset.fallback = item.fallback_url;
+            img.addEventListener("error", () => {
+              if (img.dataset.fallback && img.src !== img.dataset.fallback){
+                img.src = img.dataset.fallback;
+              }
+            });
+          }
+          preview.innerHTML = "";
+          preview.appendChild(img);
+        }
+        const cards = document.querySelectorAll("#mediaLibraryGrid .preview-card.library-card");
+        cards.forEach(card => {
+          const filename = card.dataset.filename || "";
+          card.classList.toggle("selected", filename === (item.name || ""));
+        });
+        setMediaEditStatus("Edit details and save.", "ok");
+      }
+
       async function loadMediaLibrary(){
         const grid = $("mediaLibraryGrid");
         if (!grid) return;
+        clearMediaEdit();
         await loadLibrary("media", {
           grid,
           title: null,
@@ -3737,7 +3893,8 @@
           showUse: false,
           showCopy: true,
           closeOnUse: false,
-          onSelect: null
+          onSelect: null,
+          onCardClick: (item) => selectMediaEdit(item)
         });
       }
 
@@ -6979,7 +7136,7 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "artistIndexSelect", "galleryEditArtist"];
+        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "artistIndexSelect", "galleryEditArtist"];
           selects.forEach(id => {
             const sel = $(id);
             if (!sel) return;
@@ -7165,6 +7322,58 @@
           setMediaUploadStatus(err.message, "err");
         }finally{
           updateMediaUploadState();
+        }
+      });
+
+      $("mediaEditClear").addEventListener("click", () => {
+        clearMediaEdit();
+      });
+
+      $("mediaEditSave").addEventListener("click", async () => {
+        if (!currentMediaEdit){
+          setMediaEditStatus("Select an image first.", "err");
+          return;
+        }
+        const filename = $("mediaEditFilename").value.trim();
+        if (!filename){
+          setMediaEditStatus("Missing filename.", "err");
+          return;
+        }
+        const title = $("mediaEditTitle").value.trim();
+        const artistId = $("mediaEditArtist").value.trim();
+        const artistName = $("mediaEditArtist").selectedOptions.length
+          ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
+          : "";
+        const originType = $("mediaEditOriginType").value.trim();
+        const originLabel = $("mediaEditOriginLabel").value.trim();
+        try{
+          $("mediaEditSave").disabled = true;
+          setMediaEditStatus("Saving...", "");
+          const res = await fetch("/api/gallery/media/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKeyEl.value.trim()
+            },
+            body: JSON.stringify({
+              filename,
+              title,
+              artist_id: artistId,
+              artist_name: artistName,
+              origin_type: originType,
+              origin_label: originLabel
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false){
+            throw new Error(data.error || "Save failed");
+          }
+          setMediaEditStatus("Changes saved.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaEditStatus(err.message, "err");
+        }finally{
+          $("mediaEditSave").disabled = !currentMediaEdit;
         }
       });
 

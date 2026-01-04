@@ -474,12 +474,20 @@ async def gallery_media_update(req: web.Request):
     title = str(body.get("title") or "").strip()
     artist_id = (body.get("artist_id") or "").strip() or None
     artist_name = str(body.get("artist_name") or "").strip()
+    origin_type = str(body.get("origin_type") or "").strip()
+    origin_label = str(body.get("origin_label") or "").strip()
     if item_id and item_id.startswith("media:"):
         filename = item_id.split(":", 1)[1]
     if not filename:
         return web.json_response({"ok": False, "error": "filename required"}, status=400)
     try:
-        media_mod.add_media(filename, title=title or None, artist_id=artist_id)
+        media_mod.add_media(
+            filename,
+            title=title or None,
+            artist_id=artist_id,
+            origin_type=origin_type or None,
+            origin_label=origin_label or None,
+        )
         if artist_id and artist_name:
             artist_mod.upsert_artist(artist_id, artist_name, {})
     except Exception as exc:
