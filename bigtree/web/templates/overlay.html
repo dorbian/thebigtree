@@ -1289,6 +1289,10 @@
         justify-content:center;
         position:relative;
       }
+      .preview-card::before,
+      .preview-card::after{
+        pointer-events:none;
+      }
       .preview-card::before{
         content:"";
         position:absolute;
@@ -1410,7 +1414,7 @@
       }
       #mediaPanel .preview-card.library-card{
         cursor:pointer;
-        transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+        transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
       }
       #mediaPanel .preview-card.library-card:hover{
         transform:translateY(-2px);
@@ -1419,6 +1423,63 @@
       #mediaPanel .preview-card.library-card.selected{
         border-color:rgba(157,224,125,.85);
         box-shadow:0 0 0 2px rgba(157,224,125,.2);
+      }
+      #mediaPanel .preview-card.library-card .library-actions{
+        opacity:0;
+        pointer-events:none;
+        transition:opacity .12s ease;
+      }
+      #mediaPanel .preview-card.library-card:hover .library-actions,
+      #mediaPanel .preview-card.library-card:focus-within .library-actions,
+      #mediaPanel .preview-card.library-card.selected .library-actions{
+        opacity:1;
+        pointer-events:auto;
+      }
+      #mediaPanel .preview-card.library-card .card-check{
+        position:absolute;
+        top:8px;
+        right:8px;
+        width:22px;
+        height:22px;
+        border-radius:50%;
+        background:rgba(12,18,14,.9);
+        border:1px solid rgba(157,224,125,.6);
+        color:var(--accent);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:12px;
+        opacity:0;
+        transition:opacity .12s ease;
+        pointer-events:none;
+      }
+      #mediaPanel .preview-card.library-card.selected .card-check{
+        opacity:1;
+      }
+      #mediaPanel .preview-card.library-card .card-select{
+        position:absolute;
+        top:8px;
+        left:8px;
+        width:22px;
+        height:22px;
+        border-radius:6px;
+        border:1px solid rgba(255,255,255,.25);
+        background:rgba(10,16,14,.75);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        opacity:0;
+        transition:opacity .12s ease;
+      }
+      #mediaPanel .preview-card.library-card:hover .card-select,
+      #mediaPanel .preview-card.library-card:focus-within .card-select,
+      #mediaPanel .preview-card.library-card.selected .card-select{
+        opacity:1;
+      }
+      #mediaPanel .preview-card.library-card .card-select input{
+        width:14px;
+        height:14px;
+        margin:0;
       }
       .library-layout{
         display:grid;
@@ -1529,8 +1590,126 @@
         width:auto;
         flex:1;
       }
+      #mediaPanel .library-actions button{
+        flex:0 0 auto;
+      }
       .library-actions .btn-ghost{
         margin:0;
+      }
+      .media-tabs{
+        display:flex;
+        gap:8px;
+        margin-bottom:12px;
+      }
+      .media-tab{
+        flex:1;
+        padding:8px 10px;
+        border-radius:10px;
+        border:1px solid var(--line);
+        background:rgba(9,16,14,.7);
+        color:var(--muted);
+        font-weight:600;
+        cursor:pointer;
+      }
+      .media-tab.active{
+        color:var(--ink);
+        border-color:rgba(157,224,125,.45);
+        background:rgba(14,24,18,.9);
+      }
+      .media-tab:disabled{
+        opacity:.5;
+        cursor:not-allowed;
+      }
+      .media-tab-panel{
+        display:none;
+      }
+      .media-tab-panel.active{
+        display:block;
+      }
+      .media-empty{
+        padding:16px;
+        border-radius:12px;
+        border:1px dashed rgba(255,255,255,.18);
+        color:var(--muted);
+        text-align:center;
+        font-size:13px;
+      }
+      .media-toolbar{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+        align-items:center;
+        justify-content:space-between;
+        margin-bottom:10px;
+      }
+      .media-toolbar .toolbar-left{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+        align-items:center;
+        flex:1;
+      }
+      .media-toolbar input,
+      .media-toolbar select{
+        min-width:140px;
+      }
+      .media-toolbar .btn-ghost{
+        white-space:nowrap;
+      }
+      .bulk-bar{
+        display:none;
+        gap:10px;
+        align-items:center;
+        flex-wrap:wrap;
+        padding:10px;
+        border-radius:12px;
+        border:1px solid var(--line);
+        background:rgba(10,16,14,.7);
+        margin-bottom:10px;
+      }
+      .bulk-bar.active{
+        display:flex;
+      }
+      .bulk-bar .count{
+        font-weight:600;
+        color:var(--neutral);
+      }
+      .library-actions .icon-action{
+        width:28px;
+        height:28px;
+        border-radius:8px;
+        padding:0;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+      }
+      .library-actions .icon-action svg{
+        width:14px;
+        height:14px;
+        fill:currentColor;
+      }
+      .toast-stack{
+        position:fixed;
+        right:18px;
+        bottom:18px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        z-index:1000;
+      }
+      .toast{
+        padding:10px 12px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(12,18,14,.9);
+        color:var(--ink);
+        font-size:12px;
+        box-shadow:0 12px 24px rgba(0,0,0,.3);
+      }
+      .toast.ok{border-color:rgba(157,224,125,.5);color:var(--accent)}
+      .toast.err{border-color:rgba(210,92,92,.5);color:#f1b1b1}
+      .skeleton-card{
+        height:260px;
       }
       .media-edit-card{
         margin-top:12px;
@@ -1556,6 +1735,17 @@
         width:100%;
         height:100%;
         object-fit:cover;
+      }
+      .media-edit-meta{
+        padding:8px 10px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.08);
+        background:rgba(10,16,14,.6);
+        font-family:Consolas, "Courier New", monospace;
+        font-size:11px;
+        color:var(--muted);
+        word-break:break-all;
+        white-space:pre-wrap;
       }
       .btn-danger{
         border:1px solid rgba(210,92,92,.45);
@@ -2686,64 +2876,30 @@
           <p>Upload, review, and manage images used across the Forest.</p>
           <div class="library-layout">
             <div>
-              <div class="library-section-title">Add new media</div>
-              <div class="upload-drop" id="mediaUploadDrop" role="button" tabindex="0">
-                <div class="upload-drop-title" id="mediaUploadDropTitle">Drag &amp; drop an image</div>
-                <div class="upload-drop-meta" id="mediaUploadDropMeta">PNG, JPG, GIF, WEBP</div>
-                <div class="upload-drop-cta" id="mediaUploadDropCta">or click to choose</div>
+              <div class="media-tabs">
+                <button class="media-tab active" id="mediaTabUploadBtn" data-tab="upload">Upload</button>
+                <button class="media-tab" id="mediaTabEditBtn" data-tab="edit" disabled>Edit</button>
               </div>
-              <input id="mediaUploadFile" type="file" accept="image/*" class="hidden">
-              <div class="row">
-          <div>
-            <label for="mediaUploadTitleInput">Title</label>
-            <input id="mediaUploadTitleInput" placeholder="Image title">
-          </div>
-          <div>
-            <label for="mediaUploadArtist">Artist</label>
-            <select id="mediaUploadArtist"></select>
-          </div>
-          <div>
-            <label for="mediaUploadOriginType">Origin type</label>
-            <select id="mediaUploadOriginType">
-              <option value="Artifact">Artifact</option>
-              <option value="Rite">Rite</option>
-              <option value="Contest">Contest</option>
-              <option value="Tarot">Tarot</option>
-              <option value="Bingo">Bingo</option>
-              <option value="Gallery">Gallery</option>
-            </select>
-          </div>
-          <div>
-            <label for="mediaUploadOriginLabel">Origin label</label>
-            <input id="mediaUploadOriginLabel" placeholder="Offered during...">
-          </div>
-        </div>
-              <div class="row">
-                <div>
-                  <label>&nbsp;</label>
-                  <button id="mediaUploadUpload" disabled>Upload</button>
+              <div class="media-tab-panel active" id="mediaTabUpload">
+                <div class="library-section-title">Upload</div>
+                <div class="upload-drop" id="mediaUploadDrop" role="button" tabindex="0">
+                  <div class="upload-drop-title" id="mediaUploadDropTitle">Drag &amp; drop an image</div>
+                  <div class="upload-drop-meta" id="mediaUploadDropMeta">PNG, JPG, GIF, WEBP</div>
+                  <div class="upload-drop-cta" id="mediaUploadDropCta">or click to choose</div>
                 </div>
-              </div>
-              <div class="status" id="mediaUploadStatus">Ready.</div>
-              <div class="media-edit-card">
-                <div class="library-section-title">Selected image</div>
-                <div class="media-edit-preview" id="mediaEditPreview"><span class="preview-label">Preview</span></div>
+                <input id="mediaUploadFile" type="file" accept="image/*" class="hidden">
                 <div class="row">
                   <div>
-                    <label for="mediaEditFilename">Filename</label>
-                    <input id="mediaEditFilename" readonly>
+                    <label for="mediaUploadTitleInput">Title</label>
+                    <input id="mediaUploadTitleInput" placeholder="Image title">
                   </div>
                   <div>
-                    <label for="mediaEditTitle">Title</label>
-                    <input id="mediaEditTitle" placeholder="Image title">
+                    <label for="mediaUploadArtist">Artist</label>
+                    <select id="mediaUploadArtist"></select>
                   </div>
                   <div>
-                    <label for="mediaEditArtist">Artist</label>
-                    <select id="mediaEditArtist"></select>
-                  </div>
-                  <div>
-                    <label for="mediaEditOriginType">Origin type</label>
-                    <select id="mediaEditOriginType">
+                    <label for="mediaUploadOriginType">Origin type</label>
+                    <select id="mediaUploadOriginType">
                       <option value="Artifact">Artifact</option>
                       <option value="Rite">Rite</option>
                       <option value="Contest">Contest</option>
@@ -2753,28 +2909,145 @@
                     </select>
                   </div>
                   <div>
-                    <label for="mediaEditOriginLabel">Origin label</label>
-                    <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                    <label for="mediaUploadOriginLabel">Origin label</label>
+                    <input id="mediaUploadOriginLabel" placeholder="Offered during...">
                   </div>
                 </div>
                 <div class="row">
                   <div>
                     <label>&nbsp;</label>
-                    <button id="mediaEditSave" disabled>Save changes</button>
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button class="btn-ghost" id="mediaEditClear" disabled>Clear</button>
+                    <button id="mediaUploadUpload" disabled>Upload</button>
                   </div>
                 </div>
-                <div class="status" id="mediaEditStatus">Select an image to edit.</div>
+                <div class="status" id="mediaUploadStatus">Ready.</div>
+              </div>
+              <div class="media-tab-panel" id="mediaTabEdit">
+                <div class="library-section-title">Edit</div>
+                <div class="media-empty" id="mediaEditEmpty">Select an image to edit.</div>
+                <div class="media-edit-card hidden" id="mediaEditCard">
+                  <div class="media-edit-preview" id="mediaEditPreview"><span class="preview-label">Preview</span></div>
+                  <div class="row">
+                    <div>
+                      <label>&nbsp;</label>
+                      <button class="btn-ghost" id="mediaEditCopy" disabled>Copy URL</button>
+                    </div>
+                    <div>
+                      <label>&nbsp;</label>
+                      <button class="btn-ghost" id="mediaEditOpen" disabled>Open</button>
+                    </div>
+                    <div>
+                      <label>&nbsp;</label>
+                      <button class="btn-ghost btn-danger" id="mediaEditDelete" disabled>Delete</button>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div>
+                      <label>Selected</label>
+                      <div class="status" id="mediaEditIdentity">-</div>
+                    </div>
+                    <div>
+                      <label>Artist</label>
+                      <div class="status" id="mediaEditArtistDisplay">-</div>
+                    </div>
+                    <div>
+                      <label>Origin</label>
+                      <div class="status" id="mediaEditOriginDisplay">-</div>
+                    </div>
+                  </div>
+                  <div class="media-edit-meta" id="mediaEditMeta"></div>
+                  <div class="row">
+                    <div>
+                      <label for="mediaEditFilename">Filename</label>
+                      <input id="mediaEditFilename" readonly>
+                    </div>
+                    <div>
+                      <label for="mediaEditTitle">Title</label>
+                      <input id="mediaEditTitle" placeholder="Image title">
+                    </div>
+                    <div>
+                      <label for="mediaEditArtist">Artist</label>
+                      <select id="mediaEditArtist"></select>
+                    </div>
+                    <div>
+                      <label for="mediaEditOriginType">Origin type</label>
+                      <select id="mediaEditOriginType">
+                        <option value="Artifact">Artifact</option>
+                        <option value="Rite">Rite</option>
+                        <option value="Contest">Contest</option>
+                        <option value="Tarot">Tarot</option>
+                        <option value="Bingo">Bingo</option>
+                        <option value="Gallery">Gallery</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="mediaEditOriginLabel">Origin label</label>
+                      <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div>
+                      <label>&nbsp;</label>
+                      <button id="mediaEditSave" disabled>Save changes</button>
+                    </div>
+                    <div>
+                      <label>&nbsp;</label>
+                      <button class="btn-ghost" id="mediaEditClear" disabled>Clear</button>
+                    </div>
+                  </div>
+                  <div class="status" id="mediaEditStatus">Select an image to edit.</div>
+                </div>
               </div>
             </div>
             <div>
-              <div class="row" style="justify-content:space-between;align-items:center;">
-                <div class="library-section-title">Existing media</div>
+              <div class="media-toolbar">
+                <div class="toolbar-left">
+                  <input id="mediaSearch" placeholder="Search title, artist, label">
+                  <select id="mediaFilterArtist">
+                    <option value="">All artists</option>
+                  </select>
+                  <select id="mediaFilterOriginType">
+                    <option value="">All origins</option>
+                    <option value="Artifact">Artifact</option>
+                    <option value="Rite">Rite</option>
+                    <option value="Contest">Contest</option>
+                    <option value="Tarot">Tarot</option>
+                    <option value="Bingo">Bingo</option>
+                    <option value="Gallery">Gallery</option>
+                  </select>
+                  <select id="mediaFilterLabel">
+                    <option value="any">Any label</option>
+                    <option value="has">Has label</option>
+                    <option value="none">Untagged</option>
+                  </select>
+                  <select id="mediaSort">
+                    <option value="new">Newest first</option>
+                    <option value="old">Oldest first</option>
+                    <option value="title">Title A-Z</option>
+                    <option value="artist">Artist A-Z</option>
+                  </select>
+                </div>
                 <button class="btn-ghost" id="mediaLibraryRefresh">Refresh</button>
               </div>
+              <div class="bulk-bar" id="mediaBulkBar">
+                <span class="count" id="mediaBulkCount">0 selected</span>
+                <button class="btn-ghost btn-danger" id="mediaBulkDelete">Delete</button>
+                <select id="mediaBulkArtist"></select>
+                <button id="mediaBulkSetArtist">Set artist</button>
+                <select id="mediaBulkOriginType">
+                  <option value="">Origin type</option>
+                  <option value="Artifact">Artifact</option>
+                  <option value="Rite">Rite</option>
+                  <option value="Contest">Contest</option>
+                  <option value="Tarot">Tarot</option>
+                  <option value="Bingo">Bingo</option>
+                  <option value="Gallery">Gallery</option>
+                </select>
+                <button id="mediaBulkSetOrigin">Set origin</button>
+                <input id="mediaBulkLabel" placeholder="Origin label">
+                <button id="mediaBulkApplyLabel">Set label</button>
+                <button class="btn-ghost" id="mediaBulkClearLabel">Clear label</button>
+              </div>
+              <div class="library-section-title">Existing media</div>
               <div class="status" id="mediaLibraryStatus">Ready.</div>
               <div class="preview-grid" id="mediaLibraryGrid"></div>
             </div>
@@ -3440,6 +3713,7 @@
         <div class="status" id="authTokensStatus">Ready.</div>
       </div>
     </div>
+    <div class="toast-stack" id="toastStack"></div>
     <script>
       const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
@@ -3538,6 +3812,10 @@
       let libraryKind = "";
       let libraryUploadFile = null;
       let mediaUploadFile = null;
+      let mediaLibraryItems = [];
+      let mediaVisibleItems = [];
+      let mediaSelected = new Set();
+      let mediaLastIndex = null;
       let deckEditHadSuits = false;
 
       function setLibraryStatus(msg, kind){
@@ -3558,6 +3836,18 @@
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function showToast(msg, kind){
+        const stack = $("toastStack");
+        if (!stack) return;
+        const toast = document.createElement("div");
+        toast.className = "toast" + (kind ? " " + kind : "");
+        toast.textContent = msg;
+        stack.appendChild(toast);
+        setTimeout(() => {
+          toast.remove();
+        }, 2400);
       }
 
       function updateUploadDropDisplay(file){
@@ -3826,45 +4116,84 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
-      function clearMediaEdit(){
-        const preview = $("mediaEditPreview");
-        if (preview){
-          preview.innerHTML = "<span class=\"preview-label\">Preview</span>";
+      let currentMediaEdit = null;
+      function setMediaTab(tab){
+        const uploadBtn = $("mediaTabUploadBtn");
+        const editBtn = $("mediaTabEditBtn");
+        const uploadPanel = $("mediaTabUpload");
+        const editPanel = $("mediaTabEdit");
+        if (!uploadBtn || !editBtn || !uploadPanel || !editPanel) return;
+        if (tab === "edit" && editBtn.disabled){
+          tab = "upload";
         }
-        $("mediaEditFilename").value = "";
-        $("mediaEditTitle").value = "";
-        $("mediaEditArtist").value = "";
-        $("mediaEditOriginType").value = "Artifact";
-        $("mediaEditOriginLabel").value = "";
-        $("mediaEditSave").disabled = true;
-        $("mediaEditClear").disabled = true;
-        const cards = document.querySelectorAll("#mediaLibraryGrid .preview-card.library-card");
-        cards.forEach(card => card.classList.remove("selected"));
-        setMediaEditStatus("Select an image to edit.", "");
-        currentMediaEdit = null;
+        uploadBtn.classList.toggle("active", tab === "upload");
+        editBtn.classList.toggle("active", tab === "edit");
+        uploadPanel.classList.toggle("active", tab === "upload");
+        editPanel.classList.toggle("active", tab === "edit");
       }
 
-      let currentMediaEdit = null;
-      function selectMediaEdit(item){
-        if (!item){
-          clearMediaEdit();
+      function updateMediaEditPanel(){
+        const count = mediaSelected.size;
+        const editBtn = $("mediaTabEditBtn");
+        if (editBtn){
+          editBtn.disabled = count === 0;
+          if (editBtn.disabled && editBtn.classList.contains("active")){
+            setMediaTab("upload");
+          }
+        }
+        const empty = $("mediaEditEmpty");
+        const card = $("mediaEditCard");
+        const meta = $("mediaEditMeta");
+        const identity = $("mediaEditIdentity");
+        const artistDisplay = $("mediaEditArtistDisplay");
+        const originDisplay = $("mediaEditOriginDisplay");
+        const hasSingle = count === 1 && currentMediaEdit;
+          if (!hasSingle){
+            if (card) card.classList.add("hidden");
+            if (empty){
+              empty.classList.remove("hidden");
+              empty.textContent = count
+                ? "Multiple images selected. Use bulk actions or select a single image to edit."
+                : "Select an image to edit.";
+            }
+            $("mediaEditSave").disabled = true;
+          $("mediaEditClear").disabled = count === 0;
+          $("mediaEditCopy").disabled = true;
+          $("mediaEditOpen").disabled = true;
+          $("mediaEditDelete").disabled = true;
+          if (meta) meta.textContent = "";
+          if (identity) identity.textContent = "-";
+          if (artistDisplay) artistDisplay.textContent = "-";
+          if (originDisplay) originDisplay.textContent = "-";
+          setMediaEditStatus(count ? "Multiple selected." : "Select an image to edit.", "");
           return;
         }
-        currentMediaEdit = item;
-        $("mediaEditFilename").value = item.name || "";
-        $("mediaEditTitle").value = item.title || "";
-        $("mediaEditArtist").value = item.artist_id || "";
-        $("mediaEditOriginType").value = item.origin_type || "Artifact";
-        $("mediaEditOriginLabel").value = item.origin_label || "";
+        if (empty) empty.classList.add("hidden");
+        if (card) card.classList.remove("hidden");
+        $("mediaEditFilename").value = currentMediaEdit.name || "";
+        $("mediaEditTitle").value = currentMediaEdit.title || "";
+        $("mediaEditArtist").value = currentMediaEdit.artist_id || "";
+        $("mediaEditOriginType").value = currentMediaEdit.origin_type || "Artifact";
+        $("mediaEditOriginLabel").value = currentMediaEdit.origin_label || "";
         $("mediaEditSave").disabled = false;
         $("mediaEditClear").disabled = false;
+        $("mediaEditCopy").disabled = false;
+        $("mediaEditOpen").disabled = false;
+        $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
+        if (identity) identity.textContent = currentMediaEdit.title || currentMediaEdit.name || "-";
+        if (artistDisplay) artistDisplay.textContent = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "Forest";
+        const originText = [currentMediaEdit.origin_type || "", currentMediaEdit.origin_label || ""].filter(Boolean).join(" - ");
+        if (originDisplay) originDisplay.textContent = originText || "Unlabeled";
+        if (meta){
+          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}`;
+        }
         const preview = $("mediaEditPreview");
         if (preview){
           const img = document.createElement("img");
-          img.src = item.url || "";
-          img.alt = item.title || item.name || "Preview";
-          if (item.fallback_url){
-            img.dataset.fallback = item.fallback_url;
+          img.src = currentMediaEdit.url || "";
+          img.alt = currentMediaEdit.title || currentMediaEdit.name || "Preview";
+          if (currentMediaEdit.fallback_url){
+            img.dataset.fallback = currentMediaEdit.fallback_url;
             img.addEventListener("error", () => {
               if (img.dataset.fallback && img.src !== img.dataset.fallback){
                 img.src = img.dataset.fallback;
@@ -3874,28 +4203,303 @@
           preview.innerHTML = "";
           preview.appendChild(img);
         }
-        const cards = document.querySelectorAll("#mediaLibraryGrid .preview-card.library-card");
-        cards.forEach(card => {
-          const filename = card.dataset.filename || "";
-          card.classList.toggle("selected", filename === (item.name || ""));
-        });
         setMediaEditStatus("Edit details and save.", "ok");
       }
 
       async function loadMediaLibrary(){
         const grid = $("mediaLibraryGrid");
         if (!grid) return;
-        clearMediaEdit();
-        await loadLibrary("media", {
-          grid,
-          title: null,
-          setStatus: setMediaLibraryStatus,
-          showUse: false,
-          showCopy: true,
-          closeOnUse: false,
-          onSelect: null,
-          onCardClick: (item) => selectMediaEdit(item)
+        setMediaLibraryStatus("Loading...", "");
+        grid.innerHTML = "";
+        for (let i = 0; i < 8; i++){
+          const skel = document.createElement("div");
+          skel.className = "skeleton-card";
+          grid.appendChild(skel);
+        }
+        try{
+          const res = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){
+            handleUnauthorized();
+            throw new Error("Unauthorized");
+          }
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          mediaLibraryItems = data.items || [];
+          mediaSelected.clear();
+          mediaLastIndex = null;
+          currentMediaEdit = null;
+          applyMediaFilters();
+          setMediaLibraryStatus("Ready.", "ok");
+          showToast("Library loaded.", "ok");
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      }
+
+      function mediaKey(item){
+        return item.name || item.filename || item.url || "";
+      }
+
+      function applyMediaFilters(){
+        const searchRaw = ($("mediaSearch").value || "").trim().toLowerCase();
+        const artistFilter = ($("mediaFilterArtist").value || "").trim();
+        const originFilter = ($("mediaFilterOriginType").value || "").trim();
+        const labelFilter = ($("mediaFilterLabel").value || "any").trim();
+        const sortMode = ($("mediaSort").value || "new").trim();
+        let items = mediaLibraryItems.slice();
+        if (searchRaw){
+          items = items.filter(item => {
+            const hay = [
+              item.title,
+              item.artist_name,
+              item.artist_id,
+              item.origin_label,
+              item.origin_type,
+              item.name
+            ].filter(Boolean).join(" ").toLowerCase();
+            return hay.includes(searchRaw);
+          });
+        }
+        if (artistFilter){
+          items = items.filter(item => (item.artist_id || "") === artistFilter);
+        }
+        if (originFilter){
+          items = items.filter(item => (item.origin_type || "") === originFilter);
+        }
+        if (labelFilter === "has"){
+          items = items.filter(item => (item.origin_label || "").trim());
+        }else if (labelFilter === "none"){
+          items = items.filter(item => !(item.origin_label || "").trim());
+        }
+        if (sortMode === "old"){
+          items.reverse();
+        }else if (sortMode === "title"){
+          items.sort((a, b) => (a.title || a.name || "").localeCompare(b.title || b.name || ""));
+        }else if (sortMode === "artist"){
+          items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
+        }
+        mediaVisibleItems = items;
+        renderMediaGrid(items);
+      }
+
+      function renderMediaGrid(items){
+        const grid = $("mediaLibraryGrid");
+        if (!grid) return;
+        grid.innerHTML = "";
+        if (!items.length){
+          grid.innerHTML = "<div class=\"muted\">No images found.</div>";
+          updateMediaBulkBar();
+          updateMediaEditPanel();
+          return;
+        }
+        items.forEach((item, idx) => {
+          const key = mediaKey(item);
+          const card = document.createElement("div");
+          card.className = "preview-card library-card";
+          card.dataset.filename = item.name || "";
+          card.dataset.key = key;
+          card.dataset.index = String(idx);
+          card.tabIndex = 0;
+
+          const checkbox = document.createElement("label");
+          checkbox.className = "card-select";
+          const boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
+          boxInput.checked = mediaSelected.has(key);
+          boxInput.addEventListener("click", (ev) => ev.stopPropagation());
+          boxInput.addEventListener("change", (ev) => {
+            ev.stopPropagation();
+            toggleMediaSelection(item, idx, {toggle: true});
+          });
+          checkbox.appendChild(boxInput);
+          card.appendChild(checkbox);
+
+          const checkmark = document.createElement("div");
+          checkmark.className = "card-check";
+          checkmark.textContent = "OK";
+          card.appendChild(checkmark);
+
+          const img = document.createElement("img");
+          img.src = item.url;
+          img.alt = item.title || item.name || "image";
+          if (item.fallback_url){
+            img.dataset.fallback = item.fallback_url;
+            img.addEventListener("error", () => {
+              if (img.dataset.fallback && img.src !== img.dataset.fallback){
+                img.src = img.dataset.fallback;
+              }
+            });
+          }
+
+          const titleText = document.createElement("div");
+          titleText.className = "library-card-title";
+          titleText.textContent = item.title || item.name || "Untitled";
+
+          const artist = document.createElement("div");
+          artist.className = "library-card-artist";
+          artist.textContent = item.artist_name || item.artist_id || "Forest";
+
+          const origin = document.createElement("div");
+          origin.className = "muted";
+          origin.textContent = [item.origin_type, item.origin_label].filter(Boolean).join(" - ") || "Unlabeled";
+
+          const actions = document.createElement("div");
+          actions.className = "library-actions";
+
+          const copyBtn = document.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.className = "btn-ghost icon-action";
+          copyBtn.title = "Copy URL";
+          copyBtn.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z\"/></svg>";
+          copyBtn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            try{
+              await navigator.clipboard.writeText(item.url || "");
+              showToast("Copied URL.", "ok");
+            }catch(err){
+              showToast("Copy failed.", "err");
+            }
+          });
+          actions.appendChild(copyBtn);
+
+          if (authUserIsElfmin && item.delete_url){
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "btn-ghost btn-danger icon-action";
+            del.title = "Delete";
+            del.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 7h12v2H6zm3 2h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z\"/></svg>";
+            del.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              if (!confirm("Delete this image? This cannot be undone.")) return;
+              try{
+                const res = await fetch(item.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.ok === false){
+                  throw new Error(data.error || "Delete failed");
+                }
+                showToast("Image deleted.", "ok");
+                await loadMediaLibrary();
+              }catch(err){
+                showToast(err.message, "err");
+              }
+            });
+            actions.appendChild(del);
+          }
+
+          card.appendChild(img);
+          card.appendChild(titleText);
+          card.appendChild(artist);
+          card.appendChild(origin);
+          card.appendChild(actions);
+
+          card.addEventListener("click", (ev) => {
+            toggleMediaSelection(item, idx, {shift: ev.shiftKey, multi: ev.ctrlKey || ev.metaKey});
+          });
+          card.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " "){
+              ev.preventDefault();
+              toggleMediaSelection(item, idx, {multi: ev.ctrlKey || ev.metaKey});
+            }
+          });
+
+          if (mediaSelected.has(key)){
+            card.classList.add("selected");
+          }
+          grid.appendChild(card);
         });
+        updateMediaSelectionUI();
+      }
+
+      function toggleMediaSelection(item, index, opts){
+        const key = mediaKey(item);
+        if (!key) return;
+        const shift = opts && opts.shift;
+        const multi = opts && opts.multi;
+        const toggleOnly = opts && opts.toggle;
+        if (shift && mediaLastIndex !== null){
+          const [start, end] = index > mediaLastIndex ? [mediaLastIndex, index] : [index, mediaLastIndex];
+          for (let i = start; i <= end; i++){
+            const target = mediaVisibleItems[i];
+            if (!target) continue;
+            mediaSelected.add(mediaKey(target));
+          }
+        }else if (toggleOnly || multi){
+          if (mediaSelected.has(key)){
+            mediaSelected.delete(key);
+          }else{
+            mediaSelected.add(key);
+          }
+        }else{
+          mediaSelected.clear();
+          mediaSelected.add(key);
+        }
+        mediaLastIndex = index;
+        currentMediaEdit = item;
+        updateMediaSelectionUI();
+      }
+
+      function updateMediaSelectionUI(){
+        const cards = document.querySelectorAll("#mediaLibraryGrid .preview-card.library-card");
+        cards.forEach(card => {
+          const key = card.dataset.key || "";
+          const selected = mediaSelected.has(key);
+          card.classList.toggle("selected", selected);
+          const checkbox = card.querySelector("input[type=checkbox]");
+          if (checkbox) checkbox.checked = selected;
+        });
+        if (mediaSelected.size === 0){
+          currentMediaEdit = null;
+        }else if (currentMediaEdit && !mediaSelected.has(mediaKey(currentMediaEdit))){
+          currentMediaEdit = mediaLibraryItems.find(item => mediaSelected.has(mediaKey(item))) || null;
+        }
+        updateMediaBulkBar();
+        updateMediaEditPanel();
+      }
+
+      function updateMediaBulkBar(){
+        const bar = $("mediaBulkBar");
+        if (!bar) return;
+        const count = mediaSelected.size;
+        $("mediaBulkCount").textContent = `${count} selected`;
+        bar.classList.toggle("active", count > 0);
+      }
+
+      function clearMediaSelection(){
+        mediaSelected.clear();
+        mediaLastIndex = null;
+        currentMediaEdit = null;
+        updateMediaSelectionUI();
+      }
+
+      function getSelectedMediaItems(){
+        return mediaLibraryItems.filter(item => mediaSelected.has(mediaKey(item)));
+      }
+
+      async function bulkUpdateMedia(payload){
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        for (const item of items){
+          const body = {
+            filename: item.name || "",
+            title: payload.title != null ? payload.title : (item.title || ""),
+            artist_id: payload.artist_id != null ? payload.artist_id : (item.artist_id || ""),
+            artist_name: payload.artist_name || item.artist_name || "",
+            origin_type: payload.origin_type != null ? payload.origin_type : (item.origin_type || ""),
+            origin_label: payload.origin_label != null ? payload.origin_label : (item.origin_label || "")
+          };
+          const res = await fetch("/api/gallery/media/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKeyEl.value.trim()
+            },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false){
+            throw new Error(data.error || "Bulk update failed");
+          }
+        }
       }
 
       function setAuthRolesStatus(msg, kind){
@@ -4867,6 +5471,7 @@
         $("contestPanel").classList.toggle("hidden", which !== "contests");
         $("mediaPanel").classList.toggle("hidden", which !== "media");
         if (which === "media"){
+          setMediaTab("upload");
           loadMediaLibrary();
           loadTarotArtists();
           updateMediaUploadDropDisplay(mediaUploadFile);
@@ -7136,22 +7741,44 @@
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
           window.taArtists = artists;
-        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "artistIndexSelect", "galleryEditArtist"];
-          selects.forEach(id => {
-            const sel = $(id);
-            if (!sel) return;
-            sel.innerHTML = "";
-            const none = document.createElement("option");
-            none.value = "";
-            none.textContent = "(none)";
-            sel.appendChild(none);
-            artists.forEach(a => {
-              const opt = document.createElement("option");
-              opt.value = a.artist_id || "";
-              opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
-              sel.appendChild(opt);
-            });
+        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "mediaBulkArtist", "artistIndexSelect", "galleryEditArtist"];
+        selects.forEach(id => {
+          const sel = $(id);
+          if (!sel) return;
+          const current = sel.value;
+          sel.innerHTML = "";
+          const none = document.createElement("option");
+          none.value = "";
+          none.textContent = id === "mediaBulkArtist" ? "Select artist" : "(none)";
+          sel.appendChild(none);
+          artists.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.artist_id || "";
+            opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+            sel.appendChild(opt);
           });
+          if (current){
+            sel.value = current;
+          }
+        });
+        const filter = $("mediaFilterArtist");
+        if (filter){
+          const current = filter.value;
+          filter.innerHTML = "";
+          const any = document.createElement("option");
+          any.value = "";
+          any.textContent = "All artists";
+          filter.appendChild(any);
+          artists.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.artist_id || "";
+            opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+            filter.appendChild(opt);
+          });
+          if (current){
+            filter.value = current;
+          }
+        }
         }catch(err){
           window.taArtists = [];
           setStatus("Failed to load artists.", "err");
@@ -7247,6 +7874,93 @@
       });
 
       $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
+      $("mediaTabUploadBtn").addEventListener("click", () => setMediaTab("upload"));
+      $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
+      $("mediaSearch").addEventListener("input", () => applyMediaFilters());
+      $("mediaFilterArtist").addEventListener("change", () => applyMediaFilters());
+      $("mediaFilterOriginType").addEventListener("change", () => applyMediaFilters());
+      $("mediaFilterLabel").addEventListener("change", () => applyMediaFilters());
+      $("mediaSort").addEventListener("change", () => applyMediaFilters());
+      $("mediaBulkDelete").addEventListener("click", async () => {
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        if (!confirm(`Delete ${items.length} image(s)? This cannot be undone.`)) return;
+        try{
+          setMediaLibraryStatus("Deleting...", "");
+          for (const item of items){
+            if (!item.delete_url) continue;
+            const res = await fetch(item.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false){
+              throw new Error(data.error || "Delete failed");
+            }
+          }
+          showToast("Images deleted.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkSetArtist").addEventListener("click", async () => {
+        const artistId = $("mediaBulkArtist").value.trim();
+        const artistName = $("mediaBulkArtist").selectedOptions.length
+          ? $("mediaBulkArtist").selectedOptions[0].textContent.trim()
+          : "";
+        if (!artistId){
+          showToast("Pick an artist.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating artists...", "");
+          await bulkUpdateMedia({artist_id: artistId, artist_name: artistName});
+          showToast("Artists updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkSetOrigin").addEventListener("click", async () => {
+        const originType = $("mediaBulkOriginType").value.trim();
+        if (!originType){
+          showToast("Pick an origin type.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating origin type...", "");
+          await bulkUpdateMedia({origin_type: originType});
+          showToast("Origin type updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkApplyLabel").addEventListener("click", async () => {
+        const label = $("mediaBulkLabel").value.trim();
+        if (!label){
+          showToast("Enter a label.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating labels...", "");
+          await bulkUpdateMedia({origin_label: label});
+          showToast("Labels updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkClearLabel").addEventListener("click", async () => {
+        try{
+          setMediaLibraryStatus("Clearing labels...", "");
+          await bulkUpdateMedia({origin_label: ""});
+          showToast("Labels cleared.", "ok");
+          $("mediaBulkLabel").value = "";
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
       $("mediaUploadFile").addEventListener("change", (ev) => {
         const file = ev.target.files[0] || null;
         mediaUploadFile = file;
@@ -7326,7 +8040,7 @@
       });
 
       $("mediaEditClear").addEventListener("click", () => {
-        clearMediaEdit();
+        clearMediaSelection();
       });
 
       $("mediaEditSave").addEventListener("click", async () => {
@@ -7369,11 +8083,44 @@
             throw new Error(data.error || "Save failed");
           }
           setMediaEditStatus("Changes saved.", "ok");
+          showToast("Changes saved.", "ok");
           await loadMediaLibrary();
         }catch(err){
           setMediaEditStatus(err.message, "err");
         }finally{
           $("mediaEditSave").disabled = !currentMediaEdit;
+        }
+      });
+
+      $("mediaEditCopy").addEventListener("click", async () => {
+        if (!currentMediaEdit) return;
+        try{
+          await navigator.clipboard.writeText(currentMediaEdit.url || "");
+          showToast("Copied URL.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
+      });
+
+      $("mediaEditOpen").addEventListener("click", () => {
+        if (!currentMediaEdit) return;
+        const url = currentMediaEdit.url || "";
+        if (url) window.open(url, "_blank");
+      });
+
+      $("mediaEditDelete").addEventListener("click", async () => {
+        if (!currentMediaEdit || !currentMediaEdit.delete_url) return;
+        if (!confirm("Delete this image? This cannot be undone.")) return;
+        try{
+          const res = await fetch(currentMediaEdit.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false){
+            throw new Error(data.error || "Delete failed");
+          }
+          showToast("Image deleted.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          showToast(err.message, "err");
         }
       });
 
