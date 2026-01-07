@@ -65,9 +65,9 @@ namespace Forest.Features.BingoAdmin
         public Task<SimpleResponse> DenyClaimAsync(string gameId, string cardId, CancellationToken ct = default)
             => Post<SimpleResponse>("bingo/claim-deny", new { game_id = gameId, card_id = cardId }, ct);
 
-        public async Task<BuyResponse> BuyAsync(string gameId, string ownerName, int count = 1, CancellationToken ct = default)
+        public async Task<BuyResponse> BuyAsync(string gameId, string ownerName, int count = 1, bool gift = false, CancellationToken ct = default)
         {
-            var body = new { game_id = gameId, owner_name = ownerName, quantity = count };
+            var body = new { game_id = gameId, owner_name = ownerName, quantity = count, gift = gift };
             var content = new StringContent(JsonSerializer.Serialize(body, _json), Encoding.UTF8, "application/json");
             using var req = new HttpRequestMessage(HttpMethod.Post, "bingo/buy") { Content = content };
             ApplyAuthHeaders(req);
@@ -91,6 +91,9 @@ namespace Forest.Features.BingoAdmin
 
         public Task<DeleteResponse> DeleteGameAsync(string gameId, CancellationToken ct = default)
             => Delete<DeleteResponse>($"bingo/{Uri.EscapeDataString(gameId)}", ct);
+
+        public Task<SimpleResponse> SeedPotAsync(string gameId, int amount, CancellationToken ct = default)
+            => Post<SimpleResponse>("bingo/seed", new { game_id = gameId, amount = amount }, ct);
 
         private async Task<T> Get<T>(string path, CancellationToken ct)
         {

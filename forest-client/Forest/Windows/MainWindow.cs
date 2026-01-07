@@ -83,6 +83,10 @@ public class MainWindow : Window, IDisposable
     private bool _bingoShowBuyLink = false;
     private string _bingoBuyLink = "";
     private string _bingoBuyOwner = "";
+    private string _bingoBuyOwnerInput = "";
+    private int _bingoBuyQty = 1;
+    private bool _bingoGiftTickets = false;
+    private int _bingoSeedPotAmount = 0;
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
     private string _raffleStatus = "";
@@ -174,7 +178,7 @@ public class MainWindow : Window, IDisposable
             Name = "Forest: Buy 1 Bingo Card",
             OnClicked = argsClicked =>
             {
-                _ = Bingo_BuyForOwner(name, 1);
+                _ = Bingo_BuyForOwner(name, 1, false);
                 _view = View.Bingo;
                 _selectedOwner = name;
             }
@@ -184,7 +188,7 @@ public class MainWindow : Window, IDisposable
             Name = "Forest: Buy 10 Bingo Cards",
             OnClicked = argsClicked =>
             {
-                _ = Bingo_BuyForOwner(name, 10);
+                _ = Bingo_BuyForOwner(name, 10, false);
                 _view = View.Bingo;
                 _selectedOwner = name;
             }
@@ -522,13 +526,13 @@ public class MainWindow : Window, IDisposable
                     if (ImGui.MenuItem("Buy 1 Card"))
                     {
                         _selectedOwner = ownerKey;
-                        _ = Bingo_BuyForOwner(ownerKey, 1);
+                        _ = Bingo_BuyForOwner(ownerKey, 1, false);
                         _view = View.Bingo;
                     }
                     if (ImGui.MenuItem("Buy 10 Cards"))
                     {
                         _selectedOwner = ownerKey;
-                        _ = Bingo_BuyForOwner(ownerKey, 10);
+                        _ = Bingo_BuyForOwner(ownerKey, 10, false);
                         _view = View.Bingo;
                     }
                     ImGui.EndMenu();
@@ -1191,6 +1195,15 @@ public class MainWindow : Window, IDisposable
         {
             ImGui.TextDisabled("Payouts unavailable");
         }
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Seed pot:");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120);
+        ImGui.InputInt("##bingo-seed-pot", ref _bingoSeedPotAmount, 1000);
+        if (_bingoSeedPotAmount < 0) _bingoSeedPotAmount = 0;
+        ImGui.SameLine();
+        if (ImGui.Button("Seed") && _bingoSeedPotAmount > 0)
+            _ = Bingo_SeedPot(_bingoSeedPotAmount);
         ImGui.Separator();
 
         ImGui.TextUnformatted("Called:");
@@ -1259,6 +1272,23 @@ public class MainWindow : Window, IDisposable
                 _ = Bingo_LoadOwnerCards(_bingoManualOwner);
         }
 
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Buy Cards:");
+        if (string.IsNullOrWhiteSpace(_bingoBuyOwnerInput) && !string.IsNullOrWhiteSpace(_selectedOwner))
+            _bingoBuyOwnerInput = _selectedOwner;
+        ImGui.SetNextItemWidth(220);
+        ImGui.InputText("Owner##bingo-buy-owner", ref _bingoBuyOwnerInput, 128);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(80);
+        ImGui.InputInt("Qty##bingo-buy-qty", ref _bingoBuyQty, 1);
+        if (_bingoBuyQty < 1) _bingoBuyQty = 1;
+        if (_bingoBuyQty > 10) _bingoBuyQty = 10;
+        ImGui.SameLine();
+        ImGui.Checkbox("Gift (no pot)", ref _bingoGiftTickets);
+        ImGui.SameLine();
+        if (ImGui.Button("Buy##bingo-buy-submit") && !string.IsNullOrWhiteSpace(_bingoBuyOwnerInput))
+            _ = Bingo_BuyForOwner(_bingoBuyOwnerInput, _bingoBuyQty, _bingoGiftTickets);
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextUnformatted("Random /random allowlist:");
@@ -3061,6 +3091,32 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 
+    private async Task Bingo_SeedPot(int amount)
+    {
+        if (_bingoState is null)
+        {
+            _bingoStatus = "Load a game first.";
+            return;
+        }
+        if (amount <= 0)
+        {
+            _bingoStatus = "Seed amount must be positive.";
+            return;
+        }
+        Bingo_EnsureClient();
+        _bingoLoading = true;
+        _bingoStatus = "Seeding pot.";
+        try
+        {
+            await _bingoApi!.SeedPotAsync(_bingoState.game.game_id, amount);
+            await Bingo_LoadGame(_bingoState.game.game_id);
+            var currency = _bingoState.game.currency ?? "";
+            _bingoStatus = $"Seeded {FormatGil(amount)} {currency}.";
+        }
+        catch (Exception ex) { _bingoStatus = $"Seed failed: {ex.Message}"; }
+        finally { _bingoLoading = false; }
+    }
+
     private async Task Bingo_ApproveClaim(string cardId)
     {
         if (_bingoState is null)
@@ -3297,7 +3353,7 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
         return Bingo_LoadOwnerCards(owner);
     }
 
-    private async Task Bingo_BuyForOwner(string owner, int count)
+    private async Task Bingo_BuyForOwner(string owner, int count, bool gift)
     {
         if (_bingoState is null)
         {
@@ -3314,10 +3370,12 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
 
         try
         {
-            await _bingoApi!.BuyAsync(_bingoState.game.game_id, owner, count);
+            await _bingoApi!.BuyAsync(_bingoState.game.game_id, owner, count, gift);
             await Bingo_LoadOwnerCards(owner);
             await Bingo_LoadOwners();
-            _bingoStatus = $"Bought {count} for {owner}.";
+            _bingoStatus = gift
+                ? $"Gifted {count} for {owner}."
+                : $"Bought {count} for {owner}.";
 
             var ownerInfo = _bingoOwners.FirstOrDefault(o =>
                 string.Equals(o.owner_name, owner, StringComparison.OrdinalIgnoreCase));

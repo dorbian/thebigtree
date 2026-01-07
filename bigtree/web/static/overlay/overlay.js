@@ -1906,6 +1906,7 @@
         $("bChannel").value = "";
         $("bChannelSelect").value = "";
         $("bAnnounceCalls").checked = false;
+        $("bSeedPot").value = "0";
         bingoCreateBgUrl = "";
         $("bCreateBgStatus").textContent = "No background selected.";
         loadDiscordChannels();
@@ -3207,17 +3208,18 @@
       $("bCreate").addEventListener("click", async () => {
         try{
           updateBingoCreatePayload();
-          const body = {
-            title: $("bTitle").value,
-            header_text: $("bHeader").value,
-            price: Number($("bPrice").value || 0),
-            currency: $("bCurrency").value || "gil",
-            max_cards_per_player: Number($("bMaxCards").value || 10),
-            channel_id: $("bChannelSelect").value || $("bChannel").value || "",
-            created_by: $("bCreatedBy").value || "",
-            announce_calls: $("bAnnounceCalls").checked,
-            theme_color: $("bTheme").value || ""
-          };
+            const body = {
+              title: $("bTitle").value,
+              header_text: $("bHeader").value,
+              price: Number($("bPrice").value || 0),
+              currency: $("bCurrency").value || "gil",
+              max_cards_per_player: Number($("bMaxCards").value || 10),
+              seed_pot: Number($("bSeedPot").value || 0),
+              channel_id: $("bChannelSelect").value || $("bChannel").value || "",
+              created_by: $("bCreatedBy").value || "",
+              announce_calls: $("bAnnounceCalls").checked,
+              theme_color: $("bTheme").value || ""
+            };
           const data = await jsonFetch("/bingo/create", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -3351,25 +3353,27 @@
       });
 
 
-      $("bBuy").addEventListener("click", async () => {
-        try{
-          const gid = getGameId();
-          const ownerName = $("bOwner").value.trim();
-          const qty = Number($("bQty").value || 1);
-          if (!ownerName){
-            setBingoStatus("Owner name is required.", "err");
-            return;
-          }
-          if (!Number.isFinite(qty) || qty < 1){
-            setBingoStatus("Quantity must be at least 1.", "err");
-            return;
-          }
-          const body = {
-            game_id: gid,
-            owner_name: ownerName,
-            owner_user_id: $("bOwnerId").value.trim() || null,
-            quantity: qty
-          };
+        $("bBuy").addEventListener("click", async () => {
+          try{
+            const gid = getGameId();
+            const ownerName = $("bOwner").value.trim();
+            const qty = Number($("bQty").value || 1);
+            const gift = $("bGift").checked;
+            if (!ownerName){
+              setBingoStatus("Owner name is required.", "err");
+              return;
+            }
+            if (!Number.isFinite(qty) || qty < 1){
+              setBingoStatus("Quantity must be at least 1.", "err");
+              return;
+            }
+            const body = {
+              game_id: gid,
+              owner_name: ownerName,
+              owner_user_id: $("bOwnerId").value.trim() || null,
+              quantity: qty,
+              gift: gift
+            };
           await jsonFetch("/bingo/buy", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
