@@ -173,12 +173,19 @@ def create_game(
     currency: str,
     max_cards_per_player: int,
     created_by: int,
+    seed_pot: Optional[int] = None,
     header_text: Optional[str] = None,
     theme_color: Optional[str] = None,
     announce_calls: Optional[bool] = None,
 ) -> Dict[str, Any]:
     _ensure_dirs()
     game_id = _new_game_id()
+    try:
+        seed_value = int(seed_pot or 0)
+    except Exception:
+        seed_value = 0
+    if seed_value < 0:
+        seed_value = 0
     game = {
         "_type": "game",
         "game_id": game_id,
@@ -191,7 +198,7 @@ def create_game(
         "max_cards_per_player": int(max_cards_per_player),
         "created_by": int(created_by),
         "created_at": _now(),
-        "pot": 0,
+        "pot": seed_value,
         "called": [],
         "started": False,
         "stage": "single",  # NEW
@@ -219,6 +226,9 @@ def get_game(game_id: str) -> Optional[Dict[str, Any]]:
         return None
     g = rows[-1]
     changed = False
+    if "pot" not in g:
+        g["pot"] = 0
+        changed = True
     if "header_text" not in g:
         g["header_text"] = (g.get("header") or "").strip() or None
         changed = True
@@ -399,12 +409,18 @@ def player_card_count(db: TinyDB, game_id: str, owner_name: str) -> int:
 
 def buy_card(game_id: str, owner_name: str, owner_user_id: Optional[int]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Backward-compatible single-card purchase."""
-    cards, err = buy_cards(game_id, owner_name, 1, owner_user_id)
+    cards, err = buy_cards(game_id, owner_name, 1, owner_user_id, gift=False)
     if err:
         return None, err
     return (cards[0] if cards else None), None
 
-def buy_cards(game_id: str, owner_name: str, count: int, owner_user_id: Optional[int]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+def buy_cards(
+    game_id: str,
+    owner_name: str,
+    count: int,
+    owner_user_id: Optional[int],
+    gift: bool = False,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Bulk purchase (1..10) respecting per-player cap and updating pot accordingly."""
     try:
         count = max(1, min(int(count or 1), 10))
@@ -446,13 +462,35 @@ def buy_cards(game_id: str, owner_name: str, count: int, owner_user_id: Optional
         db.insert(card)
         cards.append(card)
 
-    g["pot"] = int(g["pot"]) + int(g["price"]) * len(cards)
+    if not gift:
+        g["pot"] = int(g.get("pot") or 0) + int(g["price"]) * len(cards)
     db.update(g, doc_ids=[g.doc_id])
+    if gift:
+        delta = "gift"
+    else:
+        delta = f"+{g['price'] * len(cards)} {g['currency']}, pot={g['pot']}"
     logger.info(
-        f"[bingo] {owner_name} bought {len(cards)} card(s) in game {game_id} "
-        f"(+{g['price']*len(cards)} {g['currency']}, pot={g['pot']})"
+        f"[bingo] {owner_name} bought {len(cards)} card(s) in game {game_id} ({delta})"
     )
     return cards, None
+
+def seed_pot(game_id: str, amount: int) -> Tuple[bool, str]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+    if not g.get("active"):
+        return False, "Game is not active."
+    try:
+        amt = int(amount or 0)
+    except Exception:
+        amt = 0
+    if amt <= 0:
+        return False, "Seed amount must be positive."
+    g["pot"] = int(g.get("pot") or 0) + amt
+    db = _open(game_id)
+    db.update(g, doc_ids=[g.doc_id])
+    logger.info(f"[bingo] Seeded {amt} {g.get('currency')} into game {game_id} (pot={g['pot']})")
+    return True, "OK"
 
 def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     n = int(number)
@@ -520,7 +558,10 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
     db = _open(game_id)
     Card = Query()
     cards = db.search((Card._type == "card") & (Card.game_id == game_id))
-    pot = int(g.get("price", 0)) * len(cards)
+    if "pot" in g and g.get("pot") is not None:
+        pot = int(g.get("pot") or 0)
+    else:
+        pot = int(g.get("price", 0)) * len(cards)
     pays = _payouts(pot)
     # minimal public claim info
     claims = []
@@ -640,7 +681,10 @@ def list_games() -> List[Dict[str, Any]]:
         db = _open(game_id)
         Card = Query()
         cards = db.search((Card._type == "card") & (Card.game_id == game_id))
-        pot = int(g.get("price", 0)) * len(cards)
+        if "pot" in g and g.get("pot") is not None:
+            pot = int(g.get("pot") or 0)
+        else:
+            pot = int(g.get("price", 0)) * len(cards)
         games.append({
             "game_id": g.get("game_id"),
             "title": g.get("title"),

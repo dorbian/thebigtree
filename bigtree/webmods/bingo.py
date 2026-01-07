@@ -172,6 +172,7 @@ async def bingo_create(req: web.Request):
         currency=str(body.get("currency") or "gil"),
         max_cards_per_player=int(body.get("max_cards_per_player") or 10),
         created_by=int(body.get("created_by") or 0),
+        seed_pot=int(body.get("seed_pot") or 0),
         header_text=str(body.get("header_text") or body.get("header") or "BING"),
         theme_color=str(body.get("theme_color") or "").strip() or None,
         announce_calls=bool(body.get("announce_calls")),
@@ -198,13 +199,28 @@ async def bingo_buy(req: web.Request):
     owner_name = str(body.get("owner_name") or "")
     owner_user_id = body.get("owner_user_id")
     qty = int(body.get("quantity") or body.get("count") or 1)
-    cards = []
-    for _ in range(max(1, qty)):
-        card, err = bingo.buy_card(game_id=game_id, owner_name=owner_name, owner_user_id=owner_user_id)
-        if err:
-            return web.json_response({"ok": False, "error": err}, status=400)
-        cards.append({"card_id": card["card_id"], "numbers": card["numbers"]})
-    return web.json_response({"ok": True, "cards": cards})
+    gift = bool(body.get("gift"))
+    cards, err = bingo.buy_cards(
+        game_id=game_id,
+        owner_name=owner_name,
+        count=qty,
+        owner_user_id=owner_user_id,
+        gift=gift,
+    )
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400)
+    payload = [{"card_id": c["card_id"], "numbers": c["numbers"]} for c in cards]
+    return web.json_response({"ok": True, "cards": payload})
+
+@route("POST", "/bingo/seed", scopes=["bingo:admin"])
+async def bingo_seed(req: web.Request):
+    body = await req.json()
+    game_id = str(body.get("game_id") or "")
+    amount = int(body.get("amount") or 0)
+    ok, msg = bingo.seed_pot(game_id, amount)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True, "message": msg})
 
 @route("POST", "/bingo/call", scopes=["bingo:admin"])
 async def bingo_call(req: web.Request):
