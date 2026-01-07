@@ -30,6 +30,12 @@ namespace Forest
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;
         public Dictionary<string, List<string>> BingoRandomAllowListByGameId { get; set; } = new();
+        public int BingoUiTabIndex { get; set; } = 0;
+        public bool BingoCompactMode { get; set; } = false;
+        public float BingoUiScale { get; set; } = 1.0f;
+        public bool BingoAnnounceCalls { get; set; } = false;
+        public bool BingoAutoRoll { get; set; } = false;
+        public bool BingoAutoPinch { get; set; } = false;
 
         // Store the index of the current game instead of the object reference
         public int CurrentGameIndex { get; set; } = -1;

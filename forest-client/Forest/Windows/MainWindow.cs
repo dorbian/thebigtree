@@ -38,6 +38,7 @@ public class MainWindow : Window, IDisposable
     // ---------- View switch ----------
     private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam }
     private View _view = View.Home;
+    private enum BingoUiState { NoGameLoaded, Ready, Running, StageComplete, Finished }
 
     // ---------- Left pane layout ----------
     private float _leftPaneWidth = 360f;   // resize via slider (stable with API 13 Columns)
@@ -74,7 +75,6 @@ public class MainWindow : Window, IDisposable
     private GameStateEnvelope? _bingoState;
     private readonly Dictionary<string, List<CardInfo>> _bingoOwnerCards = new();
     private List<OwnerSummary> _bingoOwners = new();
-    private string _bingoManualOwner = "";
     private const int BingoRandomMax = 40;
     private int _bingoRollAttempts = 0;
     private DateTime _bingoRandomCooldownUntil = DateTime.MinValue;
@@ -85,8 +85,21 @@ public class MainWindow : Window, IDisposable
     private string _bingoBuyOwner = "";
     private string _bingoBuyOwnerInput = "";
     private int _bingoBuyQty = 1;
-    private bool _bingoGiftTickets = false;
+    private bool _bingoCountsTowardPot = true;
     private int _bingoSeedPotAmount = 0;
+    private int _bingoUiTabIndex = 0;
+    private bool _bingoCompactMode = false;
+    private float _bingoUiScale = 1.0f;
+    private bool _bingoAnnounceCalls = false;
+    private bool _bingoAutoRoll = false;
+    private bool _bingoAutoPinch = false;
+    private string _bingoOwnerFilter = "";
+    private string _bingoOwnerFilterCache = "";
+    private readonly List<OwnerSummary> _bingoFilteredOwners = new();
+    private bool _bingoOwnersDirty = true;
+    private readonly List<string> _bingoActionLog = new();
+    private string _bingoLastAction = "";
+    private readonly Dictionary<string, string> _bingoOwnerClaimStatus = new(StringComparer.OrdinalIgnoreCase);
     private ISharedImmediateTexture? _homeIconTexture;
     private string? _homeIconPath;
     private string _raffleStatus = "";
@@ -119,6 +132,12 @@ public class MainWindow : Window, IDisposable
         if (File.Exists(_homeIconPath))
             _homeIconTexture = Forest.Plugin.TextureProvider.GetFromFile(_homeIconPath);
         _pluginStartTime = DateTime.UtcNow;
+        _bingoUiTabIndex = Plugin.Config.BingoUiTabIndex;
+        _bingoCompactMode = Plugin.Config.BingoCompactMode;
+        _bingoUiScale = Plugin.Config.BingoUiScale;
+        _bingoAnnounceCalls = Plugin.Config.BingoAnnounceCalls;
+        _bingoAutoRoll = Plugin.Config.BingoAutoRoll;
+        _bingoAutoPinch = Plugin.Config.BingoAutoPinch;
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -205,6 +224,7 @@ public class MainWindow : Window, IDisposable
             var list = await _bingoApi!.ListGamesAsync();
             _bingoGames = list ?? new();
             _bingoStatus = $"Loaded {_bingoGames.Count} game(s).";
+            Bingo_AddAction("Refreshed games list");
         }
         catch (Exception ex)
         {
@@ -657,26 +677,58 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        foreach (var g in _bingoGames)
+        var tableFlags = ImGuiTableFlags.RowBg
+            | ImGuiTableFlags.BordersInnerV
+            | ImGuiTableFlags.Resizable
+            | ImGuiTableFlags.ScrollY;
+        if (ImGui.BeginTable("BingoGamesTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
         {
-            var id = g.game_id ?? string.Empty;
-            var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
-            var created = (g.created_at.HasValue && g.created_at.Value > 0)
-                ? DateTimeOffset.FromUnixTimeSeconds((long)g.created_at.Value).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                : "unknown";
-            var status = g.active ? "active" : "ended";
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 54f);
+            ImGui.TableSetupColumn("Stage", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Pot", ImGuiTableColumnFlags.WidthFixed, 60f);
+            ImGui.TableSetupColumn("Open", ImGuiTableColumnFlags.WidthFixed, 46f);
+            ImGui.TableHeadersRow();
 
-            bool isLoaded = string.Equals(_bingoState?.game.game_id, id, StringComparison.Ordinal)
-                            || string.Equals(_bingoGameId, id, StringComparison.Ordinal);
-
-            if (ImGui.Selectable($"{title}##{id}", isLoaded))
+            var clipper = new ImGuiListClipper();
+            clipper.Begin(_bingoGames.Count);
+            while (clipper.Step())
             {
-                _bingoGameId = id;
-                _ = Bingo_LoadGame(_bingoGameId);
-            }
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                {
+                    var g = _bingoGames[i];
+                    var id = g.game_id ?? string.Empty;
+                    var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
+                    bool isLoaded = string.Equals(_bingoState?.game.game_id, id, StringComparison.Ordinal)
+                                    || string.Equals(_bingoGameId, id, StringComparison.Ordinal);
 
-            ImGui.SameLine();
-            ImGui.TextDisabled($"[{status}] {created}  stage:{g.stage}  pot:{g.pot}");
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(title);
+                    if (!string.IsNullOrWhiteSpace(id) && ImGui.IsItemHovered())
+                        ImGui.SetTooltip(id);
+
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(g.active ? "Active" : "Ended");
+
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(string.IsNullOrWhiteSpace(g.stage) ? "-" : g.stage);
+
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(g.pot.ToString());
+
+                    ImGui.TableNextColumn();
+                    using (var dis = ImRaii.Disabled(isLoaded))
+                    {
+                        if (ImGui.SmallButton($"Open##game-{id}-{i}"))
+                        {
+                            _bingoGameId = id;
+                            _ = Bingo_LoadGame(_bingoGameId);
+                        }
+                    }
+                }
+            }
+            ImGui.EndTable();
         }
     }
 
@@ -1087,44 +1139,35 @@ public class MainWindow : Window, IDisposable
     }
     private void DrawBingoAdminPanel()
     {
-        // ====== Admin UI status ======
         bool connected = Plugin.Config.BingoConnected;
-        if (connected)
-            ImGui.TextColored(new Vector4(0.5f, 1f, 0.6f, 1f), "Connected");
-        else
+        float scale = Math.Clamp(_bingoUiScale, 0.85f, 1.25f);
+        float baseScale = ImGui.GetWindowFontScale();
+        if (Math.Abs(scale - baseScale) > 0.01f)
+            ImGui.SetWindowFontScale(scale);
+
+        if (!connected)
+        {
             ImGui.TextColored(new Vector4(1f, 0.55f, 0.55f, 1f), "Not connected");
-
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
-        {
-            ImGui.TextWrapped("Load a game, start it, then roll numbers and manage claims. The admin panel controls the active bingo game.");
+            ImGui.TextDisabled("Set your Auth Token in Settings to connect.");
+            if (Math.Abs(scale - baseScale) > 0.01f)
+                ImGui.SetWindowFontScale(baseScale);
+            return;
         }
 
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Settings"))
-            Plugin.ToggleConfigUI();
+        var game = _bingoState?.game;
+        var uiState = GetBingoUiState(game);
 
-        if (!string.IsNullOrEmpty(Plugin.Config.BingoServerInfo))
+        if (!string.IsNullOrWhiteSpace(Plugin.Config.BingoServerInfo))
         {
-            ImGui.SameLine();
-            ImGui.TextDisabled($"[{Plugin.Config.BingoServerInfo}]");
+            ImGui.TextDisabled($"Server: {Plugin.Config.BingoServerInfo}");
         }
-        if (!string.IsNullOrEmpty(_bingoStatus))
+        if (!string.IsNullOrWhiteSpace(_bingoStatus))
         {
-            ImGui.SameLine();
             ImGui.TextDisabled(_bingoStatus);
         }
         if (_bingoLoading)
         {
-            ImGui.SameLine();
-            ImGui.TextDisabled("Loading.");
-        }
-
-        ImGui.Separator();
-
-        if (!connected)
-        {
-            ImGui.TextDisabled("Set your Auth Token in Settings to connect.");
-            return;
+            ImGui.TextDisabled("Working...");
         }
 
         if (_bingoShowBuyLink)
@@ -1132,8 +1175,7 @@ public class MainWindow : Window, IDisposable
             ImGui.OpenPopup("Player link");
             _bingoShowBuyLink = false;
         }
-        var showLinkModal = true;
-        if (ImGui.BeginPopupModal("Player link", ref showLinkModal, ImGuiWindowFlags.AlwaysAutoResize))
+        if (ImGui.BeginPopup("Player link"))
         {
             ImGui.TextUnformatted($"Player: {_bingoBuyOwner}");
             ImGui.SetNextItemWidth(420);
@@ -1142,157 +1184,731 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetClipboardText(_bingoBuyLink);
             ImGui.SameLine();
             if (ImGui.Button("Close"))
-                showLinkModal = false;
+                ImGui.CloseCurrentPopup();
             ImGui.EndPopup();
         }
 
-        // ====== Game Id + controls ======
-        ImGui.Text("Game Id:");
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(260);
-        ImGui.InputText("##bingo_game", ref _bingoGameId, 128);
+        if (game != null)
+        {
+            ImGui.Spacing();
+            DrawBingoGameSummaryLine(game);
+        }
+
+        if (uiState == BingoUiState.Running || uiState == BingoUiState.StageComplete)
+        {
+            DrawBingoLastCallPanel(game);
+        }
+
+        if (uiState == BingoUiState.Running && !_bingoLoading && !ImGui.GetIO().WantTextInput)
+        {
+            if (ImGui.IsKeyPressed(Dalamud.Bindings.ImGui.ImGuiKey.N))
+            {
+                _ = Bingo_Roll();
+            }
+        }
+
+        if (ImGui.BeginTabBar("BingoTabs", ImGuiTabBarFlags.FittingPolicyResizeDown))
+        {
+            if (BeginBingoTab("Game", 0))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoGameTab(game);
+                ImGui.EndTabItem();
+            }
+            if (BeginBingoTab("Players", 1))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoPlayersTab(game);
+                ImGui.EndTabItem();
+            }
+            if (BeginBingoTab("Claims", 2))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoClaimsTab(game);
+                ImGui.EndTabItem();
+            }
+            if (BeginBingoTab("Cards", 3))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoCardsTab(game);
+                ImGui.EndTabItem();
+            }
+            if (BeginBingoTab("History", 4))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoHistoryTab(game);
+                ImGui.EndTabItem();
+            }
+            if (BeginBingoTab("Settings", 5))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoSettingsTab(game);
+                ImGui.EndTabItem();
+            }
+            ImGui.EndTabBar();
+        }
+
+        if (Math.Abs(scale - baseScale) > 0.01f)
+            ImGui.SetWindowFontScale(baseScale);
+    }
+
+    private bool BeginBingoTab(string label, int index)
+    {
+        var flags = _bingoUiTabIndex == index ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        if (ImGui.BeginTabItem(label, flags))
+        {
+            SetBingoTabIndex(index);
+            return true;
+        }
+        return false;
+    }
+
+    private void SetBingoTabIndex(int index)
+    {
+        if (_bingoUiTabIndex == index)
+            return;
+        _bingoUiTabIndex = index;
+        Plugin.Config.BingoUiTabIndex = index;
+        Plugin.Config.Save();
+    }
+
+    private void SaveBingoUiSettings()
+    {
+        Plugin.Config.BingoCompactMode = _bingoCompactMode;
+        Plugin.Config.BingoUiScale = _bingoUiScale;
+        Plugin.Config.BingoAnnounceCalls = _bingoAnnounceCalls;
+        Plugin.Config.BingoAutoRoll = _bingoAutoRoll;
+        Plugin.Config.BingoAutoPinch = _bingoAutoPinch;
+        Plugin.Config.Save();
+    }
+
+    private BingoUiState GetBingoUiState(GameInfo? game)
+    {
+        if (game == null || _bingoState == null)
+            return BingoUiState.NoGameLoaded;
+        if (!game.started)
+            return BingoUiState.Ready;
+        if (game.active)
+        {
+            bool stageComplete = false;
+            var claims = game.claims;
+            if (claims != null)
+            {
+                string stage = game.stage ?? "";
+                for (int i = 0; i < claims.Length; i++)
+                {
+                    var c = claims[i];
+                    if (!string.Equals(c.stage ?? "", stage, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!c.pending && !c.denied)
+                    {
+                        stageComplete = true;
+                        break;
+                    }
+                }
+            }
+            return stageComplete ? BingoUiState.StageComplete : BingoUiState.Running;
+        }
+        return BingoUiState.Finished;
+    }
+
+    private void DrawBingoPrimaryActionRow(BingoUiState state, GameInfo? game)
+    {
+        string statusText = state switch
+        {
+            BingoUiState.NoGameLoaded => "No Game Loaded",
+            BingoUiState.Ready => "Waiting to Start",
+            BingoUiState.Running => "Running",
+            BingoUiState.StageComplete => "Stage Complete",
+            _ => "Finished"
+        };
+        Vector4 statusColor = state switch
+        {
+            BingoUiState.NoGameLoaded => new Vector4(0.45f, 0.45f, 0.45f, 1f),
+            BingoUiState.Ready => new Vector4(0.95f, 0.8f, 0.35f, 1f),
+            BingoUiState.Running => new Vector4(0.5f, 1f, 0.6f, 1f),
+            BingoUiState.StageComplete => new Vector4(0.95f, 0.6f, 0.35f, 1f),
+            _ => new Vector4(1f, 0.55f, 0.55f, 1f)
+        };
+
+        DrawBingoStatusPill(statusText, statusColor);
         ImGui.SameLine();
 
-        bool hasGame = _bingoState is not null;
-        if (ImGui.Button("Load Game")) _ = Bingo_LoadGame(_bingoGameId);
-        ImGui.SameLine();
-        using (var dis = ImRaii.Disabled(!hasGame))
+        string primaryLabel = state switch
         {
-            if (ImGui.Button("Start")) _ = Bingo_Start();
-            ImGui.SameLine();
-            if (ImGui.Button("End")) _ = Bingo_End();
-            ImGui.SameLine();
-            if (ImGui.Button("Roll")) _ = Bingo_Roll();
-            ImGui.SameLine();
-            if (ImGui.Button("Advance Stage")) _ = Bingo_AdvanceStage();
+            BingoUiState.NoGameLoaded => "Load Game",
+            BingoUiState.Ready => "Start",
+            BingoUiState.StageComplete => "Advance Stage",
+            BingoUiState.Finished => "Close Game",
+            _ => "Call Next Number"
+        };
+
+        bool hasGame = game != null;
+        bool primaryEnabled = state switch
+        {
+            BingoUiState.NoGameLoaded => !string.IsNullOrWhiteSpace(_bingoGameId),
+            BingoUiState.Ready => hasGame,
+            BingoUiState.Running => hasGame && game!.active,
+            BingoUiState.StageComplete => hasGame && game!.active,
+            BingoUiState.Finished => hasGame,
+            _ => false
+        };
+        string disabledReason = state switch
+        {
+            BingoUiState.NoGameLoaded => "Select a game from the list or enter a Game Id in Advanced.",
+            BingoUiState.Ready => "Load a game first.",
+            BingoUiState.Running => "Game must be active.",
+            BingoUiState.StageComplete => "Game must be active.",
+            BingoUiState.Finished => "Load a game first.",
+            _ => "Unavailable."
+        };
+
+        using (var dis = ImRaii.Disabled(!primaryEnabled || _bingoLoading))
+        {
+            if (ImGui.Button(primaryLabel))
+            {
+                switch (state)
+                {
+                    case BingoUiState.NoGameLoaded:
+                        _ = Bingo_LoadGame(_bingoGameId);
+                        break;
+                    case BingoUiState.Ready:
+                        _ = Bingo_Start();
+                        break;
+                    case BingoUiState.StageComplete:
+                        _ = Bingo_AdvanceStage();
+                        break;
+                    case BingoUiState.Finished:
+                        Bingo_ClearGame();
+                        break;
+                    case BingoUiState.Running:
+                        _ = Bingo_Roll();
+                        break;
+                }
+            }
+        }
+        if (!primaryEnabled || _bingoLoading)
+            DrawDisabledTooltip(_bingoLoading ? "Working..." : disabledReason);
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("More"))
+            ImGui.OpenPopup("BingoMoreActions");
+        if (ImGui.BeginPopup("BingoMoreActions"))
+        {
+            bool canRefresh = hasGame;
+            using (var dis = ImRaii.Disabled(!canRefresh || _bingoLoading))
+            {
+                if (ImGui.MenuItem("Refresh Game"))
+                    _ = Bingo_LoadGame(game!.game_id);
+            }
+            if (!canRefresh || _bingoLoading)
+                DrawDisabledTooltip("Load a game first.");
+            if (ImGui.MenuItem("Refresh List"))
+                _ = Bingo_LoadGames();
+
+            ImGui.Separator();
+            bool canStart = hasGame && !game!.started && game.active;
+            using (var dis = ImRaii.Disabled(!canStart || _bingoLoading))
+            {
+                if (ImGui.MenuItem("Start"))
+                    _ = Bingo_Start();
+            }
+            if (!canStart || _bingoLoading)
+                DrawDisabledTooltip("Game must be active and not started.");
+
+            bool canCall = hasGame && game!.active;
+            using (var dis = ImRaii.Disabled(!canCall || _bingoLoading))
+            {
+                if (ImGui.MenuItem("Call Next Number"))
+                    _ = Bingo_Roll();
+            }
+            if (!canCall || _bingoLoading)
+                DrawDisabledTooltip("Game must be active.");
+
+            bool canAdvance = hasGame && game!.active;
+            using (var dis = ImRaii.Disabled(!canAdvance || _bingoLoading))
+            {
+                if (ImGui.MenuItem("Advance Stage"))
+                    _ = Bingo_AdvanceStage();
+            }
+            if (!canAdvance || _bingoLoading)
+                DrawDisabledTooltip("Game must be active.");
+
+            bool canEnd = hasGame;
+            using (var dis = ImRaii.Disabled(!canEnd || _bingoLoading))
+            {
+                if (ImGui.MenuItem("End Game"))
+                    _ = Bingo_End();
+            }
+            if (!canEnd || _bingoLoading)
+                DrawDisabledTooltip("Load a game first.");
+
+            ImGui.EndPopup();
         }
 
         ImGui.Spacing();
+    }
 
-        if (_bingoState is null)
+    private void DrawBingoStatusPill(string label, Vector4 color)
+    {
+        using var pad = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, new Vector2(10f, 6f));
+        using var col = ImRaii.PushColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(color));
+        using var colHover = ImRaii.PushColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(color));
+        using var colActive = ImRaii.PushColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(color));
+        ImGui.Button(label);
+    }
+
+    private void DrawDisabledTooltip(string text)
+    {
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(text);
+    }
+
+    private void DrawBingoGameSummaryLine(GameInfo game)
+    {
+        int ownerCount = _bingoOwners?.Count ?? 0;
+        string payoutsText = "Payouts unavailable";
+        if (game.payouts != null)
+        {
+            var remainder = game.payouts.remainder.HasValue ? $" R:{FormatGil(game.payouts.remainder.Value)}" : "";
+            payoutsText = $"S:{FormatGil(game.payouts.single)} D:{FormatGil(game.payouts.@double)} F:{FormatGil(game.payouts.full)}{remainder}";
+        }
+        string summary = $"Summary: {game.title} | Stage {game.stage} | Pot {FormatGil(game.pot)} {game.currency} | {payoutsText} | Owners {ownerCount}";
+        ImGui.TextUnformatted(summary);
+    }
+
+    private void DrawBingoLastCallPanel(GameInfo? game)
+    {
+        if (game == null)
+            return;
+        int? lastCalled = game.last_called;
+        if ((!lastCalled.HasValue || lastCalled.Value == 0) && game.called is { Length: > 0 })
+            lastCalled = game.called[^1];
+
+        var label = lastCalled.HasValue ? FormatBingoCall(lastCalled.Value) : "--";
+        var count = game.called?.Length ?? 0;
+
+        ImGui.BeginChild("BingoLastCall", new Vector2(0, 72), true, ImGuiWindowFlags.NoScrollbar);
+        ImGui.TextDisabled("Last Call");
+        float baseScale = ImGui.GetWindowFontScale();
+        ImGui.SetWindowFontScale(baseScale * 1.8f);
+        ImGui.TextUnformatted(label);
+        ImGui.SetWindowFontScale(baseScale);
+        ImGui.SameLine();
+        ImGui.TextDisabled($"Calls: {count}");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"Stage: {game.stage}");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Copy"))
+        {
+            ImGui.SetClipboardText(label);
+            Bingo_AddAction($"Copied call {label}");
+        }
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(!lastCalled.HasValue))
+        {
+            if (ImGui.SmallButton("Announce"))
+            {
+                Plugin.ChatGui.Print($"[Bingo] Call {label}");
+                Bingo_AddAction($"Announced {label}");
+            }
+        }
+        ImGui.EndChild();
+        ImGui.Spacing();
+    }
+
+    private string FormatBingoCall(int value)
+    {
+        if (value <= 0)
+            return "--";
+        char letter = value switch
+        {
+            <= 10 => 'B',
+            <= 20 => 'I',
+            <= 30 => 'N',
+            <= 40 => 'G',
+            _ => 'O'
+        };
+        return $"{letter}-{value}";
+    }
+
+    private void UpdateBingoOwnerFilter()
+    {
+        if (!_bingoOwnersDirty && string.Equals(_bingoOwnerFilterCache, _bingoOwnerFilter, StringComparison.Ordinal))
+            return;
+        _bingoOwnerFilterCache = _bingoOwnerFilter;
+        _bingoOwnersDirty = false;
+        _bingoFilteredOwners.Clear();
+        var filter = _bingoOwnerFilter.Trim();
+        for (int i = 0; i < _bingoOwners.Count; i++)
+        {
+            var owner = _bingoOwners[i];
+            if (string.IsNullOrWhiteSpace(filter) || owner.owner_name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                _bingoFilteredOwners.Add(owner);
+        }
+    }
+
+    private void DrawBingoGameTab(GameInfo? game)
+    {
+        if (game == null)
         {
             ImGui.TextDisabled("Select a game from the list on the left.");
             return;
         }
 
-        var g = _bingoState.game;
-        if (g is null)
+        ImGui.TextUnformatted("Game Summary");
+        ImGui.Separator();
+        ImGui.TextUnformatted($"Title: {game.title}");
+        ImGui.TextUnformatted($"Stage: {game.stage}");
+        ImGui.TextUnformatted($"Pot: {FormatGil(game.pot)} {game.currency}");
+        if (game.payouts != null)
         {
-            ImGui.TextDisabled("Game data not available.");
+            var remainder = game.payouts.remainder.HasValue ? $" R:{FormatGil(game.payouts.remainder.Value)}" : "";
+            ImGui.TextUnformatted($"Payouts: S:{FormatGil(game.payouts.single)} D:{FormatGil(game.payouts.@double)} F:{FormatGil(game.payouts.full)}{remainder}");
+        }
+        ImGui.Spacing();
+
+        ImGui.TextUnformatted("Last Action");
+        ImGui.TextDisabled(string.IsNullOrWhiteSpace(_bingoLastAction) ? "-" : _bingoLastAction);
+
+        if (!_bingoCompactMode && ImGui.CollapsingHeader("Advanced"))
+        {
+            ImGui.SetNextItemWidth(260);
+            ImGui.InputText("Game Id", ref _bingoGameId, 128);
+            using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(_bingoGameId)))
+            {
+                if (ImGui.Button("Load Game"))
+                    _ = Bingo_LoadGame(_bingoGameId);
+            }
+
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Seed Pot");
+            ImGui.SetNextItemWidth(140);
+            if (ImGui.SliderInt("Amount", ref _bingoSeedPotAmount, 0, 100000))
+            {
+                if (_bingoSeedPotAmount < 0)
+                    _bingoSeedPotAmount = 0;
+            }
+            using (var dis = ImRaii.Disabled(_bingoSeedPotAmount <= 0 || _bingoLoading))
+            {
+                if (ImGui.Button("Seed"))
+                    _ = Bingo_SeedPot(_bingoSeedPotAmount);
+            }
+        }
+
+        if (!_bingoCompactMode && ImGui.CollapsingHeader("Admin Tools"))
+        {
+            DrawBingoAllowList(game);
+        }
+    }
+
+    private void DrawBingoPlayersTab(GameInfo? game)
+    {
+        if (game == null)
+        {
+            ImGui.TextDisabled("Select a game from the list on the left.");
             return;
         }
-        ImGui.TextUnformatted($"Game: {g.title} ({g.game_id})");
-        ImGui.SameLine(); ImGui.TextDisabled($"Stage: {g.stage}");
-        ImGui.Spacing();
-        ImGui.TextUnformatted($"Pot: {FormatGil(g.pot)} {g.currency}");
-        ImGui.SameLine();
-        if (g.payouts is not null)
+
+        if (ImGui.InputText("Filter", ref _bingoOwnerFilter, 64))
         {
-            var remainder = g.payouts.remainder.HasValue ? $" R:{FormatGil(g.payouts.remainder.Value)}" : "";
-            ImGui.TextDisabled($"Payouts S:{FormatGil(g.payouts.single)} D:{FormatGil(g.payouts.@double)} F:{FormatGil(g.payouts.full)}{remainder}");
+            _bingoOwnersDirty = true;
+        }
+        UpdateBingoOwnerFilter();
+
+        var owners = _bingoFilteredOwners.Count > 0 || !string.IsNullOrWhiteSpace(_bingoOwnerFilter)
+            ? _bingoFilteredOwners
+            : _bingoOwners;
+
+        if (owners.Count == 0)
+        {
+            ImGui.TextDisabled("No owners loaded yet.");
         }
         else
         {
-            ImGui.TextDisabled("Payouts unavailable");
-        }
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Seed pot:");
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("##bingo-seed-pot", ref _bingoSeedPotAmount, 1000);
-        if (_bingoSeedPotAmount < 0) _bingoSeedPotAmount = 0;
-        ImGui.SameLine();
-        if (ImGui.Button("Seed") && _bingoSeedPotAmount > 0)
-            _ = Bingo_SeedPot(_bingoSeedPotAmount);
-        ImGui.Separator();
+            var tableFlags = ImGuiTableFlags.RowBg
+                | ImGuiTableFlags.BordersInnerV
+                | ImGuiTableFlags.Resizable
+                | ImGuiTableFlags.ScrollY;
+            if (ImGui.BeginTable("BingoOwnersTable", 4, tableFlags, new Vector2(0, 220)))
+            {
+                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Cards", ImGuiTableColumnFlags.WidthFixed, 50f);
+                ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 110f);
+                ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 90f);
+                ImGui.TableHeadersRow();
 
-        ImGui.TextUnformatted("Called:");
-        int? lastCalled = g.last_called;
-        if ((!lastCalled.HasValue || lastCalled.Value == 0) && g.called is { Length: > 0 })
-            lastCalled = g.called[^1];
-        foreach (var r in g.called ?? Array.Empty<int>())
-        {
-            ImGui.SameLine();
-            ImGui.TextColored(new Vector4(0.5f, 1f, 0.6f, 1f), r.ToString());
+                _bingoOwnerClaimStatus.Clear();
+                var claims = game.claims;
+                if (claims != null)
+                {
+                    for (int i = 0; i < claims.Length; i++)
+                    {
+                        var c = claims[i];
+                        var name = c.owner_name ?? "";
+                        if (string.IsNullOrWhiteSpace(name))
+                            continue;
+                        if (c.pending)
+                            _bingoOwnerClaimStatus[name] = "Claim pending";
+                        else if (c.denied)
+                            _bingoOwnerClaimStatus[name] = "Claim denied";
+                        else
+                            _bingoOwnerClaimStatus[name] = "Claim approved";
+                    }
+                }
+
+                var clipper = new ImGuiListClipper();
+                clipper.Begin(owners.Count);
+                while (clipper.Step())
+                {
+                    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                    {
+                        var owner = owners[i];
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(owner.owner_name);
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(owner.cards.ToString());
+                        ImGui.TableNextColumn();
+                        _bingoOwnerClaimStatus.TryGetValue(owner.owner_name, out var statusText);
+                        ImGui.TextUnformatted(string.IsNullOrWhiteSpace(statusText) ? "-" : statusText);
+                        ImGui.TableNextColumn();
+                        if (ImGui.SmallButton($"View Cards ({owner.cards})##owner-{i}"))
+                            _ = Bingo_LoadOwnerCards(owner.owner_name);
+                    }
+                }
+                ImGui.EndTable();
+            }
         }
-        ImGui.Spacing();
-        ImGui.BeginChild("ClaimsRow", new Vector2(0, 72), false, ImGuiWindowFlags.NoScrollbar);
-        ImGui.BeginChild("LastDrawBoxRow", new Vector2(120, 64), true, ImGuiWindowFlags.NoScrollbar);
-        ImGui.TextDisabled("Last draw");
-        ImGui.SetWindowFontScale(2.2f);
-        ImGui.TextUnformatted(lastCalled.HasValue ? lastCalled.Value.ToString() : "--");
-        ImGui.SetWindowFontScale(1f);
-        ImGui.EndChild();
-        ImGui.SameLine();
-        ImGui.BeginChild("ClaimsBox", new Vector2(0, 64), true, ImGuiWindowFlags.NoScrollbar);
-        ImGui.TextDisabled("Claims");
-        var claims = g.claims ?? Array.Empty<Claim>();
+
+        if (!_bingoCompactMode && ImGui.CollapsingHeader("Advanced"))
+        {
+            ImGui.TextUnformatted("Buy Cards");
+            if (string.IsNullOrWhiteSpace(_bingoBuyOwnerInput) && !string.IsNullOrWhiteSpace(_selectedOwner))
+                _bingoBuyOwnerInput = _selectedOwner;
+
+            if (owners.Count > 0)
+            {
+                string display = string.IsNullOrWhiteSpace(_bingoBuyOwnerInput) ? "Select owner" : _bingoBuyOwnerInput;
+                if (ImGui.BeginCombo("Owner", display))
+                {
+                    for (int i = 0; i < owners.Count; i++)
+                    {
+                        var o = owners[i];
+                        bool selected = string.Equals(_bingoBuyOwnerInput, o.owner_name, StringComparison.OrdinalIgnoreCase);
+                        if (ImGui.Selectable(o.owner_name, selected))
+                            _bingoBuyOwnerInput = o.owner_name;
+                        if (selected) ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+            }
+            else
+            {
+                ImGui.InputText("Owner name", ref _bingoBuyOwnerInput, 128);
+            }
+
+            ImGui.SetNextItemWidth(120);
+            ImGui.SliderInt("Quantity", ref _bingoBuyQty, 1, 10);
+            if (_bingoBuyQty < 1) _bingoBuyQty = 1;
+            ImGui.Checkbox("Counts toward pot", ref _bingoCountsTowardPot);
+
+            bool canBuy = !string.IsNullOrWhiteSpace(_bingoBuyOwnerInput);
+            using (var dis = ImRaii.Disabled(!canBuy || _bingoLoading))
+            {
+                if (ImGui.Button("Buy"))
+                    _ = Bingo_BuyForOwner(_bingoBuyOwnerInput, _bingoBuyQty, !_bingoCountsTowardPot);
+            }
+            if (!canBuy || _bingoLoading)
+                DrawDisabledTooltip("Select an owner and quantity.");
+        }
+    }
+
+    private void DrawBingoClaimsTab(GameInfo? game)
+    {
+        if (game == null)
+        {
+            ImGui.TextDisabled("Select a game from the list on the left.");
+            return;
+        }
+
+        var claims = game.claims ?? Array.Empty<Claim>();
         if (claims.Length == 0)
         {
             ImGui.TextDisabled("No claims.");
+            return;
         }
-        else
+
+        var tableFlags = ImGuiTableFlags.RowBg
+            | ImGuiTableFlags.BordersInnerV
+            | ImGuiTableFlags.Resizable
+            | ImGuiTableFlags.ScrollY;
+        if (ImGui.BeginTable("BingoClaimsTable", 6, tableFlags, new Vector2(0, 260)))
         {
-            foreach (var c in claims)
+            ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Claim", ImGuiTableColumnFlags.WidthFixed, 110f);
+            ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Approve", ImGuiTableColumnFlags.WidthFixed, 60f);
+            ImGui.TableSetupColumn("Reject", ImGuiTableColumnFlags.WidthFixed, 60f);
+            ImGui.TableSetupColumn("Show", ImGuiTableColumnFlags.WidthFixed, 50f);
+            ImGui.TableHeadersRow();
+
+            var clipper = new ImGuiListClipper();
+            clipper.Begin(claims.Length);
+            while (clipper.Step())
             {
-                var status = c.pending ? "pending" : (c.denied ? "denied" : "approved");
-                ImGui.TextUnformatted($"{c.owner_name} - {c.card_id} - {c.stage} - {status}");
-                if (c.pending)
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
                 {
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton($"Approve##{c.card_id}"))
-                        _ = Bingo_ApproveClaim(c.card_id);
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton($"Deny##{c.card_id}"))
-                        _ = Bingo_DenyClaim(c.card_id);
+                    var c = claims[i];
+                    var owner = c.owner_name ?? "-";
+                    var claimText = _bingoCompactMode ? (c.stage ?? "-") : (c.card_id ?? "-");
+                    var tsText = "-";
+                    if (c.ts.HasValue && c.ts.Value > 0)
+                    {
+                        var dt = DateTimeOffset.FromUnixTimeSeconds(c.ts.Value).ToLocalTime();
+                        tsText = dt.ToString("HH:mm");
+                    }
+                    bool pending = c.pending;
+                    bool hasCardId = !string.IsNullOrWhiteSpace(c.card_id);
+
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(owner);
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(claimText);
+                    if (!_bingoCompactMode && !string.IsNullOrWhiteSpace(c.card_id) && ImGui.IsItemHovered())
+                        ImGui.SetTooltip(c.card_id);
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(tsText);
+                    ImGui.TableNextColumn();
+                    using (var dis = ImRaii.Disabled(!pending || !hasCardId || _bingoLoading))
+                    {
+                        if (ImGui.SmallButton($"Approve##claim-{i}"))
+                            _ = Bingo_ApproveClaim(c.card_id);
+                    }
+                    if (!pending || !hasCardId || _bingoLoading)
+                        DrawDisabledTooltip(hasCardId ? "Claim must be pending." : "Card id required.");
+
+                    ImGui.TableNextColumn();
+                    using (var dis = ImRaii.Disabled(!pending || !hasCardId || _bingoLoading))
+                    {
+                        if (ImGui.SmallButton($"Reject##claim-{i}"))
+                            _ = Bingo_DenyClaim(c.card_id);
+                    }
+                    if (!pending || !hasCardId || _bingoLoading)
+                        DrawDisabledTooltip(hasCardId ? "Claim must be pending." : "Card id required.");
+
+                    ImGui.TableNextColumn();
+                    using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(c.owner_name)))
+                    {
+                        if (ImGui.SmallButton($"Show##claim-show-{i}"))
+                            _ = Bingo_LoadOwnerCards(c.owner_name ?? "");
+                    }
+                }
+            }
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawBingoCardsTab(GameInfo? game)
+    {
+        if (game == null)
+        {
+            ImGui.TextDisabled("Select a game from the list on the left.");
+            return;
+        }
+
+        if (_bingoOwnerCards.Count == 0)
+        {
+            ImGui.TextDisabled("No cards loaded. Select a player in Players to load cards.");
+            return;
+        }
+
+        foreach (var kv in _bingoOwnerCards)
+        {
+            string header = _bingoCompactMode ? kv.Key : $"{kv.Key} ({kv.Value.Count})";
+            if (ImGui.CollapsingHeader(header))
+            {
+                foreach (var card in kv.Value)
+                {
+                    Bingo_DrawCard(card, game.called ?? Array.Empty<int>());
+                    ImGui.Separator();
                 }
             }
         }
-        ImGui.EndChild();
-        ImGui.EndChild();
-        ImGui.Separator();
+    }
 
-        ImGui.TextUnformatted("Owners:");
-        if (_bingoOwners.Count > 0)
+    private void DrawBingoHistoryTab(GameInfo? game)
+    {
+        ImGui.TextUnformatted("Action Log");
+        if (_bingoActionLog.Count == 0)
         {
-            foreach (var owner in _bingoOwners)
-            {
-                ImGui.SameLine();
-                if (ImGui.Button($"{owner.owner_name} ({owner.cards})"))
-                    _ = Bingo_LoadOwnerCards(owner.owner_name);
-            }
+            ImGui.TextDisabled("No actions yet.");
         }
         else
         {
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(320);
-            ImGui.InputText("Owner", ref _bingoManualOwner, 128);
-            ImGui.SameLine();
-            if (ImGui.Button("Fetch Cards") && !string.IsNullOrWhiteSpace(_bingoManualOwner))
-                _ = Bingo_LoadOwnerCards(_bingoManualOwner);
+            for (int i = 0; i < _bingoActionLog.Count; i++)
+                ImGui.TextUnformatted(_bingoActionLog[i]);
         }
 
         ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextUnformatted("Buy Cards:");
-        if (string.IsNullOrWhiteSpace(_bingoBuyOwnerInput) && !string.IsNullOrWhiteSpace(_selectedOwner))
-            _bingoBuyOwnerInput = _selectedOwner;
-        ImGui.SetNextItemWidth(220);
-        ImGui.InputText("Owner##bingo-buy-owner", ref _bingoBuyOwnerInput, 128);
+        ImGui.TextUnformatted("Called Numbers");
+        if (game == null || game.called == null || game.called.Length == 0)
+        {
+            ImGui.TextDisabled("No numbers called.");
+            return;
+        }
+
+        var calls = game.called;
+        var clipper = new ImGuiListClipper();
+        clipper.Begin(calls.Length);
+        while (clipper.Step())
+        {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+            {
+                ImGui.TextUnformatted(FormatBingoCall(calls[i]));
+            }
+        }
+    }
+
+    private void DrawBingoSettingsTab(GameInfo? game)
+    {
+        _ = game;
+        bool changed = false;
+        if (ImGui.Checkbox("Compact Mode", ref _bingoCompactMode))
+            changed = true;
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(80);
-        ImGui.InputInt("Qty##bingo-buy-qty", ref _bingoBuyQty, 1);
-        if (_bingoBuyQty < 1) _bingoBuyQty = 1;
-        if (_bingoBuyQty > 10) _bingoBuyQty = 10;
-        ImGui.SameLine();
-        ImGui.Checkbox("Gift (no pot)", ref _bingoGiftTickets);
-        ImGui.SameLine();
-        if (ImGui.Button("Buy##bingo-buy-submit") && !string.IsNullOrWhiteSpace(_bingoBuyOwnerInput))
-            _ = Bingo_BuyForOwner(_bingoBuyOwnerInput, _bingoBuyQty, _bingoGiftTickets);
+        ImGui.TextDisabled("Hide advanced/admin tools and raw IDs.");
+
+        if (ImGui.SliderFloat("UI Scale", ref _bingoUiScale, 0.85f, 1.25f))
+            changed = true;
+
+        if (ImGui.Checkbox("Announce calls", ref _bingoAnnounceCalls))
+            changed = true;
+        if (ImGui.Checkbox("Auto roll", ref _bingoAutoRoll))
+            changed = true;
+        if (ImGui.Checkbox("Auto pinch", ref _bingoAutoPinch))
+            changed = true;
+
+        if (changed)
+            SaveBingoUiSettings();
+
         ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextUnformatted("Random /random allowlist:");
-        var allowGameId = g.game_id;
+        if (ImGui.Button("Reset UI Defaults"))
+        {
+            _bingoCompactMode = false;
+            _bingoUiScale = 1.0f;
+            _bingoAnnounceCalls = false;
+            _bingoAutoRoll = false;
+            _bingoAutoPinch = false;
+            SaveBingoUiSettings();
+        }
+    }
+
+    private void DrawBingoAllowList(GameInfo game)
+    {
+        ImGui.TextUnformatted("Random Allow List");
+        var allowGameId = game.game_id;
         var allowList = Bingo_GetRandomAllowList(allowGameId);
         if (allowList.Count == 0)
         {
@@ -1334,23 +1950,34 @@ public class MainWindow : Window, IDisposable
         ImGui.SetNextItemWidth(240);
         ImGui.InputText("Add name", ref _bingoRandomAllowManual, 64);
         ImGui.SameLine();
-        if (ImGui.Button("Add##manual"))
+        if (ImGui.Button("Add"))
         {
             Bingo_AddRandomAllow(allowGameId, _bingoRandomAllowManual);
             _bingoRandomAllowManual = "";
         }
+    }
 
-        foreach (var kv in _bingoOwnerCards)
-        {
-            if (ImGui.CollapsingHeader($"{kv.Key}##owner-{kv.Key}", ImGuiTreeNodeFlags.DefaultOpen))
-            {
-                foreach (var card in kv.Value)
-                {
-                    Bingo_DrawCard(card, g.called ?? Array.Empty<int>());
-                    ImGui.Separator();
-                }
-            }
-        }
+    private void Bingo_AddAction(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+        var stamp = DateTime.Now.ToString("HH:mm:ss");
+        var entry = $"{stamp} - {message}";
+        _bingoActionLog.Insert(0, entry);
+        if (_bingoActionLog.Count > 5)
+            _bingoActionLog.RemoveRange(5, _bingoActionLog.Count - 5);
+        _bingoLastAction = message;
+    }
+
+    private void Bingo_ClearGame()
+    {
+        _bingoState = null;
+        _bingoGameId = "";
+        _bingoOwnerCards.Clear();
+        _bingoOwners.Clear();
+        _bingoOwnersDirty = true;
+        _bingoStatus = "Game closed.";
+        Bingo_AddAction("Closed game");
     }
 
     // ========================= Murder Mystery helpers =========================
@@ -2549,7 +3176,10 @@ public class MainWindow : Window, IDisposable
     {
         var numbers = card.numbers ?? Array.Empty<int[]>();
         int n = Math.Max(1, numbers.Length);
-        ImGui.TextDisabled($"Card {card.card_id} - {n}x{n}");
+        string cardLabel = _bingoCompactMode ? $"Card {n}x{n}" : $"Card {card.card_id} - {n}x{n}";
+        ImGui.TextDisabled(cardLabel);
+        if (!_bingoCompactMode && !string.IsNullOrWhiteSpace(card.card_id) && ImGui.IsItemHovered())
+            ImGui.SetTooltip(card.card_id);
 
         bool isWin = Bingo_CheckCardWin(card, called);
         if (isWin)
@@ -2894,8 +3524,10 @@ public class MainWindow : Window, IDisposable
             _bingoState = await _bingoApi!.GetStateAsync(gameId, _bingoCts.Token);
             _bingoOwnerCards.Clear();
             _bingoOwners = new List<OwnerSummary>();
+            _bingoOwnersDirty = true;
             _bingoGameId = _bingoState.game.game_id;
             _bingoStatus = $"Loaded '{_bingoState.game.title}'.";
+            Bingo_AddAction($"Loaded game {_bingoState.game.title}");
             await Bingo_LoadOwners();
         }
         catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
@@ -2933,6 +3565,7 @@ public class MainWindow : Window, IDisposable
             var response = await _bingoApi!.GetOwnersAsync(_bingoState.game.game_id, _bingoCts.Token);
             _bingoOwners = response.owners?.ToList() ?? new List<OwnerSummary>();
             _bingoStatus = $"Loaded {_bingoOwners.Count} owner(s).";
+            _bingoOwnersDirty = true;
         }
         catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -2953,6 +3586,7 @@ public class MainWindow : Window, IDisposable
             await _bingoApi!.StartGameAsync(_bingoState.game.game_id);
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Game started.";
+            Bingo_AddAction("Game started");
         }
         catch (Exception ex) { _bingoStatus = $"Start failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3066,6 +3700,7 @@ public class MainWindow : Window, IDisposable
             await _bingoApi!.EndGameAsync(_bingoState.game.game_id);
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Game ended.";
+            Bingo_AddAction("Game ended");
         }
         catch (Exception ex) { _bingoStatus = $"End failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3086,6 +3721,7 @@ public class MainWindow : Window, IDisposable
             await _bingoApi!.AdvanceStageAsync(_bingoState.game.game_id);
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Stage advanced.";
+            Bingo_AddAction("Stage advanced");
         }
         catch (Exception ex) { _bingoStatus = $"Advance failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3112,6 +3748,7 @@ public class MainWindow : Window, IDisposable
             await Bingo_LoadGame(_bingoState.game.game_id);
             var currency = _bingoState.game.currency ?? "";
             _bingoStatus = $"Seeded {FormatGil(amount)} {currency}.";
+            Bingo_AddAction($"Seeded {FormatGil(amount)} {currency}");
         }
         catch (Exception ex) { _bingoStatus = $"Seed failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3137,6 +3774,7 @@ public class MainWindow : Window, IDisposable
             await _bingoApi!.ApproveClaimAsync(_bingoState.game.game_id, cardId);
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Claim approved.";
+            Bingo_AddAction($"Approved claim {cardId}");
         }
         catch (Exception ex) { _bingoStatus = $"Approve failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3162,6 +3800,7 @@ public class MainWindow : Window, IDisposable
             await _bingoApi!.DenyClaimAsync(_bingoState.game.game_id, cardId);
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Claim denied.";
+            Bingo_AddAction($"Rejected claim {cardId}");
         }
         catch (Exception ex) { _bingoStatus = $"Deny failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -3201,7 +3840,11 @@ public class MainWindow : Window, IDisposable
             _bingoState = _bingoState with { game = _bingoState.game with { called = called, last_called = last } };
             _bingoStatus = last.HasValue ? $"Rolled {last.Value}." : "Rolled.";
             if (last.HasValue)
-                Plugin.ChatGui.Print($"[Forest] Called number {last.Value}.");
+            {
+                Bingo_AddAction($"Called {FormatBingoCall(last.Value)}");
+                if (_bingoAnnounceCalls)
+                    Plugin.ChatGui.Print($"[Forest] Called number {last.Value}.");
+            }
         }
         catch (Exception ex)
         {
@@ -3334,7 +3977,9 @@ public class MainWindow : Window, IDisposable
             var newCalled = res.called ?? _bingoState.game.called ?? Array.Empty<int>();
             _bingoState = _bingoState with { game = _bingoState.game with { called = newCalled, last_called = rolled } };
             _bingoStatus = $"Rolled {rolled}.";
-            Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
+            Bingo_AddAction($"Called {FormatBingoCall(rolled)}");
+            if (_bingoAnnounceCalls)
+                Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
             _bingoRandomCooldownUntil = DateTime.UtcNow.AddSeconds(5);
         }
         catch (Exception ex)
@@ -3343,7 +3988,8 @@ public class MainWindow : Window, IDisposable
             Plugin.ChatGui.PrintError($"[Forest] Call failed: {ex.Message}");
         }
     }
-private Task Bingo_LoadOwnerCardsForOwner(string owner)
+
+    private Task Bingo_LoadOwnerCardsForOwner(string owner)
     {
         if (_bingoState is null)
         {
@@ -3376,6 +4022,7 @@ private Task Bingo_LoadOwnerCardsForOwner(string owner)
             _bingoStatus = gift
                 ? $"Gifted {count} for {owner}."
                 : $"Bought {count} for {owner}.";
+            Bingo_AddAction(gift ? $"Gifted {count} to {owner}" : $"Bought {count} for {owner}");
 
             var ownerInfo = _bingoOwners.FirstOrDefault(o =>
                 string.Equals(o.owner_name, owner, StringComparison.OrdinalIgnoreCase));
