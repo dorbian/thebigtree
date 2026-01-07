@@ -519,7 +519,7 @@
           grid.appendChild(skel);
         }
         try{
-          const res = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          const res = await apiFetch("/api/media/list", {method: "GET"}, true);
           if (res.status === 401){
             handleUnauthorized();
             throw new Error("Unauthorized");
@@ -544,9 +544,12 @@
         function applyMediaFilters(){
           const searchEl = $("mediaToolbarSearch");
           const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
-          const artistFilter = ($("mediaFilterArtist").value || "").trim();
-          const originFilter = ($("mediaFilterOriginType").value || "").trim();
-          const labelFilter = ($("mediaFilterLabel").value || "any").trim();
+          const artistEl = $("mediaFilterArtist");
+          const originEl = $("mediaFilterOriginType");
+          const labelEl = $("mediaFilterLabel");
+          const artistFilter = (artistEl ? artistEl.value : "").trim();
+          const originFilter = (originEl ? originEl.value : "").trim();
+          const labelFilter = (labelEl ? labelEl.value : "any").trim();
           const sortEl = $("mediaToolbarSort");
           const sortMode = (sortEl ? sortEl.value : "new").trim();
           let items = mediaLibraryItems.slice();
@@ -606,10 +609,10 @@
         function updateMediaLibraryStatus(visibleCount, totalCount, ctx){
           const activeCount = countActiveMediaFilters(ctx);
           if (activeCount > 0){
-            setMediaLibraryStatus(`Filtered · ${visibleCount} of ${totalCount} items`, "ok");
+            setMediaLibraryStatus(`Filtered - ${visibleCount} of ${totalCount} items`, "ok");
             return;
           }
-          setMediaLibraryStatus(`Library loaded · ${totalCount} items`, "ok");
+          setMediaLibraryStatus(`Library loaded - ${totalCount} items`, "ok");
         }
 
       function renderMediaGrid(items){
@@ -1207,6 +1210,59 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      let bingoHistory = [];
+      function setBingoLastAction(msg){
+        const el = $("bLastAction");
+        if (!el) return;
+        el.textContent = msg ? `Last action: ${msg}` : "Last action: -";
+      }
+
+      function addBingoHistory(msg){
+        if (!msg) return;
+        const time = new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+        bingoHistory.unshift(`${time} - ${msg}`);
+        bingoHistory = bingoHistory.slice(0, 5);
+        const el = $("bHistory");
+        if (!el) return;
+        if (!bingoHistory.length){
+          el.innerHTML = "<div class=\"muted\">No history yet.</div>";
+          return;
+        }
+        el.innerHTML = bingoHistory.map(entry => `<div class="bingo-history-item">${entry}</div>`).join("");
+      }
+
+      function setBingoPrimaryAction(targetId){
+        const ids = ["bStart", "bRoll", "bAdvanceStage"];
+        ids.forEach(id => {
+          const btn = $(id);
+          if (!btn) return;
+          const isPrimary = id === targetId;
+          btn.classList.toggle("btn-primary", isPrimary);
+          btn.classList.toggle("btn-ghost", !isPrimary);
+        });
+      }
+
+      function updateBingoBuyState(game, called){
+        const btn = $("bBuy");
+        if (!btn) return;
+        const ownerEl = $("bOwner");
+        const qtyEl = $("bQty");
+        const ownerOk = !!(ownerEl && ownerEl.value.trim());
+        const qty = Number(qtyEl ? qtyEl.value : 1);
+        const qtyOk = Number.isFinite(qty) && qty >= 1;
+        const canBuy = !!(game && game.game_id && game.active !== false && !game.started && (!called || called.length === 0));
+        btn.disabled = !(ownerOk && qtyOk && canBuy);
+      }
+
+      function updateSeedPotState(game){
+        const btn = $("bSeedPotApply");
+        if (!btn) return;
+        const amtEl = $("bSeedPotAmount");
+        const amount = Number(amtEl ? amtEl.value : 0);
+        const ok = Number.isFinite(amount) && amount > 0 && game && game.game_id && game.active !== false;
+        btn.disabled = !ok;
+      }
+
       function applyTheme(color){
         const panel = $("bingoPanel");
         if (!panel){
@@ -1236,14 +1292,18 @@
       }
 
       function loadSettings(){
-        apiKeyEl.value = storage.getItem("bt_api_key") || "";
+        if (apiKeyEl){
+          apiKeyEl.value = storage.getItem("bt_api_key") || "";
+        }
         overlayToggle.checked = storage.getItem("bt_overlay") === "1";
         if (overlayToggle.checked) document.body.classList.add("overlay");
         overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
       }
 
       function saveSettings(){
-        storage.setItem("bt_api_key", apiKeyEl.value.trim());
+        if (apiKeyEl){
+          storage.setItem("bt_api_key", apiKeyEl.value.trim());
+        }
         storage.setItem("bt_overlay", overlayToggle.checked ? "1" : "0");
       }
 
@@ -1253,7 +1313,7 @@
         const options = opts || {};
         options.headers = options.headers || {};
         if (withKey){
-          const key = apiKeyEl.value.trim();
+          const key = apiKeyEl ? apiKeyEl.value.trim() : "";
           if (key) options.headers["X-API-Key"] = key;
         }
         return fetch(url, options);
@@ -1273,7 +1333,9 @@
       }
 
       function handleUnauthorized(){
-        apiKeyEl.value = "";
+        if (apiKeyEl){
+          apiKeyEl.value = "";
+        }
         document.getElementById("appView").classList.add("hidden");
         document.getElementById("loginView").classList.remove("hidden");
         loginStatusEl.textContent = "Unauthorized. Please log in again.";
@@ -1387,7 +1449,7 @@
             const playingSuit = suitLower === "major" ? "" : (suitMap[suitLower] || "");
             const playingLabel = playingSuit && playingSuit.toLowerCase() !== suitLower ? playingSuit : "";
             const suitMeta = suit || playingLabel
-              ? `<div class="muted">${suit || "-"}${playingLabel ? ` · ${playingLabel}` : ""}</div>`
+              ? `<div class="muted">${suit || "-"}${playingLabel ? ` - ${playingLabel}` : ""}</div>`
               : "";
             return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${suitMeta}</div>`;
           }).join("");
@@ -1405,16 +1467,22 @@
         el.textContent = JSON.stringify(data, null, 2);
       }
 
-      function renderBingoState(data){
-        const game = (data && data.game) || {};
-        currentGame = game;
-        applyTheme(game.theme_color || null);
-        const gid = getGameId();
-        if (gid !== activeGameId){
-          activeGameId = gid;
-          lastCalledCount = 0;
-          lastCalloutNumber = null;
-        }
+        function renderBingoState(data){
+          const game = (data && data.game) || {};
+          currentGame = game;
+          applyTheme(game.theme_color || null);
+          const gid = getGameId();
+          if (gid !== activeGameId){
+            activeGameId = gid;
+            lastCalledCount = 0;
+            lastCalloutNumber = null;
+            bingoHistory = [];
+            const historyEl = $("bHistory");
+            if (historyEl){
+              historyEl.innerHTML = "<div class=\"muted\">No history yet.</div>";
+            }
+            setBingoLastAction("");
+          }
         $("bTitleVal").textContent = game.title || "No title";
         $("bHeaderVal").textContent = game.header_text || game.header || "No header";
         $("bStageVal").textContent = game.stage || "No stage";
@@ -1429,24 +1497,63 @@
           announceBadge.className = "status-badge" + (announceToggle && announceToggle.checked ? " good" : "");
         }
         const statusBadge = $("bGameStatus");
-        if (statusBadge){
-          let label = "No game";
-          let cls = "status-badge";
-          if (game && game.game_id){
-            if (game.active === false){
-              label = "Closed";
-              cls += " bad";
-            } else if (game.started){
-              label = "Running";
-              cls += " good";
+          if (statusBadge){
+            let label = "No game";
+            let cls = "status-badge";
+            if (game && game.game_id){
+              if (game.active === false){
+                label = "Finished";
+                cls += " bad";
+              } else if (game.started){
+                label = "Running";
+                cls += " good";
+              } else {
+                label = "Waiting to start";
+                cls += " warn";
+              }
+            }
+            statusBadge.textContent = label;
+            statusBadge.className = cls;
+          }
+          const hasPendingClaims = Array.isArray(game.claims)
+            && game.claims.some(c => c && c.pending);
+          const statusText = $("bGameStatusText");
+          const statusMeta = $("bGameStatusMeta");
+          let stateKey = "waiting";
+          let stateLabel = "Waiting to Start";
+          if (!game || !game.game_id){
+            stateKey = "waiting";
+            stateLabel = "Waiting to Start";
+          } else if (game.active === false){
+            stateKey = "finished";
+            stateLabel = "Finished";
+          } else if (hasPendingClaims){
+            stateKey = "stage";
+            stateLabel = "Stage Complete";
+          } else if (game.started){
+            stateKey = "running";
+            stateLabel = "Running";
+          }
+          if (statusText){
+            statusText.textContent = stateLabel;
+            statusText.className = `bingo-status-label status-${stateKey}`;
+          }
+          if (statusMeta){
+            if (game && game.game_id){
+              statusMeta.textContent = `${game.title || "Untitled"} - Stage: ${game.stage || "single"}`;
             } else {
-              label = "Paused";
-              cls += " warn";
+              statusMeta.textContent = "No game selected.";
             }
           }
-          statusBadge.textContent = label;
-          statusBadge.className = cls;
-        }
+          if (stateKey === "waiting"){
+            setBingoPrimaryAction("bStart");
+          } else if (stateKey === "running"){
+            setBingoPrimaryAction("bRoll");
+          } else if (stateKey === "stage"){
+            setBingoPrimaryAction("bAdvanceStage");
+          } else {
+            setBingoPrimaryAction("");
+          }
         const contextPath = $("bContextPath");
         const contextMeta = $("bContextMeta");
         const contextTitle = $("bContextTitle");
@@ -1460,16 +1567,14 @@
         if (contextTitle){
           contextTitle.textContent = game.game_id ? `${game.title || "Untitled"} (${game.game_id})` : "";
         }
-        const called = Array.isArray(game.called) ? game.called : [];
-        $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "No numbers called yet.";
-        const buyBtn = $("bBuy");
-        if (buyBtn){
-          buyBtn.disabled = !(game.game_id && game.active !== false && !game.started && called.length === 0);
-        }
-        const startBtn = $("bStart");
-        if (startBtn){
-          startBtn.disabled = !(game.active !== false && !game.started);
-        }
+          const called = Array.isArray(game.called) ? game.called : [];
+          $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "No numbers called yet.";
+          updateBingoBuyState(game, called);
+          updateSeedPotState(game);
+          const startBtn = $("bStart");
+          if (startBtn){
+            startBtn.disabled = !(game.game_id && game.active !== false && !game.started);
+          }
         const rollBtn = $("bRoll");
         if (rollBtn){
           rollBtn.disabled = !(game.active !== false && game.started);
@@ -1478,30 +1583,36 @@
         if (refreshBtn){
           refreshBtn.disabled = !game.game_id;
         }
-        const closeBtn = $("bCloseGame");
-        if (closeBtn){
-          closeBtn.disabled = !game.game_id;
-        }
-        const advanceBtn = $("bAdvanceStage");
-        if (advanceBtn){
-          advanceBtn.disabled = !game.game_id || game.active === false;
-        }
+          const closeBtn = $("bCloseGame");
+          if (closeBtn){
+            closeBtn.disabled = !game.game_id;
+          }
+          const advanceBtn = $("bAdvanceStage");
+          if (advanceBtn){
+            advanceBtn.disabled = !game.game_id || game.active === false;
+          }
+          const viewBtn = $("bViewOwner");
+          if (viewBtn){
+            viewBtn.disabled = !game.game_id;
+          }
         renderCalledGrid(called);
         const bgPath = game.background ? new URL(game.background, getBase()).toString() : "";
         const cardWrap = $("bCard");
         cardWrap.style.backgroundImage = bgPath ? `linear-gradient(180deg, rgba(6,10,18,.85), rgba(6,10,18,.6)), url('${bgPath}')` : "";
-        const last = game.last_called != null ? game.last_called : (called.length ? called[called.length - 1] : null);
-        if (last != null && last !== lastCalloutNumber){
-          showCallout(`Called ${last}`);
-          lastCalloutNumber = last;
-          setBingoStatus(`Number called: ${last}`, "ok");
+          const last = game.last_called != null ? game.last_called : (called.length ? called[called.length - 1] : null);
+          if (last != null && last !== lastCalloutNumber){
+            showCallout(`Called ${last}`);
+            lastCalloutNumber = last;
+            setBingoStatus(`Number called: ${last}`, "ok");
+            setBingoLastAction(`Called ${last}`);
+            addBingoHistory(`Called ${last}`);
+          }
+          if (!game.game_id){
+            setBingoStatus("No game selected.", "alert");
+          }
+          lastCalledCount = called.length;
+          renderClaims(game);
         }
-        if (!game.game_id){
-          setBingoStatus("No game selected.", "alert");
-        }
-        lastCalledCount = called.length;
-        renderClaims(game);
-      }
 
       function renderClaims(game){
         const el = $("bClaims");
@@ -1533,41 +1644,45 @@
             btn.textContent = "Confirm + Advance";
             btn.className = "btn-primary";
             btn.style.maxWidth = "160px";
-            btn.onclick = async () => {
-              try{
-                await jsonFetch("/bingo/claim-approve", {
-                  method:"POST",
-                  headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
-                });
-                const adv = await jsonFetch("/bingo/advance-stage", {
-                  method:"POST",
-                  headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({game_id: game.game_id})
-                });
-                setBingoStatus(adv.ended ? "Claim approved. Game ended." : "Claim approved. Stage advanced.", "ok");
-                await refreshBingo();
-              }catch(err){
-                setBingoStatus(err.message, "err");
-              }
-            };
+              btn.onclick = async () => {
+                try{
+                  await jsonFetch("/bingo/claim-approve", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                  });
+                  const adv = await jsonFetch("/bingo/advance-stage", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id})
+                  });
+                  setBingoStatus(adv.ended ? "Claim approved. Game ended." : "Claim approved. Stage advanced.", "ok");
+                  addBingoHistory(adv.ended ? "Claim approved - game ended" : "Claim approved - stage advanced");
+                  setBingoLastAction("Claim approved");
+                  await refreshBingo();
+                }catch(err){
+                  setBingoStatus(err.message, "err");
+                }
+              };
             const deny = document.createElement("button");
             deny.textContent = "Deny";
             deny.className = "btn-ghost";
             deny.style.maxWidth = "90px";
-            deny.onclick = async () => {
-              try{
-                await jsonFetch("/bingo/claim-deny", {
-                  method:"POST",
-                  headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
-                });
-                setBingoStatus("Claim denied.", "ok");
-                await refreshBingo();
-              }catch(err){
-                setBingoStatus(err.message, "err");
-              }
-            };
+              deny.onclick = async () => {
+                try{
+                  await jsonFetch("/bingo/claim-deny", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                  });
+                  setBingoStatus("Claim denied.", "ok");
+                  addBingoHistory("Claim denied");
+                  setBingoLastAction("Claim denied");
+                  await refreshBingo();
+                }catch(err){
+                  setBingoStatus(err.message, "err");
+                }
+              };
             btnWrap.appendChild(btn);
             btnWrap.appendChild(deny);
             wrap.appendChild(btnWrap);
@@ -2489,6 +2604,17 @@
         el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
       }
 
+      function getOwnerClaimStatus(ownerName){
+        const claims = (currentGame && Array.isArray(currentGame.claims)) ? currentGame.claims : [];
+        const pending = claims.some(c => c && c.owner_name === ownerName && c.pending);
+        const denied = claims.some(c => c && c.owner_name === ownerName && c.denied);
+        const approved = claims.some(c => c && c.owner_name === ownerName && !c.pending && !c.denied);
+        if (pending) return {label: "Claim pending", cls: "warn"};
+        if (approved) return {label: "Claim approved", cls: "good"};
+        if (denied) return {label: "Claim denied", cls: "bad"};
+        return {label: "No claim", cls: ""};
+      }
+
       function renderOwnersList(owners){
         const el = $("bOwners");
         const empty = $("bOwnersEmpty");
@@ -2502,31 +2628,27 @@
         owners.forEach(o => {
           const item = document.createElement("div");
           item.className = "owner-row";
-          item.style.cursor = "pointer";
-          const token = o.token || "";
-          const link = token ? `${getBase()}/bingo/owner?token=${encodeURIComponent(token)}` : "";
-          const linkHtml = link ? `<a href="${link}" class="owner-link" target="_blank" rel="noreferrer">Open</a>` : "";
-          const copyBtn = link ? `<button data-copy="${link}" class="owner-copy-icon" title="Copy link" aria-label="Copy link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg></button>` : "";
-          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${o.owner_name}</strong></div>\n              <div class="owner-meta">\n                <span class="pill owner-cards">${o.cards} cards</span>\n                ${linkHtml}\n                ${copyBtn}\n              </div>\n            </div>`;
-          item.onclick = () => {
-            $("bOwner").value = o.owner_name || "";
-            loadOwnerCards(o.owner_name || "");
-            $("bOwnerModal").classList.add("show");
-          };
-          const linkEl = item.querySelector("a");
-          if (linkEl){
-            linkEl.addEventListener("click", (ev) => ev.stopPropagation());
-          }
-          const copy = item.querySelector("button[data-copy]");
-          if (copy){
-            copy.addEventListener("click", (ev) => {
-              ev.stopPropagation();
-              try{
-                navigator.clipboard.writeText(copy.getAttribute("data-copy") || "");
-                setStatus("Link copied.", "ok");
-              }catch(err){
-                setStatus("Copy failed.", "err");
-              }
+          const claim = getOwnerClaimStatus(o.owner_name || "");
+          const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
+          item.innerHTML = `
+            <div class="owner-row-main">
+              <div class="owner-row-name">
+                <strong>${o.owner_name}</strong>
+                <span class="${badgeClass}">${claim.label}</span>
+              </div>
+              <button class="btn-ghost owner-view-btn" data-owner="${o.owner_name}">View Cards (${o.cards})</button>
+            </div>
+          `;
+          const viewBtn = item.querySelector(".owner-view-btn");
+          if (viewBtn){
+            viewBtn.addEventListener("click", () => {
+              const name = viewBtn.getAttribute("data-owner") || "";
+              if (!name) return;
+              const ownerInput = $("bOwner");
+              if (ownerInput) ownerInput.value = name;
+              updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
+              loadOwnerCards(name);
+              $("bOwnerModal").classList.add("show");
             });
           }
           el.appendChild(item);
@@ -3270,20 +3392,29 @@
 
       $("bAdvanceStage").addEventListener("click", async () => {
         try{
+          const btn = $("bAdvanceStage");
+          if (btn) btn.disabled = true;
           const data = await jsonFetch("/bingo/advance-stage", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({game_id: getGameId()})
           });
           setBingoStatus(data.ended ? "Game closed." : "Stage advanced.", "ok");
+          addBingoHistory(data.ended ? "Stage advanced and game ended" : "Stage advanced");
+          setBingoLastAction(data.ended ? "Stage advanced and game ended" : "Stage advanced");
           await refreshBingo();
         }catch(err){
           setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bAdvanceStage");
+          if (btn) btn.disabled = false;
         }
       });
 
       $("bStart").addEventListener("click", async () => {
         try{
+          const btn = $("bStart");
+          if (btn) btn.disabled = true;
           const gid = getGameId();
           if (!gid){
             setBingoStatus("Select a game first.", "err");
@@ -3295,6 +3426,8 @@
             body: JSON.stringify({game_id: gid})
           });
           setBingoStatus("Game started.", "ok");
+          addBingoHistory("Game started");
+          setBingoLastAction("Game started");
           if (currentGame && currentGame.game_id === gid){
             currentGame.started = true;
             renderBingoState({game: currentGame});
@@ -3302,12 +3435,17 @@
           await refreshBingo();
         }catch(err){
           setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bStart");
+          if (btn) btn.disabled = false;
         }
       });
 
 
       $("bRoll").addEventListener("click", async () => {
         try{
+          const btn = $("bRoll");
+          if (btn) btn.disabled = true;
           await jsonFetch("/bingo/roll", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
@@ -3317,7 +3455,24 @@
           await refreshBingo();
         }catch(err){
           setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bRoll");
+          if (btn) btn.disabled = false;
         }
+      });
+
+      document.addEventListener("keydown", (ev) => {
+        if (ev.repeat) return;
+        if (ev.key.toLowerCase() !== "n") return;
+        const target = ev.target;
+        const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
+        if (tag === "input" || tag === "textarea" || target.isContentEditable) return;
+        const panel = $("bingoPanel");
+        if (!panel || panel.classList.contains("hidden")) return;
+        const btn = $("bRoll");
+        if (!btn || btn.disabled) return;
+        ev.preventDefault();
+        btn.click();
       });
 
       $("bCloseGame").addEventListener("click", async () => {
@@ -3330,6 +3485,8 @@
           return;
         }
         try{
+          const btn = $("bCloseGame");
+          if (btn) btn.disabled = true;
           await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"DELETE"});
           setGameId("");
           currentGame = null;
@@ -3346,27 +3503,79 @@
           $("bCardHeader").innerHTML = "";
           $("bCardGrid").innerHTML = "";
           setBingoStatus("Game closed.", "ok");
+          addBingoHistory("Game closed");
+          setBingoLastAction("Game closed");
           await loadGamesMenu();
         }catch(err){
           setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bCloseGame");
+          if (btn) btn.disabled = false;
         }
       });
 
 
-        $("bBuy").addEventListener("click", async () => {
+      const bOwnerInput = $("bOwner");
+      if (bOwnerInput){
+        bOwnerInput.addEventListener("input", () => updateBingoBuyState(currentGame, currentGame ? currentGame.called : []));
+      }
+      const bQtyInput = $("bQty");
+      if (bQtyInput){
+        bQtyInput.addEventListener("input", () => updateBingoBuyState(currentGame, currentGame ? currentGame.called : []));
+      }
+      const bSeedPotInput = $("bSeedPotAmount");
+      if (bSeedPotInput){
+        bSeedPotInput.addEventListener("input", () => updateSeedPotState(currentGame));
+      }
+      const bSeedPotApply = $("bSeedPotApply");
+      if (bSeedPotApply){
+        bSeedPotApply.addEventListener("click", async () => {
           try{
+            bSeedPotApply.disabled = true;
             const gid = getGameId();
-            const ownerName = $("bOwner").value.trim();
-            const qty = Number($("bQty").value || 1);
-            const gift = $("bGift").checked;
-            if (!ownerName){
-              setBingoStatus("Owner name is required.", "err");
+            if (!gid){
+              setBingoStatus("Select a game first.", "err");
               return;
             }
-            if (!Number.isFinite(qty) || qty < 1){
-              setBingoStatus("Quantity must be at least 1.", "err");
+            const amount = Number($("bSeedPotAmount").value || 0);
+            if (!Number.isFinite(amount) || amount <= 0){
+              setBingoStatus("Seed amount must be positive.", "err");
               return;
             }
+            await jsonFetch("/bingo/seed", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({game_id: gid, amount})
+            });
+            setBingoStatus("Pot seeded.", "ok");
+            addBingoHistory(`Seeded pot +${amount}`);
+            setBingoLastAction(`Seeded pot +${amount}`);
+            await refreshBingo();
+          }catch(err){
+            setBingoStatus(err.message, "err");
+          }finally{
+            updateSeedPotState(currentGame);
+          }
+        });
+      }
+
+      $("bBuy").addEventListener("click", async () => {
+        try{
+          const buyBtn = $("bBuy");
+          if (buyBtn) buyBtn.disabled = true;
+          const gid = getGameId();
+          const ownerName = $("bOwner").value.trim();
+          const qty = Number($("bQty").value || 1);
+          const countsPot = $("bCountsPot");
+          const gift = countsPot ? !countsPot.checked : false;
+          if (!ownerName){
+            setBingoStatus("Owner name is required.", "err");
+            return;
+          }
+          if (!Number.isFinite(qty) || qty < 1){
+            setBingoStatus("Quantity must be at least 1.", "err");
+            return;
+          }
             const body = {
               game_id: gid,
               owner_name: ownerName,
@@ -3379,7 +3588,9 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
           });
-          setBingoStatus("Cards bought.", "ok");
+          setBingoStatus(gift ? "Tickets gifted." : "Cards bought.", "ok");
+          addBingoHistory(gift ? `Gifted ${qty} for ${ownerName}` : `Bought ${qty} for ${ownerName}`);
+          setBingoLastAction(gift ? `Gifted ${qty} for ${ownerName}` : `Bought ${qty} for ${ownerName}`);
           await loadOwnersForGame();
           if (gid && ownerName){
             const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/token", {method:"GET"});
@@ -3391,6 +3602,8 @@
           }
         }catch(err){
           setBingoStatus(err.message, "err");
+        }finally{
+          updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
         }
       });
 
@@ -4125,9 +4338,18 @@
       if (mediaToolbarSearch){
         mediaToolbarSearch.addEventListener("input", () => applyMediaFilters());
       }
-      $("mediaFilterArtist").addEventListener("change", () => applyMediaFilters());
-      $("mediaFilterOriginType").addEventListener("change", () => applyMediaFilters());
-      $("mediaFilterLabel").addEventListener("change", () => applyMediaFilters());
+      const mediaFilterArtist = $("mediaFilterArtist");
+      if (mediaFilterArtist){
+        mediaFilterArtist.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterOriginType = $("mediaFilterOriginType");
+      if (mediaFilterOriginType){
+        mediaFilterOriginType.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterLabel = $("mediaFilterLabel");
+      if (mediaFilterLabel){
+        mediaFilterLabel.addEventListener("change", () => applyMediaFilters());
+      }
       const mediaToolbarSort = $("mediaToolbarSort");
       if (mediaToolbarSort){
         mediaToolbarSort.addEventListener("change", () => applyMediaFilters());
@@ -4135,9 +4357,12 @@
       const mediaFilterClear = $("mediaFilterClear");
       if (mediaFilterClear){
         mediaFilterClear.addEventListener("click", () => {
-          $("mediaFilterArtist").value = "";
-          $("mediaFilterOriginType").value = "";
-          $("mediaFilterLabel").value = "any";
+          const artist = $("mediaFilterArtist");
+          const origin = $("mediaFilterOriginType");
+          const label = $("mediaFilterLabel");
+          if (artist) artist.value = "";
+          if (origin) origin.value = "";
+          if (label) label.value = "any";
           applyMediaFilters();
         });
       }
@@ -4817,4 +5042,6 @@
         loadTarotArtists();
       }
       renderCard(null, [], "BING");
+
+
 

@@ -465,134 +465,129 @@
             </details>
           </div>
         </section>
-        <section class="panel" style="animation-delay:.05s" id="bingoPanel">
-          <h2>Manager</h2>
-          <div class="context-header">
-            <div>
-              <div class="context-path" id="bContextPath">Bingo / Manager / No game selected</div>
-              <div class="context-meta" id="bContextMeta">Pick a game to manage.</div>
-            </div>
-            <div class="context-meta" id="bContextTitle"></div>
-          </div>
+          <section class="panel" style="animation-delay:.05s" id="bingoPanel">
+            <h2>Bingo Manager</h2>
 
-          <div class="bingo-section">
-            <h3>Players</h3>
-            <div class="empty-state" id="bOwnersEmpty">
-              <div class="muted">No players yet. Refresh to pull current owners.</div>
-              <button class="btn-ghost" id="bOwnersRefresh">Refresh players</button>
-            </div>
-            <div class="list" id="bOwners"></div>
-          </div>
-
-          <div class="section-divider"></div>
-
-          <div class="bingo-section">
-            <h3>Stage Control</h3>
-            <div class="row">
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn-primary" id="bAdvanceStage">Advance stage</button>
+            <div class="bingo-section bingo-control">
+              <h3>Game Control</h3>
+              <div class="bingo-status-display" id="bGameStatusDisplay">
+                <div class="bingo-status-label" id="bGameStatusText">Waiting to Start</div>
+                <div class="bingo-status-meta" id="bGameStatusMeta">No game selected.</div>
+                <div class="status-badge" id="bGameStatus">No game</div>
               </div>
-              <div>
-                <label>Announce calls</label>
-                <div class="bingo-announce">
-                  <input type="checkbox" id="bAnnounceToggle">
-                  <span class="status-badge" id="bAnnounceBadge">Off</span>
-                </div>
+              <div class="bingo-primary-row">
+                <button class="btn-ghost" id="bStart">Start game</button>
+                <button class="btn-ghost" id="bRoll">Call next number</button>
+                <button class="btn-ghost" id="bAdvanceStage">Advance stage</button>
+                <button class="btn-ghost" id="bRefresh">Refresh</button>
+                <button class="btn-ghost danger-btn danger-action" id="bCloseGame">Close game</button>
               </div>
-            </div>
-            <div class="list" id="bClaims">No claims yet.</div>
-          </div>
-
-          <div class="section-divider"></div>
-
-          <div class="bingo-section">
-            <h3>Active Game</h3>
-            <div class="bingo-state-card">
-              <div class="row">
-                <div>
-                  <label for="bGameId">Game ID</label>
-                  <div id="bGameId" class="status">No game selected.</div>
-                </div>
-                <div>
-                  <label>Status</label>
-                  <div class="status-badge" id="bGameStatus">No game</div>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn-ghost" id="bStart">Start game</button>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button id="bRoll" class="btn-primary">Pull random number</button>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn-ghost" id="bRefresh">Refresh</button>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn-ghost danger-btn danger-action" id="bCloseGame">Close game</button>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn-ghost" id="bViewOwner">View tickets</button>
+              <div class="bingo-feedback">
+                <div class="bingo-last-action" id="bLastAction">Last action: -</div>
+                <div class="bingo-history" id="bHistory">
+                  <div class="muted">No history yet.</div>
                 </div>
               </div>
               <div class="status" id="bingoStatus">No game selected.</div>
             </div>
-          </div>
 
-          <div class="section-divider"></div>
+            <div class="section-divider"></div>
 
-          <div class="bingo-section">
-            <h3>Buy Cards</h3>
-            <div class="row">
-              <div>
-                <label for="bOwner">Owner name</label>
-                <input id="bOwner" placeholder="Player name">
+            <div class="bingo-section">
+              <h3>Players &amp; Cards</h3>
+              <div class="empty-state" id="bOwnersEmpty">
+                <div class="muted">No players yet. Refresh to pull current owners.</div>
+                <button class="btn-ghost" id="bOwnersRefresh">Refresh players</button>
               </div>
-              <div>
-                <label for="bOwnerId">Discord ID</label>
-                <input id="bOwnerId" placeholder="optional">
+              <div class="list" id="bOwners"></div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="bingo-section">
+              <h3>Game State &amp; History</h3>
+              <div class="bingo-summary" id="bSummary">
+                <div>Title: <span id="bTitleVal">No title</span></div>
+                <div>Header: <span id="bHeaderVal">No header</span></div>
+                <div>Stage: <span id="bStageVal">No stage</span></div>
+                <div>Pot: <span id="bPotVal">No pot</span></div>
               </div>
-                <div>
-                  <label for="bQty">Quantity</label>
-                  <input id="bQty" type="number" value="1" min="1" max="10">
-                </div>
-                <div>
-                  <label for="bGift">
-                    <input type="checkbox" id="bGift">
-                    Gift (no pot increase)
-                  </label>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button id="bBuy" class="btn-primary">Buy</button>
-                </div>
+              <div class="bingo-called" id="bCalled">No numbers called yet.</div>
+              <div class="bingo-called-grid" id="bCalledGrid"></div>
+              <div class="bingo-card" id="bCard">
+                <div class="bingo-header" id="bCardHeader"></div>
+                <div class="bingo-grid" id="bCardGrid"></div>
+              </div>
             </div>
-          </div>
 
-          <div class="section-divider"></div>
+            <div class="section-divider"></div>
 
-          <div class="bingo-section">
-            <h3>Game State</h3>
-            <div class="bingo-summary" id="bSummary">
-              <div>Title: <span id="bTitleVal">No title</span></div>
-              <div>Header: <span id="bHeaderVal">No header</span></div>
-              <div>Stage: <span id="bStageVal">No stage</span></div>
-              <div>Pot: <span id="bPotVal">No pot</span></div>
-            </div>
-            <div class="bingo-called" id="bCalled">No numbers called yet.</div>
-            <div class="bingo-called-grid" id="bCalledGrid"></div>
-            <div class="bingo-card" id="bCard">
-              <div class="bingo-header" id="bCardHeader"></div>
-              <div class="bingo-grid" id="bCardGrid"></div>
-            </div>
-          </div>
-        </section>
+            <details class="bingo-advanced" id="bingoAdvanced">
+              <summary>Advanced</summary>
+              <div class="bingo-advanced-body">
+                <div class="row">
+                  <div>
+                    <label>Game ID</label>
+                    <div id="bGameId" class="status">No game selected.</div>
+                  </div>
+                  <div>
+                    <label for="bCountsPot">
+                      <input type="checkbox" id="bCountsPot" checked>
+                      Counts toward pot
+                    </label>
+                  </div>
+                  <div>
+                    <label for="bSeedPotAmount">Seed pot</label>
+                    <input id="bSeedPotAmount" type="number" value="0" min="0">
+                  </div>
+                  <div>
+                    <label>&nbsp;</label>
+                    <button class="btn-ghost" id="bSeedPotApply">Seed pot</button>
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label for="bOwner"><span class="req">*</span> Owner name</label>
+                    <input id="bOwner" placeholder="Player name">
+                  </div>
+                  <div>
+                    <label for="bQty">Quantity</label>
+                    <input id="bQty" type="number" value="1" min="1" max="10">
+                  </div>
+                  <div>
+                    <label>&nbsp;</label>
+                    <button id="bBuy" class="btn-ghost">Buy</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="bingo-advanced" id="bingoAdmin">
+              <summary>Admin Tools</summary>
+              <div class="bingo-advanced-body">
+                <div class="row">
+                  <div>
+                    <label for="bOwnerId">Discord ID</label>
+                    <input id="bOwnerId" placeholder="optional">
+                  </div>
+                  <div>
+                    <label>&nbsp;</label>
+                    <button class="btn-ghost" id="bViewOwner">View tickets</button>
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label>Announce calls</label>
+                    <div class="bingo-announce">
+                      <input type="checkbox" id="bAnnounceToggle">
+                      <span class="status-badge" id="bAnnounceBadge">Off</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="list" id="bClaims">No claims yet.</div>
+              </div>
+            </details>
+          </section>
 
         <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
           <h2>Session Manager</h2>

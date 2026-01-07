@@ -711,10 +711,63 @@
       .bingo-section{
         display:flex;
         flex-direction:column;
-        gap:8px;
+        gap:10px;
       }
       .bingo-section h3{
         margin:0;
+        color:var(--accent);
+        letter-spacing:.12em;
+        text-transform:uppercase;
+        font-size:12px;
+      }
+      .bingo-control{
+        gap:12px;
+      }
+      .bingo-status-display{
+        display:flex;
+        align-items:center;
+        gap:16px;
+        flex-wrap:wrap;
+      }
+      .bingo-status-label{
+        font-size:24px;
+        font-weight:700;
+        letter-spacing:.04em;
+        text-transform:uppercase;
+      }
+      .bingo-status-label.status-waiting{color:#f2d7b3;}
+      .bingo-status-label.status-running{color:var(--accent);}
+      .bingo-status-label.status-stage{color:#f2d7b3;}
+      .bingo-status-label.status-finished{color:#f1b1b1;}
+      .bingo-status-meta{
+        font-size:12px;
+        color:var(--muted);
+      }
+      .bingo-primary-row{
+        display:flex;
+        flex-wrap:wrap;
+        gap:10px;
+      }
+      .bingo-feedback{
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .bingo-last-action{
+        font-size:13px;
+        color:var(--neutral-2);
+      }
+      .bingo-history{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:12px;
+        color:var(--muted);
+      }
+      .bingo-history-item{
+        padding:4px 6px;
+        border-radius:8px;
+        background:rgba(8,12,16,.35);
       }
       .bingo-state-card{
         padding:12px;
@@ -757,18 +810,27 @@
         gap:10px;
       }
       .owner-row{
-        padding:2px 6px;
-        border-bottom:1px solid rgba(255,255,255,0.06);
+        padding:8px 6px;
+        border-bottom:1px solid rgba(255,255,255,0.05);
+      }
+      .owner-row-main{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+      }
+      .owner-row-name{
+        display:flex;
+        align-items:center;
+        gap:10px;
       }
       .owner-row strong{
-        font-size:11px;
+        font-size:12px;
         font-weight:600;
-        line-height:1.1;
       }
-      .owner-row .owner-meta{
-        gap:4px;
-        font-size:10px;
-        line-height:1.1;
+      .owner-view-btn{
+        white-space:nowrap;
       }
       .owner-card-list{
         flex:1;
@@ -1125,7 +1187,7 @@
       .section-divider{
         height:1px;
         background:linear-gradient(90deg, transparent, rgba(157,224,125,.25), transparent);
-        margin:18px 0;
+        margin:24px 0;
       }
       .context-header{
         display:flex;
@@ -1931,7 +1993,7 @@
       .bingo-summary{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-        gap:12px;
+        gap:10px;
         font-size:13px;
         color:var(--neutral-2);
       }
@@ -1987,9 +2049,9 @@
       .bingo-called{
         font-size:12px;
         color:var(--muted);
-        border:1px dashed rgba(233,226,210,.18);
         border-radius:10px;
         padding:8px;
+        background:rgba(8,12,16,.35);
       }
       .bingo-called-grid{
         display:grid;
@@ -2055,6 +2117,33 @@
       .bingo-card{
         background-size:cover;
         background-position:center;
+      }
+      .bingo-advanced{
+        border:1px solid rgba(255,255,255,.08);
+        border-radius:12px;
+        padding:10px;
+        background:rgba(8,12,16,.35);
+      }
+      .bingo-advanced summary{
+        cursor:pointer;
+        list-style:none;
+        font-size:12px;
+        letter-spacing:.12em;
+        text-transform:uppercase;
+        color:var(--neutral-2);
+      }
+      .bingo-advanced summary::-webkit-details-marker{
+        display:none;
+      }
+      .bingo-advanced[open] summary{
+        color:var(--accent-2);
+      }
+      .bingo-advanced-body{
+        margin-top:10px;
+      }
+      .req{
+        color:#f1b1b1;
+        margin-right:4px;
       }
       @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
