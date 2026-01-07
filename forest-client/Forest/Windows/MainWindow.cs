@@ -1141,16 +1141,15 @@ public class MainWindow : Window, IDisposable
     {
         bool connected = Plugin.Config.BingoConnected;
         float scale = Math.Clamp(_bingoUiScale, 0.85f, 1.25f);
-        float baseScale = ImGui.GetWindowFontScale();
-        if (Math.Abs(scale - baseScale) > 0.01f)
+        if (Math.Abs(scale - 1f) > 0.01f)
             ImGui.SetWindowFontScale(scale);
 
         if (!connected)
         {
             ImGui.TextColored(new Vector4(1f, 0.55f, 0.55f, 1f), "Not connected");
             ImGui.TextDisabled("Set your Auth Token in Settings to connect.");
-            if (Math.Abs(scale - baseScale) > 0.01f)
-                ImGui.SetWindowFontScale(baseScale);
+            if (Math.Abs(scale - 1f) > 0.01f)
+                ImGui.SetWindowFontScale(1f);
             return;
         }
 
@@ -1248,8 +1247,8 @@ public class MainWindow : Window, IDisposable
             ImGui.EndTabBar();
         }
 
-        if (Math.Abs(scale - baseScale) > 0.01f)
-            ImGui.SetWindowFontScale(baseScale);
+        if (Math.Abs(scale - 1f) > 0.01f)
+            ImGui.SetWindowFontScale(1f);
     }
 
     private bool BeginBingoTab(string label, int index)
@@ -1490,10 +1489,9 @@ public class MainWindow : Window, IDisposable
 
         ImGui.BeginChild("BingoLastCall", new Vector2(0, 72), true, ImGuiWindowFlags.NoScrollbar);
         ImGui.TextDisabled("Last Call");
-        float baseScale = ImGui.GetWindowFontScale();
-        ImGui.SetWindowFontScale(baseScale * 1.8f);
+        ImGui.SetWindowFontScale(1.8f);
         ImGui.TextUnformatted(label);
-        ImGui.SetWindowFontScale(baseScale);
+        ImGui.SetWindowFontScale(1f);
         ImGui.SameLine();
         ImGui.TextDisabled($"Calls: {count}");
         ImGui.SameLine();
