@@ -93,6 +93,7 @@ public class MainWindow : Window, IDisposable
     private bool _bingoAnnounceCalls = false;
     private bool _bingoAutoRoll = false;
     private bool _bingoAutoPinch = false;
+    private bool _bingoTabSelectionPending = true;
     private string _bingoOwnerFilter = "";
     private string _bingoOwnerFilterCache = "";
     private readonly List<OwnerSummary> _bingoFilteredOwners = new();
@@ -138,6 +139,7 @@ public class MainWindow : Window, IDisposable
         _bingoAnnounceCalls = Plugin.Config.BingoAnnounceCalls;
         _bingoAutoRoll = Plugin.Config.BingoAutoRoll;
         _bingoAutoPinch = Plugin.Config.BingoAutoPinch;
+        _bingoTabSelectionPending = true;
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -1253,10 +1255,13 @@ public class MainWindow : Window, IDisposable
 
     private bool BeginBingoTab(string label, int index)
     {
-        var flags = _bingoUiTabIndex == index ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        var flags = (_bingoTabSelectionPending && _bingoUiTabIndex == index)
+            ? ImGuiTabItemFlags.SetSelected
+            : ImGuiTabItemFlags.None;
         if (ImGui.BeginTabItem(label, flags))
         {
             SetBingoTabIndex(index);
+            _bingoTabSelectionPending = false;
             return true;
         }
         return false;
@@ -1267,6 +1272,7 @@ public class MainWindow : Window, IDisposable
         if (_bingoUiTabIndex == index)
             return;
         _bingoUiTabIndex = index;
+        _bingoTabSelectionPending = false;
         Plugin.Config.BingoUiTabIndex = index;
         Plugin.Config.Save();
     }
