@@ -431,11 +431,11 @@
         editPanel.classList.toggle("active", tab === "edit");
       }
 
-        function updateMediaEditPanel(){
-          const count = mediaSelected.size;
-          const editBtn = $("mediaTabEditBtn");
-          if (editBtn){
-            editBtn.disabled = count === 0;
+      function updateMediaEditPanel(){
+        const count = mediaSelected.size;
+        const editBtn = $("mediaTabEditBtn");
+        if (editBtn){
+          editBtn.disabled = count === 0;
             editBtn.title = editBtn.disabled ? "Select an image to edit" : "";
             if (editBtn.disabled && editBtn.classList.contains("active")){
               setMediaTab("upload");
@@ -448,14 +448,15 @@
         const artistDisplay = $("mediaEditArtistDisplay");
         const originDisplay = $("mediaEditOriginDisplay");
         const hasSingle = count === 1 && currentMediaEdit;
-          if (!hasSingle){
-            if (card) card.classList.add("hidden");
-            if (empty){
-              empty.classList.remove("hidden");
-              empty.textContent = count
-                ? "Multiple images selected. Use bulk actions or select a single image to edit."
-                : "Select an image to edit.";
-            }
+        const canDelete = hasScope("admin:web");
+        if (!hasSingle){
+          if (card) card.classList.add("hidden");
+          if (empty){
+            empty.classList.remove("hidden");
+            empty.textContent = count
+              ? "Multiple images selected. Use bulk actions or select a single image to edit."
+              : "Select an image to edit.";
+          }
           $("mediaEditSave").disabled = true;
           $("mediaEditClear").disabled = count === 0;
           $("mediaEditCopy").disabled = true;
@@ -485,7 +486,7 @@
           $("mediaEditClear").disabled = false;
           $("mediaEditCopy").disabled = false;
           $("mediaEditOpen").disabled = false;
-          $("mediaEditDelete").disabled = !currentMediaEdit.delete_url;
+          $("mediaEditDelete").disabled = !currentMediaEdit.delete_url || !canDelete;
           const isHidden = currentMediaEdit.hidden === true
             || currentMediaEdit.hidden === "true"
             || currentMediaEdit.hidden === 1
@@ -745,9 +746,10 @@
           const del = document.createElement("button");
           del.type = "button";
           del.className = "btn-ghost btn-danger icon-action";
-          del.title = authUserIsElfmin && item.delete_url ? "Delete" : "Delete not available";
+          const canDelete = hasScope("admin:web");
+          del.title = canDelete && item.delete_url ? "Delete" : "Delete not available";
           del.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 7h12v2H6zm3 2h2v9H9zm4 0h2v9h-2zM8 5h8l-1-1h-6l-1 1z\"/></svg>";
-          del.disabled = !(authUserIsElfmin && item.delete_url);
+          del.disabled = !(canDelete && item.delete_url);
           del.addEventListener("click", async (ev) => {
             ev.stopPropagation();
             if (del.disabled) return;
@@ -851,6 +853,12 @@
           if (indicator){
             indicator.textContent = `${count} selected`;
           }
+          const deleteBtn = $("mediaBulkDelete");
+          if (deleteBtn){
+            const canDelete = hasScope("admin:web");
+            deleteBtn.disabled = !canDelete || count === 0;
+            deleteBtn.title = canDelete ? "Delete selected" : "Delete requires admin access";
+          }
         }
 
       function clearMediaSelection(){
@@ -915,7 +923,7 @@
           return true;
         }
         const set = new Set(Array.from(scopes || []).map(String));
-        return set.has("*") || set.has("bingo:admin");
+        return set.has("*") || set.has("admin:web");
       }
 
       function applyElfminVisibility(){
@@ -942,6 +950,7 @@
       function applyScopeVisibility(){
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
+        const canAdmin = hasScope("admin:web");
         const bingoBtn = $("menuBingo");
         const contestsBtn = $("menuContests");
         const mediaBtn = $("menuMedia");
@@ -951,9 +960,9 @@
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
         if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
-        if (contestsBtn) contestsBtn.classList.toggle("hidden", !canBingo);
+        if (contestsBtn) contestsBtn.classList.toggle("hidden", !canAdmin);
         if (mediaBtn) mediaBtn.classList.toggle("hidden", !canBingo);
-        if (calendarBtn) calendarBtn.classList.toggle("hidden", !canBingo);
+        if (calendarBtn) calendarBtn.classList.toggle("hidden", !canAdmin);
         if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canTarot);
@@ -961,7 +970,8 @@
 
         const saved = getSavedPanel();
         const blocked =
-          (!canBingo && (saved === "bingo" || saved === "contests" || saved === "media")) ||
+          (!canBingo && (saved === "bingo" || saved === "media")) ||
+          (!canAdmin && (saved === "contests")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks"));
         if (blocked){
           showPanel("dashboard");
@@ -1554,11 +1564,14 @@
         const saved = getSavedPanel();
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
+        const canAdmin = hasScope("admin:web");
         const allowedPanels = new Set(["dashboard"]);
         if (canBingo){
           allowedPanels.add("bingo");
-          allowedPanels.add("contests");
           allowedPanels.add("media");
+        }
+        if (canAdmin){
+          allowedPanels.add("contests");
         }
         if (canTarot){
           allowedPanels.add("tarotLinks");
@@ -4625,6 +4638,11 @@
         });
       }
       $("mediaBulkDelete").addEventListener("click", async () => {
+        if (!hasScope("admin:web")){
+          setMediaLibraryStatus("Delete requires admin access.", "err");
+          showToast("Delete requires admin access.", "err");
+          return;
+        }
         const items = getSelectedMediaItems();
         if (!items.length) return;
         if (!confirm(`Delete ${items.length} image(s)? This cannot be undone.`)) return;
@@ -4883,6 +4901,11 @@
 
       $("mediaEditDelete").addEventListener("click", async () => {
         if (!currentMediaEdit || !currentMediaEdit.delete_url) return;
+        if (!hasScope("admin:web")){
+          setMediaEditStatus("Delete requires admin access.", "err");
+          showToast("Delete requires admin access.", "err");
+          return;
+        }
         if (!confirm("Delete this image? This cannot be undone.")) return;
         try{
           const res = await fetch(currentMediaEdit.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});

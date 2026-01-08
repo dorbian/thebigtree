@@ -71,7 +71,8 @@ def _scopes_ok(needed: Set[str], granted: Set[str]) -> bool:
         return True
     if "*" in granted:
         return True
-    return needed.issubset(granted)
+    # Treat route scopes as "any-of" to allow shared admin scopes.
+    return any(scope in granted for scope in needed)
 
 def _verify_api_key(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     if token not in cfg.api_keys:

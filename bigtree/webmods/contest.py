@@ -191,7 +191,7 @@ async def list_entries(req: web.Request):
         return web.json_response({"error": "contest not found"}, status=404)
     return web.json_response({"channel_id": channel_id, "entries": data["entries"]})
 
-@route("POST", "/api/contests/create", scopes=["bingo:admin"])
+@route("POST", "/api/contests/create", scopes=["admin:web"])
 async def create_contest(req: web.Request):
     try:
         body = await req.json()
@@ -271,7 +271,7 @@ async def create_contest(req: web.Request):
 
     return web.json_response({"ok": True, "channel_id": channel_id, "message_id": msg.id})
 
-@route("POST", "/api/contests/channel", scopes=["bingo:admin"])
+@route("POST", "/api/contests/channel", scopes=["admin:web"])
 async def create_contest_channel(req: web.Request):
     try:
         body = await req.json()

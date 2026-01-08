@@ -230,7 +230,7 @@ async def media_thumb(req: web.Request):
     resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
     return resp
 
-@route("POST", "/api/media/upload", scopes=["tarot:admin", "bingo:admin"])
+@route("POST", "/api/media/upload", scopes=["tarot:admin", "bingo:admin", "admin:web"])
 async def upload_media(req: web.Request):
     fields, filename_hint, data = await read_multipart(req)
     if not data:
@@ -288,7 +288,7 @@ async def upload_media(req: web.Request):
     )
     return web.json_response({"ok": True, "item": item})
 
-@route("GET", "/api/media/list", scopes=["tarot:admin", "bingo:admin"])
+@route("GET", "/api/media/list", scopes=["tarot:admin", "bingo:admin", "admin:web"])
 async def list_media(_req: web.Request):
     items: list[dict] = []
     seen: set[str] = set()
@@ -348,7 +348,7 @@ async def list_media(_req: web.Request):
 
     return web.json_response({"ok": True, "items": items})
 
-@route("DELETE", "/api/media/{filename}", scopes=["tarot:admin", "bingo:admin"])
+@route("DELETE", "/api/media/{filename}", scopes=["admin:web"])
 async def delete_media(req: web.Request):
     filename = req.match_info["filename"]
     path = os.path.join(_media_dir(), filename)
