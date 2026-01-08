@@ -108,6 +108,16 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      function hasScope(scope){
+        return authUserScopes.has("*") || authUserScopes.has(scope);
+      }
+
+      function ensureScope(scope, msg){
+        if (hasScope(scope)) return true;
+        setStatus(msg || "Unauthorized.", "err");
+        return false;
+      }
+
       function setLibraryStatus(msg, kind){
         setStatusText("uploadLibraryStatus", msg, kind);
       }
@@ -1499,6 +1509,36 @@
         }
       }
 
+      async function initAuthenticatedSession(){
+        await loadAuthUser();
+        const contestCategoryStatus = $("contestCategoryStatus");
+        if (contestCategoryStatus){
+          contestCategoryStatus.textContent = CONTEST_CATEGORY_ID;
+        }
+        if ($("contestChannelName") && !$("contestChannelName").value.trim()){
+          $("contestChannelName").value = "elfoween";
+        }
+        updateContestChannelPreview();
+        const saved = getSavedPanel();
+        if (!getSeenDashboard()){
+          showPanelOnce("dashboard");
+          setSeenDashboard();
+        } else {
+          showPanel(saved || "bingo");
+        }
+        if (hasScope("bingo:admin")){
+          loadGamesMenu();
+          ensureBingoPolling();
+        }
+        if (hasScope("tarot:admin")){
+          loadTarotDeckList();
+          loadTarotSessionDecks();
+          loadTarotSessions();
+          loadTarotNumbers();
+          loadTarotArtists();
+        }
+      }
+
       function showList(el, data){
         if (data && Array.isArray(data.cards)){
           if (!data.cards.length){
@@ -2110,8 +2150,14 @@
         loadDiscordChannels();
         updateBingoCreatePayload();
       });
-      $("menuTarotLinks").addEventListener("click", () => showPanel("tarotLinks"));
-      $("menuTarotDecks").addEventListener("click", () => showPanel("tarotDecks"));
+      $("menuTarotLinks").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        showPanel("tarotLinks");
+      });
+      $("menuTarotDecks").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        showPanel("tarotDecks");
+      });
       $("menuContests").addEventListener("click", () => {
         showPanel("contests");
         loadContestManagement();
@@ -2162,6 +2208,7 @@
         showPanel("media");
       });
       $("menuArtists").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         $("artistModal").classList.add("show");
         loadTarotArtists();
       });
@@ -2170,6 +2217,7 @@
         loadCalendarAdmin();
       });
       $("menuGallery").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         $("galleryModal").classList.add("show");
         loadGalleryChannels();
         loadGallerySettings();
@@ -3317,20 +3365,7 @@
         document.getElementById("loginView").classList.add("hidden");
         document.getElementById("appView").classList.remove("hidden");
         setStatus("Welcome to Bingo Control.", "ok");
-        loadAuthUser();
-        loadGamesMenu();
-        loadTarotDeckList();
-        loadTarotSessionDecks();
-        loadTarotSessions();
-        loadTarotNumbers();
-        const saved = getSavedPanel();
-        if (!getSeenDashboard()){
-          showPanelOnce("dashboard");
-          setSeenDashboard();
-        } else {
-          showPanel(saved || "bingo");
-        }
-        ensureBingoPolling();
+        initAuthenticatedSession();
       });
       overlayToggle.addEventListener("change", () => {
         document.body.classList.toggle("overlay", overlayToggle.checked);
@@ -3824,6 +3859,7 @@
       }
 
       async function loadTarotSessionDecks(selectValue){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
@@ -3871,6 +3907,7 @@
       });
 
       async function loadTarotSessions(selectJoin){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         try{
           const data = await jsonFetch("/api/tarot/sessions", {method:"GET"}, true);
           const select = $("tSessionSelect");
@@ -4341,6 +4378,7 @@
       }
 
       async function loadTarotNumbers(){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         try{
           const data = await jsonFetch("/api/tarot/numbers", {method:"GET"}, true);
           taNumbers = data.numbers || [];
@@ -4362,6 +4400,7 @@
       }
 
       async function loadTarotArtists(){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         try{
           const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
           const artists = data.artists || [];
@@ -5164,6 +5203,7 @@
       });
 
       async function loadTarotDeckList(selectValue, autoLoad = true){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
@@ -5189,29 +5229,7 @@
       if (apiKeyEl.value.trim()){
         document.getElementById("loginView").classList.add("hidden");
         document.getElementById("appView").classList.remove("hidden");
-        loadAuthUser();
-        const contestCategoryStatus = $("contestCategoryStatus");
-        if (contestCategoryStatus){
-          contestCategoryStatus.textContent = CONTEST_CATEGORY_ID;
-        }
-        if ($("contestChannelName") && !$("contestChannelName").value.trim()){
-          $("contestChannelName").value = "elfoween";
-        }
-        updateContestChannelPreview();
-        loadGamesMenu();
-        const saved = getSavedPanel();
-        if (!getSeenDashboard()){
-          showPanelOnce("dashboard");
-          setSeenDashboard();
-        } else {
-          showPanel(saved || "bingo");
-        }
-        ensureBingoPolling();
-        loadTarotDeckList();
-        loadTarotSessionDecks();
-        loadTarotSessions();
-        loadTarotNumbers();
-        loadTarotArtists();
+        initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
 
