@@ -893,6 +893,13 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      function setAuthTempStatus(msg, kind){
+        const el = $("authTempStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
       function computeElfminAccess(scopes, source){
         if (source === "api_key"){
           return true;
@@ -905,6 +912,7 @@
         const isElfmin = !!authUserIsElfmin;
         const authRolesBtn = $("menuAuthRoles");
         const authKeysBtn = $("menuAuthKeys");
+        const authTempBtn = $("menuAuthTemp");
         const deckDeleteBtn = $("taDeleteDeck");
         if (authRolesBtn){
           authRolesBtn.classList.toggle("hidden", !isElfmin);
@@ -912,10 +920,38 @@
         if (authKeysBtn){
           authKeysBtn.classList.toggle("hidden", !isElfmin);
         }
+        if (authTempBtn){
+          authTempBtn.classList.toggle("hidden", !isElfmin);
+        }
         if (deckDeleteBtn){
           deckDeleteBtn.classList.toggle("hidden", !isElfmin);
           deckDeleteBtn.disabled = !isElfmin;
         }
+      }
+
+      function renderAuthTempRoles(){
+        const select = $("authTempRole");
+        if (!select) return;
+        const keys = Object.keys(authRoleScopes || {});
+        select.innerHTML = "";
+        if (!keys.length){
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "No role scopes configured";
+          select.appendChild(opt);
+          return;
+        }
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "Select access profile";
+        select.appendChild(empty);
+        keys.forEach((id) => {
+          const role = (authRolesCache || []).find(r => String(r.id) === String(id));
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = role ? `${role.name} (${id})` : id;
+          select.appendChild(opt);
+        });
       }
 
       function updateAuthRoleIdsField(){
@@ -981,6 +1017,7 @@
           const roles = res.roles || [];
           authRolesCache = roles;
           renderAuthRolesList(roles);
+          renderAuthTempRoles();
           setAuthRolesStatus("Ready.", "ok");
         }catch(err){
           setAuthRolesStatus(err.message, "err");
@@ -2109,6 +2146,16 @@
         $("authTokensModal").classList.add("show");
         loadAuthTokens();
       });
+      $("menuAuthTemp").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can generate temporary links.", "err");
+          return;
+        }
+        $("authTempModal").classList.add("show");
+        loadAuthRoles();
+        renderAuthTempRoles();
+        setAuthTempStatus("Ready.", "");
+      });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
       $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
       $("contestCreate").addEventListener("click", () => createContest());
@@ -3079,6 +3126,48 @@
         $("authTokensModal").classList.remove("show");
       });
       $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
+      $("authTempClose").addEventListener("click", () => {
+        $("authTempModal").classList.remove("show");
+      });
+      $("authTempGenerate").addEventListener("click", async () => {
+        const roleId = $("authTempRole").value.trim();
+        const scopesRaw = $("authTempScopes").value.trim();
+        const scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+        if (!roleId && scopes.length === 0){
+          setAuthTempStatus("Select a role profile or provide scopes.", "err");
+          return;
+        }
+        try{
+          setAuthTempStatus("Generating...", "");
+          const payload = {
+            role_ids: roleId ? [roleId] : [],
+            scopes: scopes,
+            ttl_seconds: 6 * 60 * 60
+          };
+          const res = await jsonFetch("/api/auth/temp-links", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          $("authTempUrl").value = res.link_url || "";
+          setAuthTempStatus("Link ready.", "ok");
+        }catch(err){
+          setAuthTempStatus(err.message || "Failed to create link.", "err");
+        }
+      });
+      $("authTempCopy").addEventListener("click", async () => {
+        const url = $("authTempUrl").value.trim();
+        if (!url){
+          setAuthTempStatus("No link to copy.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(url);
+          setAuthTempStatus("Link copied.", "ok");
+        }catch(err){
+          setAuthTempStatus("Copy failed.", "err");
+        }
+      });
       $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;

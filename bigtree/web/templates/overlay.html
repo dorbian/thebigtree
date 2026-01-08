@@ -114,6 +114,11 @@
                     <path d="M12 1a7 7 0 0 0-4.3 12.5l-2.2 2.2V19h3.3l1.2-1.2h1.4l1.2-1.2h1.5l1.6-1.6A7 7 0 1 0 12 1zm0 4a3 3 0 1 1-3 3 3 3 0 0 1 3-3z"/>
                   </svg>
                 </button>
+                <button class="menu-icon" id="menuAuthTemp" title="Temporary access" aria-label="Temporary access">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2a6 6 0 0 1 6 6v3h2a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a1 1 0 0 1 1-1h2V8a6 6 0 0 1 6-6zm-4 9h8V8a4 4 0 1 0-8 0v3z"/>
+                  </svg>
+                </button>
                 <button class="menu-icon" id="menuOverlayToggle" title="Toggle overlay mode" aria-label="Toggle overlay mode">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/>
@@ -1740,6 +1745,34 @@
           <div class="list" id="authTokensList">No keys loaded.</div>
         </div>
         <div class="status" id="authTokensStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="authTempModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Temporary Access Link</h3>
+          <button class="btn-ghost" id="authTempClose">Close</button>
+        </div>
+        <div class="modal-content">
+          <div class="form-row">
+            <label for="authTempRole">Access profile (role scope)</label>
+            <select id="authTempRole"></select>
+          </div>
+          <div class="form-row">
+            <label for="authTempScopes">Scopes override (optional, comma separated)</label>
+            <input id="authTempScopes" placeholder="bingo:admin, tarot:admin">
+          </div>
+          <div class="form-row">
+            <button id="authTempGenerate">Generate 6 hour link</button>
+          </div>
+          <div class="form-row">
+            <label for="authTempUrl">Temporary link</label>
+            <input id="authTempUrl" readonly>
+            <button class="btn-ghost" id="authTempCopy" type="button">Copy link</button>
+          </div>
+          <div class="muted">Link is single-use. The session lasts 6 hours after activation.</div>
+        </div>
+        <div class="status" id="authTempStatus">Ready.</div>
       </div>
     </div>
     <div class="toast-stack" id="toastStack"></div>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Temporary Access</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+        background: #0f1318;
+        color: #e8edf2;
+      }
+      .wrap {
+        max-width: 540px;
+        margin: 8vh auto;
+        padding: 24px;
+        background: #141b22;
+        border: 1px solid #23303b;
+        border-radius: 12px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #a7b2bf;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #8fa0b3;
+        margin-bottom: 6px;
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #28333f;
+        background: #0f141a;
+        color: #e8edf2;
+      }
+      button {
+        margin-top: 12px;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: none;
+        background: #3b9d6d;
+        color: #0b0f12;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 12px;
+        min-height: 20px;
+        color: #f2c97f;
+      }
+      .token {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        background: #0c1015;
+        border: 1px dashed #2d3946;
+        border-radius: 8px;
+        padding: 8px;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Temporary Access</h1>
+      <p>Enter your display name to activate this access link. Access lasts 6 hours.</p>
+      <label for="name">Name</label>
+      <input id="name" placeholder="Your name">
+      <button id="loginBtn" type="button">Activate Access</button>
+      <div class="status" id="status"></div>
+      <div class="token" id="tokenBox" style="display:none;"></div>
+    </div>
+
+    <script>
+      (function(){
+        const token = "{TOKEN}";
+        const statusEl = document.getElementById("status");
+        const tokenBox = document.getElementById("tokenBox");
+        const nameEl = document.getElementById("name");
+        const btn = document.getElementById("loginBtn");
+        btn.addEventListener("click", async () => {
+          const name = nameEl.value.trim();
+          if (!name){
+            statusEl.textContent = "Name required.";
+            return;
+          }
+          btn.disabled = true;
+          statusEl.textContent = "Activating...";
+          try{
+            const res = await fetch(`/auth/temp/${token}`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({name})
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false){
+              throw new Error(data.error || "Login failed");
+            }
+            localStorage.setItem("bt_api_key", data.token || "");
+            statusEl.textContent = "Access granted. Redirecting...";
+            if (data.token){
+              tokenBox.style.display = "block";
+              tokenBox.textContent = data.token;
+            }
+            setTimeout(() => {
+              window.location.href = data.redirect || "/overlay";
+            }, 600);
+          }catch(err){
+            statusEl.textContent = err.message || "Login failed.";
+          }finally{
+            btn.disabled = false;
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
