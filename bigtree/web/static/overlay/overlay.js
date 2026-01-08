@@ -939,6 +939,35 @@
         }
       }
 
+      function applyScopeVisibility(){
+        const canBingo = hasScope("bingo:admin");
+        const canTarot = hasScope("tarot:admin");
+        const bingoBtn = $("menuBingo");
+        const contestsBtn = $("menuContests");
+        const mediaBtn = $("menuMedia");
+        const calendarBtn = $("menuCalendar");
+        const tarotLinksBtn = $("menuTarotLinks");
+        const tarotDecksBtn = $("menuTarotDecks");
+        const artistsBtn = $("menuArtists");
+        const galleryBtn = $("menuGallery");
+        if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
+        if (contestsBtn) contestsBtn.classList.toggle("hidden", !canBingo);
+        if (mediaBtn) mediaBtn.classList.toggle("hidden", !canBingo);
+        if (calendarBtn) calendarBtn.classList.toggle("hidden", !canBingo);
+        if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
+        if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
+        if (artistsBtn) artistsBtn.classList.toggle("hidden", !canTarot);
+        if (galleryBtn) galleryBtn.classList.toggle("hidden", !canTarot);
+
+        const saved = getSavedPanel();
+        const blocked =
+          (!canBingo && (saved === "bingo" || saved === "contests" || saved === "media")) ||
+          (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks"));
+        if (blocked){
+          showPanel("dashboard");
+        }
+      }
+
       function renderAuthTempRoles(){
         const select = $("authTempRole");
         if (!select) return;
@@ -1471,6 +1500,7 @@
           authUserScopes = new Set((data.scopes || []).map(String));
           authUserIsElfmin = computeElfminAccess(authUserScopes, data.source);
           applyElfminVisibility();
+          applyScopeVisibility();
           const createdBy = $("bCreatedBy");
           if (createdBy){
             createdBy.value = userId ? String(userId) : "";
@@ -1501,6 +1531,7 @@
           authUserScopes = new Set();
           authUserIsElfmin = false;
           applyElfminVisibility();
+          applyScopeVisibility();
           const createdBy = $("bCreatedBy");
           if (createdBy){
             createdBy.value = "";
