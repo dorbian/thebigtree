@@ -2151,7 +2151,12 @@
           setStatus("Only elfministrators can generate temporary links.", "err");
           return;
         }
-        $("authTempModal").classList.add("show");
+        const modal = $("authTempModal");
+        if (!modal){
+          setStatus("Temporary access UI not loaded.", "err");
+          return;
+        }
+        modal.classList.add("show");
         loadAuthRoles();
         renderAuthTempRoles();
         setAuthTempStatus("Ready.", "");
@@ -3126,17 +3131,29 @@
         $("authTokensModal").classList.remove("show");
       });
       $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
-      $("authTempClose").addEventListener("click", () => {
-        $("authTempModal").classList.remove("show");
-      });
-      $("authTempGenerate").addEventListener("click", async () => {
-        const roleId = $("authTempRole").value.trim();
-        const scopesRaw = $("authTempScopes").value.trim();
-        const scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-        if (!roleId && scopes.length === 0){
-          setAuthTempStatus("Select a role profile or provide scopes.", "err");
-          return;
-        }
+      const authTempClose = $("authTempClose");
+      if (authTempClose){
+        authTempClose.addEventListener("click", () => {
+          const modal = $("authTempModal");
+          if (modal) modal.classList.remove("show");
+        });
+      }
+      const authTempGenerate = $("authTempGenerate");
+      if (authTempGenerate){
+        authTempGenerate.addEventListener("click", async () => {
+          const roleEl = $("authTempRole");
+          const scopesEl = $("authTempScopes");
+          if (!roleEl || !scopesEl){
+            setAuthTempStatus("Temporary access UI not loaded.", "err");
+            return;
+          }
+          const roleId = roleEl.value.trim();
+          const scopesRaw = scopesEl.value.trim();
+          const scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+          if (!roleId && scopes.length === 0){
+            setAuthTempStatus("Select a role profile or provide scopes.", "err");
+            return;
+          }
         try{
           setAuthTempStatus("Generating...", "");
           const payload = {
@@ -3149,14 +3166,19 @@
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(payload)
           });
-          $("authTempUrl").value = res.link_url || "";
+          const urlInput = $("authTempUrl");
+          if (urlInput) urlInput.value = res.link_url || "";
           setAuthTempStatus("Link ready.", "ok");
         }catch(err){
           setAuthTempStatus(err.message || "Failed to create link.", "err");
         }
       });
-      $("authTempCopy").addEventListener("click", async () => {
-        const url = $("authTempUrl").value.trim();
+      }
+      const authTempCopy = $("authTempCopy");
+      if (authTempCopy){
+        authTempCopy.addEventListener("click", async () => {
+          const urlInput = $("authTempUrl");
+          const url = urlInput ? urlInput.value.trim() : "";
         if (!url){
           setAuthTempStatus("No link to copy.", "err");
           return;
@@ -3167,7 +3189,8 @@
         }catch(err){
           setAuthTempStatus("Copy failed.", "err");
         }
-      });
+        });
+      }
       $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;
