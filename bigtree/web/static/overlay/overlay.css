@@ -384,12 +384,6 @@
         color:var(--muted);
         margin-top:-6px;
       }
-      .brand-user .brand-logout{
-        padding:4px 8px;
-        font-size:10px;
-        letter-spacing:.08em;
-        text-transform:uppercase;
-      }
       .auth-temp-scopes{
         margin-top:6px;
         font-size:11px;
@@ -1141,6 +1135,46 @@
       }
       #bingoPanel .btn-ghost{
         font-weight:600;
+      }
+      #bingoPanel{
+        position:relative;
+        overflow:hidden;
+      }
+      #bingoPanel::before{
+        content:"";
+        position:absolute;
+        inset:-40px;
+        background:
+          radial-gradient(circle at 15% 20%, rgba(120,255,175,.10), transparent 40%),
+          radial-gradient(circle at 85% 28%, rgba(255,210,140,.12), transparent 45%),
+          radial-gradient(circle at 50% 0%, rgba(90,150,120,.45), rgba(10,16,28,0) 55%),
+          linear-gradient(180deg, rgba(10,20,16,.85), rgba(10,16,28,.2)),
+          repeating-linear-gradient(135deg, rgba(30,80,50,.18) 0 14px, rgba(12,32,22,.18) 14px 28px);
+        opacity:.85;
+        pointer-events:none;
+        z-index:0;
+      }
+      #bingoPanel::after{
+        content:"";
+        position:absolute;
+        inset:auto -10% -30% -10%;
+        height:55%;
+        background:
+          radial-gradient(closest-side at 10% 80%, rgba(20,70,45,.8), transparent 70%),
+          radial-gradient(closest-side at 30% 90%, rgba(18,60,40,.8), transparent 72%),
+          radial-gradient(closest-side at 55% 85%, rgba(16,55,36,.8), transparent 70%),
+          radial-gradient(closest-side at 78% 90%, rgba(20,70,45,.8), transparent 70%),
+          radial-gradient(circle at 18% 40%, rgba(255,214,140,.35), transparent 18%),
+          radial-gradient(circle at 38% 35%, rgba(150,220,255,.28), transparent 18%),
+          radial-gradient(circle at 60% 38%, rgba(255,140,160,.28), transparent 18%),
+          radial-gradient(circle at 82% 35%, rgba(160,255,200,.30), transparent 18%);
+        opacity:.55;
+        pointer-events:none;
+        z-index:0;
+      }
+      #bingoPanel > *{
+        position:relative;
+        z-index:1;
       }
       .pill{
         display:inline-block;

@@ -3338,13 +3338,6 @@
         document.body.classList.remove("overlay");
         saveSettings();
       });
-      const logoutBtn = $("brandUserLogout");
-      if (logoutBtn){
-        logoutBtn.addEventListener("click", () => {
-          clearAuthSession("Logged out.", "");
-          window.location.href = "/overlay";
-        });
-      }
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
       $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
 
