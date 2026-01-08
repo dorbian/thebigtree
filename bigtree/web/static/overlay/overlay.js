@@ -961,6 +961,10 @@
         if (!preview) return;
         const scopes = (authRoleScopes && roleId) ? (authRoleScopes[roleId] || []) : [];
         preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: none";
+        const scopesEl = $("authTempScopes");
+        if (scopesEl && !scopesEl.value.trim() && scopes.length){
+          scopesEl.value = scopes.join(", ");
+        }
       }
 
       function updateAuthRoleIdsField(){
@@ -1405,6 +1409,9 @@
         try{
           storage.removeItem("bt_api_key");
           storage.setItem("bt_overlay", "0");
+          if (window.sessionStorage){
+            window.sessionStorage.removeItem("bt_api_key");
+          }
         }catch(err){}
         document.getElementById("appView").classList.add("hidden");
         document.getElementById("loginView").classList.remove("hidden");
@@ -3190,7 +3197,10 @@
           }
           const roleId = roleEl.value.trim();
           const scopesRaw = scopesEl.value.trim();
-          const scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+          let scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+          if (!scopes.length && roleId && authRoleScopes && authRoleScopes[roleId]){
+            scopes = (authRoleScopes[roleId] || []).map(s => String(s).trim()).filter(Boolean);
+          }
           if (!roleId && scopes.length === 0){
             setAuthTempStatus("Select a role profile or provide scopes.", "err");
             return;
@@ -3332,6 +3342,7 @@
       if (logoutBtn){
         logoutBtn.addEventListener("click", () => {
           clearAuthSession("Logged out.", "");
+          window.location.href = "/overlay";
         });
       }
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
