@@ -1337,6 +1337,22 @@
         overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
       }
 
+      function applyTempTokenFromUrl(){
+        try{
+          const params = new URLSearchParams(window.location.search || "");
+          const token = params.get("temp_token");
+          if (!token) return;
+          storage.setItem("bt_api_key", token);
+          if (apiKeyEl){
+            apiKeyEl.value = token;
+          }
+          params.delete("temp_token");
+          const query = params.toString();
+          const next = window.location.pathname + (query ? "?" + query : "") + window.location.hash;
+          window.history.replaceState(null, "", next);
+        }catch(err){}
+      }
+
       function saveSettings(){
         if (apiKeyEl){
           storage.setItem("bt_api_key", apiKeyEl.value.trim());
@@ -1370,13 +1386,22 @@
       }
 
       function handleUnauthorized(){
+        clearAuthSession("Unauthorized. Please log in again.", "err");
+      }
+
+      function clearAuthSession(message, kind){
         if (apiKeyEl){
           apiKeyEl.value = "";
         }
+        try{
+          storage.removeItem("bt_api_key");
+        }catch(err){}
         document.getElementById("appView").classList.add("hidden");
         document.getElementById("loginView").classList.remove("hidden");
-        loginStatusEl.textContent = "Unauthorized. Please log in again.";
-        loginStatusEl.className = "status err";
+        if (loginStatusEl){
+          loginStatusEl.textContent = message || "Logged out.";
+          loginStatusEl.className = "status" + (kind ? " " + kind : "");
+        }
         overlayToggle.checked = false;
         document.body.classList.remove("overlay");
         saveSettings();
@@ -3287,6 +3312,12 @@
         document.body.classList.remove("overlay");
         saveSettings();
       });
+      const logoutBtn = $("brandUserLogout");
+      if (logoutBtn){
+        logoutBtn.addEventListener("click", () => {
+          clearAuthSession("Logged out.", "");
+        });
+      }
       $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
       $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
 
@@ -5125,6 +5156,7 @@
         }
       }
 
+      applyTempTokenFromUrl();
       loadSettings();
       if (apiKeyEl.value.trim()){
         document.getElementById("loginView").classList.add("hidden");

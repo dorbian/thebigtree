@@ -108,14 +108,17 @@
             if (!res.ok || data.ok === false){
               throw new Error(data.error || "Login failed");
             }
-            localStorage.setItem("bt_api_key", data.token || "");
-            statusEl.textContent = "Access granted. Redirecting...";
             if (data.token){
+              localStorage.setItem("bt_api_key", data.token);
               tokenBox.style.display = "block";
               tokenBox.textContent = data.token;
             }
+            statusEl.textContent = "Access granted. Redirecting...";
             setTimeout(() => {
-              window.location.href = data.redirect || "/overlay";
+              const target = data.token
+                ? `/overlay?temp_token=${encodeURIComponent(data.token)}`
+                : (data.redirect || "/overlay");
+              window.location.href = target;
             }, 600);
           }catch(err){
             statusEl.textContent = err.message || "Login failed.";

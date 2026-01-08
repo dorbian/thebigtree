@@ -384,6 +384,12 @@
         color:var(--muted);
         margin-top:-6px;
       }
+      .brand-user .brand-logout{
+        padding:4px 8px;
+        font-size:10px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
       .brand-user svg{
         width:20px;
         height:20px;
