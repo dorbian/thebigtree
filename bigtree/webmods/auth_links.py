@@ -2,6 +2,8 @@
 from __future__ import annotations
 from aiohttp import web
 from typing import Any, Dict, List
+from pathlib import Path
+import os
 import time
 import bigtree
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
@@ -22,9 +24,39 @@ def _read_role_scopes() -> Dict[str, list[str]]:
     try:
         cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
         sec = cfg.get("BOT", {}) or {}
-        return sec.get("auth_role_scopes") or {}
+        role_scopes = sec.get("auth_role_scopes") or {}
+        if role_scopes:
+            return role_scopes
+    except Exception:
+        role_scopes = {}
+    path = _auth_roles_path()
+    if not path:
+        return role_scopes or {}
+    return _read_auth_roles_file(path) or {}
+
+
+def _auth_roles_path() -> Path | None:
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            base = bigtree.settings.get("BOT.DATA_DIR", None)
+        else:
+            base = None
+    except Exception:
+        base = None
+    if not base:
+        base = getattr(bigtree, "datadir", None)
+    if not base:
+        return None
+    return Path(base) / "auth_roles.json"
+
+
+def _read_auth_roles_file(path: Path) -> Dict[str, list[str]]:
+    try:
+        if path.exists():
+            return json.loads(path.read_text("utf-8"))
     except Exception:
         return {}
+    return {}
 
 
 def _resolve_scopes(role_ids: List[str], scopes: List[str]) -> List[str]:

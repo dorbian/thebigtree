@@ -939,6 +939,7 @@
           opt.value = "";
           opt.textContent = "No role scopes configured";
           select.appendChild(opt);
+          updateAuthTempScopesPreview("");
           return;
         }
         const empty = document.createElement("option");
@@ -952,6 +953,14 @@
           opt.textContent = role ? `${role.name} (${id})` : id;
           select.appendChild(opt);
         });
+        updateAuthTempScopesPreview(select.value || "");
+      }
+
+      function updateAuthTempScopesPreview(roleId){
+        const preview = $("authTempScopesPreview");
+        if (!preview) return;
+        const scopes = (authRoleScopes && roleId) ? (authRoleScopes[roleId] || []) : [];
+        preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: none";
       }
 
       function updateAuthRoleIdsField(){
@@ -1395,6 +1404,7 @@
         }
         try{
           storage.removeItem("bt_api_key");
+          storage.setItem("bt_overlay", "0");
         }catch(err){}
         document.getElementById("appView").classList.add("hidden");
         document.getElementById("loginView").classList.remove("hidden");
@@ -1404,7 +1414,7 @@
         }
         overlayToggle.checked = false;
         document.body.classList.remove("overlay");
-        saveSettings();
+        overlayToggleBtn.classList.remove("active");
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
@@ -3161,6 +3171,12 @@
         authTempClose.addEventListener("click", () => {
           const modal = $("authTempModal");
           if (modal) modal.classList.remove("show");
+        });
+      }
+      const authTempRole = $("authTempRole");
+      if (authTempRole){
+        authTempRole.addEventListener("change", (ev) => {
+          updateAuthTempScopesPreview(ev.target.value || "");
         });
       }
       const authTempGenerate = $("authTempGenerate");

@@ -390,6 +390,11 @@
         letter-spacing:.08em;
         text-transform:uppercase;
       }
+      .auth-temp-scopes{
+        margin-top:6px;
+        font-size:11px;
+        letter-spacing:.02em;
+      }
       .brand-user svg{
         width:20px;
         height:20px;
