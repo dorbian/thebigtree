@@ -960,7 +960,11 @@
         const preview = $("authTempScopesPreview");
         if (!preview) return;
         const scopes = (authRoleScopes && roleId) ? (authRoleScopes[roleId] || []) : [];
-        preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: none";
+        if (!roleId){
+          preview.textContent = "Scopes: none";
+          return;
+        }
+        preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: (from role profile)";
         const scopesEl = $("authTempScopes");
         if (scopesEl && !scopesEl.value.trim() && scopes.length){
           scopesEl.value = scopes.join(", ");
@@ -3203,6 +3207,10 @@
           }
           if (!roleId && scopes.length === 0){
             setAuthTempStatus("Select a role profile or provide scopes.", "err");
+            return;
+          }
+          if (roleId && scopes.length === 0){
+            setAuthTempStatus("Selected profile has no scopes. Add a scopes override.", "err");
             return;
           }
         try{
