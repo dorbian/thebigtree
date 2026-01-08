@@ -94,6 +94,7 @@ public class MainWindow : Window, IDisposable
     private bool _bingoAutoRoll = false;
     private bool _bingoAutoPinch = false;
     private bool _bingoTabSelectionPending = true;
+    private string _bingoCardsExpandedOwner = "";
     private string _bingoOwnerFilter = "";
     private string _bingoOwnerFilterCache = "";
     private readonly List<OwnerSummary> _bingoFilteredOwners = new();
@@ -1277,6 +1278,14 @@ public class MainWindow : Window, IDisposable
         Plugin.Config.Save();
     }
 
+    private void SelectBingoTab(int index)
+    {
+        _bingoUiTabIndex = index;
+        _bingoTabSelectionPending = true;
+        Plugin.Config.BingoUiTabIndex = index;
+        Plugin.Config.Save();
+    }
+
     private void SaveBingoUiSettings()
     {
         Plugin.Config.BingoCompactMode = _bingoCompactMode;
@@ -1588,7 +1597,7 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             ImGui.TextUnformatted("Seed Pot");
             ImGui.SetNextItemWidth(140);
-            if (ImGui.SliderInt("Amount", ref _bingoSeedPotAmount, 0, 100000))
+            if (ImGui.SliderInt("Amount", ref _bingoSeedPotAmount, 0, 10000000))
             {
                 if (_bingoSeedPotAmount < 0)
                     _bingoSeedPotAmount = 0;
@@ -1678,7 +1687,11 @@ public class MainWindow : Window, IDisposable
                         ImGui.TextUnformatted(string.IsNullOrWhiteSpace(statusText) ? "-" : statusText);
                         ImGui.TableNextColumn();
                         if (ImGui.SmallButton($"View Cards ({owner.cards})##owner-{i}"))
+                        {
                             _ = Bingo_LoadOwnerCards(owner.owner_name);
+                            _bingoCardsExpandedOwner = owner.owner_name;
+                            SelectBingoTab(3);
+                        }
                     }
                 }
                 ImGui.EndTable();
@@ -1831,6 +1844,11 @@ public class MainWindow : Window, IDisposable
         foreach (var kv in _bingoOwnerCards)
         {
             string header = _bingoCompactMode ? kv.Key : $"{kv.Key} ({kv.Value.Count})";
+            if (!string.IsNullOrWhiteSpace(_bingoCardsExpandedOwner)
+                && string.Equals(_bingoCardsExpandedOwner, kv.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+            }
             if (ImGui.CollapsingHeader(header))
             {
                 foreach (var card in kv.Value)
@@ -1887,8 +1905,6 @@ public class MainWindow : Window, IDisposable
         if (ImGui.SliderFloat("UI Scale", ref _bingoUiScale, 0.85f, 1.25f))
             changed = true;
 
-        if (ImGui.Checkbox("Announce calls", ref _bingoAnnounceCalls))
-            changed = true;
         if (ImGui.Checkbox("Auto roll", ref _bingoAutoRoll))
             changed = true;
         if (ImGui.Checkbox("Auto pinch", ref _bingoAutoPinch))
@@ -1980,6 +1996,7 @@ public class MainWindow : Window, IDisposable
         _bingoOwnerCards.Clear();
         _bingoOwners.Clear();
         _bingoOwnersDirty = true;
+        _bingoCardsExpandedOwner = "";
         _bingoStatus = "Game closed.";
         Bingo_AddAction("Closed game");
     }
