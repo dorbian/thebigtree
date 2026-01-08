@@ -1542,6 +1542,7 @@
 
       async function initAuthenticatedSession(){
         await loadAuthUser();
+        applyScopeVisibility();
         const contestCategoryStatus = $("contestCategoryStatus");
         if (contestCategoryStatus){
           contestCategoryStatus.textContent = CONTEST_CATEGORY_ID;
@@ -1551,11 +1552,27 @@
         }
         updateContestChannelPreview();
         const saved = getSavedPanel();
+        const canBingo = hasScope("bingo:admin");
+        const canTarot = hasScope("tarot:admin");
+        const allowedPanels = new Set(["dashboard"]);
+        if (canBingo){
+          allowedPanels.add("bingo");
+          allowedPanels.add("contests");
+          allowedPanels.add("media");
+        }
+        if (canTarot){
+          allowedPanels.add("tarotLinks");
+          allowedPanels.add("tarotDecks");
+        }
+        let nextPanel = saved || (canBingo ? "bingo" : "dashboard");
+        if (!allowedPanels.has(nextPanel)){
+          nextPanel = "dashboard";
+        }
         if (!getSeenDashboard()){
           showPanelOnce("dashboard");
           setSeenDashboard();
         } else {
-          showPanel(saved || "bingo");
+          showPanel(nextPanel);
         }
         if (hasScope("bingo:admin")){
           loadGamesMenu();
