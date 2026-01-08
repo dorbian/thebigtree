@@ -1841,14 +1841,36 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(_bingoCardsExpandedOwner))
+        {
+            if (!_bingoOwnerCards.TryGetValue(_bingoCardsExpandedOwner, out var cards))
+            {
+                ImGui.TextDisabled("Selected player has no loaded cards.");
+                return;
+            }
+            string header = _bingoCompactMode ? _bingoCardsExpandedOwner : $"{_bingoCardsExpandedOwner} ({cards.Count})";
+            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+            if (ImGui.CollapsingHeader(header))
+            {
+                foreach (var card in cards)
+                {
+                    Bingo_DrawCard(card, game.called ?? Array.Empty<int>());
+                    ImGui.Separator();
+                }
+            }
+            return;
+        }
+
+        if (_bingoOwnerCards.Count > 1)
+        {
+            ImGui.TextDisabled("Select a player in Players to view their cards.");
+            return;
+        }
+
         foreach (var kv in _bingoOwnerCards)
         {
             string header = _bingoCompactMode ? kv.Key : $"{kv.Key} ({kv.Value.Count})";
-            if (!string.IsNullOrWhiteSpace(_bingoCardsExpandedOwner)
-                && string.Equals(_bingoCardsExpandedOwner, kv.Key, StringComparison.OrdinalIgnoreCase))
-            {
-                ImGui.SetNextItemOpen(true, ImGuiCond.Always);
-            }
+            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
             if (ImGui.CollapsingHeader(header))
             {
                 foreach (var card in kv.Value)
@@ -3569,6 +3591,8 @@ public class MainWindow : Window, IDisposable
             _bingoOwnerCards[owner] = cards;
             _bingoState = new GameStateEnvelope(_bingoState.active, response.game, _bingoState.stats);
             _bingoStatus = $"Loaded {cards.Count} cards for {owner}.";
+            if (!string.IsNullOrWhiteSpace(owner))
+                _bingoCardsExpandedOwner = owner;
         }
         catch (Exception ex) { _bingoStatus = $"Failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
