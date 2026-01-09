@@ -528,15 +528,13 @@
     const g = state.game || {};
     const called = Array.isArray(g.called) ? g.called : [];
     const bg = g.background ? new URL(g.background, location.origin).toString() : "";
-    document.body.style.backgroundImage = bg
-      ? `linear-gradient(160deg, rgba(11,22,17,.97), rgba(11,22,17,.88)), url('${bg}')`
-      : "";
+    document.body.style.backgroundImage = bg ? `url('${bg}')` : "";
     applyTheme(g.theme_color || null);
     owner = data.owner || owner;
     resolvedGame = (g.game_id || resolvedGame);
     const title = g.title || "Bingo";
     const cardCount = cards.length;
-    if (contextPath) contextPath.textContent = `Bingo / My Cards / ${title}`;
+    if (contextPath) contextPath.textContent = `My Cards / ${title}`;
     if (contextMeta) contextMeta.textContent = `Viewing cards for ${owner || "-"} (${cardCount} card(s))`;
     summary.textContent = `Loaded ${cardCount} card(s) for ${owner || "-"}.`;
     potValue.textContent = `${formatGil(g.pot != null ? g.pot : 0)} ${g.currency || ""}`.trim();
