@@ -108,3 +108,12 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
             return True
         return any(scope in scopes for scope in needed_scopes)
     return False
+
+
+def find_token(token: str) -> Optional[Dict[str, Any]]:
+    if not token:
+        return None
+    for doc in load_tokens():
+        if doc.get("token") == token:
+            return doc
+    return None

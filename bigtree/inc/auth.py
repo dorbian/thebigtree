@@ -88,6 +88,19 @@ def _verify_dynamic_token(token: str, needed: Set[str]) -> bool:
     except Exception:
         return False
 
+def _dynamic_token_scopes(token: str) -> Optional[Set[str]]:
+    doc = web_tokens.find_token(token)
+    if not doc:
+        return None
+    if "scopes" not in doc:
+        return {"*"}
+    raw = doc.get("scopes")
+    if isinstance(raw, list):
+        return {str(x) for x in raw}
+    if isinstance(raw, str):
+        return _split_scopes(raw)
+    return set()
+
 def _verify_jwt(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     if not cfg.jwt_secret or jwt is None:
         return False
@@ -105,6 +118,20 @@ def _verify_jwt(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     else:
         granted = set()
     return _scopes_ok(needed, granted) if needed else True
+
+def _jwt_scopes(token: str, cfg: _Cfg) -> Optional[Set[str]]:
+    if not cfg.jwt_secret or jwt is None:
+        return None
+    try:
+        claims = jwt.decode(token, cfg.jwt_secret, algorithms=list(cfg.jwt_algorithms), options={"verify_aud": False})
+    except InvalidTokenError:
+        return None
+    raw = claims.get("scopes")
+    if isinstance(raw, list):
+        return {str(x) for x in raw}
+    if isinstance(raw, str):
+        return _split_scopes(raw)
+    return set()
 
 def auth_middleware() -> Callable:
     """
@@ -124,18 +151,27 @@ def auth_middleware() -> Callable:
         needed_scopes: Set[str] = getattr(route_obj, "scopes", set()) or set()
         token = _extract_token(request)
 
-        ok = False
+        valid = False
+        scope_ok = False
         if token:
-            # Try API key first
-            ok = _verify_api_key(token, cfg, needed_scopes)
-            if not ok:
-                ok = _verify_dynamic_token(token, needed_scopes)
-            # If that didn't match, try JWT (if configured)
-            if not ok and cfg.jwt_secret:
-                ok = _verify_jwt(token, cfg, needed_scopes)
+            if token in cfg.api_keys:
+                valid = True
+                if not cfg.scopes_map:
+                    scope_ok = True
+                else:
+                    scope_ok = _scopes_ok(needed_scopes, _split_scopes(cfg.scopes_map.get(token)))
+            if not scope_ok:
+                dyn_scopes = _dynamic_token_scopes(token)
+                if dyn_scopes is not None:
+                    valid = True
+                    scope_ok = _scopes_ok(needed_scopes, dyn_scopes)
+            if not scope_ok and cfg.jwt_secret:
+                jwt_scopes = _jwt_scopes(token, cfg)
+                if jwt_scopes is not None:
+                    valid = True
+                    scope_ok = _scopes_ok(needed_scopes, jwt_scopes) if needed_scopes else True
 
-        if not ok:
-            # Be explicit but non-leaky
+        if not valid:
             auth_logger.warning(
                 "[auth] unauthorized path=%s method=%s scopes=%s token=%s",
                 request.path,
@@ -144,6 +180,15 @@ def auth_middleware() -> Callable:
                 "yes" if token else "no",
             )
             return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+        if not scope_ok:
+            auth_logger.warning(
+                "[auth] forbidden path=%s method=%s scopes=%s token=%s",
+                request.path,
+                request.method,
+                ",".join(sorted(needed_scopes)) if needed_scopes else "-",
+                "yes",
+            )
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
 
         return await handler(request)
     return _mw
