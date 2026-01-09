@@ -1791,7 +1791,7 @@
         renderCalledGrid(called);
         const bgPath = game.background ? new URL(game.background, getBase()).toString() : "";
         const cardWrap = $("bCard");
-        cardWrap.style.backgroundImage = bgPath ? `linear-gradient(180deg, rgba(6,10,18,.85), rgba(6,10,18,.6)), url('${bgPath}')` : "";
+        cardWrap.style.backgroundImage = bgPath ? `url('${bgPath}')` : "";
           const last = game.last_called != null ? game.last_called : (called.length ? called[called.length - 1] : null);
           if (last != null && last !== lastCalloutNumber){
             showCallout(`Called ${last}`);
