@@ -249,6 +249,10 @@
         if (!grid){
           return;
         }
+        if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
+          setStatus("Media access requires permission.", "err");
+          return;
+        }
         grid.innerHTML = "";
         setStatus("Loading...", "");
         const path = "/api/media/list";
@@ -522,6 +526,11 @@
       async function loadMediaLibrary(){
         const grid = $("mediaLibraryGrid");
         if (!grid) return;
+        if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
+          setMediaLibraryStatus("Media access requires permission.", "err");
+          grid.innerHTML = "";
+          return;
+        }
           setMediaLibraryStatus("Refreshing...", "");
         grid.innerHTML = "";
         for (let i = 0; i < 8; i++){

@@ -106,5 +106,5 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
             return True
         if not needed_scopes:
             return True
-        return needed_scopes.issubset(scopes)
+        return any(scope in scopes for scope in needed_scopes)
     return False
