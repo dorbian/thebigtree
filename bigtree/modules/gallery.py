@@ -191,6 +191,29 @@ def set_upload_channel_id(channel_id: Optional[int]) -> Dict:
         db.insert(payload)
     return payload
 
+def get_hidden_decks() -> List[str]:
+    db = _settings_db(); q = Query()
+    row = db.get(q._type == "settings") or {}
+    decks = row.get("hidden_decks") or []
+    if not isinstance(decks, list):
+        decks = []
+    return [str(deck).strip() for deck in decks if str(deck).strip()]
+
+def set_hidden_decks(deck_ids: List[str]) -> Dict:
+    decks = [str(deck).strip() for deck in (deck_ids or []) if str(deck).strip()]
+    db = _settings_db(); q = Query()
+    payload = {
+        "_type": "settings",
+        "hidden_decks": decks,
+        "updated_at": _now(),
+    }
+    existing = db.get(q._type == "settings")
+    if existing:
+        db.update(payload, q._type == "settings")
+    else:
+        db.insert(payload)
+    return payload
+
 def list_calendar() -> List[Dict]:
     db = _db(); q = Query()
     rows = db.search(q._type == "month")

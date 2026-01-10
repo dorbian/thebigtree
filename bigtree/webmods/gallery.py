@@ -93,6 +93,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     seen: set[str] = set()
     hidden_set = gallery_mod.get_hidden_set()
+    hidden_decks = set(gallery_mod.get_hidden_decks())
 
     for entry in media_mod.list_media():
         filename = entry.get("filename")
@@ -124,6 +125,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
 
     for deck in tarot_mod.list_decks():
         deck_id = deck.get("deck_id") or "elf-classic"
+        if deck_id in hidden_decks:
+            continue
         back = (deck.get("back_image") or "").strip()
         if back:
             url = _strip_query(back)
@@ -316,7 +319,11 @@ async def gallery_hidden_set(req: web.Request):
 
 @route("GET", "/api/gallery/settings", scopes=["tarot:admin"])
 async def gallery_settings_get(_req: web.Request):
-    return web.json_response({"ok": True, "upload_channel_id": gallery_mod.get_upload_channel_id()})
+    return web.json_response({
+        "ok": True,
+        "upload_channel_id": gallery_mod.get_upload_channel_id(),
+        "hidden_decks": gallery_mod.get_hidden_decks(),
+    })
 
 @route("POST", "/api/gallery/settings", scopes=["tarot:admin"])
 async def gallery_settings_set(req: web.Request):
@@ -325,12 +332,20 @@ async def gallery_settings_set(req: web.Request):
     except Exception:
         body = {}
     channel_id = body.get("upload_channel_id")
+    hidden_decks = body.get("hidden_decks")
     try:
         channel_id = int(channel_id) if channel_id else None
     except Exception:
         channel_id = None
+    if hidden_decks is None:
+        hidden_decks = []
+    if isinstance(hidden_decks, str):
+        hidden_decks = [item.strip() for item in hidden_decks.split(",") if item.strip()]
+    if not isinstance(hidden_decks, list):
+        hidden_decks = []
     payload = gallery_mod.set_upload_channel_id(channel_id)
-    return web.json_response({"ok": True, "settings": payload})
+    deck_payload = gallery_mod.set_hidden_decks(hidden_decks)
+    return web.json_response({"ok": True, "settings": payload, "hidden_decks": deck_payload.get("hidden_decks")})
 
 @route("POST", "/api/gallery/upload-channel", scopes=["tarot:admin"])
 async def gallery_upload_channel_create(req: web.Request):
