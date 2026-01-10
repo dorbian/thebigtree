@@ -19,7 +19,7 @@
   const CARD_MIN_WIDTH = 220;
   const CARD_HEIGHT = 380;
   const VIRTUAL_BUFFER_ROWS = 2;
-  const USE_VIRTUAL = true;
+  const USE_VIRTUAL = false;
   const PAGE_SIZE = 120;
   let gallerySeed = null;
   let galleryTotal = 0;
