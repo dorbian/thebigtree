@@ -1,0 +1,10 @@
+[Unit]
+Description=TheBigTree pod (Kubernetes)
+Wants=network-online.target
+After=network-online.target
+
+[Kube]
+Yaml=thebigtree-pod.yaml
+
+[Install]
+WantedBy=multi-user.target

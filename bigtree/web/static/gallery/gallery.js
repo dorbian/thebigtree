@@ -17,7 +17,7 @@
   let virtualFrame = null;
   let virtualListening = false;
   const CARD_MIN_WIDTH = 220;
-  const CARD_HEIGHT = 380;
+  const CARD_HEIGHT = 560;
   const VIRTUAL_BUFFER_ROWS = 2;
   const USE_VIRTUAL = true;
   const PAGE_SIZE = 120;
