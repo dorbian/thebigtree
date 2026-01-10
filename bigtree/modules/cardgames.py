@@ -33,6 +33,9 @@ def _now() -> float:
     return time.time()
 
 def _get_base_dir() -> str:
+    base = os.getenv("BIGTREE_CARDGAMES_DB_DIR")
+    if base:
+        return base
     base = None
     try:
         if getattr(bigtree, "settings", None):
@@ -50,6 +53,8 @@ def _get_db_path() -> str:
     if _DB_PATH:
         return _DB_PATH
     base = _get_base_dir()
+    if not base:
+        base = "/opt/bigtree/database"
     path = os.path.join(base, "cardgames")
     os.makedirs(path, exist_ok=True)
     _DB_PATH = os.path.join(path, "cardgames.db")
@@ -61,10 +66,20 @@ def _connect() -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
-def _with_conn(fn):
-    with _DB_LOCK:
-        with _connect() as conn:
-            return fn(conn)
+def _with_conn(fn, retries: int = 10, delay: float = 0.2):
+    last_err = None
+    for attempt in range(retries):
+        with _DB_LOCK:
+            try:
+                with _connect() as conn:
+                    return fn(conn)
+            except sqlite3.OperationalError as exc:
+                last_err = exc
+                if "locked" not in str(exc).lower():
+                    raise
+        time.sleep(delay * (attempt + 1))
+    if last_err:
+        raise last_err
 
 def _configure_db(conn: sqlite3.Connection) -> None:
     conn.execute("PRAGMA journal_mode=DELETE")
@@ -77,10 +92,9 @@ def _ensure_db() -> None:
     with _DB_LOCK:
         if _DB_READY:
             return
-        with _connect() as conn:
+        def _init(conn):
             if not _DB_CONFIGURED:
                 _configure_db(conn)
-                _DB_CONFIGURED = True
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -110,6 +124,8 @@ def _ensure_db() -> None:
                 )
                 """
             )
+        _with_conn(_init, retries=15, delay=0.3)
+        _DB_CONFIGURED = True
         _DB_READY = True
 
 def _new_id() -> str:

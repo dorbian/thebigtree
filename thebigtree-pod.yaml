@@ -58,6 +58,8 @@ spec:
           value: "0.0.0.0"
         - name: BIGTREE__WEB__listen_port
           value: "8443"
+        - name: BIGTREE_CARDGAMES_DB_DIR
+          value: "/opt/bigtree/database"
       ports:
         - containerPort: 8443
           hostPort: 8443   # change this if it conflicts on the host
@@ -68,6 +70,8 @@ spec:
         - name: thebigtree-config
           mountPath: /opt/thebigtree/bigtree.ini
           subPath: bigtree.ini
+        - name: thebigtree-local-db
+          mountPath: /opt/bigtree/database
     - name: thebigtree-web
       # Web gateway container (reverse proxy + cache)
       image: ghcr.io/YOURORG/YOURREPO/thebigtree-web:latest
@@ -84,3 +88,7 @@ spec:
     - name: thebigtree-config
       configMap:
         name: thebigtree-config
+    - name: thebigtree-local-db
+      hostPath:
+        path: /opt/bigtree/database
+        type: DirectoryOrCreate
