@@ -458,14 +458,21 @@
   }
 
   function measureCardHeight(colWidth){
+    const probe = document.createElement("div");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.left = "-9999px";
+    probe.style.top = "0";
+    probe.style.width = `${colWidth}px`;
     const sample = {
       title: "Untitled Offering",
       artist: {name: "Forest", links: {}},
       origin: "Offered during the Forest rites - 2024",
       type: "Artifact",
-      tags: ["Forest"],
-      url: "",
-      thumb_url: "",
+      tags: [],
+      url: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+      thumb_url: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
       reactions: {
         appreciation: 0,
         inspired: 0,
@@ -473,18 +480,12 @@
         craft: 0
       }
     };
-    const html = buildCardHtml(sample);
-    const temp = document.createElement("div");
-    temp.style.position = "absolute";
-    temp.style.visibility = "hidden";
-    temp.style.pointerEvents = "none";
-    temp.style.width = `${colWidth}px`;
-    temp.innerHTML = html;
-    grid.appendChild(temp);
-    const card = temp.firstElementChild;
+    probe.innerHTML = buildCardHtml(sample);
+    document.body.appendChild(probe);
+    const card = probe.firstElementChild;
     const height = card ? card.getBoundingClientRect().height : CARD_HEIGHT;
-    grid.removeChild(temp);
-    return Math.max(CARD_HEIGHT, Math.ceil(height));
+    document.body.removeChild(probe);
+    return Math.max(CARD_HEIGHT, Math.ceil(height) + 12);
   }
 
   function renderVirtualGrid(){
