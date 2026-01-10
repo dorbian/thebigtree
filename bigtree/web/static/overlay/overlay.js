@@ -2153,24 +2153,29 @@
             localStorage.setItem("overlay_panel", which);
           }catch(err){}
         }
-        $("menuDashboard").classList.toggle("active", which === "dashboard");
-        $("menuBingo").classList.toggle("active", which === "bingo");
-        $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
-        $("menuCardgameBlackjack").classList.toggle("active", which === "cardgameBlackjack");
-        $("menuCardgamePoker").classList.toggle("active", which === "cardgamePoker");
-        $("menuCardgameHighlow").classList.toggle("active", which === "cardgameHighlow");
-        $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
-        $("menuContests").classList.toggle("active", which === "contests");
-        $("menuMedia").classList.toggle("active", which === "media");
-        $("dashboardPanel").classList.toggle("hidden", which !== "dashboard");
-        $("bingoPanel").classList.toggle("hidden", which !== "bingo");
-        $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
-        $("cardgameBlackjackPanel").classList.toggle("hidden", which !== "cardgameBlackjack");
-        $("cardgamePokerPanel").classList.toggle("hidden", which !== "cardgamePoker");
-        $("cardgameHighlowPanel").classList.toggle("hidden", which !== "cardgameHighlow");
-        $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
-        $("contestPanel").classList.toggle("hidden", which !== "contests");
-        $("mediaPanel").classList.toggle("hidden", which !== "media");
+        function toggleClass(id, name, state){
+          const el = $(id);
+          if (!el) return;
+          el.classList.toggle(name, state);
+        }
+        toggleClass("menuDashboard", "active", which === "dashboard");
+        toggleClass("menuBingo", "active", which === "bingo");
+        toggleClass("menuTarotLinks", "active", which === "tarotLinks");
+        toggleClass("menuCardgameBlackjack", "active", which === "cardgameBlackjack");
+        toggleClass("menuCardgamePoker", "active", which === "cardgamePoker");
+        toggleClass("menuCardgameHighlow", "active", which === "cardgameHighlow");
+        toggleClass("menuTarotDecks", "active", which === "tarotDecks");
+        toggleClass("menuContests", "active", which === "contests");
+        toggleClass("menuMedia", "active", which === "media");
+        toggleClass("dashboardPanel", "hidden", which !== "dashboard");
+        toggleClass("bingoPanel", "hidden", which !== "bingo");
+        toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
+        toggleClass("cardgameBlackjackPanel", "hidden", which !== "cardgameBlackjack");
+        toggleClass("cardgamePokerPanel", "hidden", which !== "cardgamePoker");
+        toggleClass("cardgameHighlowPanel", "hidden", which !== "cardgameHighlow");
+        toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
+        toggleClass("contestPanel", "hidden", which !== "contests");
+        toggleClass("mediaPanel", "hidden", which !== "media");
         if (which === "media"){
           setMediaTab("upload");
           loadMediaLibrary();
@@ -2247,21 +2252,30 @@
         if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         showPanel("tarotLinks");
       });
-      $("menuCardgameBlackjack").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
-        showPanel("cardgameBlackjack");
-        loadCardgameSessions("blackjack");
-      });
-      $("menuCardgamePoker").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
-        showPanel("cardgamePoker");
-        loadCardgameSessions("poker");
-      });
-      $("menuCardgameHighlow").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
-        showPanel("cardgameHighlow");
-        loadCardgameSessions("highlow");
-      });
+      const blackjackMenu = $("menuCardgameBlackjack");
+      if (blackjackMenu){
+        blackjackMenu.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+          showPanel("cardgameBlackjack");
+          loadCardgameSessions("blackjack");
+        });
+      }
+      const pokerMenu = $("menuCardgamePoker");
+      if (pokerMenu){
+        pokerMenu.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+          showPanel("cardgamePoker");
+          loadCardgameSessions("poker");
+        });
+      }
+      const highlowMenu = $("menuCardgameHighlow");
+      if (highlowMenu){
+        highlowMenu.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+          showPanel("cardgameHighlow");
+          loadCardgameSessions("highlow");
+        });
+      }
       $("menuTarotDecks").addEventListener("click", () => {
         if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         showPanel("tarotDecks");
