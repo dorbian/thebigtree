@@ -100,6 +100,8 @@
       let mediaSelected = new Set();
       let mediaLastIndex = null;
       let deckEditHadSuits = false;
+      let gallerySettingsCache = null;
+      let galleryHiddenDecks = [];
 
       function setStatusText(id, msg, kind){
         const el = $(id);
@@ -5068,6 +5070,17 @@
         }
       }
 
+      async function loadGallerySettings(){
+        try{
+          const data = await jsonFetch("/api/gallery/settings", {method:"GET"}, true);
+          gallerySettingsCache = data || {};
+          galleryHiddenDecks = Array.isArray(data.hidden_decks) ? data.hidden_decks : [];
+        }catch(err){
+          gallerySettingsCache = null;
+          galleryHiddenDecks = [];
+        }
+      }
+
       $("taDeck").addEventListener("change", async () => {
         await loadTarotDeck();
       });
@@ -5094,6 +5107,7 @@
           return;
         }
         try{
+          await loadGallerySettings();
           if (!window.taDeckData || !window.taDeckData.deck || window.taDeckData.deck.deck_id !== deck){
             const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
             showList($("taDeckList"), data);
@@ -5122,6 +5136,10 @@
           }
           $("deckEditBackPick").dataset.backUrl = backUrl;
           $("deckEditBackPick").dataset.artistId = deckData.back_artist_id || "";
+          const hideToggle = $("deckEditHideGallery");
+          if (hideToggle){
+            hideToggle.checked = galleryHiddenDecks.includes(deck);
+          }
           $("deckEditModal").classList.add("show");
         }catch(err){
           setTarotStatus(err.message, "err");
@@ -5203,6 +5221,22 @@
               method:"PUT",
               headers: {"Content-Type": "application/json"},
               body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
+            }, true);
+          }
+          const hideToggle = $("deckEditHideGallery");
+          if (hideToggle){
+            const wantHidden = hideToggle.checked;
+            const nextHidden = new Set(galleryHiddenDecks || []);
+            if (wantHidden){
+              nextHidden.add(deck);
+            }else{
+              nextHidden.delete(deck);
+            }
+            galleryHiddenDecks = Array.from(nextHidden);
+            await jsonFetch("/api/gallery/settings", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({hidden_decks: galleryHiddenDecks})
             }, true);
           }
           $("deckEditModal").classList.remove("show");

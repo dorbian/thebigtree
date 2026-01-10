@@ -331,21 +331,34 @@ async def gallery_settings_set(req: web.Request):
         body = await req.json()
     except Exception:
         body = {}
-    channel_id = body.get("upload_channel_id")
-    hidden_decks = body.get("hidden_decks")
-    try:
-        channel_id = int(channel_id) if channel_id else None
-    except Exception:
-        channel_id = None
-    if hidden_decks is None:
-        hidden_decks = []
-    if isinstance(hidden_decks, str):
-        hidden_decks = [item.strip() for item in hidden_decks.split(",") if item.strip()]
-    if not isinstance(hidden_decks, list):
-        hidden_decks = []
-    payload = gallery_mod.set_upload_channel_id(channel_id)
-    deck_payload = gallery_mod.set_hidden_decks(hidden_decks)
-    return web.json_response({"ok": True, "settings": payload, "hidden_decks": deck_payload.get("hidden_decks")})
+    channel_present = "upload_channel_id" in body
+    hidden_present = "hidden_decks" in body
+
+    payload = {"upload_channel_id": gallery_mod.get_upload_channel_id()}
+    if channel_present:
+        channel_id = body.get("upload_channel_id")
+        try:
+            channel_id = int(channel_id) if channel_id else None
+        except Exception:
+            channel_id = None
+        payload = gallery_mod.set_upload_channel_id(channel_id)
+
+    deck_payload = {"hidden_decks": gallery_mod.get_hidden_decks()}
+    if hidden_present:
+        hidden_decks = body.get("hidden_decks")
+        if hidden_decks is None:
+            hidden_decks = []
+        if isinstance(hidden_decks, str):
+            hidden_decks = [item.strip() for item in hidden_decks.split(",") if item.strip()]
+        if not isinstance(hidden_decks, list):
+            hidden_decks = []
+        deck_payload = gallery_mod.set_hidden_decks(hidden_decks)
+
+    return web.json_response({
+        "ok": True,
+        "settings": payload,
+        "hidden_decks": deck_payload.get("hidden_decks")
+    })
 
 @route("POST", "/api/gallery/upload-channel", scopes=["tarot:admin"])
 async def gallery_upload_channel_create(req: web.Request):
