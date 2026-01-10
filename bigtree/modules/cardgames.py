@@ -5,6 +5,7 @@ import time
 import secrets
 import random
 import sqlite3
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -20,6 +21,8 @@ except Exception:
 
 GAMES = {"blackjack", "poker", "highlow"}
 _DB_PATH: Optional[str] = None
+_DB_READY = False
+_DB_LOCK = threading.RLock()
 
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["spades", "hearts", "diamonds", "clubs"]
@@ -52,44 +55,56 @@ def _get_db_path() -> str:
     return _DB_PATH
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_get_db_path(), timeout=5)
+    conn = sqlite3.connect(_get_db_path(), timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
+def _with_conn(fn):
+    with _DB_LOCK:
+        with _connect() as conn:
+            return fn(conn)
+
 def _ensure_db() -> None:
-    with _connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_id TEXT PRIMARY KEY,
-                join_code TEXT UNIQUE,
-                priestess_token TEXT,
-                player_token TEXT,
-                game_id TEXT,
-                status TEXT,
-                pot INTEGER,
-                winnings INTEGER,
-                state_json TEXT,
-                created_at REAL,
-                updated_at REAL
+    global _DB_READY
+    if _DB_READY:
+        return
+    with _DB_LOCK:
+        if _DB_READY:
+            return
+        with _connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    join_code TEXT UNIQUE,
+                    priestess_token TEXT,
+                    player_token TEXT,
+                    game_id TEXT,
+                    status TEXT,
+                    pot INTEGER,
+                    winnings INTEGER,
+                    state_json TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS events (
-                session_id TEXT,
-                seq INTEGER,
-                ts REAL,
-                type TEXT,
-                data_json TEXT,
-                PRIMARY KEY (session_id, seq)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    session_id TEXT,
+                    seq INTEGER,
+                    ts REAL,
+                    type TEXT,
+                    data_json TEXT,
+                    PRIMARY KEY (session_id, seq)
+                )
+                """
             )
-            """
-        )
+        _DB_READY = True
 
 def _new_id() -> str:
     return secrets.token_urlsafe(10)
@@ -361,7 +376,7 @@ def create_session(game_id: str, pot: int = 0) -> Dict[str, Any]:
     priestess_token = _new_id()
     state = _init_state(game_id)
     now = _now()
-    with _connect() as conn:
+    def _insert(conn):
         conn.execute(
             """
             INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, status, pot, winnings, state_json, created_at, updated_at)
@@ -369,70 +384,77 @@ def create_session(game_id: str, pot: int = 0) -> Dict[str, Any]:
             """,
             (session_id, join_code, priestess_token, None, game_id, "created", int(pot or 0), 0, json.dumps(state), now, now)
         )
+    _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
     return get_session_by_id(session_id) or {}
 
 def list_sessions(game_id: Optional[str] = None) -> List[Dict[str, Any]]:
     _ensure_db()
-    with _connect() as conn:
+    def _load(conn):
         if game_id:
-            rows = conn.execute(
+            return conn.execute(
                 "SELECT * FROM sessions WHERE game_id = ? ORDER BY created_at DESC",
                 (game_id,),
             ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
+        return conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
+    rows = _with_conn(_load)
     return [_session_from_row(row) for row in rows]
 
 def get_session_by_join_code(join_code: str) -> Optional[Dict[str, Any]]:
     _ensure_db()
-    with _connect() as conn:
-        row = conn.execute("SELECT * FROM sessions WHERE join_code = ?", (join_code,)).fetchone()
+    def _load(conn):
+        return conn.execute("SELECT * FROM sessions WHERE join_code = ?", (join_code,)).fetchone()
+    row = _with_conn(_load)
     return _session_from_row(row) if row else None
 
 def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
     _ensure_db()
-    with _connect() as conn:
-        row = conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+    def _load(conn):
+        return conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+    row = _with_conn(_load)
     return _session_from_row(row) if row else None
 
 def _update_session(session_id: str, payload: Dict[str, Any]) -> None:
     _ensure_db()
     now = _now()
-    with _connect() as conn:
+    def _update(conn):
         conn.execute(
             "UPDATE sessions SET status = ?, pot = ?, winnings = ?, state_json = ?, updated_at = ? WHERE session_id = ?",
             (payload.get("status"), int(payload.get("pot") or 0), int(payload.get("winnings") or 0), json.dumps(payload.get("state") or {}), now, session_id)
         )
+    _with_conn(_update)
 
 def join_session(join_code: str) -> Dict[str, Any]:
     s = get_session_by_join_code(join_code)
     if not s:
         raise ValueError("not found")
     token = _new_id()
-    with _connect() as conn:
+    def _update(conn):
         conn.execute("UPDATE sessions SET player_token = ?, updated_at = ? WHERE session_id = ?", (token, _now(), s["session_id"]))
+    _with_conn(_update)
     _add_event(s["session_id"], "PLAYER_JOINED", {})
     s["player_token"] = token
     return {"player_token": token, "session": s}
 
 def _add_event(session_id: str, event_type: str, data: Dict[str, Any]) -> None:
     _ensure_db()
-    with _connect() as conn:
+    def _insert(conn):
         row = conn.execute("SELECT MAX(seq) AS max_seq FROM events WHERE session_id = ?", (session_id,)).fetchone()
         seq = int(row["max_seq"] or 0) + 1
         conn.execute(
             "INSERT INTO events (session_id, seq, ts, type, data_json) VALUES (?, ?, ?, ?, ?)",
             (session_id, seq, _now(), event_type, json.dumps(data or {}))
         )
+    _with_conn(_insert)
 
 def list_events(session_id: str, since_seq: int) -> List[Dict[str, Any]]:
     _ensure_db()
-    with _connect() as conn:
-        rows = conn.execute(
+    def _load(conn):
+        return conn.execute(
             "SELECT seq, ts, type, data_json FROM events WHERE session_id = ? AND seq > ? ORDER BY seq ASC",
             (session_id, int(since_seq))
         ).fetchall()
+    rows = _with_conn(_load)
     return [{
         "seq": int(r["seq"]),
         "ts": float(r["ts"] or 0),
