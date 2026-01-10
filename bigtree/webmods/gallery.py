@@ -19,16 +19,18 @@ import time
 _GALLERY_CACHE: dict | None = None
 _GALLERY_CACHE_AT = 0.0
 _GALLERY_CACHE_TTL = 600.0
+_GALLERY_SHUFFLES: dict[int, list[int]] = {}
 _THUMB_WARM_AT = 0.0
 _THUMB_WARM_TTL = 30.0
 
 def invalidate_gallery_cache() -> None:
-    global _GALLERY_CACHE, _GALLERY_CACHE_AT
+    global _GALLERY_CACHE, _GALLERY_CACHE_AT, _GALLERY_SHUFFLES
     _GALLERY_CACHE = None
     _GALLERY_CACHE_AT = 0.0
+    _GALLERY_SHUFFLES = {}
 
 def _get_gallery_cached(include_hidden: bool) -> list[dict]:
-    global _GALLERY_CACHE, _GALLERY_CACHE_AT
+    global _GALLERY_CACHE, _GALLERY_CACHE_AT, _GALLERY_SHUFFLES
     now = time.time()
     if _GALLERY_CACHE is not None and (now - _GALLERY_CACHE_AT) < _GALLERY_CACHE_TTL:
         cached = _GALLERY_CACHE.get("items", [])
@@ -38,6 +40,7 @@ def _get_gallery_cached(include_hidden: bool) -> list[dict]:
     items = _collect_gallery_items(include_hidden=True)
     _GALLERY_CACHE = {"items": items}
     _GALLERY_CACHE_AT = now
+    _GALLERY_SHUFFLES = {}
     if include_hidden:
         return list(items)
     return [item for item in items if not item.get("hidden")]
@@ -89,6 +92,7 @@ def _item_id(source: str, identifier: str) -> str:
 def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     seen: set[str] = set()
+    hidden_set = gallery_mod.get_hidden_set()
 
     for entry in media_mod.list_media():
         filename = entry.get("filename")
@@ -99,7 +103,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
         discord_url = entry.get("discord_url") or ""
         url = discord_url or f"/media/{filename}"
         item_id = _item_id("media", filename)
-        if not include_hidden and gallery_mod.is_hidden(item_id):
+        hidden = item_id in hidden_set
+        if not include_hidden and hidden:
             continue
         seen.add(url)
         items.append({
@@ -113,8 +118,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "type": entry.get("origin_type") or "Artifact",
             "origin": entry.get("origin_label") or "",
             "artist": _artist_payload(entry.get("artist_id")),
-            "reactions": gallery_mod.get_reactions(item_id),
-            "hidden": gallery_mod.is_hidden(item_id),
+            "reactions": {},
+            "hidden": hidden,
         })
 
     for deck in tarot_mod.list_decks():
@@ -124,7 +129,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             url = _strip_query(back)
             if url and url not in seen:
                 item_id = _item_id("tarot-back", deck_id)
-                if include_hidden or not gallery_mod.is_hidden(item_id):
+                hidden = item_id in hidden_set
+                if include_hidden or not hidden:
                     items.append({
                         "item_id": item_id,
                         "title": deck.get("name") or deck_id,
@@ -132,8 +138,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                         "source": "tarot-back",
                         "type": "Tarot",
                         "artist": _artist_payload(deck.get("back_artist_id")),
-                        "reactions": gallery_mod.get_reactions(item_id),
-                        "hidden": gallery_mod.is_hidden(item_id),
+                        "reactions": {},
+                        "hidden": hidden,
                     })
                     seen.add(url)
         for card in tarot_mod.list_cards(deck_id):
@@ -145,7 +151,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                 continue
             card_id = card.get("card_id") or card.get("name") or url
             item_id = _item_id("tarot-card", f"{deck_id}:{card_id}")
-            if not include_hidden and gallery_mod.is_hidden(item_id):
+            hidden = item_id in hidden_set
+            if not include_hidden and hidden:
                 continue
             items.append({
                 "item_id": item_id,
@@ -154,8 +161,8 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                 "source": "tarot-card",
                 "type": "Tarot",
                 "artist": _artist_payload(card.get("artist_id")),
-                "reactions": gallery_mod.get_reactions(item_id),
-                "hidden": gallery_mod.is_hidden(item_id),
+                "reactions": {},
+                "hidden": hidden,
             })
             seen.add(url)
 
@@ -165,19 +172,36 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             url = _strip_query(entry.get("url") or "")
             filename = os.path.basename(url) if url else ""
             item_id = _item_id("contest", filename or url)
-            if not include_hidden and gallery_mod.is_hidden(item_id):
+            hidden = item_id in hidden_set
+            if not include_hidden and hidden:
                 continue
             entry["item_id"] = item_id
             entry["type"] = entry.get("type") or "Contest"
-            entry["reactions"] = gallery_mod.get_reactions(item_id)
-            entry["hidden"] = gallery_mod.is_hidden(item_id)
+            entry["reactions"] = {}
+            entry["hidden"] = hidden
             if entry.get("contest"):
                 entry["event_name"] = entry.get("contest")
             items.append(entry)
     except Exception:
         pass
 
+    item_ids = [item.get("item_id") or "" for item in items]
+    reactions_map = gallery_mod.list_reactions_bulk(item_ids)
+    for item in items:
+        item_id = item.get("item_id") or ""
+        item["reactions"] = reactions_map.get(item_id, {})
+
     return items
+
+def _get_shuffle_indices(total: int, seed: int) -> list[int]:
+    indices = _GALLERY_SHUFFLES.get(seed)
+    if indices is not None and len(indices) == total:
+        return indices
+    rng = random.Random(seed)
+    indices = list(range(total))
+    rng.shuffle(indices)
+    _GALLERY_SHUFFLES[seed] = indices
+    return indices
 
 def _schedule_thumb_warm(items: list[dict]) -> None:
     global _THUMB_WARM_AT
@@ -240,8 +264,7 @@ async def gallery_images(_req: web.Request):
         seed = None
     if seed is None:
         seed = int(time.time() * 1000) & 0x7FFFFFFF
-    rng = random.Random(seed)
-    rng.shuffle(items)
+    indices = _get_shuffle_indices(total, seed)
     _schedule_thumb_warm(items)
     try:
         limit = int(_req.query.get("limit") or 0)
@@ -254,7 +277,10 @@ async def gallery_images(_req: web.Request):
     if offset < 0:
         offset = 0
     if limit and limit > 0:
-        items = items[offset:offset + limit]
+        indices = indices[offset:offset + limit]
+        items = [items[idx] for idx in indices]
+    else:
+        items = [items[idx] for idx in indices]
     resp = web.json_response({
         "ok": True,
         "items": items,

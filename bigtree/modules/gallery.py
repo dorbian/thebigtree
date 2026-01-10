@@ -76,20 +76,41 @@ def _settings_db() -> TinyDB:
 def reaction_types() -> List[str]:
     return list(_REACTION_TYPES)
 
+def _normalize_counts(counts: Dict[str, int] | None) -> Dict[str, int]:
+    if not isinstance(counts, dict):
+        counts = {}
+    return {key: int(counts.get(key) or 0) for key in _REACTION_TYPES}
+
 def get_reactions(item_id: str) -> Dict[str, int]:
     if not item_id:
         return {}
     db = _reactions_db(); q = Query()
     row = db.get((q._type == "reaction") & (q.item_id == item_id))
     counts = row.get("counts") if row else None
-    if not isinstance(counts, dict):
-        counts = {}
-    return {key: int(counts.get(key) or 0) for key in _REACTION_TYPES}
+    return _normalize_counts(counts)
 
 def list_reactions(item_ids: List[str]) -> Dict[str, Dict[str, int]]:
     out: Dict[str, Dict[str, int]] = {}
     for item_id in item_ids:
         out[item_id] = get_reactions(item_id)
+    return out
+
+def list_reactions_bulk(item_ids: List[str]) -> Dict[str, Dict[str, int]]:
+    if not item_ids:
+        return {}
+    id_set = {item_id for item_id in item_ids if item_id}
+    if not id_set:
+        return {}
+    db = _reactions_db(); q = Query()
+    rows = db.search(q._type == "reaction")
+    out: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        item_id = row.get("item_id")
+        if item_id in id_set:
+            out[item_id] = _normalize_counts(row.get("counts"))
+    for item_id in id_set:
+        if item_id not in out:
+            out[item_id] = _normalize_counts({})
     return out
 
 def increment_reaction(item_id: str, reaction_id: str, amount: int = 1) -> Dict[str, int]:
@@ -122,6 +143,11 @@ def is_hidden(item_id: str) -> bool:
     db = _hidden_db(); q = Query()
     row = db.get((q._type == "hidden") & (q.item_id == item_id))
     return bool(row and row.get("hidden") is True)
+
+def get_hidden_set() -> set[str]:
+    db = _hidden_db(); q = Query()
+    rows = db.search((q._type == "hidden") & (q.hidden == True))
+    return {str(row.get("item_id")) for row in rows if row.get("item_id")}
 
 def set_hidden(item_id: str, hidden: bool) -> Dict[str, int | str | bool]:
     if not item_id:

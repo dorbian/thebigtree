@@ -19,7 +19,7 @@
   const CARD_MIN_WIDTH = 220;
   const CARD_HEIGHT = 380;
   const VIRTUAL_BUFFER_ROWS = 2;
-  const USE_VIRTUAL = false;
+  const USE_VIRTUAL = true;
   const PAGE_SIZE = 120;
   let gallerySeed = null;
   let galleryTotal = 0;
@@ -51,6 +51,11 @@
     website: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm6.9 6H15a15.5 15.5 0 0 0-1.5-4.1A8.1 8.1 0 0 1 18.9 8zM12 4.1A13.7 13.7 0 0 1 13.6 8H10.4A13.7 13.7 0 0 1 12 4.1zM8.5 3.9A15.5 15.5 0 0 0 7 8H5.1a8.1 8.1 0 0 1 3.4-4.1zM4.1 10H7a16.7 16.7 0 0 0 0 4H4.1a8.1 8.1 0 0 1 0-4zm1 6H7a15.5 15.5 0 0 0 1.5 4.1A8.1 8.1 0 0 1 5.1 16zM12 19.9A13.7 13.7 0 0 1 10.4 16h3.2A13.7 13.7 0 0 1 12 19.9zm3.5.2A15.5 15.5 0 0 0 17 16h1.9a8.1 8.1 0 0 1-3.4 4.1zM16.9 14a16.7 16.7 0 0 0 0-4h2.9a8.1 8.1 0 0 1 0 4h-2.9z\"/></svg>"
   };
   const DEFAULT_LINK_ICON = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M10 3h10v10h-2V7.4l-9.3 9.3-1.4-1.4L16.6 6H10V3zM5 5h4v2H7v10h10v-2h2v4H5V5z\"/></svg>";
+
+  function getReactionLabel(reactionId){
+    const match = REACTIONS.find((reaction) => reaction.id === reactionId);
+    return match ? match.label : reactionId;
+  }
 
   function openArtistModal(name, links){
     artistName.textContent = name || "Forest";
@@ -178,10 +183,15 @@
           total: galleryTotal,
           items: galleryItems
         });
+        renderGrid();
       }else{
         galleryItems = galleryItems.concat(batch);
+        if (USE_VIRTUAL){
+          renderGrid();
+        }else{
+          appendGrid(batch);
+        }
       }
-      renderGrid();
       if (galleryItems.length < galleryTotal){
         const nextOffset = galleryItems.length;
         if ("requestIdleCallback" in window){
@@ -264,18 +274,20 @@
       }catch (err){}
       return;
     }
-    if (target.classList && target.classList.contains("reaction")){
+    const reactionButton = target.closest ? target.closest(".reaction") : null;
+    if (reactionButton){
       event.preventDefault();
-      const reactionId = target.getAttribute("data-reaction");
-      const itemKey = target.getAttribute("data-item");
+      const reactionId = reactionButton.getAttribute("data-reaction");
+      const itemKey = reactionButton.getAttribute("data-item");
       if (!reactionId || !itemKey) return;
       const decodedKey = decodeURIComponent(itemKey);
       postReaction(decodedKey, reactionId);
       return;
     }
-    if (!target.classList || !target.classList.contains("artist-link")) return;
+    const artistLink = target.closest ? target.closest(".artist-link") : null;
+    if (!artistLink) return;
     event.preventDefault();
-    const payload = target.getAttribute("data-artist");
+    const payload = artistLink.getAttribute("data-artist");
     if (!payload) return;
     try{
       const parsed = JSON.parse(decodeURIComponent(payload));
@@ -304,7 +316,18 @@
       if (match){
         match.reactions = data.reactions || {};
       }
-      renderGrid();
+      const reactionButton = grid.querySelector(`.reaction[data-item="${encodeURIComponent(itemId)}"][data-reaction="${reactionId}"]`);
+      if (reactionButton){
+        const count = Number((data.reactions || {})[reactionId] || 0);
+        const countNode = reactionButton.querySelector(".reaction-count");
+        if (countNode){
+          countNode.textContent = String(count);
+        }else{
+          reactionButton.innerHTML = `<span>${getReactionLabel(reactionId)}</span> <span class="reaction-count">${count}</span>`;
+        }
+      }else if (!USE_VIRTUAL){
+        renderGrid();
+      }
     }catch(err){}
   }
   function getItemKey(item){
@@ -375,7 +398,7 @@
       const count = Number(baseCounts[reaction.id] || 0);
       return `
           <button class="reaction" data-reaction="${reaction.id}" data-item="${encodeURIComponent(itemKey)}" aria-label="${reaction.label}">
-            <span>${reaction.label}</span> ${count}
+            <span>${reaction.label}</span> <span class="reaction-count">${count}</span>
           </button>
         `;
     }).join("");
@@ -506,5 +529,14 @@
     grid.classList.remove("virtualized");
     grid.style.height = "";
     grid.innerHTML = galleryRenderItems.map(buildCardHtml).join("");
+  }
+
+  function appendGrid(items){
+    if (!Array.isArray(items) || !items.length) return;
+    if (!grid.innerHTML){
+      grid.innerHTML = items.map(buildCardHtml).join("");
+      return;
+    }
+    grid.insertAdjacentHTML("beforeend", items.map(buildCardHtml).join(""));
   }
 
