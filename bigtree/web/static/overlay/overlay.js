@@ -4275,9 +4275,6 @@
           setCardgameInputs(gameId, session);
           setCardgameStatus(gameId, "Session created.", "ok");
           await loadCardgameSessions(gameId, session.join_code || "");
-          if (session.join_code){
-            window.open(getCardgamePriestessUrl(gameId, session.join_code, session.priestess_token || ""), "_blank");
-          }
         }catch(err){
           setCardgameStatus(gameId, err.message, "err");
         }
