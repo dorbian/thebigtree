@@ -43,10 +43,21 @@
 </header>
 
 <main>
+  <div class="post-game-banner" id="postGameBanner" aria-hidden="true">
+    <div class="post-game-copy">
+      <div class="post-game-title" id="postGameTitle">Thank you for playing with us.</div>
+      <div class="post-game-body">The Forest remembers your steps. Please enjoy the offerings left by its artists.</div>
+    </div>
+    <button class="post-game-dismiss" id="postGameDismiss" aria-label="Dismiss">Dismiss</button>
+  </div>
   <div class="row" id="filterRow" style="margin-bottom:10px;display:none">
     <div class="filter-chip">Artist: <span id="filterName">-</span> <button id="filterClear" aria-label="Clear filter">x</button></div>
   </div>
   <div class="grid" id="grid"></div>
+  <section class="suggestions" id="suggestions" aria-hidden="true">
+    <h2 id="suggestionsTitle">The Forest suggests...</h2>
+    <div class="suggestions-grid" id="suggestionsGrid"></div>
+  </section>
 </main>
 
 <div class="modal" id="artistModal" role="dialog" aria-modal="true" aria-hidden="true">
@@ -55,14 +66,41 @@
       <h2 id="artistName">Artist</h2>
       <button class="artist-filter" id="artistFilterBtn">View all works</button>
     </div>
+    <div class="artist-flavor" id="artistFlavor">A frequent voice within the Forest.</div>
     <div class="modal-links" id="artistLinks"></div>
     <button class="modal-close" id="artistClose">Close</button>
   </div>
 </div>
 <div class="image-modal" id="imageModal" aria-hidden="true">
   <div class="info" id="imageInfo"></div>
+  <div class="detail-card">
+    <div class="detail-media">
+      <img id="imageModalImg" alt="">
+    </div>
+    <div class="detail-body">
+      <div class="detail-title" id="detailTitle"></div>
+      <div class="detail-artist" id="detailArtist"></div>
+      <div class="detail-origin" id="detailOrigin"></div>
+      <div class="detail-actions" id="detailActions"></div>
+      <div class="detail-tags" id="detailTags"></div>
+    </div>
+  </div>
   <button class="close" id="imageClose" aria-label="Close">X</button>
-  <img id="imageModalImg" alt="">
+</div>
+
+<div class="toast" id="toast" aria-hidden="true"></div>
+
+<div class="return-prompt" id="returnPrompt" aria-hidden="true">
+  <div class="return-copy">
+    <div class="return-title">The Forest is always growing.</div>
+    <div class="return-body">Return after the next gathering.</div>
+  </div>
+  <div class="return-actions">
+    <a href="/tarot/calendar">Next event</a>
+    <a href="/tarot/gallery">Play again</a>
+    <a href="https://join.thebigtree.life" target="_blank" rel="noreferrer">Submit an offering</a>
+  </div>
+  <button class="return-close" id="returnClose" aria-label="Close">Close</button>
 </div>
 
 <script src="/static/gallery/gallery.js" defer></script>
