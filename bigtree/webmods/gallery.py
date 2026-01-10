@@ -353,6 +353,7 @@ async def gallery_settings_set(req: web.Request):
         if not isinstance(hidden_decks, list):
             hidden_decks = []
         deck_payload = gallery_mod.set_hidden_decks(hidden_decks)
+        invalidate_gallery_cache()
 
     return web.json_response({
         "ok": True,
