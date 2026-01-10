@@ -27,6 +27,7 @@
   const imagePrev = document.getElementById("imagePrev");
   const imageNext = document.getElementById("imageNext");
   const detailLinks = document.getElementById("detailLinks");
+  const detailWatermark = document.getElementById("detailWatermark");
   let imageInfoTimer = null;
   let galleryItems = [];
   let galleryRenderItems = [];
@@ -161,12 +162,16 @@
     if (detailLinks){
       const links = data.artist_links || {};
       const keys = Object.keys(links).filter((key) => links[key]);
-      detailLinks.innerHTML = keys.map((key) => {
-        const url = links[key];
-        const label = LINK_LABELS[key] || key;
-        const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
-        return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
-      }).join("");
+      if (!keys.length){
+        detailLinks.innerHTML = "<span class='muted'>No external links shared.</span>";
+      }else{
+        detailLinks.innerHTML = keys.map((key) => {
+          const url = links[key];
+          const label = LINK_LABELS[key] || key;
+          const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
+          return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
+        }).join("");
+      }
     }
     if (detailOrigin) detailOrigin.textContent = data.origin || "";
     if (detailActions){
@@ -176,6 +181,9 @@
     }
     if (detailTags){
       detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join("");
+    }
+    if (detailWatermark){
+      detailWatermark.textContent = data.artist || "";
     }
     if (data.item_id){
       currentDetailIndex = galleryItems.findIndex((item) => getItemKey(item) === data.item_id);
@@ -196,6 +204,8 @@
     if (detailOrigin) detailOrigin.textContent = "";
     if (detailActions) detailActions.innerHTML = "";
     if (detailTags) detailTags.innerHTML = "";
+    if (detailLinks) detailLinks.innerHTML = "";
+    if (detailWatermark) detailWatermark.textContent = "";
     if (detailLinks) detailLinks.innerHTML = "";
     currentDetailIndex = -1;
     updateDetailNav();
@@ -612,6 +622,7 @@
         <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}" data-full="${fullPayload}">
           <div class="card-media">
             ${media}
+            <div class="card-watermark">${artistName}</div>
           </div>
           <div class="card-body">
             <div class="artist-name">${artistName}</div>
