@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Blackjack Priestess</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
+    main{padding:18px;display:grid;gap:16px}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .hand{display:flex;gap:8px;flex-wrap:wrap}
+    .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08)}
+    .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .muted{color:#9fb4a6}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Blackjack Priestess</h1>
+    <div class="muted" id="statusLine">Waiting for session...</div>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <div>Pot: <strong id="potValue">0</strong> gil</div>
+        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="muted">Dealer</div>
+      <div class="hand" id="dealerHand"></div>
+    </div>
+    <div class="panel">
+      <div class="muted">Player</div>
+      <div class="hand" id="playerHand"></div>
+    </div>
+    <div class="panel actions">
+      <button id="startBtn">Start</button>
+      <button id="finishBtn">Finish</button>
+    </div>
+  </main>
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "blackjack";
+  const statusLine = document.getElementById("statusLine");
+  const potValue = document.getElementById("potValue");
+  const winValue = document.getElementById("winValue");
+  const dealerHand = document.getElementById("dealerHand");
+  const playerHand = document.getElementById("playerHand");
+  const startBtn = document.getElementById("startBtn");
+  const finishBtn = document.getElementById("finishBtn");
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  let sessionId = "";
+
+  function cardLabel(card){
+    if (!card) return "?";
+    const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C", hidden:"?"};
+    return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
+  }
+
+  function renderHand(el, hand){
+    el.innerHTML = (hand || []).map(card => `<div class="card">${cardLabel(card)}</div>`).join("");
+  }
+
+  async function postAdmin(path){
+    if (!token){
+      statusLine.textContent = "Missing priestess token.";
+      return;
+    }
+    if (!sessionId) return;
+    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/${path}`, {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({token})
+    });
+  }
+
+  function render(state){
+    if (!state || !state.session) return;
+    sessionId = state.session.session_id || "";
+    potValue.textContent = state.session.pot || 0;
+    winValue.textContent = state.session.winnings || 0;
+    statusLine.textContent = `Status: ${state.session.status}`;
+    renderHand(dealerHand, (state.state && state.state.dealer_hand) || []);
+    renderHand(playerHand, (state.state && state.state.player_hand) || []);
+    const status = state.session.status;
+    startBtn.disabled = status !== "created";
+    finishBtn.disabled = status === "finished";
+  }
+
+  startBtn.addEventListener("click", () => postAdmin("start"));
+  finishBtn.addEventListener("click", () => postAdmin("finish"));
+
+  async function loadState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+    const data = await res.json();
+    if (data && data.state) render(data.state);
+  }
+
+  const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=priestess`);
+  src.onmessage = (ev) => {
+    try{
+      const payload = JSON.parse(ev.data);
+      if (payload.type === "STATE" && payload.state){
+        render(payload.state);
+      }else{
+        loadState();
+      }
+    }catch(err){}
+  };
+  loadState();
+</script>
+</body>
+</html>

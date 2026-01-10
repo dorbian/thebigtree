@@ -967,6 +967,9 @@
         const mediaBtn = $("menuMedia");
         const calendarBtn = $("menuCalendar");
         const tarotLinksBtn = $("menuTarotLinks");
+        const blackjackBtn = $("menuCardgameBlackjack");
+        const pokerBtn = $("menuCardgamePoker");
+        const highlowBtn = $("menuCardgameHighlow");
         const tarotDecksBtn = $("menuTarotDecks");
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
@@ -975,6 +978,9 @@
         if (mediaBtn) mediaBtn.classList.toggle("hidden", !canBingo);
         if (calendarBtn) calendarBtn.classList.toggle("hidden", !canAdmin);
         if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
+        if (blackjackBtn) blackjackBtn.classList.toggle("hidden", !canTarot);
+        if (pokerBtn) pokerBtn.classList.toggle("hidden", !canTarot);
+        if (highlowBtn) highlowBtn.classList.toggle("hidden", !canTarot);
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canTarot);
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canTarot);
@@ -983,7 +989,7 @@
         const blocked =
           (!canBingo && (saved === "bingo" || saved === "media")) ||
           (!canAdmin && (saved === "contests")) ||
-          (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks"));
+          (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks" || saved === "cardgameBlackjack" || saved === "cardgamePoker" || saved === "cardgameHighlow"));
         if (blocked){
           showPanel("dashboard");
         }
@@ -1586,6 +1592,9 @@
         }
         if (canTarot){
           allowedPanels.add("tarotLinks");
+          allowedPanels.add("cardgameBlackjack");
+          allowedPanels.add("cardgamePoker");
+          allowedPanels.add("cardgameHighlow");
           allowedPanels.add("tarotDecks");
         }
         let nextPanel = saved || (canBingo ? "bingo" : "dashboard");
@@ -2147,12 +2156,18 @@
         $("menuDashboard").classList.toggle("active", which === "dashboard");
         $("menuBingo").classList.toggle("active", which === "bingo");
         $("menuTarotLinks").classList.toggle("active", which === "tarotLinks");
+        $("menuCardgameBlackjack").classList.toggle("active", which === "cardgameBlackjack");
+        $("menuCardgamePoker").classList.toggle("active", which === "cardgamePoker");
+        $("menuCardgameHighlow").classList.toggle("active", which === "cardgameHighlow");
         $("menuTarotDecks").classList.toggle("active", which === "tarotDecks");
         $("menuContests").classList.toggle("active", which === "contests");
         $("menuMedia").classList.toggle("active", which === "media");
         $("dashboardPanel").classList.toggle("hidden", which !== "dashboard");
         $("bingoPanel").classList.toggle("hidden", which !== "bingo");
         $("tarotLinksPanel").classList.toggle("hidden", which !== "tarotLinks");
+        $("cardgameBlackjackPanel").classList.toggle("hidden", which !== "cardgameBlackjack");
+        $("cardgamePokerPanel").classList.toggle("hidden", which !== "cardgamePoker");
+        $("cardgameHighlowPanel").classList.toggle("hidden", which !== "cardgameHighlow");
         $("tarotDecksPanel").classList.toggle("hidden", which !== "tarotDecks");
         $("contestPanel").classList.toggle("hidden", which !== "contests");
         $("mediaPanel").classList.toggle("hidden", which !== "media");
@@ -2162,6 +2177,12 @@
           loadTarotArtists();
           updateMediaUploadDropDisplay(mediaUploadFile);
           updateMediaUploadState();
+        }else if (which === "cardgameBlackjack"){
+          loadCardgameSessions("blackjack");
+        }else if (which === "cardgamePoker"){
+          loadCardgameSessions("poker");
+        }else if (which === "cardgameHighlow"){
+          loadCardgameSessions("highlow");
         }
       }
 
@@ -2226,6 +2247,21 @@
         if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         showPanel("tarotLinks");
       });
+      $("menuCardgameBlackjack").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+        showPanel("cardgameBlackjack");
+        loadCardgameSessions("blackjack");
+      });
+      $("menuCardgamePoker").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+        showPanel("cardgamePoker");
+        loadCardgameSessions("poker");
+      });
+      $("menuCardgameHighlow").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+        showPanel("cardgameHighlow");
+        loadCardgameSessions("highlow");
+      });
       $("menuTarotDecks").addEventListener("click", () => {
         if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         showPanel("tarotDecks");
@@ -2250,6 +2286,9 @@
       bindMenuKey("menuDashboard");
       bindMenuKey("menuBingo");
       bindMenuKey("menuTarotLinks");
+      bindMenuKey("menuCardgameBlackjack");
+      bindMenuKey("menuCardgamePoker");
+      bindMenuKey("menuCardgameHighlow");
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
@@ -4071,6 +4110,284 @@
           setStatus(err.message, "err");
         }
       });
+
+      const CARDGAME_CONFIGS = {
+        blackjack: {
+          panelId: "cardgameBlackjackPanel",
+          menuId: "menuCardgameBlackjack",
+          selectId: "bjSessionSelect",
+          refreshId: "bjSessionRefresh",
+          createId: "bjCreateSession",
+          potId: "bjPot",
+          joinId: "bjJoinCode",
+          tokenId: "bjPriestessToken",
+          openPlayerId: "bjOpenPlayer",
+          openPriestessId: "bjOpenPriestess",
+          startId: "bjStartSession",
+          finishId: "bjFinishSession",
+          statusId: "bjStatus",
+          linkId: "bjLink",
+        },
+        poker: {
+          panelId: "cardgamePokerPanel",
+          menuId: "menuCardgamePoker",
+          selectId: "pkSessionSelect",
+          refreshId: "pkSessionRefresh",
+          createId: "pkCreateSession",
+          potId: "pkPot",
+          joinId: "pkJoinCode",
+          tokenId: "pkPriestessToken",
+          openPlayerId: "pkOpenPlayer",
+          openPriestessId: "pkOpenPriestess",
+          startId: "pkStartSession",
+          finishId: "pkFinishSession",
+          statusId: "pkStatus",
+          linkId: "pkLink",
+        },
+        highlow: {
+          panelId: "cardgameHighlowPanel",
+          menuId: "menuCardgameHighlow",
+          selectId: "hlSessionSelect",
+          refreshId: "hlSessionRefresh",
+          createId: "hlCreateSession",
+          potId: "hlPot",
+          joinId: "hlJoinCode",
+          tokenId: "hlPriestessToken",
+          openPlayerId: "hlOpenPlayer",
+          openPriestessId: "hlOpenPriestess",
+          startId: "hlStartSession",
+          finishId: "hlFinishSession",
+          statusId: "hlStatus",
+          linkId: "hlLink",
+        },
+      };
+
+      function getCardgamePlayerUrl(gameId, joinCode){
+        const base = getBase();
+        return new URL(`/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(joinCode)}`, base).toString();
+      }
+
+      function getCardgamePriestessUrl(gameId, joinCode, token){
+        const base = getBase();
+        const url = new URL(`/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(joinCode)}`, base);
+        url.searchParams.set("view", "priestess");
+        if (token){
+          url.searchParams.set("token", token);
+        }
+        return url.toString();
+      }
+
+      function setCardgameStatus(gameId, msg, kind){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const el = $(cfg.statusId);
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function renderCardgameLinks(gameId, joinCode, token){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const target = $(cfg.linkId);
+        if (!target) return;
+        const links = [];
+        if (joinCode){
+          links.push(`<a href="${getCardgamePlayerUrl(gameId, joinCode)}" target="_blank" rel="noreferrer">Player</a>`);
+          links.push(`<a href="${getCardgamePriestessUrl(gameId, joinCode, token)}" target="_blank" rel="noreferrer">Priestess</a>`);
+        }
+        target.innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
+      function setCardgameInputs(gameId, session){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const joinEl = $(cfg.joinId);
+        const tokenEl = $(cfg.tokenId);
+        const potEl = $(cfg.potId);
+        if (joinEl){
+          joinEl.value = session.join_code || "";
+          joinEl.dataset.sessionId = session.session_id || "";
+        }
+        if (tokenEl){
+          tokenEl.value = session.priestess_token || "";
+        }
+        if (potEl && session.pot !== undefined){
+          potEl.value = session.pot;
+        }
+        renderCardgameLinks(gameId, session.join_code || "", session.priestess_token || "");
+      }
+
+      async function loadCardgameSessions(gameId, selectJoin){
+        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        try{
+          const data = await jsonFetch(`/api/cardgames/${gameId}/sessions`, {method:"GET"}, true);
+          const select = $(cfg.selectId);
+          if (!select) return;
+          select.innerHTML = "";
+          const sessions = data.sessions || [];
+          sessions.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.join_code || "";
+            const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
+            opt.textContent = `${s.join_code || "-"} | pot ${s.pot || 0} | ${s.status || "-"} | ${created}`;
+            opt.dataset.token = s.priestess_token || "";
+            opt.dataset.sessionId = s.session_id || "";
+            opt.dataset.pot = s.pot || 0;
+            select.appendChild(opt);
+          });
+          if (selectJoin){
+            select.value = selectJoin;
+          }
+        }catch(err){
+          setCardgameStatus(gameId, err.message, "err");
+        }
+      }
+
+      async function createCardgameSession(gameId){
+        if (!ensureScope("tarot:admin", "Cardgames access required.")) return;
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const pot = parseInt(($(cfg.potId).value || "0").trim(), 10) || 0;
+        try{
+          const data = await jsonFetch(`/api/cardgames/${gameId}/sessions`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({pot})
+          }, true);
+          const session = data.session || {};
+          setCardgameInputs(gameId, session);
+          setCardgameStatus(gameId, "Session created.", "ok");
+          await loadCardgameSessions(gameId, session.join_code || "");
+          if (session.join_code){
+            window.open(getCardgamePriestessUrl(gameId, session.join_code, session.priestess_token || ""), "_blank");
+          }
+        }catch(err){
+          setCardgameStatus(gameId, err.message, "err");
+        }
+      }
+
+      async function startCardgameSession(gameId){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const join = $(cfg.joinId).value.trim();
+        const token = $(cfg.tokenId).value.trim();
+        const sessionId = $(cfg.joinId).dataset.sessionId || "";
+        if (!join || !token || !sessionId){
+          setCardgameStatus(gameId, "Select a session and priestess token.", "err");
+          return;
+        }
+        try{
+          await jsonFetch(`/api/cardgames/${gameId}/sessions/${encodeURIComponent(sessionId)}/start`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({token})
+          }, true);
+          setCardgameStatus(gameId, "Session started.", "ok");
+          await loadCardgameSessions(gameId, join);
+        }catch(err){
+          setCardgameStatus(gameId, err.message, "err");
+        }
+      }
+
+      async function finishCardgameSession(gameId){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        const join = $(cfg.joinId).value.trim();
+        const token = $(cfg.tokenId).value.trim();
+        const sessionId = $(cfg.joinId).dataset.sessionId || "";
+        if (!join || !token || !sessionId){
+          setCardgameStatus(gameId, "Select a session and priestess token.", "err");
+          return;
+        }
+        if (!confirm("Finish this session?")){
+          return;
+        }
+        try{
+          await jsonFetch(`/api/cardgames/${gameId}/sessions/${encodeURIComponent(sessionId)}/finish`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({token})
+          }, true);
+          setCardgameStatus(gameId, "Session finished.", "ok");
+          await loadCardgameSessions(gameId, join);
+        }catch(err){
+          setCardgameStatus(gameId, err.message, "err");
+        }
+      }
+
+      function bindCardgamePanel(gameId){
+        const cfg = CARDGAME_CONFIGS[gameId];
+        if (!cfg) return;
+        if (!$(cfg.panelId)) return;
+        const select = $(cfg.selectId);
+        if (select){
+          select.addEventListener("change", (ev) => {
+            const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
+            const join = opt ? (opt.value || "") : "";
+            const token = opt ? (opt.dataset.token || "") : "";
+            const pot = opt ? (opt.dataset.pot || "") : "";
+            const sessionId = opt ? (opt.dataset.sessionId || "") : "";
+            const joinEl = $(cfg.joinId);
+            if (joinEl){
+              joinEl.value = join;
+              joinEl.dataset.sessionId = sessionId;
+            }
+            const tokenEl = $(cfg.tokenId);
+            if (tokenEl) tokenEl.value = token;
+            const potEl = $(cfg.potId);
+            if (potEl) potEl.value = pot;
+            renderCardgameLinks(gameId, join, token);
+          });
+        }
+        const refreshBtn = $(cfg.refreshId);
+        if (refreshBtn){
+          refreshBtn.addEventListener("click", () => loadCardgameSessions(gameId));
+        }
+        const createBtn = $(cfg.createId);
+        if (createBtn){
+          createBtn.addEventListener("click", () => createCardgameSession(gameId));
+        }
+        const openPlayerBtn = $(cfg.openPlayerId);
+        if (openPlayerBtn){
+          openPlayerBtn.addEventListener("click", () => {
+            const join = $(cfg.joinId).value.trim();
+            if (!join){
+              setCardgameStatus(gameId, "Enter a join code.", "err");
+              return;
+            }
+            renderCardgameLinks(gameId, join, $(cfg.tokenId).value.trim());
+            window.open(getCardgamePlayerUrl(gameId, join), "_blank");
+          });
+        }
+        const openPriestessBtn = $(cfg.openPriestessId);
+        if (openPriestessBtn){
+          openPriestessBtn.addEventListener("click", () => {
+            const join = $(cfg.joinId).value.trim();
+            if (!join){
+              setCardgameStatus(gameId, "Enter a join code.", "err");
+              return;
+            }
+            const token = $(cfg.tokenId).value.trim();
+            renderCardgameLinks(gameId, join, token);
+            window.open(getCardgamePriestessUrl(gameId, join, token), "_blank");
+          });
+        }
+        const startBtn = $(cfg.startId);
+        if (startBtn){
+          startBtn.addEventListener("click", () => startCardgameSession(gameId));
+        }
+        const finishBtn = $(cfg.finishId);
+        if (finishBtn){
+          finishBtn.addEventListener("click", () => finishCardgameSession(gameId));
+        }
+      }
+
+      bindCardgamePanel("blackjack");
+      bindCardgamePanel("poker");
+      bindCardgamePanel("highlow");
 
       let taNumbers = [];
       let taSuitDefs = [];

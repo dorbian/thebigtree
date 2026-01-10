@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Poker Session</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
+    main{padding:18px;display:grid;gap:16px}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .hand{display:flex;gap:10px;flex-wrap:wrap}
+    .hold-card{display:flex;align-items:center;gap:8px;background:#0c1511;border:1px solid rgba(255,255,255,.08);padding:8px 10px;border-radius:10px}
+    .card{font-weight:600}
+    .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .muted{color:#9fb4a6}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Poker</h1>
+    <div class="muted" id="statusLine">Waiting for session...</div>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <div>Pot: <strong id="potValue">0</strong> gil</div>
+        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Draws left: <strong id="drawsLeft">0</strong></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="muted">Your hand (select cards to hold)</div>
+      <div class="hand" id="playerHand"></div>
+    </div>
+    <div class="panel actions">
+      <button id="drawBtn">Draw</button>
+    </div>
+    <div class="panel">
+      <div class="muted" id="resultLine">Result: --</div>
+    </div>
+  </main>
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "poker";
+  const statusLine = document.getElementById("statusLine");
+  const potValue = document.getElementById("potValue");
+  const winValue = document.getElementById("winValue");
+  const drawsLeft = document.getElementById("drawsLeft");
+  const playerHand = document.getElementById("playerHand");
+  const resultLine = document.getElementById("resultLine");
+  const drawBtn = document.getElementById("drawBtn");
+  const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
+  let playerToken = "";
+  let sessionId = "";
+
+  function cardLabel(card){
+    if (!card) return "?";
+    const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C"};
+    return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
+  }
+
+  function renderHand(hand, holds){
+    const data = hand || [];
+    const held = holds || [];
+    playerHand.innerHTML = data.map((card, idx) => {
+      const checked = held[idx] ? "checked" : "";
+      return `<label class="hold-card"><input type="checkbox" data-index="${idx}" ${checked}><span class="card">${cardLabel(card)}</span></label>`;
+    }).join("");
+  }
+
+  function getHoldSelection(){
+    const boxes = playerHand.querySelectorAll("input[type=checkbox]");
+    return Array.from(boxes).map(box => box.checked);
+  }
+
+  async function ensureToken(){
+    playerToken = localStorage.getItem(tokenKey) || "";
+    if (playerToken) return;
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST"});
+    const data = await res.json();
+    if (data && data.player_token){
+      playerToken = data.player_token;
+      localStorage.setItem(tokenKey, playerToken);
+    }
+  }
+
+  async function postAction(action, payload){
+    await ensureToken();
+    if (!sessionId) return;
+    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({token: playerToken, action, payload: payload || {}})
+    });
+  }
+
+  async function drawCards(){
+    const holds = getHoldSelection();
+    await postAction("hold", {holds});
+    await postAction("draw");
+  }
+
+  function render(state){
+    if (!state || !state.session) return;
+    sessionId = state.session.session_id || "";
+    potValue.textContent = state.session.pot || 0;
+    winValue.textContent = state.session.winnings || 0;
+    statusLine.textContent = `Status: ${state.session.status}`;
+    const draws = (state.state && state.state.draws_left) || 0;
+    drawsLeft.textContent = draws;
+    renderHand((state.state && state.state.hand) || [], (state.state && state.state.holds) || []);
+    const live = state.session.status === "live" && draws > 0;
+    drawBtn.disabled = !live;
+    playerHand.querySelectorAll("input[type=checkbox]").forEach(box => {
+      box.disabled = !live;
+    });
+    const rank = state.state && state.state.rank ? state.state.rank.replace(/_/g, " ") : "--";
+    const result = state.state && state.state.result ? state.state.result : "--";
+    resultLine.textContent = `Result: ${result} ${rank}`.trim();
+    if (state.session.status === "finished"){
+      setTimeout(() => window.location.assign("/tarot/gallery"), 2000);
+    }
+  }
+
+  drawBtn.addEventListener("click", () => drawCards());
+
+  async function loadState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
+    const data = await res.json();
+    if (data && data.state) render(data.state);
+  }
+
+  const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=player`);
+  src.onmessage = (ev) => {
+    try{
+      const payload = JSON.parse(ev.data);
+      if (payload.type === "STATE" && payload.state){
+        render(payload.state);
+      }else{
+        loadState();
+      }
+    }catch(err){}
+  };
+  loadState();
+</script>
+</body>
+</html>
