@@ -38,6 +38,11 @@ metadata:
     app: thebigtree
 spec:
   restartPolicy: Always
+  dnsPolicy: None
+  dnsConfig:
+    nameservers:
+      - 1.1.1.1
+      - 8.8.8.8
   containers:
     - name: thebigtree
       # Replace with your multi-arch image reference

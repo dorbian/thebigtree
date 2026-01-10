@@ -24,6 +24,9 @@
   const suggestions = document.getElementById("suggestions");
   const suggestionsTitle = document.getElementById("suggestionsTitle");
   const suggestionsGrid = document.getElementById("suggestionsGrid");
+  const imagePrev = document.getElementById("imagePrev");
+  const imageNext = document.getElementById("imageNext");
+  const detailLinks = document.getElementById("detailLinks");
   let imageInfoTimer = null;
   let galleryItems = [];
   let galleryRenderItems = [];
@@ -48,10 +51,10 @@
     {id:"craft", label:"Craft"}
   ];
   const CONTEXT_LABELS = {
-    contest: {icon: "C", label: "Contest"},
-    artifact: {icon: "A", label: "Artifact"},
-    event: {icon: "E", label: "Event"},
-    tarot: {icon: "T", label: "Tarot"}
+    contest: {label: "Contest"},
+    artifact: {label: "Artifact"},
+    event: {label: "Event"},
+    tarot: {label: "Tarot"}
   };
   const DIVIDER_LINES = [
     "Not all offerings are loud. Some wait to be found.",
@@ -60,6 +63,7 @@
   ];
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
+  let currentDetailIndex = -1;
 
   const LINK_ORDER = ["instagram", "bluesky", "x", "artstation", "linktree", "website"];
   const LINK_LABELS = {
@@ -154,6 +158,16 @@
     imageInfo.textContent = data.info || "";
     if (detailTitle) detailTitle.textContent = data.title || "";
     if (detailArtist) detailArtist.textContent = data.artist ? `Offered by ${data.artist}` : "";
+    if (detailLinks){
+      const links = data.artist_links || {};
+      const keys = Object.keys(links).filter((key) => links[key]);
+      detailLinks.innerHTML = keys.map((key) => {
+        const url = links[key];
+        const label = LINK_LABELS[key] || key;
+        const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
+        return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
+      }).join("");
+    }
     if (detailOrigin) detailOrigin.textContent = data.origin || "";
     if (detailActions){
       detailActions.innerHTML = (data.actions || []).map((action) => {
@@ -163,6 +177,10 @@
     if (detailTags){
       detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join("");
     }
+    if (data.item_id){
+      currentDetailIndex = galleryItems.findIndex((item) => getItemKey(item) === data.item_id);
+    }
+    updateDetailNav();
     imageModal.classList.add("show");
     imageModal.setAttribute("aria-hidden", "false");
     showImageInfo();
@@ -178,6 +196,9 @@
     if (detailOrigin) detailOrigin.textContent = "";
     if (detailActions) detailActions.innerHTML = "";
     if (detailTags) detailTags.innerHTML = "";
+    if (detailLinks) detailLinks.innerHTML = "";
+    currentDetailIndex = -1;
+    updateDetailNav();
   }
 
   function preloadThumbnails(items){
@@ -365,6 +386,12 @@
       postReaction(decodedKey, reactionId);
     });
   }
+  if (imagePrev){
+    imagePrev.addEventListener("click", () => navigateDetail(-1));
+  }
+  if (imageNext){
+    imageNext.addEventListener("click", () => navigateDetail(1));
+  }
   grid.addEventListener("click", (event) => {
     const target = event.target;
     if (target.tagName === "IMG" && target.getAttribute("data-full")){
@@ -424,6 +451,11 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && imageModal.classList.contains("show")){
       closeImageModal();
+    }
+    if (imageModal.classList.contains("show") && (event.key === "ArrowLeft" || event.key === "ArrowRight")){
+      event.preventDefault();
+      if (event.key === "ArrowLeft") navigateDetail(-1);
+      if (event.key === "ArrowRight") navigateDetail(1);
     }
   });
   load();
@@ -548,7 +580,7 @@
       contextItems.push(CONTEXT_LABELS.event);
     }
     const contextRow = contextItems.map((entry) => {
-      return `<span class="context-pill" title="${entry.label}">${entry.icon}</span>`;
+      return `<span class="context-pill" title="${entry.label}">${entry.label}</span>`;
     }).join("");
     const imgUrl = item.thumb_url || item.url;
     const fallbackUrl = item.thumb_url ? (item.url || "") : (item.fallback_url || "");
@@ -559,6 +591,7 @@
       info: infoText,
       title: title,
       artist: artistName,
+      artist_links: artistLinks,
       origin: origin,
       item_id: itemKey,
       actions: REACTIONS.map(reaction => ({
@@ -746,6 +779,53 @@
     const batch = insertDividers(items);
     grid.insertAdjacentHTML("beforeend", batch.map(item => (item && item._divider) ? buildDividerHtml(item) : buildCardHtml(item)).join(""));
     renderSuggestions();
+  }
+
+  function buildDetailPayload(item){
+    const artist = item.artist || {};
+    const artistName = artist.name || "Forest";
+    const title = item.title || "Untitled Offering";
+    const origin = (item.origin || "").trim() || getOrigin(item);
+    const itemKey = getItemKey(item);
+    const baseCounts = item.reactions || {};
+    return {
+      url: item.url,
+      fallback_url: item.fallback_url || "",
+      info: [title, artistName, origin].filter(Boolean).join(" - "),
+      title: title,
+      artist: artistName,
+      artist_links: artist.links || {},
+      origin: origin,
+      item_id: itemKey,
+      actions: REACTIONS.map(reaction => ({
+        id: reaction.id,
+        label: reaction.label,
+        count: Number(baseCounts[reaction.id] || 0)
+      })),
+      tags: getTags(item)
+    };
+  }
+
+  function openDetailByIndex(index){
+    if (index < 0 || index >= galleryItems.length) return;
+    currentDetailIndex = index;
+    const item = galleryItems[index];
+    if (!item) return;
+    openImageModal(buildDetailPayload(item));
+  }
+
+  function updateDetailNav(){
+    if (!imagePrev || !imageNext) return;
+    const hasItems = galleryItems.length > 0 && currentDetailIndex >= 0;
+    imagePrev.disabled = !hasItems || currentDetailIndex <= 0;
+    imageNext.disabled = !hasItems || currentDetailIndex >= galleryItems.length - 1;
+  }
+
+  function navigateDetail(delta){
+    if (currentDetailIndex < 0) return;
+    const nextIndex = currentDetailIndex + delta;
+    if (nextIndex < 0 || nextIndex >= galleryItems.length) return;
+    openDetailByIndex(nextIndex);
   }
 
   function renderSuggestions(){

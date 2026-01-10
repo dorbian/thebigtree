@@ -447,6 +447,25 @@
     font-size:18px;
     cursor:pointer;
   }
+  .image-modal .nav{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:40px;
+    height:40px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:rgba(12,18,15,.9);
+    color:var(--text);
+    font-size:18px;
+    cursor:pointer;
+  }
+  .image-modal .nav.prev{left:16px;}
+  .image-modal .nav.next{right:16px;}
+  .image-modal .nav:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
 
   .card:hover .origin,
   .card:hover .reaction-row,
@@ -477,8 +496,8 @@
     display:inline-flex;
     align-items:center;
     justify-content:center;
-    width:22px;
-    height:22px;
+    padding:3px 8px;
+    min-height:22px;
     border-radius:999px;
     border:1px solid rgba(214,178,110,.35);
     color:var(--accent-2);
@@ -564,6 +583,25 @@
     gap:10px;
     max-height:86vh;
     overflow:auto;
+  }
+  .detail-links{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .detail-links a{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    color:var(--accent);
+    text-decoration:none;
+    font-size:12px;
+  }
+  .detail-links svg{
+    width:14px;
+    height:14px;
+    fill:currentColor;
+    flex:0 0 auto;
   }
   .detail-title{
     font-size:18px;
