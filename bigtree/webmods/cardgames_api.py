@@ -6,6 +6,9 @@ import json
 from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
 
+async def _run_blocking(func, *args):
+    return await asyncio.to_thread(func, *args)
+
 def _get_view(req: web.Request) -> str:
     view = str(req.query.get("view") or "player").strip().lower()
     return view if view in ("player", "priestess") else "player"
@@ -48,7 +51,7 @@ async def create_session(req: web.Request):
         body = {}
     pot = int(body.get("pot") or 0)
     try:
-        s = cg.create_session(game_id, pot=pot)
+        s = await _run_blocking(cg.create_session, game_id, pot)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, "session": s})
@@ -56,14 +59,14 @@ async def create_session(req: web.Request):
 @route("GET", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin"])
 async def list_sessions(req: web.Request):
     game_id = str(req.match_info["game_id"] or "").strip().lower()
-    sessions = cg.list_sessions(game_id)
+    sessions = await _run_blocking(cg.list_sessions, game_id)
     return web.json_response({"ok": True, "sessions": sessions})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{join_code}/join", allow_public=True)
 async def join_session(req: web.Request):
     join_code = req.match_info["join_code"]
     try:
-        payload = cg.join_session(join_code)
+        payload = await _run_blocking(cg.join_session, join_code)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, **payload})
@@ -72,7 +75,7 @@ async def join_session(req: web.Request):
 async def get_state(req: web.Request):
     join_code = req.match_info["join_code"]
     view = _get_view(req)
-    s = cg.get_session_by_join_code(join_code)
+    s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
         return web.json_response({"ok": False, "error": "not found"}, status=404)
     return web.json_response({"ok": True, "state": cg.get_state(s, view=view)})
@@ -81,7 +84,7 @@ async def get_state(req: web.Request):
 async def stream_events(req: web.Request):
     join_code = req.match_info["join_code"]
     view = _get_view(req)
-    s = cg.get_session_by_join_code(join_code)
+    s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
         return web.json_response({"ok": False, "error": "not found"}, status=404)
 
@@ -100,7 +103,7 @@ async def stream_events(req: web.Request):
     try:
         while True:
             await asyncio.sleep(1.0)
-            events = cg.list_events(s["session_id"], last_seq)
+            events = await _run_blocking(cg.list_events, s["session_id"], last_seq)
             if events:
                 last_seq = int(events[-1].get("seq", last_seq))
                 for ev in events:
@@ -121,7 +124,7 @@ async def start_session(req: web.Request):
         body = {}
     token = _get_token(req, body)
     try:
-        cg.start_session(session_id, token)
+        await _run_blocking(cg.start_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
@@ -139,7 +142,7 @@ async def player_action(req: web.Request):
     action = str(body.get("action") or "").strip().lower()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     try:
-        s = cg.player_action(session_id, token, action, payload)
+        s = await _run_blocking(cg.player_action, session_id, token, action, payload)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
@@ -155,7 +158,7 @@ async def finish_session(req: web.Request):
         body = {}
     token = _get_token(req, body)
     try:
-        cg.finish_session(session_id, token)
+        await _run_blocking(cg.finish_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:

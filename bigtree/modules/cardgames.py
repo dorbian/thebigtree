@@ -22,6 +22,7 @@ except Exception:
 GAMES = {"blackjack", "poker", "highlow"}
 _DB_PATH: Optional[str] = None
 _DB_READY = False
+_DB_CONFIGURED = False
 _DB_LOCK = threading.RLock()
 
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
@@ -57,8 +58,6 @@ def _get_db_path() -> str:
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_get_db_path(), timeout=30)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
@@ -67,14 +66,21 @@ def _with_conn(fn):
         with _connect() as conn:
             return fn(conn)
 
+def _configure_db(conn: sqlite3.Connection) -> None:
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA synchronous=NORMAL")
+
 def _ensure_db() -> None:
-    global _DB_READY
+    global _DB_READY, _DB_CONFIGURED
     if _DB_READY:
         return
     with _DB_LOCK:
         if _DB_READY:
             return
         with _connect() as conn:
+            if not _DB_CONFIGURED:
+                _configure_db(conn)
+                _DB_CONFIGURED = True
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
