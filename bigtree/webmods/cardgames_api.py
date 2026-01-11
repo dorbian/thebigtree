@@ -181,6 +181,31 @@ async def finish_session(req: web.Request):
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True})
 
+@route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/clone", allow_public=True)
+async def clone_session(req: web.Request):
+    session_id = req.match_info["session_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    token = _get_token(req, body)
+    s = await _run_blocking(cg.get_session_by_id, session_id)
+    if not s:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    if token != s.get("priestess_token"):
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
+    try:
+        new_session = await _run_blocking(
+            cg.create_session,
+            s.get("game_id"),
+            int(s.get("pot") or 0),
+            s.get("deck_id"),
+            s.get("background_url"),
+        )
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response({"ok": True, "session": new_session})
+
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/delete", allow_public=True)
 async def delete_session(req: web.Request):
     session_id = req.match_info["session_id"]

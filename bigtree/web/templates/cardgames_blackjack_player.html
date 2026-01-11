@@ -10,12 +10,13 @@
     body::before{content:"";position:fixed;inset:0;background:var(--bg-image) center/cover no-repeat;opacity:0;pointer-events:none;transition:opacity .6s ease}
     body.has-bg::before{opacity:.25}
     header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
-    main{padding:18px;display:grid;gap:16px}
-    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .hand{display:flex;gap:8px;flex-wrap:wrap}
+    main{padding:18px;display:grid;gap:16px;justify-items:center}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    .hand{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:56px;min-height:76px}
     .card img{max-width:72px;max-height:96px;border-radius:8px;display:block}
+    .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .muted{color:#9fb4a6}
   </style>
