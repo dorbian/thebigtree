@@ -1318,10 +1318,12 @@
         color:var(--muted);
       }
       .danger-action{
-        opacity:0;
-        transition:opacity .2s ease;
         border-color:rgba(210,92,92,.45);
         color:#e7b1b1;
+      }
+      .icon-group .danger-action{
+        opacity:0;
+        transition:opacity .2s ease;
       }
       .icon-group:hover .danger-action{
         opacity:1;

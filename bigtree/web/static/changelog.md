@@ -14,6 +14,7 @@
 - Media library: guard against non-JSON responses and surface clearer errors.
 - Gallery: strip emoji characters from Discord-sourced image titles.
 - Gallery: add inline fallback handler for Join game prompt.
+- Overlay: always show delete session action outside icon groups.
 - Gallery: added Join game button that routes join codes to the right session page.
 - High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
 - Poker: added round-based betting UI with staged community reveal and action tracking.
