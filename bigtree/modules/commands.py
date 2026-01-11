@@ -4,6 +4,7 @@ import discord
 import os
 import importlib
 from pathlib import Path
+import unicodedata
 from discord.ext import commands
 from discord import app_commands
 from discord import Permissions
@@ -21,6 +22,22 @@ PRIEST_ROLE_NAME = "Priest/ess"
 
 bot = bigtree.bot
 _GALLERY_IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+def _strip_emojis(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = []
+    for ch in text:
+        code = ord(ch)
+        if code in (0x200D, 0xFE0E, 0xFE0F):
+            continue
+        if 0x1F3FB <= code <= 0x1F3FF:
+            continue
+        category = unicodedata.category(ch)
+        if category in ("So", "Cs"):
+            continue
+        cleaned.append(ch)
+    return "".join(cleaned)
 
 # Simple per-user rolling memory (volatile)
 _user_hist = defaultdict(lambda: deque(maxlen=8))
@@ -268,7 +285,7 @@ async def receive(message):
         if upload_channel_id and message.channel.id == upload_channel_id:
             if message.attachments:
                 for idx, attachment in enumerate(message.attachments):
-                    filename = attachment.filename or ""
+                    filename = _strip_emojis(attachment.filename or "")
                     ext = Path(filename).suffix.lower()
                     content_type = (attachment.content_type or "").lower()
                     if ext not in _GALLERY_IMG_EXTS and not content_type.startswith("image/"):
@@ -282,8 +299,9 @@ async def receive(message):
                         continue
                     display_name = getattr(message.author, "display_name", None) or message.author.name
                     artist_mod.upsert_artist(author_id, display_name, {})
-                    base_title = (message.content or "").strip() or filename
+                    base_title = _strip_emojis((message.content or "").strip()) or filename
                     title = base_title if idx == 0 else f"{base_title} ({idx + 1})"
+                    title = title.strip() or filename
                     discord_url = getattr(attachment, "url", None)
                     media_mod.add_media(
                         save_name,

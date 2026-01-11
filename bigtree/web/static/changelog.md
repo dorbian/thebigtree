@@ -12,6 +12,8 @@
 - High/Low: added decision-focused UI (double/stop, intent/settlement preview) and synced winnings/state flow.
 - Cardgame sessions: open media library now always opens the panel before scope checks.
 - Media library: guard against non-JSON responses and surface clearer errors.
+- Gallery: strip emoji characters from Discord-sourced image titles.
+- Gallery: add inline fallback handler for Join game prompt.
 - Gallery: added Join game button that routes join codes to the right session page.
 - High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
 - Poker: added round-based betting UI with staged community reveal and action tracking.

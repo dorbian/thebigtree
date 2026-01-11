@@ -2,6 +2,7 @@
 from __future__ import annotations
 from aiohttp import web
 from typing import Dict, Any, List
+import unicodedata
 import asyncio
 import os
 import discord
@@ -78,6 +79,22 @@ def _contest_name(meta: Dict[str, Any] | None, channel_id: int) -> str:
 
 def _contest_media_url(filename: str) -> str:
     return f"/contest/media/{filename}"
+
+def _strip_emojis(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = []
+    for ch in text:
+        code = ord(ch)
+        if code in (0x200D, 0xFE0E, 0xFE0F):
+            continue
+        if 0x1F3FB <= code <= 0x1F3FF:
+            continue
+        category = unicodedata.category(ch)
+        if category in ("So", "Cs"):
+            continue
+        cleaned.append(ch)
+    return "".join(cleaned)
 
 def _strip_query(url: str) -> str:
     return (url or "").split("?", 1)[0]
@@ -456,7 +473,7 @@ async def gallery_import_channel(req: web.Request):
             artist_id = str(author.id)
             display_name = getattr(author, "display_name", None) or author.name
             artist_mod.upsert_artist(artist_id, display_name, {})
-            base_title = (message.content or "").strip()
+            base_title = _strip_emojis((message.content or "").strip())
             for idx, att in enumerate(message.attachments):
                 if not _is_image_attachment(att):
                     continue
@@ -464,7 +481,7 @@ async def gallery_import_channel(req: web.Request):
                 if discord_url and media_mod.get_media_by_discord_url(discord_url):
                     skipped += 1
                     continue
-                filename = att.filename or "image"
+                filename = _strip_emojis(att.filename or "image")
                 ext = os.path.splitext(filename)[1].lower()
                 if ext not in _IMG_EXTS:
                     ext = ".png"
@@ -477,6 +494,7 @@ async def gallery_import_channel(req: web.Request):
                 title = base_title or filename
                 if idx > 0 and base_title:
                     title = f"{base_title} ({idx + 1})"
+                title = title.strip() or filename
                 media_mod.add_media(
                     save_name,
                     original_name=filename,
