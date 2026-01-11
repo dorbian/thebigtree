@@ -13,6 +13,8 @@
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:980px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    .hand-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr))}
+    .hand-col{text-align:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card.hidden{color:#9fb4a6;letter-spacing:.12em;text-transform:uppercase;background:linear-gradient(135deg, rgba(20,32,26,.7), rgba(10,18,14,.9));background-size:cover;background-position:center}
@@ -68,12 +70,16 @@
       <div class="intent" id="playerAction">Awaiting player action.</div>
     </div>
     <div class="panel">
-      <div class="muted">Player hand</div>
-      <div class="hand" id="playerHand"></div>
-    </div>
-    <div class="panel">
-      <div class="muted">Dealer hand</div>
-      <div class="hand" id="dealerHand"></div>
+      <div class="hand-grid">
+        <div class="hand-col">
+          <div class="muted">Player hand</div>
+          <div class="hand" id="playerHand"></div>
+        </div>
+        <div class="hand-col">
+          <div class="muted">Dealer hand</div>
+          <div class="hand" id="dealerHand"></div>
+        </div>
+      </div>
     </div>
     <div class="panel">
       <div class="muted">Community</div>
