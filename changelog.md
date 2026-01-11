@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- FFXIV client: add cardgames host panel for creating sessions and copying join links.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
 - Added dashboard changelog panel and refreshed dashboard content.

@@ -11,6 +11,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
 using Forest.Features.BingoAdmin;
+using Forest.Features.CardgamesHost;
 using Forest.Features.HuntStaffed;
 
 using System;
@@ -36,7 +37,7 @@ public class MainWindow : Window, IDisposable
     private readonly Plugin Plugin;
 
     // ---------- View switch ----------
-    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam }
+    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam, Cardgames }
     private View _view = View.Home;
     private enum BingoUiState { NoGameLoaded, Ready, Running, StageComplete, Finished }
 
@@ -125,6 +126,22 @@ public class MainWindow : Window, IDisposable
     private string _huntRules = "";
     private bool _huntAllowImplicit = true;
 
+    // ---------- Cardgames (Host) ----------
+    private CardgamesHostApiClient? _cardgamesApi;
+    private string? _cardgamesApiBaseUrl;
+    private string? _cardgamesApiKey;
+    private string _cardgamesStatus = "";
+    private bool _cardgamesLoading = false;
+    private bool _cardgamesDecksLoading = false;
+    private string _cardgamesGameId = "blackjack";
+    private readonly List<CardgameSession> _cardgamesSessions = new();
+    private readonly List<CardDeck> _cardgamesDecks = new();
+    private CardgameSession? _cardgamesSelectedSession;
+    private string _cardgamesSelectedDeckId = "";
+    private int _cardgamesPot = 0;
+    private string _cardgamesLastJoinCode = "";
+    private DateTime _cardgamesLastRefresh = DateTime.MinValue;
+
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
     {
@@ -169,6 +186,7 @@ public class MainWindow : Window, IDisposable
         _bingoCts?.Cancel();
         _bingoApi?.Dispose();
         _huntApi?.Dispose();
+        _cardgamesApi?.Dispose();
     }
 
     private void OnContextMenuOpened(IMenuOpenedArgs args)
@@ -303,6 +321,12 @@ public class MainWindow : Window, IDisposable
             _huntLastRefresh = DateTime.UtcNow;
             _ = Hunt_LoadState();
         }
+        if (_view == View.Cardgames
+            && (DateTime.UtcNow - _cardgamesLastRefresh).TotalSeconds >= 10
+            && !_cardgamesLoading)
+        {
+            _ = Cardgames_LoadSessions();
+        }
     }
 
     // ========================= DRAW =========================
@@ -330,6 +354,32 @@ public class MainWindow : Window, IDisposable
                     _ = Bingo_LoadGames();
                 }
                 if (ImGui.MenuItem("Raffle")) _view = View.Raffle;
+                ImGui.EndMenu();
+            }
+            ImGui.SameLine();
+            if (ImGui.BeginMenu("Cardgames"))
+            {
+                if (ImGui.MenuItem("Blackjack"))
+                {
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "blackjack";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                }
+                if (ImGui.MenuItem("Poker"))
+                {
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "poker";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                }
+                if (ImGui.MenuItem("High/Low"))
+                {
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "highlow";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                }
                 ImGui.EndMenu();
             }
 
@@ -371,6 +421,7 @@ public class MainWindow : Window, IDisposable
                 case View.Raffle: DrawRafflePanel(); break;
                 case View.SpinWheel: DrawSpinWheelPanel(); break;
                 case View.Glam: DrawGlamRoulettePanel(); break;
+                case View.Cardgames: DrawCardgamesPanel(); break;
             }
         }
         ImGui.EndChild();
@@ -412,6 +463,8 @@ public class MainWindow : Window, IDisposable
             DrawGlamContestantsList();
         else if (_view == View.MurderMystery)
             DrawSavedMurderGames();
+        else if (_view == View.Cardgames)
+            DrawCardgamesSessionsList();
         else
             ImGui.TextDisabled("Select a game from the menu above.");
         ImGui.EndChild();
@@ -2370,6 +2423,154 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    // ========================= Cardgames (Host) =========================
+    private void DrawCardgamesPanel()
+    {
+        ImGui.TextUnformatted("Cardgames (Host)");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        ImGui.TextDisabled("Game");
+        if (ImGui.RadioButton("Blackjack", _cardgamesGameId == "blackjack"))
+        {
+            _cardgamesGameId = "blackjack";
+            _ = Cardgames_LoadSessions();
+        }
+        ImGui.SameLine();
+        if (ImGui.RadioButton("Poker", _cardgamesGameId == "poker"))
+        {
+            _cardgamesGameId = "poker";
+            _ = Cardgames_LoadSessions();
+        }
+        ImGui.SameLine();
+        if (ImGui.RadioButton("High/Low", _cardgamesGameId == "highlow"))
+        {
+            _cardgamesGameId = "highlow";
+            _ = Cardgames_LoadSessions();
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Refresh sessions"))
+            _ = Cardgames_LoadSessions();
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(_cardgamesDecksLoading))
+        {
+            if (ImGui.Button("Load decks"))
+                _ = Cardgames_LoadDecks();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        ImGui.SetNextItemWidth(240);
+        string deckLabel = string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId) ? "(default deck)" : _cardgamesSelectedDeckId;
+        if (ImGui.BeginCombo("Deck", deckLabel))
+        {
+            if (ImGui.Selectable("(default deck)", string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId)))
+                _cardgamesSelectedDeckId = "";
+
+            foreach (var deck in _cardgamesDecks)
+            {
+                var label = string.IsNullOrWhiteSpace(deck.name) ? deck.deck_id : $"{deck.name} ({deck.deck_id})";
+                bool selected = string.Equals(_cardgamesSelectedDeckId, deck.deck_id, StringComparison.Ordinal);
+                if (ImGui.Selectable(label, selected))
+                    _cardgamesSelectedDeckId = deck.deck_id;
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SetNextItemWidth(120);
+        int pot = Math.Max(0, _cardgamesPot);
+        if (ImGui.InputInt("Gil pot", ref pot))
+            _cardgamesPot = Math.Max(0, pot);
+
+        ImGui.Spacing();
+        using (var dis = ImRaii.Disabled(_cardgamesLoading))
+        {
+            if (ImGui.Button("Create session"))
+                _ = Cardgames_CreateSession();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_cardgamesStatus))
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled(_cardgamesStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_cardgamesLastJoinCode))
+        {
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.TextUnformatted("Latest session");
+            ImGui.TextWrapped($"Join code: {_cardgamesLastJoinCode}");
+            var baseUrl = GetCardgamesBaseUrl();
+            var playerLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}";
+            var hostLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}?view=priestess";
+            ImGui.TextWrapped($"Player link: {playerLink}");
+            ImGui.TextWrapped($"Host link: {hostLink}");
+            if (ImGui.Button("Copy join code"))
+                ImGui.SetClipboardText(_cardgamesLastJoinCode);
+            ImGui.SameLine();
+            if (ImGui.Button("Copy player link"))
+                ImGui.SetClipboardText(playerLink);
+            ImGui.SameLine();
+            if (ImGui.Button("Copy host link"))
+                ImGui.SetClipboardText(hostLink);
+        }
+    }
+
+    private void DrawCardgamesSessionsList()
+    {
+        ImGui.TextDisabled("Cardgame sessions");
+        ImGui.Separator();
+        if (_cardgamesSessions.Count == 0)
+        {
+            ImGui.TextDisabled("No sessions yet.");
+            return;
+        }
+
+        foreach (var s in _cardgamesSessions)
+        {
+            var label = $"{FormatCardgamesName(s.game_id)} · {s.join_code} · {s.status}";
+            if (ImGui.Selectable(label, _cardgamesSelectedSession?.session_id == s.session_id))
+                _cardgamesSelectedSession = s;
+        }
+
+        if (_cardgamesSelectedSession is null)
+            return;
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextWrapped($"Selected: {_cardgamesSelectedSession.join_code}");
+        var baseUrl = GetCardgamesBaseUrl();
+        var playerLink = $"{baseUrl}/cardgames/{_cardgamesSelectedSession.game_id}/session/{_cardgamesSelectedSession.join_code}";
+        var hostLink = $"{baseUrl}/cardgames/{_cardgamesSelectedSession.game_id}/session/{_cardgamesSelectedSession.join_code}?view=priestess";
+        if (ImGui.Button("Copy join code"))
+            ImGui.SetClipboardText(_cardgamesSelectedSession.join_code);
+        ImGui.SameLine();
+        if (ImGui.Button("Copy player link"))
+            ImGui.SetClipboardText(playerLink);
+        ImGui.SameLine();
+        if (ImGui.Button("Copy host link"))
+            ImGui.SetClipboardText(hostLink);
+    }
+
+    private static string FormatCardgamesName(string? gameId)
+    {
+        return gameId switch
+        {
+            "blackjack" => "Blackjack",
+            "poker" => "Poker",
+            "highlow" => "High/Low",
+            _ => string.IsNullOrWhiteSpace(gameId) ? "Cardgame" : gameId
+        };
+    }
+
+    private string GetCardgamesBaseUrl()
+    {
+        return (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+    }
+
     private void DrawGlamContestantsList()
     {
         var glam = Plugin.Config.GlamRoulette;
@@ -3311,6 +3512,112 @@ public class MainWindow : Window, IDisposable
     private static string FormatGil(int value)
     {
         return value.ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
+    }
+
+    private void Cardgames_EnsureClient()
+    {
+        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443";
+        var apiKey = Plugin.Config.BingoApiKey;
+        var needsRefresh = _cardgamesApi is null
+                           || !string.Equals(_cardgamesApiBaseUrl, baseUrl, StringComparison.Ordinal)
+                           || !string.Equals(_cardgamesApiKey, apiKey, StringComparison.Ordinal);
+        if (!needsRefresh)
+            return;
+
+        _cardgamesApi?.Dispose();
+        _cardgamesApiBaseUrl = baseUrl;
+        _cardgamesApiKey = apiKey;
+        _cardgamesApi = new CardgamesHostApiClient(baseUrl, apiKey);
+    }
+
+    private async Task Cardgames_LoadDecks()
+    {
+        Cardgames_EnsureClient();
+        _cardgamesDecksLoading = true;
+        try
+        {
+            var decks = await _cardgamesApi!.ListDecksAsync();
+            _cardgamesDecks.Clear();
+            _cardgamesDecks.AddRange(decks.OrderBy(d => d.name ?? d.deck_id));
+            if (!string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId)
+                && _cardgamesDecks.All(d => d.deck_id != _cardgamesSelectedDeckId))
+            {
+                _cardgamesSelectedDeckId = "";
+            }
+            _cardgamesStatus = $"Loaded {_cardgamesDecks.Count} deck(s).";
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Failed to load decks: {ex.Message}";
+        }
+        finally
+        {
+            _cardgamesDecksLoading = false;
+        }
+    }
+
+    private async Task Cardgames_LoadSessions()
+    {
+        if (string.IsNullOrWhiteSpace(_cardgamesGameId))
+        {
+            _cardgamesStatus = "Select a game first.";
+            return;
+        }
+        Cardgames_EnsureClient();
+        _cardgamesLoading = true;
+        try
+        {
+            var sessions = await _cardgamesApi!.ListSessionsAsync(_cardgamesGameId);
+            _cardgamesSessions.Clear();
+            _cardgamesSessions.AddRange(sessions);
+            _cardgamesLastRefresh = DateTime.UtcNow;
+            _cardgamesStatus = $"Loaded {_cardgamesSessions.Count} session(s).";
+            if (_cardgamesSelectedSession is not null
+                && _cardgamesSessions.All(s => s.session_id != _cardgamesSelectedSession.session_id))
+            {
+                _cardgamesSelectedSession = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Failed to load sessions: {ex.Message}";
+        }
+        finally
+        {
+            _cardgamesLoading = false;
+        }
+    }
+
+    private async Task Cardgames_CreateSession()
+    {
+        if (string.IsNullOrWhiteSpace(_cardgamesGameId))
+        {
+            _cardgamesStatus = "Select a game first.";
+            return;
+        }
+        Cardgames_EnsureClient();
+        _cardgamesLoading = true;
+        try
+        {
+            var resp = await _cardgamesApi!.CreateSessionAsync(_cardgamesGameId, _cardgamesPot, _cardgamesSelectedDeckId);
+            if (!resp.ok || resp.session is null)
+            {
+                _cardgamesStatus = resp.error ?? "Create failed.";
+                return;
+            }
+            var s = resp.session;
+            _cardgamesLastJoinCode = s.join_code;
+            _cardgamesStatus = $"Session created: {s.join_code}.";
+            _ = Cardgames_LoadSessions();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Create failed: {ex.Message}";
+        }
+        finally
+        {
+            _cardgamesLoading = false;
+        }
     }
 
     private void Hunt_EnsureClient()
