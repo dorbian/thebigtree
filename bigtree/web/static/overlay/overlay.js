@@ -4488,16 +4488,11 @@
           setCardgameBackgroundStatus(pick);
         });
         $("cgOpenMedia").addEventListener("click", () => {
+          showPanel("media");
           if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
             setCardgameStatus("Media access requires permission.", "err");
             return;
           }
-          showPanel("media");
-          setMediaTab("upload");
-          loadMediaLibrary();
-          loadTarotArtists();
-          updateMediaUploadDropDisplay(mediaUploadFile);
-          updateMediaUploadState();
           setCardgameStatus("Media library opened.", "ok");
         });
         const defaults = getCardgameDefaults();
