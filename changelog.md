@@ -8,7 +8,8 @@
 - Cardgame sessions: dynamic polling fallback, card centering, larger cards, and artist credits.
 - Blackjack: dealer back image for hidden card, dealer totals/lead on host view, and host-only finish.
 - Cardgames: sessions now stay alive until host finishes; no player auto-end.
-- Poker: converted to 1v1 Texas Hold’em with host-controlled stage advance.
+- Poker: converted to 1v1 Texas Hold'em with host-controlled stage advance.
+- High/Low: added decision-focused UI (double/stop, intent/settlement preview) and synced winnings/state flow.
 
 ## 2026-01-11
 ### Cardgames

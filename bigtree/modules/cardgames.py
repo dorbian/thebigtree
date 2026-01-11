@@ -360,9 +360,17 @@ def _init_highlow_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
         "deck": deck,
         "current": None,
         "next": None,
+        "revealed": None,
         "status": "created",
+        "phase": "created",
         "result": None,
-        "guess": None,
+        "last_result": None,
+        "intent": None,
+        "base_pot": 0,
+        "winnings": 0,
+        "pending_multiplier": 1,
+        "doubles_used": 0,
+        "max_doubles": 2,
     }
 
 def _start_highlow(state: Dict[str, Any]) -> None:
@@ -373,24 +381,71 @@ def _start_highlow(state: Dict[str, Any]) -> None:
     state["current"] = current[0] if current else None
     state["deck"] = deck
     state["status"] = "live"
+    state["phase"] = "decision"
+    state["intent"] = None
+    state["pending_multiplier"] = 1
 
-def _apply_highlow_action(state: Dict[str, Any], guess: str) -> Tuple[Dict[str, Any], Optional[str]]:
+def _apply_highlow_action(state: Dict[str, Any], action: str) -> Tuple[Dict[str, Any], Optional[str]]:
     deck = state.get("deck") or []
+    phase = state.get("phase") or "created"
+    if state.get("status") != "live" or phase == "settlement":
+        return state, "not active"
+    if action == "stop":
+        if int(state.get("winnings") or 0) <= 0:
+            return state, "no winnings to stop"
+        state["intent"] = "stop"
+        state["result"] = "stopped"
+        state["last_result"] = "stopped"
+        state["phase"] = "settlement"
+        state["pending_multiplier"] = 1
+        return state, None
+    if action == "double":
+        if phase != "decision":
+            return state, "not in decision phase"
+        if int(state.get("winnings") or 0) <= 0:
+            return state, "cannot double yet"
+        max_doubles = int(state.get("max_doubles") or 0)
+        doubles_used = int(state.get("doubles_used") or 0)
+        if max_doubles and doubles_used >= max_doubles:
+            return state, "max doubles reached"
+        state["pending_multiplier"] = int(state.get("pending_multiplier") or 1) * 2
+        state["doubles_used"] = doubles_used + 1
+        state["intent"] = "double"
+        return state, None
+    if action not in ("higher", "lower"):
+        return state, "invalid action"
+    if phase != "decision":
+        return state, "not in decision phase"
     if not deck or not state.get("current"):
         return state, "no cards"
     next_card = _draw(deck, 1)[0]
     state["next"] = next_card
+    state["revealed"] = next_card
     state["deck"] = deck
-    state["guess"] = guess
+    state["intent"] = action
     current_val = RANK_VALUES.get(state["current"]["rank"], 0)
     next_val = RANK_VALUES.get(next_card["rank"], 0)
-    if guess == "higher":
+    if action == "higher":
         state["result"] = "win" if next_val >= current_val else "lose"
-    elif guess == "lower":
+    elif action == "lower":
         state["result"] = "win" if next_val <= current_val else "lose"
     else:
         return state, "invalid guess"
-    state["status"] = "finished"
+    state["last_result"] = state.get("result")
+    base = int(state.get("winnings") or 0) or int(state.get("base_pot") or 0) or 0
+    if base <= 0:
+        base = 0
+    multiplier = int(state.get("pending_multiplier") or 1)
+    if state["result"] == "win":
+        if base == 0:
+            base = int(state.get("base_pot") or 0) or 0
+        state["winnings"] = max(base, int(state.get("winnings") or 0)) * multiplier
+    else:
+        state["winnings"] = 0
+    state["pending_multiplier"] = 1
+    state["current"] = next_card
+    state["next"] = None
+    state["phase"] = "decision"
     return state, None
 
 def _init_poker_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
@@ -541,9 +596,12 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
     if game_id == "poker":
         return _apply_poker_action(state, action, payload)
     if game_id == "highlow":
-        if action != "guess":
-            return state, "invalid action"
-        return _apply_highlow_action(state, str(payload.get("guess") or ""))
+        choice = ""
+        if action == "guess":
+            choice = str(payload.get("guess") or "")
+        else:
+            choice = str(action or "")
+        return _apply_highlow_action(state, choice)
     return state, "invalid game"
 
 def _poker_visible_community(state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -716,6 +774,8 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
     if token != s.get("priestess_token"):
         raise PermissionError("unauthorized")
     state = s.get("state") or {}
+    if s.get("game_id") == "highlow" and not state.get("base_pot"):
+        state["base_pot"] = int(s.get("pot") or 0)
     _start_game(s["game_id"], state)
     s["status"] = "live"
     s["state"] = state
@@ -768,12 +828,16 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     if token != s.get("player_token"):
         raise PermissionError("unauthorized")
     state = s.get("state") or {}
+    if s.get("game_id") == "highlow" and not state.get("base_pot"):
+        state["base_pot"] = int(s.get("pot") or 0)
     if s.get("status") != "live":
         raise ValueError("session not live")
     updated, err = _apply_action(s["game_id"], state, action, payload or {})
     if err:
         raise ValueError(err)
     s["state"] = updated
+    if s.get("game_id") == "highlow":
+        s["winnings"] = int(updated.get("winnings") or 0)
     if updated.get("status") == "finished":
         result = updated.get("result")
         pot = int(s.get("pot") or 0)

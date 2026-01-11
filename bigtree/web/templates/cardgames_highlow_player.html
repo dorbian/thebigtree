@@ -13,11 +13,17 @@
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
-    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px;margin:0 auto}
-    .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
-    .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-    .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .card{padding:10px 12px;border-radius:14px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:120px;min-height:180px;margin:0 auto}
+    .card img{max-width:180px;max-height:260px;border-radius:10px;display:block}
+    .decision-grid{display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:12px;width:100%}
+    .decision-row{display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:12px;width:100%}
+    .actions button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:600}
+    .actions button[disabled]{opacity:.45;cursor:not-allowed}
+    .hint{margin-top:10px;color:#9fb4a6;font-size:14px}
     .muted{color:#9fb4a6}
+    .risk{display:flex;gap:8px;align-items:center;justify-content:center;color:#e8d1a4}
+    .risk strong{color:#f2e2bf}
+    .pulse{box-shadow:0 0 18px rgba(214,178,110,.35)}
   </style>
 </head>
 <body>
@@ -31,18 +37,24 @@
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
       </div>
+      <div class="row muted" id="phaseLine">Phase: --</div>
     </div>
     <div class="panel">
       <div class="muted">Current card</div>
       <div class="card" id="currentCard">--</div>
     </div>
-    <div class="panel">
-      <div class="muted">Next card</div>
-      <div class="card" id="nextCard">--</div>
-    </div>
-    <div class="panel actions">
-      <button id="higherBtn">Higher</button>
-      <button id="lowerBtn">Lower</button>
+    <div class="panel actions" id="decisionPanel">
+      <div class="muted">Decision</div>
+      <div class="decision-grid">
+        <button id="higherBtn">Higher</button>
+        <button id="lowerBtn">Lower</button>
+      </div>
+      <div class="decision-row">
+        <button id="doubleBtn">Double</button>
+        <button id="stopBtn">Stop</button>
+      </div>
+      <div class="hint" id="decisionHint">Choose your next move.</div>
+      <div class="risk" id="riskPreview"></div>
     </div>
     <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
@@ -58,15 +70,20 @@
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
   const winValue = document.getElementById("winValue");
+  const phaseLine = document.getElementById("phaseLine");
   const currentCard = document.getElementById("currentCard");
-  const nextCard = document.getElementById("nextCard");
   const resultLine = document.getElementById("resultLine");
   const artistCredits = document.getElementById("artistCredits");
   const higherBtn = document.getElementById("higherBtn");
   const lowerBtn = document.getElementById("lowerBtn");
+  const doubleBtn = document.getElementById("doubleBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const decisionHint = document.getElementById("decisionHint");
+  const riskPreview = document.getElementById("riskPreview");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   let playerToken = "";
   let sessionId = "";
+  let pendingAction = false;
 
   function cardLabel(card){
     if (!card) return "--";
@@ -120,41 +137,116 @@
     }
   }
 
-  async function postAction(guess){
+  async function postAction(action){
     await ensureToken();
     if (!sessionId) return;
+    pendingAction = true;
+    setButtonsState(false);
+    decisionHint.textContent = "Waiting for the dealer...";
     await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({token: playerToken, action: "guess", payload: {guess}})
+      body: JSON.stringify({token: playerToken, action, payload: {}})
     });
     loadState();
+  }
+
+  function resultCopy(result, winnings){
+    if (result === "win") return `The risk paid off. Winnings now ${winnings} gil.`;
+    if (result === "lose") return "The forest was not kind. You lost everything.";
+    if (result === "stopped") return `You leave the table richer with ${winnings} gil.`;
+    return "Awaiting decision.";
+  }
+
+  function setButtonsState(enabled){
+    const controls = [higherBtn, lowerBtn, doubleBtn, stopBtn];
+    controls.forEach(btn => { btn.disabled = !enabled; });
+  }
+
+  function updatePreview(basePot, winnings, pendingMultiplier){
+    const base = winnings > 0 ? winnings : basePot;
+    const nextWin = Math.max(base, 0) * pendingMultiplier;
+    riskPreview.innerHTML = `<span>Potential payout:</span> <strong>${nextWin}</strong> gil`;
+  }
+
+  function hintFor(action, pot, winnings, pendingMultiplier){
+    const base = winnings > 0 ? winnings : pot;
+    const nextWin = Math.max(base, 0) * pendingMultiplier;
+    if (action === "double") return `If you win, winnings become ${nextWin} gil. If you lose, you lose everything.`;
+    if (action === "stop") return `Dealer pays out ${winnings} gil.`;
+    if (action === "higher") return `Choose higher. If you win, winnings become ${nextWin} gil.`;
+    if (action === "lower") return `Choose lower. If you win, winnings become ${nextWin} gil.`;
+    return "Choose your next move.";
   }
 
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
-    potValue.textContent = state.session.pot || 0;
-    winValue.textContent = state.session.winnings || 0;
+    const pot = state.session.pot || 0;
+    const winnings = state.session.winnings || 0;
+    const phase = (state.state && state.state.phase) || "--";
+    const pendingMultiplier = (state.state && state.state.pending_multiplier) || 1;
+    const doublesUsed = (state.state && state.state.doubles_used) || 0;
+    const maxDoubles = (state.state && state.state.max_doubles) || 0;
+    const basePot = (state.state && state.state.base_pot) || pot;
+
+    pendingAction = false;
+    potValue.textContent = pot;
+    winValue.textContent = winnings;
+    phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
+
     const current = state.state && state.state.current;
-    const next = state.state && state.state.next;
     currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
-    nextCard.innerHTML = next && next.image ? `<img src="${next.image}" alt="${cardLabel(next)}">` : cardLabel(next);
-    renderArtists([current, next]);
-    const result = state.state && state.state.result ? state.state.result : "--";
-    resultLine.textContent = `Result: ${result}`;
-    const live = state.session.status === "live" && !((state.state && state.state.status) === "finished");
-    higherBtn.disabled = !live;
-    lowerBtn.disabled = !live;
-    if (state.session.status === "finished"){
-      statusLine.textContent = "Status: finished (waiting for host)";
+    renderArtists([current]);
+
+    const result = state.state && (state.state.last_result || state.state.result) ? (state.state.last_result || state.state.result) : null;
+    resultLine.textContent = resultCopy(result, winnings);
+
+    const live = state.session.status === "live";
+    const inDecision = phase === "decision" && live;
+    const canDouble = inDecision && winnings > 0 && (!maxDoubles || doublesUsed < maxDoubles) && pendingMultiplier < 2;
+    const canStop = inDecision && winnings > 0;
+    const canGuess = inDecision;
+
+    higherBtn.disabled = !canGuess;
+    lowerBtn.disabled = !canGuess;
+    doubleBtn.disabled = !canDouble;
+    stopBtn.disabled = !canStop;
+
+    decisionHint.textContent = inDecision ? "Choose your next move." : "Waiting for the dealer...";
+    updatePreview(basePot, winnings, pendingMultiplier);
+
+    if (pendingMultiplier > 1){
+      document.getElementById("decisionPanel").classList.add("pulse");
+    }else{
+      document.getElementById("decisionPanel").classList.remove("pulse");
+    }
+
+    if (!live){
+      decisionHint.textContent = "Session is not live yet.";
     }
   }
 
   higherBtn.addEventListener("click", () => postAction("higher"));
   lowerBtn.addEventListener("click", () => postAction("lower"));
+  doubleBtn.addEventListener("click", () => postAction("double"));
+  stopBtn.addEventListener("click", () => postAction("stop"));
+
+  [higherBtn, lowerBtn, doubleBtn, stopBtn].forEach((btn) => {
+    btn.addEventListener("mouseenter", () => {
+      if (btn.disabled || !sessionId) return;
+      const pot = Number(potValue.textContent || 0);
+      const winnings = Number(winValue.textContent || 0);
+      const multiplier = btn === doubleBtn ? 2 : 1;
+      const action = btn === higherBtn ? "higher" : btn === lowerBtn ? "lower" : btn === doubleBtn ? "double" : "stop";
+      decisionHint.textContent = hintFor(action, pot, winnings, multiplier);
+    });
+    btn.addEventListener("mouseleave", () => {
+      decisionHint.textContent = "Choose your next move.";
+    });
+  });
 
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);

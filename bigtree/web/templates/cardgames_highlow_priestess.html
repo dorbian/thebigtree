@@ -13,11 +13,15 @@
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
-    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px;margin:0 auto}
-    .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
+    .card{padding:10px 12px;border-radius:14px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:120px;min-height:180px;margin:0 auto}
+    .card img{max-width:180px;max-height:260px;border-radius:10px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-    .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .actions button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:600}
+    .actions button[disabled]{opacity:.45;cursor:not-allowed}
     .muted{color:#9fb4a6}
+    .intent{display:flex;gap:8px;align-items:center;justify-content:center;color:#e8d1a4}
+    .preview{display:grid;gap:6px;text-align:center;color:#e7f2ea}
+    .preview strong{color:#f2e2bf}
   </style>
 </head>
 <body>
@@ -31,6 +35,7 @@
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
       </div>
+      <div class="row muted" id="phaseLine">Phase: --</div>
     </div>
     <div class="panel">
       <div class="row">
@@ -48,8 +53,12 @@
       <div class="card" id="currentCard">--</div>
     </div>
     <div class="panel">
-      <div class="muted">Next card</div>
-      <div class="card" id="nextCard">--</div>
+      <div class="muted">Player intent</div>
+      <div class="intent" id="intentLine">Awaiting decision.</div>
+    </div>
+    <div class="panel">
+      <div class="muted">Settlement preview</div>
+      <div class="preview" id="settlementPreview">No payout pending.</div>
     </div>
     <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
@@ -69,9 +78,11 @@
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
   const winValue = document.getElementById("winValue");
+  const phaseLine = document.getElementById("phaseLine");
   const currentCard = document.getElementById("currentCard");
-  const nextCard = document.getElementById("nextCard");
   const resultLine = document.getElementById("resultLine");
+  const intentLine = document.getElementById("intentLine");
+  const settlementPreview = document.getElementById("settlementPreview");
   const joinCodeEl = document.getElementById("joinCode");
   const copyPlayerLink = document.getElementById("copyPlayerLink");
   const createNext = document.getElementById("createNext");
@@ -133,25 +144,70 @@
     });
   }
 
+  function resultCopy(result, winnings){
+    if (result === "win") return `Player won. Pay ${winnings} gil.`;
+    if (result === "lose") return "Player lost. No payout.";
+    if (result === "stopped") return `Player stopped. Pay ${winnings} gil.`;
+    return "Awaiting decision.";
+  }
+
+  function intentCopy(intent){
+    if (intent === "higher") return "Player chose Higher.";
+    if (intent === "lower") return "Player chose Lower.";
+    if (intent === "double") return "Player doubled the risk.";
+    if (intent === "stop") return "Player requested payout.";
+    return "Awaiting decision.";
+  }
+
+  function renderPreview(state, pot, winnings){
+    const pendingMultiplier = (state && state.pending_multiplier) || 1;
+    const basePot = (state && state.base_pot) || pot;
+    const base = winnings > 0 ? winnings : basePot;
+    const previewWin = Math.max(base, 0) * pendingMultiplier;
+    const intent = state && state.intent;
+
+    if (intent === "stop"){
+      settlementPreview.innerHTML = `Player stopped.<br><strong>Dealer must pay ${winnings} gil.</strong>`;
+      return;
+    }
+
+    if (!intent || intent === "double"){
+      settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} gil.</strong><br>If player loses: <strong>Pay 0 gil.</strong>`;
+      return;
+    }
+
+    settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} gil.</strong><br>If player loses: <strong>Pay 0 gil.</strong>`;
+  }
+
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
     sessionState = state;
+    const pot = state.session.pot || 0;
+    const winnings = state.session.winnings || 0;
+    const phase = (state.state && state.state.phase) || "--";
+    const intent = state.state && state.state.intent;
+
     joinCodeEl.textContent = state.session.join_code || "-";
-    potValue.textContent = state.session.pot || 0;
-    winValue.textContent = state.session.winnings || 0;
+    potValue.textContent = pot;
+    winValue.textContent = winnings;
+    phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
+
     const current = state.state && state.state.current;
-    const next = state.state && state.state.next;
     currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
-    nextCard.innerHTML = next && next.image ? `<img src="${next.image}" alt="${cardLabel(next)}">` : cardLabel(next);
-    renderArtists([current, next]);
-    const result = state.state && state.state.result ? state.state.result : "--";
-    resultLine.textContent = `Result: ${result}`;
+    renderArtists([current]);
+
+    const result = state.state && (state.state.last_result || state.state.result) ? (state.state.last_result || state.state.result) : null;
+    resultLine.textContent = resultCopy(result, winnings);
+    intentLine.textContent = intentCopy(intent);
+    renderPreview(state.state || {}, pot, winnings);
+
     const status = state.session.status;
     startBtn.disabled = status !== "created";
     finishBtn.disabled = status === "finished";
+    createNext.disabled = status !== "live";
   }
 
   startBtn.addEventListener("click", () => postAdmin("start"));
@@ -171,15 +227,10 @@
       return;
     }
     try{
-      const payload = {
-        pot: sessionState.session.pot || 0,
-        deck_id: sessionState.session.deck_id || "",
-        background_url: sessionState.session.background_url || ""
-      };
-      const res = await fetch(`/api/cardgames/${gameId}/sessions`, {
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionState.session.session_id}/clone`, {
         method:"POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({token})
       });
       const data = await res.json();
       if (!data || !data.session){
