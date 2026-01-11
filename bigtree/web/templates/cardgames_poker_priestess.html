@@ -22,6 +22,14 @@
     .card.placeholder{opacity:.4;letter-spacing:.12em}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .bg-credit{position:fixed;right:18px;bottom:16px;background:rgba(10,16,12,.72);border:1px solid rgba(107,212,162,.35);color:#d6b26e;padding:6px 12px;border-radius:999px;font-size:12px;cursor:pointer;display:none;z-index:5}
+    .bg-credit.show{display:inline-flex;align-items:center;gap:6px}
+    .modal{position:fixed;inset:0;background:rgba(6,10,8,.6);display:none;align-items:center;justify-content:center;z-index:10}
+    .modal.show{display:flex}
+    .modal-card{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;min-width:280px;max-width:420px}
+    .modal-card h3{margin:0 0 8px 0}
+    .modal-links{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .modal-links a{color:#6bd4a2;text-decoration:none}
     .muted{color:#9fb4a6}
     .house-rules{color:#d6b26e;font-size:13px;letter-spacing:.02em}
     .stepper{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -97,6 +105,14 @@
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
   </main>
+  <div class="bg-credit" id="bgCredit" role="button" tabindex="0">Art by <span id="bgCreditName"></span></div>
+  <div class="modal" id="bgArtistModal" aria-hidden="true">
+    <div class="modal-card">
+      <h3 id="bgArtistName">Artist</h3>
+      <div class="modal-links" id="bgArtistLinks"></div>
+      <button id="bgArtistClose">Close</button>
+    </div>
+  </div>
 <script>
   const joinCode = "{JOIN}";
   const gameId = "poker";
@@ -120,6 +136,12 @@
   const roundStatus = document.getElementById("roundStatus");
   const playerAction = document.getElementById("playerAction");
   const token = new URLSearchParams(window.location.search).get("token") || "";
+  const bgCredit = document.getElementById("bgCredit");
+  const bgCreditName = document.getElementById("bgCreditName");
+  const bgArtistModal = document.getElementById("bgArtistModal");
+  const bgArtistName = document.getElementById("bgArtistName");
+  const bgArtistLinks = document.getElementById("bgArtistLinks");
+  const bgArtistClose = document.getElementById("bgArtistClose");
   let sessionId = "";
   let sessionState = null;
 
@@ -160,6 +182,43 @@
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
+  }
+
+  function updateBackgroundArtist(backgroundUrl, artist){
+    if (!bgCredit || !bgCreditName) return;
+    const name = artist && artist.name ? artist.name : "";
+    if (!backgroundUrl || !name){
+      bgCredit.classList.remove("show");
+      return;
+    }
+    bgCreditName.textContent = name;
+    bgCredit.classList.add("show");
+    const links = (artist && artist.links) ? artist.links : {};
+    bgCredit.dataset.links = JSON.stringify(links || {});
+  }
+
+  function openBackgroundModal(){
+    if (!bgArtistModal || !bgArtistName || !bgArtistLinks) return;
+    const name = bgCreditName ? bgCreditName.textContent : "";
+    bgArtistName.textContent = name || "Artist";
+    let links = {};
+    try{
+      links = JSON.parse(bgCredit.dataset.links || "{}");
+    }catch(err){
+      links = {};
+    }
+    const entries = Object.entries(links || {}).filter(([, url]) => url);
+    bgArtistLinks.innerHTML = entries.length
+      ? entries.map(([label, url]) => `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`).join("")
+      : "<span class='muted'>No links shared.</span>";
+    bgArtistModal.classList.add("show");
+    bgArtistModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeBackgroundModal(){
+    if (!bgArtistModal) return;
+    bgArtistModal.classList.remove("show");
+    bgArtistModal.setAttribute("aria-hidden", "true");
   }
 
   function renderCommunity(hand, stage){
@@ -280,6 +339,7 @@
     dealerLiability.textContent = pot;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
+    updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
     const player = (state.state && state.state.player_hand) || [];
     const dealer = (state.state && state.state.dealer_hand) || [];
     const community = (state.state && state.state.community) || [];
@@ -300,6 +360,23 @@
 
   startBtn.addEventListener("click", () => postAdmin("start"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
+  if (bgCredit){
+    bgCredit.addEventListener("click", openBackgroundModal);
+    bgCredit.addEventListener("keypress", (ev) => {
+      if (ev.key === "Enter" || ev.key === " "){
+        ev.preventDefault();
+        openBackgroundModal();
+      }
+    });
+  }
+  if (bgArtistModal){
+    bgArtistModal.addEventListener("click", (ev) => {
+      if (ev.target === bgArtistModal) closeBackgroundModal();
+    });
+  }
+  if (bgArtistClose){
+    bgArtistClose.addEventListener("click", closeBackgroundModal);
+  }
   copyPlayerLink.addEventListener("click", async () => {
     const url = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;
     try{

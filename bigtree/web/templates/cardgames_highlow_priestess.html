@@ -17,6 +17,14 @@
     .card img{max-width:180px;max-height:260px;border-radius:10px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:600}
+    .bg-credit{position:fixed;right:18px;bottom:16px;background:rgba(10,16,12,.72);border:1px solid rgba(107,212,162,.35);color:#d6b26e;padding:6px 12px;border-radius:999px;font-size:12px;cursor:pointer;display:none;z-index:5}
+    .bg-credit.show{display:inline-flex;align-items:center;gap:6px}
+    .modal{position:fixed;inset:0;background:rgba(6,10,8,.6);display:none;align-items:center;justify-content:center;z-index:10}
+    .modal.show{display:flex}
+    .modal-card{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;min-width:280px;max-width:420px}
+    .modal-card h3{margin:0 0 8px 0}
+    .modal-links{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .modal-links a{color:#6bd4a2;text-decoration:none}
     .actions button[disabled]{opacity:.45;cursor:not-allowed}
     .muted{color:#9fb4a6}
     .intent{display:flex;gap:8px;align-items:center;justify-content:center;color:#e8d1a4}
@@ -82,6 +90,14 @@
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
   </main>
+  <div class="bg-credit" id="bgCredit" role="button" tabindex="0">Art by <span id="bgCreditName"></span></div>
+  <div class="modal" id="bgArtistModal" aria-hidden="true">
+    <div class="modal-card">
+      <h3 id="bgArtistName">Artist</h3>
+      <div class="modal-links" id="bgArtistLinks"></div>
+      <button id="bgArtistClose">Close</button>
+    </div>
+  </div>
 <script>
   const joinCode = "{JOIN}";
   const gameId = "highlow";
@@ -106,6 +122,12 @@
   const hostPlayHint = document.getElementById("hostPlayHint");
   const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
+  const bgCredit = document.getElementById("bgCredit");
+  const bgCreditName = document.getElementById("bgCreditName");
+  const bgArtistModal = document.getElementById("bgArtistModal");
+  const bgArtistName = document.getElementById("bgArtistName");
+  const bgArtistLinks = document.getElementById("bgArtistLinks");
+  const bgArtistClose = document.getElementById("bgArtistClose");
   const token = new URLSearchParams(window.location.search).get("token") || "";
   let sessionId = "";
   let sessionState = null;
@@ -147,6 +169,43 @@
     }
     document.body.style.setProperty("--bg-image", `url('${url}')`);
     document.body.classList.add("has-bg");
+  }
+
+  function updateBackgroundArtist(backgroundUrl, artist){
+    if (!bgCredit || !bgCreditName) return;
+    const name = artist && artist.name ? artist.name : "";
+    if (!backgroundUrl || !name){
+      bgCredit.classList.remove("show");
+      return;
+    }
+    bgCreditName.textContent = name;
+    bgCredit.classList.add("show");
+    const links = (artist && artist.links) ? artist.links : {};
+    bgCredit.dataset.links = JSON.stringify(links || {});
+  }
+
+  function openBackgroundModal(){
+    if (!bgArtistModal || !bgArtistName || !bgArtistLinks) return;
+    const name = bgCreditName ? bgCreditName.textContent : "";
+    bgArtistName.textContent = name || "Artist";
+    let links = {};
+    try{
+      links = JSON.parse(bgCredit.dataset.links || "{}");
+    }catch(err){
+      links = {};
+    }
+    const entries = Object.entries(links || {}).filter(([, url]) => url);
+    bgArtistLinks.innerHTML = entries.length
+      ? entries.map(([label, url]) => `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`).join("")
+      : "<span class='muted'>No links shared.</span>";
+    bgArtistModal.classList.add("show");
+    bgArtistModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeBackgroundModal(){
+    if (!bgArtistModal) return;
+    bgArtistModal.classList.remove("show");
+    bgArtistModal.setAttribute("aria-hidden", "true");
   }
 
   async function postAdmin(path, payload){
@@ -222,6 +281,7 @@
     phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
+    updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
 
     const current = state.state && state.state.current;
     currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
@@ -246,6 +306,23 @@
 
   startBtn.addEventListener("click", () => postAdmin("start"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
+  if (bgCredit){
+    bgCredit.addEventListener("click", openBackgroundModal);
+    bgCredit.addEventListener("keypress", (ev) => {
+      if (ev.key === "Enter" || ev.key === " "){
+        ev.preventDefault();
+        openBackgroundModal();
+      }
+    });
+  }
+  if (bgArtistModal){
+    bgArtistModal.addEventListener("click", (ev) => {
+      if (ev.target === bgArtistModal) closeBackgroundModal();
+    });
+  }
+  if (bgArtistClose){
+    bgArtistClose.addEventListener("click", closeBackgroundModal);
+  }
   hostHigher.addEventListener("click", () => postAdmin("host-action", {action: "higher"}));
   hostLower.addEventListener("click", () => postAdmin("host-action", {action: "lower"}));
   hostDouble.addEventListener("click", () => postAdmin("host-action", {action: "double"}));

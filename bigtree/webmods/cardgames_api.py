@@ -69,8 +69,18 @@ async def create_session(req: web.Request):
     pot = int(body.get("pot") or 0)
     deck_id = str(body.get("deck_id") or "").strip() or None
     background_url = str(body.get("background_url") or "").strip() or None
+    background_artist_id = str(body.get("background_artist_id") or "").strip() or None
+    background_artist_name = str(body.get("background_artist_name") or "").strip() or None
     try:
-        s = await _run_blocking(cg.create_session, game_id, pot, deck_id, background_url)
+        s = await _run_blocking(
+            cg.create_session,
+            game_id,
+            pot,
+            deck_id,
+            background_url,
+            background_artist_id,
+            background_artist_name,
+        )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, "session": s})
@@ -232,6 +242,8 @@ async def clone_session(req: web.Request):
             int(s.get("pot") or 0),
             s.get("deck_id"),
             s.get("background_url"),
+            s.get("background_artist_id"),
+            s.get("background_artist_name"),
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)

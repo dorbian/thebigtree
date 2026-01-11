@@ -112,6 +112,8 @@ def _ensure_db() -> None:
                     game_id TEXT,
                     deck_id TEXT,
                     background_url TEXT,
+                    background_artist_id TEXT,
+                    background_artist_name TEXT,
                     status TEXT,
                     pot INTEGER,
                     winnings INTEGER,
@@ -123,6 +125,8 @@ def _ensure_db() -> None:
             )
             _ensure_column(conn, "sessions", "deck_id", "TEXT")
             _ensure_column(conn, "sessions", "background_url", "TEXT")
+            _ensure_column(conn, "sessions", "background_artist_id", "TEXT")
+            _ensure_column(conn, "sessions", "background_artist_name", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -656,6 +660,8 @@ def _poker_visible_community(state: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
     deck_id = None
     background_url = None
+    background_artist_id = None
+    background_artist_name = None
     try:
         deck_id = row["deck_id"]
     except Exception:
@@ -664,6 +670,14 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         background_url = row["background_url"]
     except Exception:
         background_url = None
+    try:
+        background_artist_id = row["background_artist_id"]
+    except Exception:
+        background_artist_id = None
+    try:
+        background_artist_name = row["background_artist_name"]
+    except Exception:
+        background_artist_name = None
     return {
         "session_id": row["session_id"],
         "join_code": row["join_code"],
@@ -672,6 +686,8 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         "game_id": row["game_id"],
         "deck_id": deck_id,
         "background_url": background_url,
+        "background_artist_id": background_artist_id,
+        "background_artist_name": background_artist_name,
         "status": row["status"],
         "pot": int(row["pot"] or 0),
         "winnings": int(row["winnings"] or 0),
@@ -694,7 +710,14 @@ def _cleanup_finished(conn: sqlite3.Connection) -> None:
         if now - updated >= _FINISHED_TTL:
             _delete_session(conn, row["session_id"])
 
-def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None, background_url: Optional[str] = None) -> Dict[str, Any]:
+def create_session(
+    game_id: str,
+    pot: int = 0,
+    deck_id: Optional[str] = None,
+    background_url: Optional[str] = None,
+    background_artist_id: Optional[str] = None,
+    background_artist_name: Optional[str] = None,
+) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
         raise ValueError("invalid game")
@@ -704,15 +727,17 @@ def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None, ba
     priestess_token = _new_id()
     deck_id = (deck_id or "").strip() or None
     background_url = (background_url or "").strip() or None
+    background_artist_id = (background_artist_id or "").strip() or None
+    background_artist_name = (background_artist_name or "").strip() or None
     state = _init_state(game_id, deck_id)
     now = _now()
     def _insert(conn):
         conn.execute(
             """
-            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, status, pot, winnings, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, background_artist_id, background_artist_name, status, pot, winnings, state_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, "created", int(pot or 0), 0, json.dumps(state), now, now)
+            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, "created", int(pot or 0), 0, json.dumps(state), now, now)
         )
     _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
@@ -910,6 +935,24 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     _add_event(session_id, "STATE_UPDATED", {"action": action})
     return s
 
+def _background_artist_payload(artist_id: Optional[str], artist_name: Optional[str]) -> Dict[str, Any]:
+    if artist_id:
+        try:
+            from bigtree.modules import artists
+            artist = artists.get_artist(artist_id)
+        except Exception:
+            artist = None
+        if artist:
+            return {
+                "artist_id": artist.get("artist_id"),
+                "name": artist.get("name") or artist_name or "Forest",
+                "links": artist.get("links") or {},
+            }
+    name = (artist_name or "").strip()
+    if name:
+        return {"artist_id": artist_id, "name": name, "links": {}}
+    return {"artist_id": None, "name": "Forest", "links": {}}
+
 def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
     state = session.get("state") or {}
     game_id = session.get("game_id")
@@ -929,7 +972,8 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
         dealer_hand = list(state.get("dealer_hand") or [])
         state["dealer_hand_count"] = len(dealer_hand)
         state["dealer_hand_back"] = back_image
-        if (state.get("stage") or "") != "showdown":
+        stage = state.get("stage") or ""
+        if stage != "showdown" and (state.get("status") or "") != "finished":
             state["dealer_hand"] = []
         state["community"] = _poker_visible_community(state)
     if game_id == "poker" and view == "priestess":
@@ -938,7 +982,8 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
         player_hand = list(state.get("player_hand") or [])
         state["player_hand_count"] = len(player_hand)
         state["player_hand_back"] = back_image
-        if (state.get("stage") or "") != "showdown":
+        stage = state.get("stage") or ""
+        if stage != "showdown" and (state.get("status") or "") != "finished":
             state["player_hand"] = []
     return {
         "session": {
@@ -947,6 +992,10 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             "game_id": game_id,
             "deck_id": session.get("deck_id"),
             "background_url": session.get("background_url"),
+            "background_artist": _background_artist_payload(
+                session.get("background_artist_id"),
+                session.get("background_artist_name"),
+            ),
             "status": session.get("status"),
             "pot": int(session.get("pot") or 0),
             "winnings": int(session.get("winnings") or 0),
