@@ -114,6 +114,7 @@ def _ensure_db() -> None:
                     background_url TEXT,
                     background_artist_id TEXT,
                     background_artist_name TEXT,
+                    currency TEXT,
                     status TEXT,
                     pot INTEGER,
                     winnings INTEGER,
@@ -127,6 +128,7 @@ def _ensure_db() -> None:
             _ensure_column(conn, "sessions", "background_url", "TEXT")
             _ensure_column(conn, "sessions", "background_artist_id", "TEXT")
             _ensure_column(conn, "sessions", "background_artist_name", "TEXT")
+            _ensure_column(conn, "sessions", "currency", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -662,6 +664,7 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
     background_url = None
     background_artist_id = None
     background_artist_name = None
+    currency = None
     try:
         deck_id = row["deck_id"]
     except Exception:
@@ -678,6 +681,10 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         background_artist_name = row["background_artist_name"]
     except Exception:
         background_artist_name = None
+    try:
+        currency = row["currency"]
+    except Exception:
+        currency = None
     return {
         "session_id": row["session_id"],
         "join_code": row["join_code"],
@@ -688,6 +695,7 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         "background_url": background_url,
         "background_artist_id": background_artist_id,
         "background_artist_name": background_artist_name,
+        "currency": currency,
         "status": row["status"],
         "pot": int(row["pot"] or 0),
         "winnings": int(row["winnings"] or 0),
@@ -717,6 +725,7 @@ def create_session(
     background_url: Optional[str] = None,
     background_artist_id: Optional[str] = None,
     background_artist_name: Optional[str] = None,
+    currency: Optional[str] = None,
 ) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
@@ -729,15 +738,16 @@ def create_session(
     background_url = (background_url or "").strip() or None
     background_artist_id = (background_artist_id or "").strip() or None
     background_artist_name = (background_artist_name or "").strip() or None
+    currency = (currency or "").strip() or None
     state = _init_state(game_id, deck_id)
     now = _now()
     def _insert(conn):
         conn.execute(
             """
-            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, background_artist_id, background_artist_name, status, pot, winnings, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, status, pot, winnings, state_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, "created", int(pot or 0), 0, json.dumps(state), now, now)
+            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, "created", int(pot or 0), 0, json.dumps(state), now, now)
         )
     _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
@@ -991,6 +1001,7 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             "join_code": session.get("join_code"),
             "game_id": game_id,
             "deck_id": session.get("deck_id"),
+            "currency": session.get("currency"),
             "background_url": session.get("background_url"),
             "background_artist": _background_artist_payload(
                 session.get("background_artist_id"),

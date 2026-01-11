@@ -42,8 +42,8 @@
   <main>
     <div class="panel">
       <div class="row">
-        <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Pot: <strong id="potValue">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Winnings: <strong id="winValue">0</strong> <span id="currencyLabelWin">gil</span></div>
       </div>
       <div class="row muted" id="phaseLine">Phase: --</div>
     </div>
@@ -107,6 +107,7 @@
   let playerToken = "";
   let sessionId = "";
   let pendingAction = false;
+  let currency = "gil";
 
   function cardLabel(card){
     if (!card) return "--";
@@ -222,10 +223,10 @@
     loadState();
   }
 
-  function resultCopy(result, winnings){
-    if (result === "win") return `The risk paid off. Winnings now ${winnings} gil.`;
+  function resultCopy(result, winnings, currency){
+    if (result === "win") return `The risk paid off. Winnings now ${winnings} ${currency}.`;
     if (result === "lose") return "The forest was not kind. You lost everything.";
-    if (result === "stopped") return `You leave the table richer with ${winnings} gil.`;
+    if (result === "stopped") return `You leave the table richer with ${winnings} ${currency}.`;
     return "Awaiting decision.";
   }
 
@@ -234,19 +235,19 @@
     controls.forEach(btn => { btn.disabled = !enabled; });
   }
 
-  function updatePreview(basePot, winnings, pendingMultiplier){
+  function updatePreview(basePot, winnings, pendingMultiplier, currency){
     const base = winnings > 0 ? winnings : basePot;
     const nextWin = Math.max(base, 0) * pendingMultiplier;
-    riskPreview.innerHTML = `<span>Potential payout:</span> <strong>${nextWin}</strong> gil`;
+    riskPreview.innerHTML = `<span>Potential payout:</span> <strong>${nextWin}</strong> ${currency}`;
   }
 
-  function hintFor(action, pot, winnings, pendingMultiplier){
+  function hintFor(action, pot, winnings, pendingMultiplier, currency){
     const base = winnings > 0 ? winnings : pot;
     const nextWin = Math.max(base, 0) * pendingMultiplier;
-    if (action === "double") return `If you win, winnings become ${nextWin} gil. If you lose, you lose everything.`;
-    if (action === "stop") return `Dealer pays out ${winnings} gil.`;
-    if (action === "higher") return `Choose higher. If you win, winnings become ${nextWin} gil.`;
-    if (action === "lower") return `Choose lower. If you win, winnings become ${nextWin} gil.`;
+    if (action === "double") return `If you win, winnings become ${nextWin} ${currency}. If you lose, you lose everything.`;
+    if (action === "stop") return `Dealer pays out ${winnings} ${currency}.`;
+    if (action === "higher") return `Choose higher. If you win, winnings become ${nextWin} ${currency}.`;
+    if (action === "lower") return `Choose lower. If you win, winnings become ${nextWin} ${currency}.`;
     return "Choose your next move.";
   }
 
@@ -255,6 +256,7 @@
     sessionId = state.session.session_id || "";
     const pot = state.session.pot || 0;
     const winnings = state.session.winnings || 0;
+    currency = (state.session.currency || "gil").trim() || "gil";
     const phase = (state.state && state.state.phase) || "--";
     const pendingMultiplier = (state.state && state.state.pending_multiplier) || 1;
     const doublesUsed = (state.state && state.state.doubles_used) || 0;
@@ -264,6 +266,10 @@
     pendingAction = false;
     potValue.textContent = pot;
     winValue.textContent = winnings;
+    const currencyLabel = document.getElementById("currencyLabel");
+    const currencyLabelWin = document.getElementById("currencyLabelWin");
+    if (currencyLabel) currencyLabel.textContent = currency;
+    if (currencyLabelWin) currencyLabelWin.textContent = currency;
     phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
@@ -274,7 +280,7 @@
     renderArtists([current]);
 
     const result = state.state && (state.state.last_result || state.state.result) ? (state.state.last_result || state.state.result) : null;
-    resultLine.textContent = resultCopy(result, winnings);
+    resultLine.textContent = resultCopy(result, winnings, currency);
 
     const live = state.session.status === "live";
     const inDecision = phase === "decision" && live;
@@ -288,7 +294,7 @@
     stopBtn.disabled = !canStop;
 
     decisionHint.textContent = inDecision ? "Choose your next move." : "Waiting for the dealer...";
-    updatePreview(basePot, winnings, pendingMultiplier);
+    updatePreview(basePot, winnings, pendingMultiplier, currency);
 
     if (pendingMultiplier > 1){
       document.getElementById("decisionPanel").classList.add("pulse");
@@ -330,7 +336,7 @@
       const winnings = Number(winValue.textContent || 0);
       const multiplier = btn === doubleBtn ? 2 : 1;
       const action = btn === higherBtn ? "higher" : btn === lowerBtn ? "lower" : btn === doubleBtn ? "double" : "stop";
-      decisionHint.textContent = hintFor(action, pot, winnings, multiplier);
+      decisionHint.textContent = hintFor(action, pot, winnings, multiplier, currency);
     });
     btn.addEventListener("mouseleave", () => {
       decisionHint.textContent = "Choose your next move.";

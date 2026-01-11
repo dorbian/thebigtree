@@ -46,9 +46,9 @@
   <main>
     <div class="panel">
       <div class="row">
-        <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Player committed: <strong id="playerCommit">0</strong> gil</div>
-        <div>Dealer liability: <strong id="dealerLiability">0</strong> gil</div>
+        <div>Pot: <strong id="potValue">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Player committed: <strong id="playerCommit">0</strong> <span id="currencyLabelCommit">gil</span></div>
+        <div>Dealer liability: <strong id="dealerLiability">0</strong> <span id="currencyLabelLiability">gil</span></div>
       </div>
       <div class="row house-rules">Forest Hold'em - Dealer always calls. No re-raises.</div>
     </div>
@@ -144,6 +144,7 @@
   const bgArtistClose = document.getElementById("bgArtistClose");
   let sessionId = "";
   let sessionState = null;
+  let currency = "gil";
 
   const STAGE_LABELS = {
     preflop: "Pre-Flop",
@@ -297,7 +298,7 @@
 
   function actionCopy(action){
     if (!action) return "Awaiting player action.";
-    const amt = action.amount ? ` ${action.amount} gil` : "";
+    const amt = action.amount ? ` ${action.amount} ${currency}` : "";
     if (action.action === "bet") return `Bet${amt} (${STAGE_LABELS[action.stage] || ""})`;
     if (action.action === "raise") return `Raise${amt} (${STAGE_LABELS[action.stage] || ""})`;
     if (action.action === "check") return "Check";
@@ -333,10 +334,17 @@
     sessionId = state.session.session_id || "";
     sessionState = state;
     joinCodeEl.textContent = state.session.join_code || "-";
+    currency = (state.session.currency || "gil").trim() || "gil";
     const pot = state.state && typeof state.state.pot === "number" ? state.state.pot : (state.session.pot || 0);
     potValue.textContent = pot;
     playerCommit.textContent = state.state && state.state.player_commit != null ? state.state.player_commit : 0;
     dealerLiability.textContent = pot;
+    const currencyLabel = document.getElementById("currencyLabel");
+    const currencyLabelCommit = document.getElementById("currencyLabelCommit");
+    const currencyLabelLiability = document.getElementById("currencyLabelLiability");
+    if (currencyLabel) currencyLabel.textContent = currency;
+    if (currencyLabelCommit) currencyLabelCommit.textContent = currency;
+    if (currencyLabelLiability) currencyLabelLiability.textContent = currency;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});

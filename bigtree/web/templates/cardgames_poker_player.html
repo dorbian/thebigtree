@@ -47,9 +47,9 @@
   <main>
     <div class="panel">
       <div class="row">
-        <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Your committed: <strong id="commitValue">0</strong> gil</div>
-        <div>Possible win: <strong id="winValue">0</strong> gil</div>
+        <div>Pot: <strong id="potValue">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Your committed: <strong id="commitValue">0</strong> <span id="currencyLabelCommit">gil</span></div>
+        <div>Possible win: <strong id="winValue">0</strong> <span id="currencyLabelWin">gil</span></div>
       </div>
       <div class="row house-rules">Forest Hold'em - Dealer always calls. No re-raises.</div>
     </div>
@@ -333,9 +333,16 @@
     const stage = (state.state && state.state.stage) || "preflop";
     const live = state.session.status === "live" && (state.state && state.state.status) !== "finished";
 
+    const currency = (session.currency || "gil").trim() || "gil";
     potValue.textContent = pot;
     commitValue.textContent = committed;
     winValue.textContent = pot;
+    const currencyLabel = document.getElementById("currencyLabel");
+    const currencyLabelCommit = document.getElementById("currencyLabelCommit");
+    const currencyLabelWin = document.getElementById("currencyLabelWin");
+    if (currencyLabel) currencyLabel.textContent = currency;
+    if (currencyLabelCommit) currencyLabelCommit.textContent = currency;
+    if (currencyLabelWin) currencyLabelWin.textContent = currency;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});

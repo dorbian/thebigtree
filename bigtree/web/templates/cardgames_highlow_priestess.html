@@ -40,8 +40,8 @@
   <main>
     <div class="panel">
       <div class="row">
-        <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Pot: <strong id="potValue">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Winnings: <strong id="winValue">0</strong> <span id="currencyLabelWin">gil</span></div>
       </div>
       <div class="row muted" id="phaseLine">Phase: --</div>
     </div>
@@ -227,10 +227,10 @@
     }
   }
 
-  function resultCopy(result, winnings){
-    if (result === "win") return `Player won. Pay ${winnings} gil.`;
+  function resultCopy(result, winnings, currency){
+    if (result === "win") return `Player won. Pay ${winnings} ${currency}.`;
     if (result === "lose") return "Player lost. No payout.";
-    if (result === "stopped") return `Player stopped. Pay ${winnings} gil.`;
+    if (result === "stopped") return `Player stopped. Pay ${winnings} ${currency}.`;
     return "Awaiting decision.";
   }
 
@@ -242,7 +242,7 @@
     return "Awaiting decision.";
   }
 
-  function renderPreview(state, pot, winnings){
+  function renderPreview(state, pot, winnings, currency){
     const pendingMultiplier = (state && state.pending_multiplier) || 1;
     const basePot = (state && state.base_pot) || pot;
     const base = winnings > 0 ? winnings : basePot;
@@ -250,16 +250,16 @@
     const intent = state && state.intent;
 
     if (intent === "stop"){
-      settlementPreview.innerHTML = `Player stopped.<br><strong>Dealer must pay ${winnings} gil.</strong>`;
+      settlementPreview.innerHTML = `Player stopped.<br><strong>Dealer must pay ${winnings} ${currency}.</strong>`;
       return;
     }
 
     if (!intent || intent === "double"){
-      settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} gil.</strong><br>If player loses: <strong>Pay 0 gil.</strong>`;
+      settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} ${currency}.</strong><br>If player loses: <strong>Pay 0 ${currency}.</strong>`;
       return;
     }
 
-    settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} gil.</strong><br>If player loses: <strong>Pay 0 gil.</strong>`;
+    settlementPreview.innerHTML = `If player wins: <strong>Pay ${previewWin} ${currency}.</strong><br>If player loses: <strong>Pay 0 ${currency}.</strong>`;
   }
 
   function render(state){
@@ -272,12 +272,17 @@
     const intent = state.state && state.state.intent;
     const phase = (state.state && state.state.phase) || "";
     const winnings = state.session.winnings || 0;
+    const currency = (state.session.currency || "gil").trim() || "gil";
     const doublesUsed = (state.state && state.state.doubles_used) || 0;
     const maxDoubles = (state.state && state.state.max_doubles) || 0;
 
     joinCodeEl.textContent = state.session.join_code || "-";
     potValue.textContent = pot;
     winValue.textContent = winnings;
+    const currencyLabel = document.getElementById("currencyLabel");
+    const currencyLabelWin = document.getElementById("currencyLabelWin");
+    if (currencyLabel) currencyLabel.textContent = currency;
+    if (currencyLabelWin) currencyLabelWin.textContent = currency;
     phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
@@ -288,9 +293,9 @@
     renderArtists([current]);
 
     const result = state.state && (state.state.last_result || state.state.result) ? (state.state.last_result || state.state.result) : null;
-    resultLine.textContent = resultCopy(result, winnings);
+    resultLine.textContent = resultCopy(result, winnings, currency);
     intentLine.textContent = intentCopy(intent);
-    renderPreview(state.state || {}, pot, winnings);
+    renderPreview(state.state || {}, pot, winnings, currency);
 
     const status = state.session.status;
     startBtn.disabled = status !== "created";

@@ -26,6 +26,7 @@ public record CardgameSession(
     string? background_url,
     string? background_artist_id,
     string? background_artist_name,
+    string? currency,
     string status,
     int pot,
     int winnings,

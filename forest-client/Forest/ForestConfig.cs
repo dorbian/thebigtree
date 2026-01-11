@@ -28,6 +28,10 @@ namespace Forest
         public string? BingoApiBaseUrl { get; set; } = "https://server.thebigtree.life:8443";
         public string? BingoApiKey { get; set; } = null;
         public string? CardgamesPublicBaseUrl { get; set; } = "https://rites.thebigtree.life";
+        public string? CardgamesPreferredDeckId { get; set; } = null;
+        public int CardgamesPreferredPot { get; set; } = 0;
+        public string? CardgamesPreferredCurrency { get; set; } = "gil";
+        public string? CardgamesLastGameId { get; set; } = null;
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;
         public Dictionary<string, List<string>> BingoRandomAllowListByGameId { get; set; } = new();

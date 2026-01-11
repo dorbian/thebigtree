@@ -139,6 +139,7 @@ public class MainWindow : Window, IDisposable
     private CardgameSession? _cardgamesSelectedSession;
     private string _cardgamesSelectedDeckId = "";
     private int _cardgamesPot = 0;
+    private string _cardgamesCurrency = "gil";
     private string _cardgamesLastJoinCode = "";
     private DateTime _cardgamesLastRefresh = DateTime.MinValue;
     private DateTime _cardgamesStateLastFetch = DateTime.MinValue;
@@ -166,6 +167,11 @@ public class MainWindow : Window, IDisposable
         _bingoAutoRoll = Plugin.Config.BingoAutoRoll;
         _bingoAutoPinch = Plugin.Config.BingoAutoPinch;
         _bingoTabSelectionPending = true;
+        _cardgamesSelectedDeckId = Plugin.Config.CardgamesPreferredDeckId ?? "";
+        _cardgamesPot = Plugin.Config.CardgamesPreferredPot;
+        _cardgamesCurrency = Plugin.Config.CardgamesPreferredCurrency ?? "gil";
+        if (!string.IsNullOrWhiteSpace(Plugin.Config.CardgamesLastGameId))
+            _cardgamesGameId = Plugin.Config.CardgamesLastGameId!;
         _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
 
         SizeConstraints = new WindowSizeConstraints
@@ -257,6 +263,15 @@ public class MainWindow : Window, IDisposable
             _bingoGames = list ?? new();
             _bingoStatus = $"Loaded {_bingoGames.Count} game(s).";
             Bingo_AddAction("Refreshed games list");
+            if (_bingoState is null && string.IsNullOrWhiteSpace(_bingoGameId))
+            {
+                var last = Plugin.Config.BingoLastSelectedGameId;
+                if (!string.IsNullOrWhiteSpace(last) && _bingoGames.Any(g => g.game_id == last))
+                {
+                    _bingoGameId = last;
+                    _ = Bingo_LoadGame(_bingoGameId);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -381,6 +396,8 @@ public class MainWindow : Window, IDisposable
                 {
                     _view = View.Cardgames;
                     _cardgamesGameId = "blackjack";
+                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+                    Plugin.Config.Save();
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                 }
@@ -388,6 +405,8 @@ public class MainWindow : Window, IDisposable
                 {
                     _view = View.Cardgames;
                     _cardgamesGameId = "poker";
+                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+                    Plugin.Config.Save();
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                 }
@@ -395,6 +414,8 @@ public class MainWindow : Window, IDisposable
                 {
                     _view = View.Cardgames;
                     _cardgamesGameId = "highlow";
+                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+                    Plugin.Config.Save();
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                 }
@@ -2452,18 +2473,24 @@ public class MainWindow : Window, IDisposable
         if (ImGui.RadioButton("Blackjack", _cardgamesGameId == "blackjack"))
         {
             _cardgamesGameId = "blackjack";
+            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+            Plugin.Config.Save();
             _ = Cardgames_LoadSessions();
         }
         ImGui.SameLine();
         if (ImGui.RadioButton("Poker", _cardgamesGameId == "poker"))
         {
             _cardgamesGameId = "poker";
+            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+            Plugin.Config.Save();
             _ = Cardgames_LoadSessions();
         }
         ImGui.SameLine();
         if (ImGui.RadioButton("High/Low", _cardgamesGameId == "highlow"))
         {
             _cardgamesGameId = "highlow";
+            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
+            Plugin.Config.Save();
             _ = Cardgames_LoadSessions();
         }
 
@@ -2485,22 +2512,43 @@ public class MainWindow : Window, IDisposable
         if (ImGui.BeginCombo("Deck", deckLabel))
         {
             if (ImGui.Selectable("(default deck)", string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId)))
+            {
                 _cardgamesSelectedDeckId = "";
+                Plugin.Config.CardgamesPreferredDeckId = null;
+                Plugin.Config.Save();
+            }
 
             foreach (var deck in _cardgamesDecks)
             {
                 var label = string.IsNullOrWhiteSpace(deck.name) ? deck.deck_id : $"{deck.name} ({deck.deck_id})";
                 bool selected = string.Equals(_cardgamesSelectedDeckId, deck.deck_id, StringComparison.Ordinal);
                 if (ImGui.Selectable(label, selected))
+                {
                     _cardgamesSelectedDeckId = deck.deck_id;
+                    Plugin.Config.CardgamesPreferredDeckId = _cardgamesSelectedDeckId;
+                    Plugin.Config.Save();
+                }
             }
             ImGui.EndCombo();
         }
 
         ImGui.SetNextItemWidth(120);
         int pot = Math.Max(0, _cardgamesPot);
-        if (ImGui.InputInt("Gil pot", ref pot))
+        if (ImGui.InputInt("Pot", ref pot))
+        {
             _cardgamesPot = Math.Max(0, pot);
+            Plugin.Config.CardgamesPreferredPot = _cardgamesPot;
+            Plugin.Config.Save();
+        }
+
+        ImGui.SetNextItemWidth(120);
+        string currency = _cardgamesCurrency;
+        if (ImGui.InputText("Currency", ref currency, 32))
+        {
+            _cardgamesCurrency = string.IsNullOrWhiteSpace(currency) ? "gil" : currency.Trim();
+            Plugin.Config.CardgamesPreferredCurrency = _cardgamesCurrency;
+            Plugin.Config.Save();
+        }
 
         ImGui.Spacing();
         using (var dis = ImRaii.Disabled(_cardgamesLoading))
@@ -2562,7 +2610,7 @@ public class MainWindow : Window, IDisposable
         var stage = GetString(state, "stage");
         var phase = GetString(state, "phase");
         if (!string.IsNullOrWhiteSpace(stage) || !string.IsNullOrWhiteSpace(phase))
-            ImGui.TextDisabled($"Stage: {FormatGameLabel(stage != \"\" ? stage : phase)}");
+            ImGui.TextDisabled($"Stage: {FormatGameLabel(stage != "" ? stage : phase)}");
         if (!string.IsNullOrWhiteSpace(status))
             ImGui.TextDisabled($"Status: {status}");
         if (!string.IsNullOrWhiteSpace(result))
@@ -3794,6 +3842,8 @@ public class MainWindow : Window, IDisposable
                 && _cardgamesDecks.All(d => d.deck_id != _cardgamesSelectedDeckId))
             {
                 _cardgamesSelectedDeckId = "";
+                Plugin.Config.CardgamesPreferredDeckId = null;
+                Plugin.Config.Save();
             }
             _cardgamesStatus = $"Loaded {_cardgamesDecks.Count} deck(s).";
         }
@@ -3855,7 +3905,12 @@ public class MainWindow : Window, IDisposable
         _cardgamesLoading = true;
         try
         {
-            var resp = await _cardgamesApi!.CreateSessionAsync(_cardgamesGameId, _cardgamesPot, _cardgamesSelectedDeckId);
+            var resp = await _cardgamesApi!.CreateSessionAsync(
+                _cardgamesGameId,
+                _cardgamesPot,
+                _cardgamesSelectedDeckId,
+                _cardgamesCurrency
+            );
             if (!resp.ok || resp.session is null)
             {
                 _cardgamesStatus = resp.error ?? "Create failed.";
@@ -4292,6 +4347,8 @@ public class MainWindow : Window, IDisposable
             _bingoOwners = new List<OwnerSummary>();
             _bingoOwnersDirty = true;
             _bingoGameId = _bingoState.game.game_id;
+            Plugin.Config.BingoLastSelectedGameId = _bingoGameId;
+            Plugin.Config.Save();
             _bingoStatus = $"Loaded '{_bingoState.game.title}'.";
             Bingo_AddAction($"Loaded game {_bingoState.game.title}");
             await Bingo_LoadOwners();

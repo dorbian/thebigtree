@@ -37,8 +37,8 @@
   <main>
     <div class="panel">
       <div class="row">
-        <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Pot: <strong id="potValue">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Winnings: <strong id="winValue">0</strong> <span id="currencyLabelWin">gil</span></div>
         <div>Player: <strong id="playerTotal">0</strong></div>
         <div>Dealer: <strong id="dealerTotal">0</strong></div>
         <div>Lead: <strong id="leadStatus">-</strong></div>
@@ -271,8 +271,13 @@
     sessionId = state.session.session_id || "";
     sessionState = state;
     joinCodeEl.textContent = state.session.join_code || "-";
+    const currency = (state.session.currency || "gil").trim() || "gil";
     potValue.textContent = state.session.pot || 0;
     winValue.textContent = state.session.winnings || 0;
+    const currencyLabel = document.getElementById("currencyLabel");
+    const currencyLabelWin = document.getElementById("currencyLabelWin");
+    if (currencyLabel) currencyLabel.textContent = currency;
+    if (currencyLabelWin) currencyLabelWin.textContent = currency;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
