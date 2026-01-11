@@ -8,6 +8,7 @@
 
 import os
 import json
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -251,10 +252,19 @@ async def setup(bot: commands.Bot):
         async def _on_ready_once():
             if getattr(bot, "_bigtree_perms_registered", False):
                 return
-            try:
-                await register_permissions_group(bot, bigtree.guildid, hard_purge=False)
-                bot._bigtree_perms_registered = True
-            except Exception as e:
-                logger.error("Failed to register /permissions: %s", e, exc_info=True)
+            async def _retry_register():
+                delay = 2.0
+                for attempt in range(8):
+                    try:
+                        await register_permissions_group(bot, bigtree.guildid, hard_purge=False)
+                        bot._bigtree_perms_registered = True
+                        return
+                    except Exception as e:
+                        logger.error("Failed to register /permissions (attempt %s): %s", attempt + 1, e, exc_info=True)
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, 60.0)
+                logger.error("Failed to register /permissions after retries; will wait for manual refresh.")
+
+            asyncio.create_task(_retry_register())
 
         bot.add_listener(_on_ready_once, name="on_ready")
