@@ -11,6 +11,7 @@
 - Poker: converted to 1v1 Texas Hold'em with host-controlled stage advance.
 - High/Low: added decision-focused UI (double/stop, intent/settlement preview) and synced winnings/state flow.
 - Cardgame sessions: open media library now always opens the panel before scope checks.
+- Gallery: added Join game button that routes join codes to the right session page.
 
 ## 2026-01-11
 ### Cardgames

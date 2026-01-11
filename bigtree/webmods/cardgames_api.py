@@ -5,6 +5,7 @@ import asyncio
 import json
 from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
+from bigtree.modules import tarot
 
 async def _run_blocking(func, *args):
     return await asyncio.to_thread(func, *args)
@@ -44,6 +45,19 @@ async def cardgame_session_page(req: web.Request):
         return web.Response(status=404, text="Not found")
     html = _render_template(tpl, {"JOIN": join_code, "GAME": game_id})
     return web.Response(text=html, content_type="text/html")
+
+@route("GET", "/cardgames/join", allow_public=True)
+async def join_any_game(req: web.Request):
+    join_code = str(req.query.get("code") or "").strip()
+    if not join_code:
+        raise web.HTTPFound("/tarot/gallery")
+    s = await _run_blocking(cg.get_session_by_join_code, join_code)
+    if s and s.get("game_id"):
+        raise web.HTTPFound(f"/cardgames/{s['game_id']}/session/{join_code}")
+    t = await _run_blocking(tarot.get_session_by_join_code, join_code)
+    if t:
+        raise web.HTTPFound(f"/tarot/session/{join_code}")
+    raise web.HTTPFound("/tarot/gallery")
 
 @route("POST", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin", "cardgames:admin"])
 async def create_session(req: web.Request):

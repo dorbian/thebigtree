@@ -17,6 +17,7 @@
   const postGameBanner = document.getElementById("postGameBanner");
   const postGameTitle = document.getElementById("postGameTitle");
   const postGameDismiss = document.getElementById("postGameDismiss");
+  const joinGameBtn = document.getElementById("joinGameBtn");
   const returnPrompt = document.getElementById("returnPrompt");
   const returnClose = document.getElementById("returnClose");
   const artistFlavor = document.getElementById("artistFlavor");
@@ -99,6 +100,15 @@
       toast.classList.remove("show");
       toast.setAttribute("aria-hidden", "true");
     }, 2200);
+  }
+
+  if (joinGameBtn){
+    joinGameBtn.addEventListener("click", () => {
+      const code = (prompt("Enter join code") || "").trim();
+      if (!code) return;
+      const target = `/cardgames/join?code=${encodeURIComponent(code)}`;
+      window.location.assign(target);
+    });
   }
 
   function openArtistModal(name, links){

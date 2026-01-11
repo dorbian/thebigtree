@@ -60,6 +60,17 @@
     gap:10px;
     align-items:center;
   }
+  .join-game{
+    padding:8px 14px;
+    border-radius:999px;
+    border:1px solid rgba(107,212,162,.45);
+    background:#0f1a14;
+    color:var(--accent);
+    cursor:pointer;
+    font-size:13px;
+    letter-spacing:.02em;
+  }
+  .join-game:hover{border-color:rgba(107,212,162,.7)}
   .icon-link{
     width:36px;
     height:36px;
