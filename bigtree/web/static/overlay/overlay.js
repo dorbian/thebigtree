@@ -271,6 +271,12 @@
             handleUnauthorized();
             throw new Error("Unauthorized");
           }
+          const contentType = (res.headers.get("content-type") || "").toLowerCase();
+          if (!contentType.includes("application/json")){
+            const text = await res.text();
+            const hint = text && text.startsWith("<!doctype") ? "HTML response returned." : "Non-JSON response returned.";
+            throw new Error(`Media list failed (${res.status}). ${hint}`);
+          }
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
           const items = data.items || [];
@@ -552,6 +558,12 @@
           if (res.status === 401){
             handleUnauthorized();
             throw new Error("Unauthorized");
+          }
+          const contentType = (res.headers.get("content-type") || "").toLowerCase();
+          if (!contentType.includes("application/json")){
+            const text = await res.text();
+            const hint = text && text.startsWith("<!doctype") ? "HTML response returned." : "Non-JSON response returned.";
+            throw new Error(`Media list failed (${res.status}). ${hint}`);
           }
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
