@@ -39,7 +39,7 @@
         <div>Player committed: <strong id="playerCommit">0</strong> gil</div>
         <div>Dealer liability: <strong id="dealerLiability">0</strong> gil</div>
       </div>
-      <div class="row house-rules">Forest Hold'em — Dealer always calls. No re-raises.</div>
+      <div class="row house-rules">Forest Hold'em - Dealer always calls. No re-raises.</div>
     </div>
     <div class="panel">
       <div class="row">
@@ -207,8 +207,8 @@
     const result = state.result;
     const playerRank = state.player_rank ? state.player_rank.replace(/_/g, " ") : "";
     const dealerRank = state.dealer_rank ? state.dealer_rank.replace(/_/g, " ") : "";
-    if (result === "player") return `Player wins — ${playerRank} beats ${dealerRank}.`; 
-    if (result === "dealer") return `Dealer wins — ${dealerRank} beats ${playerRank}.`;
+    if (result === "player") return `Player wins - ${playerRank} beats ${dealerRank}.`; 
+    if (result === "dealer") return `Dealer wins - ${dealerRank} beats ${playerRank}.`;
     if (result === "push") return "Push. The pot is split.";
     return "Result: --";
   }

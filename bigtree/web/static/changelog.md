@@ -18,6 +18,7 @@
 - Gallery: generate thumbs for contest media and use media thumbs for tarot when local.
 - Gallery: enable virtualization by default and reduce initial batch size.
 - Gallery: reduce initial batch to 20 and warm thumbs for first items.
+- Cardgames: background picker now opens the media library modal.
 - Gallery: added Join game button that routes join codes to the right session page.
 - High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
 - Poker: added round-based betting UI with staged community reveal and action tracking.
