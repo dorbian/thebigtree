@@ -15,6 +15,7 @@
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
+    .card.hidden{color:#9fb4a6;letter-spacing:.12em;text-transform:uppercase;background:linear-gradient(135deg, rgba(20,32,26,.7), rgba(10,18,14,.9));background-size:cover;background-position:center}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .card.placeholder{opacity:.4;letter-spacing:.12em}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
@@ -130,7 +131,23 @@
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
+  function renderHiddenHand(el, count, backUrl){
+    const total = Math.max(2, count || 0);
+    el.innerHTML = Array.from({length: total}).map(() => {
+      if (backUrl){
+        return `<div class="card hidden" style="background-image:linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')"></div>`;
+      }
+      return `<div class="card hidden">Hidden</div>`;
+    }).join("");
+  }
+
   function renderHand(el, hand){
+    if (el === playerHand){
+      const count = sessionState && sessionState.state ? sessionState.state.player_hand_count : 0;
+      const backUrl = sessionState && sessionState.state ? sessionState.state.player_hand_back : "";
+      renderHiddenHand(el, count || (hand || []).length, backUrl);
+      return;
+    }
     el.innerHTML = (hand || []).map(card => {
       if (card && card.image){
         return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;

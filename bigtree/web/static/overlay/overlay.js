@@ -2258,7 +2258,9 @@
           }
           if (raw.startsWith("## ")){
             closeList();
-            html += `<h4>${escapeHtml(raw.slice(3))}</h4>`;
+            const title = raw.slice(3).trim();
+            const label = title.toLowerCase() === "unreleased" ? "Latest (auto-published)" : title;
+            html += `<h4>${escapeHtml(label)}</h4>`;
             return;
           }
           if (raw.startsWith("# ")){
@@ -2286,12 +2288,21 @@
         if (!target || changelogLoaded) return;
         changelogLoaded = true;
         target.textContent = "Loading changelog...";
+        const sources = [
+          "https://raw.githubusercontent.com/dorbian/thebigtree/main/changelog.md",
+          "/static/changelog.md"
+        ];
         try{
-          const res = await fetch("/static/changelog.md", {cache:"no-store"});
-          if (!res.ok){
+          let text = "";
+          for (const url of sources){
+            const res = await fetch(url, {cache:"no-store"});
+            if (!res.ok) continue;
+            text = await res.text();
+            if (text) break;
+          }
+          if (!text){
             throw new Error("Changelog not available.");
           }
-          const text = await res.text();
           target.innerHTML = renderSimpleMarkdown(text);
         }catch(err){
           target.textContent = err.message || "Changelog not available.";

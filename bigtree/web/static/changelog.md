@@ -19,6 +19,10 @@
 - Gallery: enable virtualization by default and reduce initial batch size.
 - Gallery: reduce initial batch to 20 and warm thumbs for first items.
 - Cardgames: background picker now opens the media library modal.
+- Poker (host view): hide player hand with face-down placeholders.
+- Poker (host view): use deck back image for hidden player cards.
+- Poker (player view): show dealer hand alongside player, with card backs until reveal.
+- Dashboard: move changelog to top, restore thank you section, and fetch changelog from GitHub with fallback.
 - Gallery: added Join game button that routes join codes to the right session page.
 - High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
 - Poker: added round-based betting UI with staged community reveal and action tracking.

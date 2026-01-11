@@ -13,10 +13,13 @@
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:980px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    .hand-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr))}
+    .hand-col{text-align:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .card.placeholder{opacity:.4;letter-spacing:.12em}
+    .card.hidden{color:#9fb4a6;letter-spacing:.12em;text-transform:uppercase;background:linear-gradient(135deg, rgba(20,32,26,.7), rgba(10,18,14,.9));background-size:cover;background-position:center}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .actions button[disabled]{opacity:.45;cursor:not-allowed}
@@ -53,8 +56,16 @@
       <div class="status-line" id="roundStatus">Waiting for round.</div>
     </div>
     <div class="panel">
-      <div class="muted">Your hand</div>
-      <div class="hand" id="playerHand"></div>
+      <div class="hand-grid">
+        <div class="hand-col">
+          <div class="muted">Your hand</div>
+          <div class="hand" id="playerHand"></div>
+        </div>
+        <div class="hand-col">
+          <div class="muted">Dealer hand</div>
+          <div class="hand" id="dealerHand"></div>
+        </div>
+      </div>
     </div>
     <div class="panel">
       <div class="muted">Community</div>
@@ -88,6 +99,7 @@
   const commitValue = document.getElementById("commitValue");
   const winValue = document.getElementById("winValue");
   const playerHand = document.getElementById("playerHand");
+  const dealerHand = document.getElementById("dealerHand");
   const communityCards = document.getElementById("communityCards");
   const resultLine = document.getElementById("resultLine");
   const artistPanel = document.getElementById("artistPanel");
@@ -135,6 +147,16 @@
         return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
       }
       return `<div class="card">${cardLabel(card)}</div>`;
+    }).join("");
+  }
+
+  function renderHiddenHand(el, count, backUrl){
+    const total = Math.max(2, count || 0);
+    el.innerHTML = Array.from({length: total}).map(() => {
+      if (backUrl){
+        return `<div class="card hidden" style="background-image:linear-gradient(135deg, rgba(12,18,32,.4), rgba(12,18,32,.6)), url('${backUrl}')"></div>`;
+      }
+      return `<div class="card hidden">Hidden</div>`;
     }).join("");
   }
 
@@ -259,8 +281,18 @@
     applyBackground(state.session.background_url || "");
 
     renderHand(playerHand, (state.state && state.state.player_hand) || []);
+    const dealer = (state.state && state.state.dealer_hand) || [];
+    if (dealer && dealer.length){
+      renderHand(dealerHand, dealer);
+    }else{
+      const count = state.state ? state.state.dealer_hand_count : 0;
+      const backUrl = state.state ? state.state.dealer_hand_back : "";
+      renderHiddenHand(dealerHand, count, backUrl);
+    }
     renderCommunity((state.state && state.state.community) || [], stage);
-    renderArtists(((state.state && state.state.player_hand) || []).concat((state.state && state.state.community) || []));
+    renderArtists(((state.state && state.state.player_hand) || [])
+      .concat((state.state && state.state.dealer_hand) || [])
+      .concat((state.state && state.state.community) || []));
     renderStepper(stage);
     roundLabel.textContent = STAGE_LABELS[stage] || stage;
     roundStatus.textContent = live ? `Current round: ${STAGE_LABELS[stage] || stage}` : "Waiting for round.";

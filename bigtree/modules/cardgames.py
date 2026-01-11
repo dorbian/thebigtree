@@ -925,9 +925,20 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
         state["dealer_hand"] = dealer
     if game_id == "poker" and view != "priestess":
         state = dict(state)
+        back_image = _get_deck_back_image(session.get("deck_id")) or ""
+        dealer_hand = list(state.get("dealer_hand") or [])
+        state["dealer_hand_count"] = len(dealer_hand)
+        state["dealer_hand_back"] = back_image
         if (state.get("status") or "") != "finished":
             state["dealer_hand"] = []
         state["community"] = _poker_visible_community(state)
+    if game_id == "poker" and view == "priestess":
+        state = dict(state)
+        back_image = _get_deck_back_image(session.get("deck_id")) or ""
+        player_hand = list(state.get("player_hand") or [])
+        state["player_hand_count"] = len(player_hand)
+        state["player_hand_back"] = back_image
+        state["player_hand"] = []
     return {
         "session": {
             "session_id": session.get("session_id"),
