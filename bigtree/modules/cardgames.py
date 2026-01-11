@@ -708,14 +708,9 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
             winnings = pot
         elif result == "push":
             winnings = int(pot / 2)
-        s["status"] = "finished"
         s["winnings"] = winnings
     _update_session(session_id, s)
     _add_event(session_id, "STATE_UPDATED", {"action": action})
-    if s.get("status") == "finished":
-        def _delete(conn):
-            _delete_session(conn, session_id)
-        _with_conn(_delete)
     return s
 
 def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:

@@ -13,8 +13,8 @@
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
-    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:56px;min-height:76px;margin:0 auto}
-    .card img{max-width:72px;max-height:96px;border-radius:8px;display:block}
+    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px;margin:0 auto}
+    .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .muted{color:#9fb4a6}
@@ -47,6 +47,10 @@
     <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
     </div>
+    <div class="panel">
+      <div class="muted">Artist credits</div>
+      <div id="artistCredits" class="muted">No artist credits.</div>
+    </div>
   </main>
 <script>
   const joinCode = "{JOIN}";
@@ -57,6 +61,7 @@
   const currentCard = document.getElementById("currentCard");
   const nextCard = document.getElementById("nextCard");
   const resultLine = document.getElementById("resultLine");
+  const artistCredits = document.getElementById("artistCredits");
   const higherBtn = document.getElementById("higherBtn");
   const lowerBtn = document.getElementById("lowerBtn");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
@@ -67,6 +72,27 @@
     if (!card) return "--";
     const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C"};
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
+  }
+
+  function collectArtists(cards){
+    const artists = [];
+    (cards || []).forEach(card => {
+      if (!card) return;
+      const name = card.artist_name || card.artist || card.artist_id || "";
+      if (name && !artists.includes(name)){
+        artists.push(name);
+      }
+    });
+    return artists;
+  }
+
+  function renderArtists(cards){
+    const names = collectArtists(cards);
+    if (!names.length){
+      artistCredits.textContent = "No artist credits.";
+      return;
+    }
+    artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
   function applyBackground(url){
@@ -115,13 +141,14 @@
     const next = state.state && state.state.next;
     currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
     nextCard.innerHTML = next && next.image ? `<img src="${next.image}" alt="${cardLabel(next)}">` : cardLabel(next);
+    renderArtists([current, next]);
     const result = state.state && state.state.result ? state.state.result : "--";
     resultLine.textContent = `Result: ${result}`;
-    const live = state.session.status === "live";
+    const live = state.session.status === "live" && !((state.state && state.state.status) === "finished");
     higherBtn.disabled = !live;
     lowerBtn.disabled = !live;
     if (state.session.status === "finished"){
-      setTimeout(() => window.location.assign("/tarot/gallery"), 2000);
+      statusLine.textContent = "Status: finished (waiting for host)";
     }
   }
 

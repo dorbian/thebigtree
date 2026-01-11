@@ -14,8 +14,8 @@
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-    .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:56px;min-height:76px}
-    .card img{max-width:72px;max-height:96px;border-radius:8px;display:block}
+    .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
+    .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .muted{color:#9fb4a6}
@@ -59,6 +59,10 @@
       <button id="startBtn">Start</button>
       <button id="finishBtn">Finish</button>
     </div>
+    <div class="panel">
+      <div class="muted">Artist credits</div>
+      <div id="artistCredits" class="muted">No artist credits.</div>
+    </div>
   </main>
 <script>
   const joinCode = "{JOIN}";
@@ -72,6 +76,7 @@
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const dealerHand = document.getElementById("dealerHand");
   const playerHand = document.getElementById("playerHand");
+  const artistCredits = document.getElementById("artistCredits");
   const playerTotal = document.getElementById("playerTotal");
   const dealerTotal = document.getElementById("dealerTotal");
   const leadStatus = document.getElementById("leadStatus");
@@ -94,6 +99,27 @@
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
+  }
+
+  function collectArtists(cards){
+    const artists = [];
+    (cards || []).forEach(card => {
+      if (!card) return;
+      const name = card.artist_name || card.artist || card.artist_id || "";
+      if (name && !artists.includes(name)){
+        artists.push(name);
+      }
+    });
+    return artists;
+  }
+
+  function renderArtists(cards){
+    const names = collectArtists(cards);
+    if (!names.length){
+      artistCredits.textContent = "No artist credits.";
+      return;
+    }
+    artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
   function handValue(hand){
@@ -194,11 +220,12 @@
     const player = (state.state && state.state.player_hand) || [];
     renderHand(dealerHand, dealer);
     renderHand(playerHand, player);
+    renderArtists(dealer.concat(player));
     const dealerVal = handValue(dealer);
     const playerVal = handValue(player);
     dealerTotal.textContent = dealerVal;
     playerTotal.textContent = playerVal;
-    leadStatus.textContent = updateLead(playerVal, dealerVal, state.session.status);
+    leadStatus.textContent = updateLead(playerVal, dealerVal, (state.state && state.state.status) || state.session.status);
     const status = state.session.status;
     startBtn.disabled = status !== "created";
     finishBtn.disabled = status === "finished";
