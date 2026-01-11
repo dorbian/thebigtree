@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Forest.Features.CardgamesHost;
@@ -39,6 +40,27 @@ public record ListSessionsResponse(
 );
 
 public record CreateSessionResponse(
+    bool ok,
+    CardgameSession? session,
+    string? error
+);
+
+public record JoinSessionResponse(
+    bool ok,
+    string? player_token,
+    CardgameSession? session,
+    string? error,
+    string? redirect
+);
+
+public record CardgameStateResponse(
+    bool ok,
+    JsonElement state,
+    string? error,
+    string? redirect
+);
+
+public record CardgameActionResponse(
     bool ok,
     CardgameSession? session,
     string? error

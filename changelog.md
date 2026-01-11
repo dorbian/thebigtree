@@ -2,6 +2,8 @@
 
 ## Unreleased
 - FFXIV client: add cardgames host panel for creating sessions and copying join links.
+- FFXIV client: add public cardgames URL setting for generated links.
+- FFXIV client: add in-plugin host gameplay view with card images and actions.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
 - Added dashboard changelog panel and refreshed dashboard content.

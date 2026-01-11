@@ -54,7 +54,14 @@ public class ConfigWindow : Window, IDisposable
             Plugin.Config.Save();
         }
         ImGui.Spacing();
-
+        var publicBase = Plugin.Config.CardgamesPublicBaseUrl ?? ""https://rites.thebigtree.life"";
+        ImGui.SetNextItemWidth(360);
+        if (ImGui.InputText(""Cardgames Public URL"", ref publicBase, 512))
+        {
+            Plugin.Config.CardgamesPublicBaseUrl = string.IsNullOrWhiteSpace(publicBase) ? null : publicBase.Trim();
+            Plugin.Config.Save();
+        }
+        ImGui.Spacing();
         // Connect / status
         if (!_connecting)
         {

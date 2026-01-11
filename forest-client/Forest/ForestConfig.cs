@@ -27,6 +27,7 @@ namespace Forest
         public string? BingoAdminJwt { get; set; } = null;
         public string? BingoApiBaseUrl { get; set; } = "https://server.thebigtree.life:8443";
         public string? BingoApiKey { get; set; } = null;
+        public string? CardgamesPublicBaseUrl { get; set; } = "https://rites.thebigtree.life";
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;
         public Dictionary<string, List<string>> BingoRandomAllowListByGameId { get; set; } = new();

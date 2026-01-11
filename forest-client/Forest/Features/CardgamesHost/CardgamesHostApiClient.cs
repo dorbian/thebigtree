@@ -55,6 +55,81 @@ public sealed class CardgamesHostApiClient : IDisposable
         return Post<CreateSessionResponse>($"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions", body, ct);
     }
 
+    public Task<JoinSessionResponse> JoinSessionAsync(string gameId, string joinCode, CancellationToken ct = default)
+    {
+        return Post<JoinSessionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(joinCode)}/join",
+            new { },
+            ct
+        );
+    }
+
+    public Task<CardgameStateResponse> GetStateAsync(string gameId, string joinCode, CancellationToken ct = default)
+    {
+        return Get<CardgameStateResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(joinCode)}/state?view=priestess",
+            ct
+        );
+    }
+
+    public Task<CardgameActionResponse> StartSessionAsync(string gameId, string sessionId, string priestessToken, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?> { ["token"] = priestessToken };
+        return Post<CardgameActionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/start",
+            body,
+            ct
+        );
+    }
+
+    public Task<CardgameActionResponse> FinishSessionAsync(string gameId, string sessionId, string priestessToken, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?> { ["token"] = priestessToken };
+        return Post<CardgameActionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/finish",
+            body,
+            ct
+        );
+    }
+
+    public Task<CardgameActionResponse> HostActionAsync(
+        string gameId,
+        string sessionId,
+        string priestessToken,
+        string action,
+        CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["token"] = priestessToken,
+            ["action"] = action
+        };
+        return Post<CardgameActionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/host-action",
+            body,
+            ct
+        );
+    }
+
+    public Task<CardgameActionResponse> PlayerActionAsync(
+        string gameId,
+        string sessionId,
+        string playerToken,
+        string action,
+        CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["token"] = playerToken,
+            ["action"] = action
+        };
+        return Post<CardgameActionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/action",
+            body,
+            ct
+        );
+    }
+
     private async Task<T> Get<T>(string path, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, path);

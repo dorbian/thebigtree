@@ -141,6 +141,14 @@ public class MainWindow : Window, IDisposable
     private int _cardgamesPot = 0;
     private string _cardgamesLastJoinCode = "";
     private DateTime _cardgamesLastRefresh = DateTime.MinValue;
+    private DateTime _cardgamesStateLastFetch = DateTime.MinValue;
+    private JsonDocument? _cardgamesStateDoc;
+    private string _cardgamesStateError = "";
+    private bool _cardgamesStateLoading = false;
+    private readonly Dictionary<string, string> _cardgamesPlayerTokens = new();
+    private readonly Dictionary<string, ISharedImmediateTexture> _cardgamesTextureCache = new();
+    private readonly Dictionary<string, Task> _cardgamesTextureTasks = new();
+    private readonly HttpClient _cardgamesHttp = new();
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -158,6 +166,7 @@ public class MainWindow : Window, IDisposable
         _bingoAutoRoll = Plugin.Config.BingoAutoRoll;
         _bingoAutoPinch = Plugin.Config.BingoAutoPinch;
         _bingoTabSelectionPending = true;
+        _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -187,6 +196,8 @@ public class MainWindow : Window, IDisposable
         _bingoApi?.Dispose();
         _huntApi?.Dispose();
         _cardgamesApi?.Dispose();
+        _cardgamesHttp.Dispose();
+        _cardgamesStateDoc?.Dispose();
     }
 
     private void OnContextMenuOpened(IMenuOpenedArgs args)
@@ -326,6 +337,13 @@ public class MainWindow : Window, IDisposable
             && !_cardgamesLoading)
         {
             _ = Cardgames_LoadSessions();
+        }
+        if (_view == View.Cardgames
+            && _cardgamesSelectedSession is not null
+            && (DateTime.UtcNow - _cardgamesStateLastFetch).TotalSeconds >= 2
+            && !_cardgamesStateLoading)
+        {
+            _ = Cardgames_LoadState();
         }
     }
 
@@ -2517,6 +2535,104 @@ public class MainWindow : Window, IDisposable
             if (ImGui.Button("Copy host link"))
                 ImGui.SetClipboardText(hostLink);
         }
+
+        if (_cardgamesSelectedSession is null)
+            return;
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Live view");
+        if (!string.IsNullOrWhiteSpace(_cardgamesStateError))
+            ImGui.TextDisabled(_cardgamesStateError);
+        if (_cardgamesStateDoc is null)
+        {
+            ImGui.TextDisabled("Waiting for state...");
+            return;
+        }
+
+        var root = _cardgamesStateDoc.RootElement;
+        if (!root.TryGetProperty("state", out var state))
+        {
+            ImGui.TextDisabled("No state payload.");
+            return;
+        }
+
+        var status = GetString(state, "status");
+        var result = GetString(state, "result");
+        var stage = GetString(state, "stage");
+        var phase = GetString(state, "phase");
+        if (!string.IsNullOrWhiteSpace(stage) || !string.IsNullOrWhiteSpace(phase))
+            ImGui.TextDisabled($"Stage: {FormatGameLabel(stage != \"\" ? stage : phase)}");
+        if (!string.IsNullOrWhiteSpace(status))
+            ImGui.TextDisabled($"Status: {status}");
+        if (!string.IsNullOrWhiteSpace(result))
+            ImGui.TextDisabled($"Result: {result}");
+
+        ImGui.Spacing();
+
+        if (_cardgamesSelectedSession.game_id == "blackjack")
+        {
+            DrawCardRow("Player hand", GetCardList(state, "player_hand"));
+            ImGui.Spacing();
+            DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
+            ImGui.Spacing();
+            using (var dis = ImRaii.Disabled(status != "live"))
+            {
+                if (ImGui.Button("Hit"))
+                    _ = Cardgames_PlayerAction("hit");
+                ImGui.SameLine();
+                if (ImGui.Button("Stand"))
+                    _ = Cardgames_PlayerAction("stand");
+            }
+        }
+        else if (_cardgamesSelectedSession.game_id == "highlow")
+        {
+            DrawCardRow("Current", GetCardList(state, "current"));
+            ImGui.Spacing();
+            DrawCardRow("Revealed", GetCardList(state, "revealed"));
+            ImGui.Spacing();
+            using (var dis = ImRaii.Disabled(status != "live"))
+            {
+                if (ImGui.Button("Higher"))
+                    _ = Cardgames_HostAction("higher");
+                ImGui.SameLine();
+                if (ImGui.Button("Lower"))
+                    _ = Cardgames_HostAction("lower");
+                ImGui.SameLine();
+                if (ImGui.Button("Double"))
+                    _ = Cardgames_HostAction("double");
+                ImGui.SameLine();
+                if (ImGui.Button("Stop"))
+                    _ = Cardgames_HostAction("stop");
+            }
+        }
+        else if (_cardgamesSelectedSession.game_id == "poker")
+        {
+            DrawCardRow("Player hand", GetCardList(state, "player_hand"));
+            ImGui.Spacing();
+            DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
+            ImGui.Spacing();
+            DrawCardRow("Community", GetCardList(state, "community"));
+            ImGui.Spacing();
+            using (var dis = ImRaii.Disabled(status != "live"))
+            {
+                if (ImGui.Button("Advance round"))
+                    _ = Cardgames_HostAction("advance");
+            }
+        }
+
+        ImGui.Spacing();
+        using (var dis = ImRaii.Disabled(_cardgamesSelectedSession.status == "live"))
+        {
+            if (ImGui.Button("Start session"))
+                _ = Cardgames_StartSelected();
+        }
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(_cardgamesSelectedSession.status != "live"))
+        {
+            if (ImGui.Button("Finish session"))
+                _ = Cardgames_FinishSelected();
+        }
     }
 
     private void DrawCardgamesSessionsList()
@@ -2533,7 +2649,11 @@ public class MainWindow : Window, IDisposable
         {
             var label = $"{FormatCardgamesName(s.game_id)} · {s.join_code} · {s.status}";
             if (ImGui.Selectable(label, _cardgamesSelectedSession?.session_id == s.session_id))
+            {
                 _cardgamesSelectedSession = s;
+                _cardgamesStateLastFetch = DateTime.MinValue;
+                _ = Cardgames_LoadState();
+            }
         }
 
         if (_cardgamesSelectedSession is null)
@@ -2568,7 +2688,138 @@ public class MainWindow : Window, IDisposable
 
     private string GetCardgamesBaseUrl()
     {
+        var publicBase = Plugin.Config.CardgamesPublicBaseUrl;
+        if (!string.IsNullOrWhiteSpace(publicBase))
+            return publicBase.TrimEnd('/');
         return (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+    }
+
+    private string ResolveCardImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return "";
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return url;
+        if (!url.StartsWith("/"))
+            url = "/" + url;
+        return GetCardgamesBaseUrl() + url;
+    }
+
+    private bool TryGetCardTexture(string url, out ISharedImmediateTexture? texture)
+    {
+        texture = null;
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+        if (_cardgamesTextureCache.TryGetValue(url, out var cached))
+        {
+            texture = cached;
+            return true;
+        }
+        if (_cardgamesTextureTasks.ContainsKey(url))
+            return false;
+
+        _cardgamesTextureTasks[url] = Task.Run(async () =>
+        {
+            try
+            {
+                var cacheDir = Path.Combine(Forest.Plugin.PluginInterface.GetPluginConfigDirectory(), "cardgame-cache");
+                Directory.CreateDirectory(cacheDir);
+                var hash = HashString(url);
+                var ext = Path.GetExtension(new Uri(url).AbsolutePath);
+                if (string.IsNullOrWhiteSpace(ext))
+                    ext = ".png";
+                var filePath = Path.Combine(cacheDir, $"{hash}{ext}");
+                if (!File.Exists(filePath))
+                {
+                    var bytes = await _cardgamesHttp.GetByteArrayAsync(url).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(filePath, bytes).ConfigureAwait(false);
+                }
+                var tex = Forest.Plugin.TextureProvider.GetFromFile(filePath);
+                _cardgamesTextureCache[url] = tex;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.Warning($"[Cardgames] Failed to load image {url}: {ex.Message}");
+            }
+            finally
+            {
+                _cardgamesTextureTasks.Remove(url);
+            }
+        });
+        return false;
+    }
+
+    private static string HashString(string value)
+    {
+        using var sha1 = SHA1.Create();
+        var bytes = Encoding.UTF8.GetBytes(value);
+        var hash = sha1.ComputeHash(bytes);
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash)
+            sb.Append(b.ToString("x2"));
+        return sb.ToString();
+    }
+
+    private static List<JsonElement> GetCardList(JsonElement state, string key)
+    {
+        if (!state.TryGetProperty(key, out var cards))
+            return new List<JsonElement>();
+        if (cards.ValueKind == JsonValueKind.Object)
+            return new List<JsonElement> { cards };
+        if (cards.ValueKind != JsonValueKind.Array)
+            return new List<JsonElement>();
+        return cards.EnumerateArray().ToList();
+    }
+
+    private static string GetString(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out var val) && val.ValueKind == JsonValueKind.String)
+            return val.GetString() ?? "";
+        return "";
+    }
+
+    private static int GetInt(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out var val) && val.ValueKind == JsonValueKind.Number && val.TryGetInt32(out var num))
+            return num;
+        return 0;
+    }
+
+    private static string FormatGameLabel(string label)
+    {
+        return string.IsNullOrWhiteSpace(label) ? "--" : label;
+    }
+
+    private void DrawCardRow(string label, List<JsonElement> cards)
+    {
+        ImGui.TextUnformatted(label);
+        if (cards.Count == 0)
+        {
+            ImGui.TextDisabled("No cards.");
+            return;
+        }
+
+        float cardW = 72f;
+        float cardH = 100f;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var card = cards[i];
+            string img = "";
+            if (card.TryGetProperty("image", out var imgEl) && imgEl.ValueKind == JsonValueKind.String)
+                img = ResolveCardImageUrl(imgEl.GetString());
+            if (!string.IsNullOrWhiteSpace(img) && TryGetCardTexture(img, out var tex))
+            {
+                var wrap = tex!.GetWrapOrDefault();
+                ImGui.Image(wrap.Handle, new Vector2(cardW, cardH));
+            }
+            else
+            {
+                ImGui.Button("...", new Vector2(cardW, cardH));
+            }
+            if (i + 1 < cards.Count)
+                ImGui.SameLine();
+        }
     }
 
     private void DrawGlamContestantsList()
@@ -3572,10 +3823,15 @@ public class MainWindow : Window, IDisposable
             _cardgamesSessions.AddRange(sessions);
             _cardgamesLastRefresh = DateTime.UtcNow;
             _cardgamesStatus = $"Loaded {_cardgamesSessions.Count} session(s).";
-            if (_cardgamesSelectedSession is not null
-                && _cardgamesSessions.All(s => s.session_id != _cardgamesSelectedSession.session_id))
+            if (_cardgamesSelectedSession is not null)
             {
-                _cardgamesSelectedSession = null;
+                var updated = _cardgamesSessions.FirstOrDefault(s => s.session_id == _cardgamesSelectedSession.session_id);
+                _cardgamesSelectedSession = updated;
+            }
+            if (_cardgamesSelectedSession is null && _cardgamesStateDoc is not null)
+            {
+                _cardgamesStateDoc.Dispose();
+                _cardgamesStateDoc = null;
             }
         }
         catch (Exception ex)
@@ -3618,6 +3874,166 @@ public class MainWindow : Window, IDisposable
         {
             _cardgamesLoading = false;
         }
+    }
+
+    private async Task Cardgames_LoadState()
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+
+        Cardgames_EnsureClient();
+        _cardgamesStateLoading = true;
+        _cardgamesStateError = "";
+        try
+        {
+            var resp = await _cardgamesApi!.GetStateAsync(_cardgamesSelectedSession.game_id, _cardgamesSelectedSession.join_code);
+            if (!resp.ok)
+            {
+                _cardgamesStateError = resp.error ?? "Failed to load state.";
+                return;
+            }
+            _cardgamesStateDoc?.Dispose();
+            _cardgamesStateDoc = JsonDocument.Parse(resp.state.GetRawText());
+            _cardgamesStateLastFetch = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStateError = $"State load failed: {ex.Message}";
+        }
+        finally
+        {
+            _cardgamesStateLoading = false;
+        }
+    }
+
+    private async Task Cardgames_StartSelected()
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        Cardgames_EnsureClient();
+        _cardgamesStatus = "Starting session.";
+        try
+        {
+            var resp = await _cardgamesApi!.StartSessionAsync(
+                _cardgamesSelectedSession.game_id,
+                _cardgamesSelectedSession.session_id,
+                _cardgamesSelectedSession.priestess_token
+            );
+            if (!resp.ok)
+            {
+                _cardgamesStatus = resp.error ?? "Start failed.";
+                return;
+            }
+            _cardgamesStatus = "Session started.";
+            _ = Cardgames_LoadSessions();
+            _ = Cardgames_LoadState();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Start failed: {ex.Message}";
+        }
+    }
+
+    private async Task Cardgames_FinishSelected()
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        Cardgames_EnsureClient();
+        _cardgamesStatus = "Finishing session.";
+        try
+        {
+            var resp = await _cardgamesApi!.FinishSessionAsync(
+                _cardgamesSelectedSession.game_id,
+                _cardgamesSelectedSession.session_id,
+                _cardgamesSelectedSession.priestess_token
+            );
+            if (!resp.ok)
+            {
+                _cardgamesStatus = resp.error ?? "Finish failed.";
+                return;
+            }
+            _cardgamesStatus = "Session finished.";
+            _cardgamesSelectedSession = null;
+            _cardgamesStateDoc?.Dispose();
+            _cardgamesStateDoc = null;
+            _ = Cardgames_LoadSessions();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Finish failed: {ex.Message}";
+        }
+    }
+
+    private async Task Cardgames_HostAction(string action)
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        Cardgames_EnsureClient();
+        try
+        {
+            var resp = await _cardgamesApi!.HostActionAsync(
+                _cardgamesSelectedSession.game_id,
+                _cardgamesSelectedSession.session_id,
+                _cardgamesSelectedSession.priestess_token,
+                action
+            );
+            if (!resp.ok)
+            {
+                _cardgamesStatus = resp.error ?? "Action failed.";
+                return;
+            }
+            _cardgamesStatus = $"Action: {action}.";
+            _ = Cardgames_LoadState();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Action failed: {ex.Message}";
+        }
+    }
+
+    private async Task Cardgames_PlayerAction(string action)
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        Cardgames_EnsureClient();
+        try
+        {
+            var token = await EnsurePlayerToken(_cardgamesSelectedSession);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _cardgamesStatus = "Unable to join session as player.";
+                return;
+            }
+            var resp = await _cardgamesApi!.PlayerActionAsync(
+                _cardgamesSelectedSession.game_id,
+                _cardgamesSelectedSession.session_id,
+                token,
+                action
+            );
+            if (!resp.ok)
+            {
+                _cardgamesStatus = resp.error ?? "Action failed.";
+                return;
+            }
+            _cardgamesStatus = $"Action: {action}.";
+            _ = Cardgames_LoadState();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Action failed: {ex.Message}";
+        }
+    }
+
+    private async Task<string> EnsurePlayerToken(CardgameSession session)
+    {
+        if (_cardgamesPlayerTokens.TryGetValue(session.session_id, out var token))
+            return token;
+
+        var join = await _cardgamesApi!.JoinSessionAsync(session.game_id, session.join_code);
+        if (!join.ok || string.IsNullOrWhiteSpace(join.player_token))
+            return "";
+        _cardgamesPlayerTokens[session.session_id] = join.player_token;
+        return join.player_token;
     }
 
     private void Hunt_EnsureClient()
