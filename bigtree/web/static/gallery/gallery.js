@@ -61,7 +61,22 @@
   const DIVIDER_LINES = [
     "Not all offerings are loud. Some wait to be found.",
     "The Forest keeps what is given in quiet places.",
-    "Each ritual leaves a trace, each trace a memory."
+    "Each ritual leaves a trace, each trace a memory.",
+    "Leave what you can. The forest will hold it.",
+    "Some offerings are for the living. Some for the lost.",
+    "A quiet hand can change a whole gathering.",
+    "The canopy remembers the ones who returned.",
+    "We do not rush the roots.",
+    "Every light leaves a shadow of gratitude.",
+    "The hush between steps is part of the rite.",
+    "Even small gifts keep the grove alive.",
+    "Offerings speak when words fall away.",
+    "The trail you took is still warm.",
+    "Let the leaves decide what stays.",
+    "A single spark can keep the night kind.",
+    "The Forest hums with what you left behind.",
+    "Some stories are carried by quiet hands.",
+    "A breath, a bow, a candle, a promise."
   ];
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
