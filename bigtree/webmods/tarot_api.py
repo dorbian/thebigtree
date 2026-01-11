@@ -389,12 +389,12 @@ async def create_deck(req: web.Request):
     deck = tar.create_deck(deck_id, name=name, theme=theme, suits=suits)
     return web.json_response({"ok": True, "deck": deck})
 
-@route("GET", "/api/tarot/decks", scopes=["tarot:admin"])
+@route("GET", "/api/tarot/decks", scopes=["tarot:admin", "cardgames:admin"])
 async def list_decks(req: web.Request):
     decks = tar.list_decks()
     return web.json_response({"ok": True, "decks": decks})
 
-@route("GET", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin"])
+@route("GET", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin", "cardgames:admin"])
 async def get_deck(req: web.Request):
     deck_id = req.match_info["deck_id"]
     deck = tar.get_deck(deck_id)

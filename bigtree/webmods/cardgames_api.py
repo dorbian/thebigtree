@@ -45,7 +45,7 @@ async def cardgame_session_page(req: web.Request):
     html = _render_template(tpl, {"JOIN": join_code, "GAME": game_id})
     return web.Response(text=html, content_type="text/html")
 
-@route("POST", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin"])
+@route("POST", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin", "cardgames:admin"])
 async def create_session(req: web.Request):
     game_id = str(req.match_info["game_id"] or "").strip().lower()
     try:
@@ -54,19 +54,20 @@ async def create_session(req: web.Request):
         body = {}
     pot = int(body.get("pot") or 0)
     deck_id = str(body.get("deck_id") or "").strip() or None
+    background_url = str(body.get("background_url") or "").strip() or None
     try:
-        s = await _run_blocking(cg.create_session, game_id, pot, deck_id)
+        s = await _run_blocking(cg.create_session, game_id, pot, deck_id, background_url)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, "session": s})
 
-@route("GET", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin"])
+@route("GET", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin", "cardgames:admin"])
 async def list_sessions(req: web.Request):
     game_id = str(req.match_info["game_id"] or "").strip().lower()
     sessions = await _run_blocking(cg.list_sessions, game_id)
     return web.json_response({"ok": True, "sessions": sessions})
 
-@route("GET", "/api/cardgames/sessions", scopes=["tarot:admin"])
+@route("GET", "/api/cardgames/sessions", scopes=["tarot:admin", "cardgames:admin"])
 async def list_all_sessions(req: web.Request):
     sessions = await _run_blocking(cg.list_sessions, None)
     return web.json_response({"ok": True, "sessions": sessions})
@@ -174,6 +175,22 @@ async def finish_session(req: web.Request):
     token = _get_token(req, body)
     try:
         await _run_blocking(cg.finish_session, session_id, token)
+    except PermissionError:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response({"ok": True})
+
+@route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/delete", allow_public=True)
+async def delete_session(req: web.Request):
+    session_id = req.match_info["session_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    token = _get_token(req, body)
+    try:
+        await _run_blocking(cg.delete_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:

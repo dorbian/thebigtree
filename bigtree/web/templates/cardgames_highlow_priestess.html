@@ -6,7 +6,9 @@
   <title>High/Low</title>
   <link rel="icon" href="/icon.png" type="image/png">
   <style>
-    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea}
+    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea;min-height:100vh;position:relative;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;background:var(--bg-image) center/cover no-repeat;opacity:0;pointer-events:none;transition:opacity .6s ease}
+    body.has-bg::before{opacity:.25}
     header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
     main{padding:18px;display:grid;gap:16px}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
@@ -28,6 +30,17 @@
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
       </div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <div>Role: <strong>Host</strong></div>
+        <div>Join code: <strong id="joinCode">-</strong></div>
+      </div>
+      <div class="row">
+        <button id="copyPlayerLink">Copy player link</button>
+        <button id="createNext">Create next session</button>
+      </div>
+      <div class="muted" id="nextSessionLinks">No new session yet.</div>
     </div>
     <div class="panel">
       <div class="muted">Current card</div>
@@ -54,15 +67,30 @@
   const currentCard = document.getElementById("currentCard");
   const nextCard = document.getElementById("nextCard");
   const resultLine = document.getElementById("resultLine");
+  const joinCodeEl = document.getElementById("joinCode");
+  const copyPlayerLink = document.getElementById("copyPlayerLink");
+  const createNext = document.getElementById("createNext");
+  const nextSessionLinks = document.getElementById("nextSessionLinks");
   const startBtn = document.getElementById("startBtn");
   const finishBtn = document.getElementById("finishBtn");
   const token = new URLSearchParams(window.location.search).get("token") || "";
   let sessionId = "";
+  let sessionState = null;
 
   function cardLabel(card){
     if (!card) return "--";
     const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C"};
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
+  }
+
+  function applyBackground(url){
+    if (!url){
+      document.body.classList.remove("has-bg");
+      document.body.style.removeProperty("--bg-image");
+      return;
+    }
+    document.body.style.setProperty("--bg-image", `url('${url}')`);
+    document.body.classList.add("has-bg");
   }
 
   async function postAdmin(path){
@@ -81,9 +109,12 @@
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
+    sessionState = state;
+    joinCodeEl.textContent = state.session.join_code || "-";
     potValue.textContent = state.session.pot || 0;
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
+    applyBackground(state.session.background_url || "");
     const current = state.state && state.state.current;
     const next = state.state && state.state.next;
     currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
@@ -97,6 +128,46 @@
 
   startBtn.addEventListener("click", () => postAdmin("start"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
+  copyPlayerLink.addEventListener("click", async () => {
+    const url = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;
+    try{
+      await navigator.clipboard.writeText(url);
+      nextSessionLinks.textContent = "Player link copied.";
+    }catch(err){
+      nextSessionLinks.textContent = url;
+    }
+  });
+  createNext.addEventListener("click", async () => {
+    if (!sessionState || !sessionState.session){
+      nextSessionLinks.textContent = "Session not ready yet.";
+      return;
+    }
+    try{
+      const payload = {
+        pot: sessionState.session.pot || 0,
+        deck_id: sessionState.session.deck_id || "",
+        background_url: sessionState.session.background_url || ""
+      };
+      const res = await fetch(`/api/cardgames/${gameId}/sessions`, {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data || !data.session){
+        nextSessionLinks.textContent = "Failed to create session.";
+        return;
+      }
+      const newJoin = data.session.join_code || "";
+      const hostToken = data.session.priestess_token || "";
+      const playerUrl = `${window.location.origin}/cardgames/${gameId}/session/${newJoin}`;
+      const hostUrl = `${window.location.origin}/cardgames/${gameId}/session/${newJoin}?view=priestess&token=${encodeURIComponent(hostToken)}`;
+      nextSessionLinks.innerHTML = `Next session: <a href="${playerUrl}" target="_blank" rel="noreferrer">Player</a> | <a href="${hostUrl}" target="_blank" rel="noreferrer">Host</a>`;
+      window.open(hostUrl, "_blank");
+    }catch(err){
+      nextSessionLinks.textContent = "Failed to create session.";
+    }
+  });
 
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);

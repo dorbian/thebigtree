@@ -688,6 +688,21 @@
           </div>
           <div class="row">
             <div>
+              <label for="cgBackgroundUrl">Background image</label>
+              <input id="cgBackgroundUrl" placeholder="/media/forest.png or https://...">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgUseSelectedMedia">Use selected media</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgOpenMedia">Open media library</button>
+            </div>
+          </div>
+          <div class="status" id="cgBackgroundStatus">No background selected.</div>
+          <div class="row">
+            <div>
               <label for="cgSessionSelect">Existing sessions</label>
               <select id="cgSessionSelect"></select>
             </div>
@@ -726,6 +741,10 @@
             <div>
               <label>&nbsp;</label>
               <button class="btn-ghost" id="cgFinishSession">Finish session</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost danger-action" id="cgDeleteSession">Delete session</button>
             </div>
           </div>
           <div class="row links">

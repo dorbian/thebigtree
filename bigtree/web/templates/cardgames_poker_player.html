@@ -6,7 +6,9 @@
   <title>Poker Session</title>
   <link rel="icon" href="/icon.png" type="image/png">
   <style>
-    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea}
+    body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea;min-height:100vh;position:relative;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;background:var(--bg-image) center/cover no-repeat;opacity:0;pointer-events:none;transition:opacity .6s ease}
+    body.has-bg::before{opacity:.25}
     header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
     main{padding:18px;display:grid;gap:16px}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
@@ -63,6 +65,16 @@
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
+  function applyBackground(url){
+    if (!url){
+      document.body.classList.remove("has-bg");
+      document.body.style.removeProperty("--bg-image");
+      return;
+    }
+    document.body.style.setProperty("--bg-image", `url('${url}')`);
+    document.body.classList.add("has-bg");
+  }
+
   function renderHand(hand, holds){
     const data = hand || [];
     const held = holds || [];
@@ -117,6 +129,7 @@
     potValue.textContent = state.session.pot || 0;
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
+    applyBackground(state.session.background_url || "");
     const draws = (state.state && state.state.draws_left) || 0;
     drawsLeft.textContent = draws;
     renderHand((state.state && state.state.hand) || [], (state.state && state.state.holds) || []);

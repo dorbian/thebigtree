@@ -110,6 +110,7 @@ def _ensure_db() -> None:
                     player_token TEXT,
                     game_id TEXT,
                     deck_id TEXT,
+                    background_url TEXT,
                     status TEXT,
                     pot INTEGER,
                     winnings INTEGER,
@@ -120,6 +121,7 @@ def _ensure_db() -> None:
                 """
             )
             _ensure_column(conn, "sessions", "deck_id", "TEXT")
+            _ensure_column(conn, "sessions", "background_url", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -489,10 +491,15 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
 
 def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
     deck_id = None
+    background_url = None
     try:
         deck_id = row["deck_id"]
     except Exception:
         deck_id = None
+    try:
+        background_url = row["background_url"]
+    except Exception:
+        background_url = None
     return {
         "session_id": row["session_id"],
         "join_code": row["join_code"],
@@ -500,6 +507,7 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         "player_token": row["player_token"],
         "game_id": row["game_id"],
         "deck_id": deck_id,
+        "background_url": background_url,
         "status": row["status"],
         "pot": int(row["pot"] or 0),
         "winnings": int(row["winnings"] or 0),
@@ -522,7 +530,7 @@ def _cleanup_finished(conn: sqlite3.Connection) -> None:
         if now - updated >= _FINISHED_TTL:
             _delete_session(conn, row["session_id"])
 
-def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None) -> Dict[str, Any]:
+def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None, background_url: Optional[str] = None) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
         raise ValueError("invalid game")
@@ -531,15 +539,16 @@ def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None) ->
     join_code = _new_code()
     priestess_token = _new_id()
     deck_id = (deck_id or "").strip() or None
+    background_url = (background_url or "").strip() or None
     state = _init_state(game_id, deck_id)
     now = _now()
     def _insert(conn):
         conn.execute(
             """
-            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, status, pot, winnings, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, status, pot, winnings, state_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, join_code, priestess_token, None, game_id, deck_id, "created", int(pot or 0), 0, json.dumps(state), now, now)
+            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, "created", int(pot or 0), 0, json.dumps(state), now, now)
         )
     _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
@@ -709,6 +718,7 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             "join_code": session.get("join_code"),
             "game_id": game_id,
             "deck_id": session.get("deck_id"),
+            "background_url": session.get("background_url"),
             "status": session.get("status"),
             "pot": int(session.get("pot") or 0),
             "winnings": int(session.get("winnings") or 0),
@@ -716,3 +726,14 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
         },
         "state": state,
     }
+def delete_session(session_id: str, token: Optional[str] = None) -> None:
+    _ensure_db()
+    if token:
+        s = get_session_by_id(session_id)
+        if not s:
+            raise ValueError("not found")
+        if token != s.get("priestess_token"):
+            raise PermissionError("unauthorized")
+    def _delete(conn):
+        _delete_session(conn, session_id)
+    _with_conn(_delete)
