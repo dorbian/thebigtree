@@ -462,6 +462,11 @@ def _init_poker_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
         "winner": None,
         "player_rank": None,
         "dealer_rank": None,
+        "pot": 0,
+        "player_commit": 0,
+        "dealer_commit": 0,
+        "last_action": None,
+        "ended_reason": None,
     }
 
 def _start_poker(state: Dict[str, Any]) -> None:
@@ -474,6 +479,11 @@ def _start_poker(state: Dict[str, Any]) -> None:
     state["stage"] = "preflop"
     state["status"] = "live"
     state["deck"] = deck
+    state["player_commit"] = int(state.get("player_commit") or 0)
+    state["dealer_commit"] = int(state.get("dealer_commit") or 0)
+    state["pot"] = int(state.get("pot") or 0)
+    state["last_action"] = None
+    state["ended_reason"] = None
 
 def _is_straight(values: List[int]) -> Tuple[bool, int]:
     unique = sorted(set(values))
@@ -571,7 +581,35 @@ def _advance_poker(state: Dict[str, Any]) -> None:
     state["deck"] = deck
 
 def _apply_poker_action(state: Dict[str, Any], action: str, payload: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
-    return state, "no player actions"
+    if state.get("status") != "live":
+        return state, "not active"
+    stage = state.get("stage") or "preflop"
+    if stage not in ("preflop", "flop", "turn", "river"):
+        return state, "no actions allowed"
+    action = str(action or "").strip().lower()
+    if action not in ("check", "call", "bet", "raise", "fold"):
+        return state, "invalid action"
+    if action == "fold":
+        state["status"] = "finished"
+        state["result"] = "dealer"
+        state["winner"] = "dealer"
+        state["ended_reason"] = "fold"
+        state["last_action"] = {"actor": "player", "action": "fold", "amount": 0, "stage": stage}
+        return state, None
+    amount = 0
+    if action in ("bet", "raise"):
+        try:
+            amount = int(payload.get("amount") or 0)
+        except Exception:
+            amount = 0
+        if amount <= 0:
+            return state, "invalid bet"
+        state["player_commit"] = int(state.get("player_commit") or 0) + amount
+        state["dealer_commit"] = int(state.get("dealer_commit") or 0) + amount
+        state["pot"] = int(state.get("pot") or 0) + (amount * 2)
+    state["last_action"] = {"actor": "player", "action": action, "amount": amount, "stage": stage}
+    _advance_poker(state)
+    return state, None
 
 def _init_state(game_id: str, deck_id: Optional[str]) -> Dict[str, Any]:
     if game_id == "blackjack":
@@ -774,6 +812,8 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
     if token != s.get("priestess_token"):
         raise PermissionError("unauthorized")
     state = s.get("state") or {}
+    if s.get("game_id") == "poker":
+        state["pot"] = int(s.get("pot") or 0)
     if s.get("game_id") == "highlow" and not state.get("base_pot"):
         state["base_pot"] = int(s.get("pot") or 0)
     _start_game(s["game_id"], state)
@@ -849,14 +889,22 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     s["state"] = updated
     if s.get("game_id") == "highlow":
         s["winnings"] = int(updated.get("winnings") or 0)
+    if s.get("game_id") == "poker":
+        s["pot"] = int(updated.get("pot") or s.get("pot") or 0)
     if updated.get("status") == "finished":
         result = updated.get("result")
         pot = int(s.get("pot") or 0)
         winnings = 0
-        if result == "win":
-            winnings = pot
-        elif result == "push":
-            winnings = int(pot / 2)
+        if s.get("game_id") == "poker":
+            if result == "player":
+                winnings = pot
+            elif result == "push":
+                winnings = int(pot / 2)
+        else:
+            if result == "win":
+                winnings = pot
+            elif result == "push":
+                winnings = int(pot / 2)
         s["winnings"] = winnings
     _update_session(session_id, s)
     _add_event(session_id, "STATE_UPDATED", {"action": action})

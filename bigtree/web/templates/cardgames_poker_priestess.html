@@ -11,14 +11,20 @@
     body.has-bg::before{opacity:.25}
     header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
     main{padding:18px;display:grid;gap:16px;justify-items:center}
-    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:980px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
+    .card.placeholder{opacity:.4;letter-spacing:.12em}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .muted{color:#9fb4a6}
+    .house-rules{color:#d6b26e;font-size:13px;letter-spacing:.02em}
+    .stepper{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .step{padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:12px;color:#9fb4a6}
+    .step.active{border-color:rgba(214,178,110,.6);color:#f2e2bf;background:rgba(214,178,110,.08)}
+    .intent{color:#f2e2bf}
   </style>
 </head>
 <body>
@@ -30,8 +36,10 @@
     <div class="panel">
       <div class="row">
         <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Player committed: <strong id="playerCommit">0</strong> gil</div>
+        <div>Dealer liability: <strong id="dealerLiability">0</strong> gil</div>
       </div>
+      <div class="row house-rules">Forest Hold'em — Dealer always calls. No re-raises.</div>
     </div>
     <div class="panel">
       <div class="row">
@@ -43,6 +51,20 @@
         <button id="createNext">Create next session</button>
       </div>
       <div class="muted" id="nextSessionLinks">No new session yet.</div>
+    </div>
+    <div class="panel">
+      <div class="stepper" id="roundStepper">
+        <span class="step" data-stage="preflop">Pre-Flop</span>
+        <span class="step" data-stage="flop">Flop</span>
+        <span class="step" data-stage="turn">Turn</span>
+        <span class="step" data-stage="river">River</span>
+        <span class="step" data-stage="showdown">Showdown</span>
+      </div>
+      <div class="muted" id="roundStatus">Waiting for round.</div>
+    </div>
+    <div class="panel">
+      <div class="muted">Player action</div>
+      <div class="intent" id="playerAction">Awaiting player action.</div>
     </div>
     <div class="panel">
       <div class="muted">Player hand</div>
@@ -61,10 +83,9 @@
     </div>
     <div class="panel actions">
       <button id="startBtn">Start</button>
-      <button id="nextBtn">Next</button>
       <button id="finishBtn">Finish</button>
     </div>
-    <div class="panel">
+    <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -74,7 +95,8 @@
   const gameId = "poker";
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
-  const winValue = document.getElementById("winValue");
+  const playerCommit = document.getElementById("playerCommit");
+  const dealerLiability = document.getElementById("dealerLiability");
   const playerHand = document.getElementById("playerHand");
   const dealerHand = document.getElementById("dealerHand");
   const communityCards = document.getElementById("communityCards");
@@ -84,12 +106,23 @@
   const createNext = document.getElementById("createNext");
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const startBtn = document.getElementById("startBtn");
-  const nextBtn = document.getElementById("nextBtn");
   const finishBtn = document.getElementById("finishBtn");
+  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
+  const roundStepper = document.getElementById("roundStepper");
+  const roundStatus = document.getElementById("roundStatus");
+  const playerAction = document.getElementById("playerAction");
   const token = new URLSearchParams(window.location.search).get("token") || "";
   let sessionId = "";
   let sessionState = null;
+
+  const STAGE_LABELS = {
+    preflop: "Pre-Flop",
+    flop: "Flop",
+    turn: "Turn",
+    river: "River",
+    showdown: "Showdown"
+  };
 
   function cardLabel(card){
     if (!card) return "?";
@@ -104,6 +137,24 @@
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
+  }
+
+  function renderCommunity(hand, stage){
+    const revealCount = stage === "flop" ? 3 : stage === "turn" ? 4 : stage === "river" || stage === "showdown" ? 5 : 0;
+    const slots = [];
+    for (let i = 0; i < 5; i++){
+      const card = hand[i];
+      if (i < revealCount && card){
+        if (card.image){
+          slots.push(`<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`);
+        }else{
+          slots.push(`<div class="card">${cardLabel(card)}</div>`);
+        }
+      }else{
+        slots.push(`<div class="card placeholder">?</div>`);
+      }
+    }
+    communityCards.innerHTML = slots.join("");
   }
 
   function collectArtists(cards){
@@ -122,8 +173,10 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
+      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
+    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
@@ -135,6 +188,40 @@
     }
     document.body.style.setProperty("--bg-image", `url('${url}')`);
     document.body.classList.add("has-bg");
+  }
+
+  function renderStepper(stage){
+    const steps = roundStepper.querySelectorAll(".step");
+    steps.forEach(step => {
+      const key = step.dataset.stage;
+      step.classList.toggle("active", key === stage);
+    });
+  }
+
+  function resultCopy(state){
+    if (!state) return "Result: --";
+    const reason = state.ended_reason;
+    if (reason === "fold"){
+      return "Player folded. Dealer wins the pot.";
+    }
+    const result = state.result;
+    const playerRank = state.player_rank ? state.player_rank.replace(/_/g, " ") : "";
+    const dealerRank = state.dealer_rank ? state.dealer_rank.replace(/_/g, " ") : "";
+    if (result === "player") return `Player wins — ${playerRank} beats ${dealerRank}.`; 
+    if (result === "dealer") return `Dealer wins — ${dealerRank} beats ${playerRank}.`;
+    if (result === "push") return "Push. The pot is split.";
+    return "Result: --";
+  }
+
+  function actionCopy(action){
+    if (!action) return "Awaiting player action.";
+    const amt = action.amount ? ` ${action.amount} gil` : "";
+    if (action.action === "bet") return `Bet${amt} (${STAGE_LABELS[action.stage] || ""})`;
+    if (action.action === "raise") return `Raise${amt} (${STAGE_LABELS[action.stage] || ""})`;
+    if (action.action === "check") return "Check";
+    if (action.action === "call") return "Call";
+    if (action.action === "fold") return "Folded";
+    return action.action || "Awaiting player action.";
   }
 
   async function postAdmin(path){
@@ -159,35 +246,15 @@
     loadState();
   }
 
-  async function postHostAction(action){
-    if (!token){
-      statusLine.textContent = "Missing priestess token.";
-      return;
-    }
-    if (!sessionId) return;
-    try{
-      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/host-action`, {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({token, action})
-      });
-      const data = await res.json();
-      if (!data.ok){
-        statusLine.textContent = data.error || "Action failed.";
-      }
-    }catch(err){
-      statusLine.textContent = "Action failed.";
-    }
-    loadState();
-  }
-
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
     sessionState = state;
     joinCodeEl.textContent = state.session.join_code || "-";
-    potValue.textContent = state.session.pot || 0;
-    winValue.textContent = state.session.winnings || 0;
+    const pot = state.state && typeof state.state.pot === "number" ? state.state.pot : (state.session.pot || 0);
+    potValue.textContent = pot;
+    playerCommit.textContent = state.state && state.state.player_commit != null ? state.state.player_commit : 0;
+    dealerLiability.textContent = pot;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
     const player = (state.state && state.state.player_hand) || [];
@@ -195,22 +262,20 @@
     const community = (state.state && state.state.community) || [];
     renderHand(playerHand, player);
     renderHand(dealerHand, dealer);
-    renderHand(communityCards, community);
+    renderCommunity(community, (state.state && state.state.stage) || "preflop");
     renderArtists(player.concat(dealer).concat(community));
-    const result = state.state && state.state.result ? state.state.result : "--";
-    const playerRank = state.state && state.state.player_rank ? state.state.player_rank.replace(/_/g, " ") : "";
-    const dealerRank = state.state && state.state.dealer_rank ? state.state.dealer_rank.replace(/_/g, " ") : "";
-    resultLine.textContent = `Result: ${result} ${playerRank} ${dealerRank}`.trim();
+    const stage = (state.state && state.state.stage) || "preflop";
+    renderStepper(stage);
+    roundStatus.textContent = `Current round: ${STAGE_LABELS[stage] || stage}`;
+    playerAction.textContent = actionCopy(state.state && state.state.last_action);
+    resultLine.textContent = resultCopy(state.state || {});
     const status = state.session.status;
     startBtn.disabled = status !== "created";
-    const stage = (state.state && state.state.stage) || "";
-    const finished = (state.state && state.state.status) === "finished";
-    nextBtn.disabled = status !== "live" || finished;
     finishBtn.disabled = status === "finished";
+    createNext.disabled = status !== "live";
   }
 
   startBtn.addEventListener("click", () => postAdmin("start"));
-  nextBtn.addEventListener("click", () => postHostAction("advance"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
   copyPlayerLink.addEventListener("click", async () => {
     const url = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;

@@ -13,6 +13,7 @@
 - Cardgame sessions: open media library now always opens the panel before scope checks.
 - Gallery: added Join game button that routes join codes to the right session page.
 - High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
+- Poker: added round-based betting UI with staged community reveal and action tracking.
 
 ## 2026-01-11
 ### Cardgames

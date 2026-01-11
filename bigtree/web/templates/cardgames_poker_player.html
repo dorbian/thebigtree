@@ -11,14 +11,21 @@
     body.has-bg::before{opacity:.25}
     header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
     main{padding:18px;display:grid;gap:16px;justify-items:center}
-    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:980px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
+    .card.placeholder{opacity:.4;letter-spacing:.12em}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .actions button[disabled]{opacity:.45;cursor:not-allowed}
     .muted{color:#9fb4a6}
+    .house-rules{color:#d6b26e;font-size:13px;letter-spacing:.02em}
+    .stepper{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .step{padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:12px;color:#9fb4a6}
+    .step.active{border-color:rgba(214,178,110,.6);color:#f2e2bf;background:rgba(214,178,110,.08)}
+    .status-line{color:#9fb4a6;text-align:center}
   </style>
 </head>
 <body>
@@ -30,8 +37,20 @@
     <div class="panel">
       <div class="row">
         <div>Pot: <strong id="potValue">0</strong> gil</div>
-        <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Your committed: <strong id="commitValue">0</strong> gil</div>
+        <div>Possible win: <strong id="winValue">0</strong> gil</div>
       </div>
+      <div class="row house-rules">Forest Hold'em — Dealer always calls. No re-raises.</div>
+    </div>
+    <div class="panel">
+      <div class="stepper" id="roundStepper">
+        <span class="step" data-stage="preflop">Pre-Flop</span>
+        <span class="step" data-stage="flop">Flop</span>
+        <span class="step" data-stage="turn">Turn</span>
+        <span class="step" data-stage="river">River</span>
+        <span class="step" data-stage="showdown">Showdown</span>
+      </div>
+      <div class="status-line" id="roundStatus">Waiting for round.</div>
     </div>
     <div class="panel">
       <div class="muted">Your hand</div>
@@ -42,9 +61,21 @@
       <div class="hand" id="communityCards"></div>
     </div>
     <div class="panel">
-      <div class="muted" id="resultLine">Result: --</div>
+      <div class="muted">Betting panel</div>
+      <div class="row">Current round: <strong id="roundLabel">--</strong></div>
+      <div class="actions" id="betActions">
+        <button id="betCheck">Check / Call</button>
+        <button id="bet50">Bet 50</button>
+        <button id="bet100">Bet 100</button>
+        <button id="bet200">Bet 200</button>
+        <button id="betFold">Fold</button>
+      </div>
+      <div class="status-line" id="betStatus">Choose your action.</div>
     </div>
     <div class="panel">
+      <div class="muted" id="resultLine">Result: --</div>
+    </div>
+    <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -54,14 +85,33 @@
   const gameId = "poker";
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
+  const commitValue = document.getElementById("commitValue");
   const winValue = document.getElementById("winValue");
   const playerHand = document.getElementById("playerHand");
   const communityCards = document.getElementById("communityCards");
   const resultLine = document.getElementById("resultLine");
+  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
+  const roundStepper = document.getElementById("roundStepper");
+  const roundStatus = document.getElementById("roundStatus");
+  const roundLabel = document.getElementById("roundLabel");
+  const betStatus = document.getElementById("betStatus");
+  const betCheck = document.getElementById("betCheck");
+  const bet50 = document.getElementById("bet50");
+  const bet100 = document.getElementById("bet100");
+  const bet200 = document.getElementById("bet200");
+  const betFold = document.getElementById("betFold");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   let playerToken = "";
   let sessionId = "";
+
+  const STAGE_LABELS = {
+    preflop: "Pre-Flop",
+    flop: "Flop",
+    turn: "Turn",
+    river: "River",
+    showdown: "Showdown"
+  };
 
   function cardLabel(card){
     if (!card) return "?";
@@ -88,6 +138,24 @@
     }).join("");
   }
 
+  function renderCommunity(hand, stage){
+    const revealCount = stage === "flop" ? 3 : stage === "turn" ? 4 : stage === "river" || stage === "showdown" ? 5 : 0;
+    const slots = [];
+    for (let i = 0; i < 5; i++){
+      const card = hand[i];
+      if (i < revealCount && card){
+        if (card.image){
+          slots.push(`<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`);
+        }else{
+          slots.push(`<div class="card">${cardLabel(card)}</div>`);
+        }
+      }else{
+        slots.push(`<div class="card placeholder">?</div>`);
+      }
+    }
+    communityCards.innerHTML = slots.join("");
+  }
+
   function collectArtists(cards){
     const artists = [];
     (cards || []).forEach(card => {
@@ -104,9 +172,34 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
+      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
+    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
+  }
+
+  function renderStepper(stage){
+    const steps = roundStepper.querySelectorAll(".step");
+    steps.forEach(step => {
+      const key = step.dataset.stage;
+      step.classList.toggle("active", key === stage);
+    });
+  }
+
+  function resultCopy(state){
+    if (!state) return "Result: --";
+    const reason = state.ended_reason;
+    if (reason === "fold"){
+      return "You folded. Dealer wins the pot.";
+    }
+    const result = state.result;
+    const playerRank = state.player_rank ? state.player_rank.replace(/_/g, " ") : "";
+    const dealerRank = state.dealer_rank ? state.dealer_rank.replace(/_/g, " ") : "";
+    if (result === "player") return `You win with a ${playerRank}.`;
+    if (result === "dealer") return `Dealer wins with a ${dealerRank}.`;
+    if (result === "push") return "Push. The pot is split.";
+    return "Result: --";
   }
 
   async function ensureToken(){
@@ -124,25 +217,71 @@
     }
   }
 
+  function setBetButtons(enabled){
+    [betCheck, bet50, bet100, bet200, betFold].forEach(btn => {
+      btn.disabled = !enabled;
+    });
+  }
+
+  async function postAction(action, amount){
+    await ensureToken();
+    if (!sessionId) return;
+    setBetButtons(false);
+    betStatus.textContent = "Waiting for dealer...";
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({token: playerToken, action, payload: amount ? {amount} : {}})
+    });
+    if (res){
+      const data = await res.json().catch(() => ({}));
+      if (data && data.ok === false){
+        betStatus.textContent = data.error || "Action failed.";
+        setBetButtons(true);
+        return;
+      }
+    }
+    loadState();
+  }
+
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
-    potValue.textContent = state.session.pot || 0;
-    winValue.textContent = state.session.winnings || 0;
+    const pot = state.state && typeof state.state.pot === "number" ? state.state.pot : (state.session.pot || 0);
+    const committed = state.state && typeof state.state.player_commit === "number" ? state.state.player_commit : 0;
+    const stage = (state.state && state.state.stage) || "preflop";
+    const live = state.session.status === "live" && (state.state && state.state.status) !== "finished";
+
+    potValue.textContent = pot;
+    commitValue.textContent = committed;
+    winValue.textContent = pot;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
-    const hand = (state.state && state.state.player_hand) || [];
-    const community = (state.state && state.state.community) || [];
-    renderHand(playerHand, hand);
-    renderHand(communityCards, community);
-    renderArtists(hand.concat(community));
-    const result = state.state && state.state.result ? state.state.result : "--";
-    const playerRank = state.state && state.state.player_rank ? state.state.player_rank.replace(/_/g, " ") : "";
-    resultLine.textContent = `Result: ${result} ${playerRank}`.trim();
+
+    renderHand(playerHand, (state.state && state.state.player_hand) || []);
+    renderCommunity((state.state && state.state.community) || [], stage);
+    renderArtists(((state.state && state.state.player_hand) || []).concat((state.state && state.state.community) || []));
+    renderStepper(stage);
+    roundLabel.textContent = STAGE_LABELS[stage] || stage;
+    roundStatus.textContent = live ? `Current round: ${STAGE_LABELS[stage] || stage}` : "Waiting for round.";
+
+    const canAct = live && ["preflop", "flop", "turn", "river"].includes(stage);
+    setBetButtons(canAct);
+    betStatus.textContent = canAct ? "Choose your action." : "Waiting for dealer...";
+
+    resultLine.textContent = resultCopy(state.state || {});
     if ((state.state && state.state.status) === "finished"){
-      statusLine.textContent = "Status: finished (waiting for host)";
+      statusLine.textContent = "Status: finished";
+      setBetButtons(false);
+      betStatus.textContent = "Hand finished.";
     }
   }
+
+  betCheck.addEventListener("click", () => postAction("check"));
+  bet50.addEventListener("click", () => postAction("bet", 50));
+  bet100.addEventListener("click", () => postAction("bet", 100));
+  bet200.addEventListener("click", () => postAction("bet", 200));
+  betFold.addEventListener("click", () => postAction("fold"));
 
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
