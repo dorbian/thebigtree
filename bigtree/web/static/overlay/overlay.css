@@ -528,6 +528,28 @@
         margin:6px 0 10px 18px;
         color:var(--muted);
       }
+      .dash-changelog{
+        border:1px solid rgba(255,255,255,.08);
+        border-radius:12px;
+        padding:12px;
+        background:rgba(6,10,18,.4);
+        color:var(--muted);
+      }
+      .dash-changelog h3,
+      .dash-changelog h4,
+      .dash-changelog h5{
+        margin:10px 0 6px;
+        color:var(--ink);
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
+      .dash-changelog ul{
+        margin:6px 0 10px 18px;
+        color:var(--muted);
+      }
+      .dash-changelog p{
+        margin:6px 0;
+      }
       .dash-tool{
         margin-bottom:10px;
         padding:8px 10px;

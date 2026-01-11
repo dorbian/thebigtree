@@ -2178,7 +2178,9 @@
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
         toggleClass("contestPanel", "hidden", which !== "contests");
         toggleClass("mediaPanel", "hidden", which !== "media");
-        if (which === "media"){
+        if (which === "dashboard"){
+          renderDashboardChangelog();
+        } else if (which === "media"){
           setMediaTab("upload");
           loadMediaLibrary();
           loadTarotArtists();
@@ -2210,6 +2212,78 @@
         try{
           localStorage.setItem("overlay_seen_dashboard", "1");
         }catch(err){}
+      }
+
+      let changelogLoaded = false;
+
+      function escapeHtml(text){
+        return String(text || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function renderSimpleMarkdown(text){
+        const lines = String(text || "").split(/\r?\n/);
+        let html = "";
+        let inList = false;
+        function closeList(){
+          if (inList){
+            html += "</ul>";
+            inList = false;
+          }
+        }
+        lines.forEach((line) => {
+          const raw = line.trim();
+          if (!raw){
+            closeList();
+            return;
+          }
+          if (raw.startsWith("### ")){
+            closeList();
+            html += `<h5>${escapeHtml(raw.slice(4))}</h5>`;
+            return;
+          }
+          if (raw.startsWith("## ")){
+            closeList();
+            html += `<h4>${escapeHtml(raw.slice(3))}</h4>`;
+            return;
+          }
+          if (raw.startsWith("# ")){
+            closeList();
+            html += `<h3>${escapeHtml(raw.slice(2))}</h3>`;
+            return;
+          }
+          if (raw.startsWith("- ")){
+            if (!inList){
+              html += "<ul>";
+              inList = true;
+            }
+            html += `<li>${escapeHtml(raw.slice(2))}</li>`;
+            return;
+          }
+          closeList();
+          html += `<p>${escapeHtml(raw)}</p>`;
+        });
+        closeList();
+        return html || "<p>No changelog entries found.</p>";
+      }
+
+      async function renderDashboardChangelog(){
+        const target = $("dashChangelog");
+        if (!target || changelogLoaded) return;
+        changelogLoaded = true;
+        target.textContent = "Loading changelog...";
+        try{
+          const res = await fetch("/static/changelog.md", {cache:"no-store"});
+          if (!res.ok){
+            throw new Error("Changelog not available.");
+          }
+          const text = await res.text();
+          target.innerHTML = renderSimpleMarkdown(text);
+        }catch(err){
+          target.textContent = err.message || "Changelog not available.";
+        }
       }
 
       let suppressPanelSave = false;
