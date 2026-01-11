@@ -128,6 +128,7 @@
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({token: playerToken, action: "guess", payload: {guess}})
     });
+    loadState();
   }
 
   function render(state){
@@ -177,6 +178,9 @@
     }catch(err){}
   };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>

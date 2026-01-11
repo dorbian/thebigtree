@@ -165,6 +165,23 @@ async def player_action(req: web.Request):
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, "session": s})
 
+@route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/host-action", allow_public=True)
+async def host_action(req: web.Request):
+    session_id = req.match_info["session_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    token = _get_token(req, body)
+    action = str(body.get("action") or "").strip().lower()
+    try:
+        s = await _run_blocking(cg.host_action, session_id, token, action)
+    except PermissionError:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response({"ok": True, "session": s})
+
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/finish", allow_public=True)
 async def finish_session(req: web.Request):
     session_id = req.match_info["session_id"]

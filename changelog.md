@@ -3,6 +3,12 @@
 ## Unreleased
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
+- Added dashboard changelog panel and refreshed dashboard content.
+- Added retry/backoff for /permissions registration on startup.
+- Cardgame sessions: dynamic polling fallback, card centering, larger cards, and artist credits.
+- Blackjack: dealer back image for hidden card, dealer totals/lead on host view, and host-only finish.
+- Cardgames: sessions now stay alive until host finishes; no player auto-end.
+- Poker: converted to 1v1 Texas Hold’em with host-controlled stage advance.
 
 ## 2026-01-11
 ### Cardgames

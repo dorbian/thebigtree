@@ -4498,6 +4498,7 @@
           loadTarotArtists();
           updateMediaUploadDropDisplay(mediaUploadFile);
           updateMediaUploadState();
+          setCardgameStatus("Media library opened.", "ok");
         });
         const defaults = getCardgameDefaults();
         if (defaults){
@@ -4888,8 +4889,11 @@
           const data = await jsonFetch("/api/tarot/numbers", {method:"GET"}, true);
           taNumbers = data.numbers || [];
           const input = $("taCardNumber");
-          const current = input.value || "";
           const list = $("taNumberList");
+          if (!input || !list){
+            return;
+          }
+          const current = input.value || "";
           list.innerHTML = "";
           taNumbers.forEach(n => {
             const opt = document.createElement("option");
@@ -4900,7 +4904,7 @@
           input.value = current;
           taRenderNumberInfo(input.value);
         }catch(err){
-          setTarotStatus("Failed to load numbers.", "err");
+          setTarotStatus(`Failed to load numbers: ${err.message || "unknown error"}`, "err");
         }
       }
 

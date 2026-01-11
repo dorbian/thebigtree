@@ -14,8 +14,7 @@
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-    .hold-card{display:flex;align-items:center;gap:8px;background:#0c1511;border:1px solid rgba(255,255,255,.08);padding:8px 10px;border-radius:10px}
-    .card{font-weight:600}
+    .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
@@ -32,15 +31,15 @@
       <div class="row">
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
-        <div>Draws left: <strong id="drawsLeft">0</strong></div>
       </div>
     </div>
     <div class="panel">
-      <div class="muted">Your hand (select cards to hold)</div>
+      <div class="muted">Your hand</div>
       <div class="hand" id="playerHand"></div>
     </div>
-    <div class="panel actions">
-      <button id="drawBtn">Draw</button>
+    <div class="panel">
+      <div class="muted">Community</div>
+      <div class="hand" id="communityCards"></div>
     </div>
     <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
@@ -56,11 +55,10 @@
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
   const winValue = document.getElementById("winValue");
-  const drawsLeft = document.getElementById("drawsLeft");
   const playerHand = document.getElementById("playerHand");
+  const communityCards = document.getElementById("communityCards");
   const resultLine = document.getElementById("resultLine");
   const artistCredits = document.getElementById("artistCredits");
-  const drawBtn = document.getElementById("drawBtn");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   let playerToken = "";
   let sessionId = "";
@@ -81,21 +79,13 @@
     document.body.classList.add("has-bg");
   }
 
-  function renderHand(hand, holds){
-    const data = hand || [];
-    const held = holds || [];
-    playerHand.innerHTML = data.map((card, idx) => {
-      const checked = held[idx] ? "checked" : "";
+  function renderHand(el, hand){
+    el.innerHTML = (hand || []).map(card => {
       if (card && card.image){
-        return `<label class="hold-card"><input type="checkbox" data-index="${idx}" ${checked}><span class="card"><img src="${card.image}" alt="${cardLabel(card)}"></span></label>`;
+        return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
       }
-      return `<label class="hold-card"><input type="checkbox" data-index="${idx}" ${checked}><span class="card">${cardLabel(card)}</span></label>`;
+      return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
-  }
-
-  function getHoldSelection(){
-    const boxes = playerHand.querySelectorAll("input[type=checkbox]");
-    return Array.from(boxes).map(box => box.checked);
   }
 
   function collectArtists(cards){
@@ -134,22 +124,6 @@
     }
   }
 
-  async function postAction(action, payload){
-    await ensureToken();
-    if (!sessionId) return;
-    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
-      method:"POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({token: playerToken, action, payload: payload || {}})
-    });
-  }
-
-  async function drawCards(){
-    const holds = getHoldSelection();
-    await postAction("hold", {holds});
-    await postAction("draw");
-  }
-
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
@@ -157,27 +131,18 @@
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
-    const draws = (state.state && state.state.draws_left) || 0;
-    drawsLeft.textContent = draws;
-    const hand = (state.state && state.state.hand) || [];
-    renderHand(hand, (state.state && state.state.holds) || []);
-    renderArtists(hand);
-    const live = state.session.status === "live"
-      && draws > 0
-      && !((state.state && state.state.status) === "finished");
-    drawBtn.disabled = !live;
-    playerHand.querySelectorAll("input[type=checkbox]").forEach(box => {
-      box.disabled = !live;
-    });
-    const rank = state.state && state.state.rank ? state.state.rank.replace(/_/g, " ") : "--";
+    const hand = (state.state && state.state.player_hand) || [];
+    const community = (state.state && state.state.community) || [];
+    renderHand(playerHand, hand);
+    renderHand(communityCards, community);
+    renderArtists(hand.concat(community));
     const result = state.state && state.state.result ? state.state.result : "--";
-    resultLine.textContent = `Result: ${result} ${rank}`.trim();
-    if (state.session.status === "finished"){
+    const playerRank = state.state && state.state.player_rank ? state.state.player_rank.replace(/_/g, " ") : "";
+    resultLine.textContent = `Result: ${result} ${playerRank}`.trim();
+    if ((state.state && state.state.status) === "finished"){
       statusLine.textContent = "Status: finished (waiting for host)";
     }
   }
-
-  drawBtn.addEventListener("click", () => drawCards());
 
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
@@ -201,6 +166,9 @@
     }catch(err){}
   };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>

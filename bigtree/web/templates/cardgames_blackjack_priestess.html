@@ -297,6 +297,9 @@
     }catch(err){}
   };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>

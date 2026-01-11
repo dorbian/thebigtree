@@ -4,6 +4,7 @@ import json
 import time
 import secrets
 import random
+import itertools
 import sqlite3
 import threading
 from typing import Any, Dict, List, Optional, Tuple
@@ -397,84 +398,125 @@ def _init_poker_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
     random.shuffle(deck)
     return {
         "deck": deck,
-        "hand": [],
-        "holds": [False, False, False, False, False],
-        "draws_left": 1,
+        "player_hand": [],
+        "dealer_hand": [],
+        "community": [],
+        "stage": "created",
         "status": "created",
         "result": None,
-        "rank": None,
+        "winner": None,
+        "player_rank": None,
+        "dealer_rank": None,
     }
 
 def _start_poker(state: Dict[str, Any]) -> None:
     if state.get("status") == "live":
         return
     deck = state.get("deck") or []
-    state["hand"] = _draw(deck, 5)
-    state["holds"] = [False, False, False, False, False]
-    state["draws_left"] = 1
+    state["player_hand"] = _draw(deck, 2)
+    state["dealer_hand"] = _draw(deck, 2)
+    state["community"] = []
+    state["stage"] = "preflop"
     state["status"] = "live"
     state["deck"] = deck
 
-def _poker_hand_rank(hand: List[Dict[str, str]]) -> Tuple[str, int]:
-    ranks = sorted([RANK_VALUES.get(c["rank"], 0) for c in hand])
-    suits = [c["suit"] for c in hand]
+def _is_straight(values: List[int]) -> Tuple[bool, int]:
+    unique = sorted(set(values))
+    if len(unique) < 5:
+        return False, 0
+    for i in range(len(unique) - 4):
+        window = unique[i:i + 5]
+        if window == list(range(window[0], window[0] + 5)):
+            return True, window[-1]
+    if set([14, 2, 3, 4, 5]).issubset(set(unique)):
+        return True, 5
+    return False, 0
+
+def _poker_hand_rank_5(cards: List[Dict[str, str]]) -> Tuple[int, List[int], str]:
+    values = [RANK_VALUES.get(c.get("rank"), 0) for c in cards]
+    values = [14 if v == 1 else v for v in values]
+    values.sort(reverse=True)
+    suits = [c.get("suit") for c in cards]
     counts: Dict[int, int] = {}
-    for r in ranks:
-        counts[r] = counts.get(r, 0) + 1
+    for v in values:
+        counts[v] = counts.get(v, 0) + 1
+    count_items = sorted(counts.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)
     count_values = sorted(counts.values(), reverse=True)
     is_flush = len(set(suits)) == 1
-    is_straight = ranks == list(range(min(ranks), min(ranks) + 5))
-    if ranks == [1, 10, 11, 12, 13]:
-        is_straight = True
-    if is_straight and is_flush:
-        return "straight_flush", 20
+    straight, straight_high = _is_straight(values)
+    if is_flush and straight:
+        return 8, [straight_high], "straight_flush"
     if 4 in count_values:
-        return "four_kind", 10
+        four = next(v for v, c in count_items if c == 4)
+        kicker = max(v for v, c in count_items if c == 1)
+        return 7, [four, kicker], "four_kind"
     if count_values == [3, 2]:
-        return "full_house", 6
+        three = next(v for v, c in count_items if c == 3)
+        pair = next(v for v, c in count_items if c == 2)
+        return 6, [three, pair], "full_house"
     if is_flush:
-        return "flush", 5
-    if is_straight:
-        return "straight", 4
+        return 5, values, "flush"
+    if straight:
+        return 4, [straight_high], "straight"
     if 3 in count_values:
-        return "three_kind", 3
+        three = next(v for v, c in count_items if c == 3)
+        kickers = [v for v, c in count_items if c == 1]
+        return 3, [three] + kickers, "three_kind"
     if count_values == [2, 2, 1]:
-        return "two_pair", 2
+        pairs = [v for v, c in count_items if c == 2]
+        kicker = next(v for v, c in count_items if c == 1)
+        return 2, pairs + [kicker], "two_pair"
     if 2 in count_values:
-        return "pair", 1
-    return "high_card", 0
+        pair = next(v for v, c in count_items if c == 2)
+        kickers = [v for v, c in count_items if c == 1]
+        return 1, [pair] + kickers, "pair"
+    return 0, values, "high_card"
+
+def _best_poker_hand(cards: List[Dict[str, str]]) -> Tuple[str, Tuple[int, List[int]]]:
+    best_score: Optional[Tuple[int, List[int]]] = None
+    best_rank = "high_card"
+    for combo in itertools.combinations(cards, 5):
+        score, tie, name = _poker_hand_rank_5(list(combo))
+        current = (score, tie)
+        if best_score is None or current > best_score:
+            best_score = current
+            best_rank = name
+    return best_rank, best_score or (0, [])
+
+def _advance_poker(state: Dict[str, Any]) -> None:
+    if state.get("status") != "live":
+        return
+    deck = state.get("deck") or []
+    stage = state.get("stage") or "preflop"
+    if stage == "preflop":
+        state["community"] = _draw(deck, 3)
+        state["stage"] = "flop"
+    elif stage == "flop":
+        state["community"] = (state.get("community") or []) + _draw(deck, 1)
+        state["stage"] = "turn"
+    elif stage == "turn":
+        state["community"] = (state.get("community") or []) + _draw(deck, 1)
+        state["stage"] = "river"
+    elif stage == "river":
+        state["stage"] = "showdown"
+        player = (state.get("player_hand") or []) + (state.get("community") or [])
+        dealer = (state.get("dealer_hand") or []) + (state.get("community") or [])
+        player_rank, player_score = _best_poker_hand(player)
+        dealer_rank, dealer_score = _best_poker_hand(dealer)
+        state["player_rank"] = player_rank
+        state["dealer_rank"] = dealer_rank
+        if player_score > dealer_score:
+            state["winner"] = "player"
+        elif dealer_score > player_score:
+            state["winner"] = "dealer"
+        else:
+            state["winner"] = "push"
+        state["result"] = state["winner"]
+        state["status"] = "finished"
+    state["deck"] = deck
 
 def _apply_poker_action(state: Dict[str, Any], action: str, payload: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
-    if action == "hold":
-        holds = payload.get("holds")
-        if not isinstance(holds, list) or len(holds) != 5:
-            return state, "invalid holds"
-        state["holds"] = [bool(x) for x in holds]
-        return state, None
-    if action == "draw":
-        if int(state.get("draws_left") or 0) <= 0:
-            return state, "no draws left"
-        deck = state.get("deck") or []
-        hand = state.get("hand") or []
-        holds = state.get("holds") or [False, False, False, False, False]
-        new_hand = []
-        for idx in range(5):
-            if idx < len(hand) and holds[idx]:
-                new_hand.append(hand[idx])
-            else:
-                drawn = _draw(deck, 1)
-                if drawn:
-                    new_hand.append(drawn[0])
-        state["hand"] = new_hand
-        state["deck"] = deck
-        state["draws_left"] = 0
-        rank, multiplier = _poker_hand_rank(new_hand)
-        state["rank"] = rank
-        state["result"] = "win" if multiplier > 0 else "lose"
-        state["status"] = "finished"
-        state["multiplier"] = multiplier
-        return state, None
-    return state, "unknown action"
+    return state, "no player actions"
 
 def _init_state(game_id: str, deck_id: Optional[str]) -> Dict[str, Any]:
     if game_id == "blackjack":
@@ -503,6 +545,17 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
             return state, "invalid action"
         return _apply_highlow_action(state, str(payload.get("guess") or ""))
     return state, "invalid game"
+
+def _poker_visible_community(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    community = list(state.get("community") or [])
+    stage = state.get("stage") or "preflop"
+    if stage in ("created", "preflop"):
+        return []
+    if stage == "flop":
+        return community[:3]
+    if stage == "turn":
+        return community[:4]
+    return community
 
 def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
     deck_id = None
@@ -684,6 +737,30 @@ def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     _with_conn(_delete)
     return s
 
+def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
+    s = get_session_by_id(session_id)
+    if not s:
+        raise ValueError("not found")
+    if token != s.get("priestess_token"):
+        raise PermissionError("unauthorized")
+    state = s.get("state") or {}
+    if s.get("game_id") == "poker" and action == "advance":
+        _advance_poker(state)
+        if state.get("status") == "finished":
+            pot = int(s.get("pot") or 0)
+            result = state.get("result")
+            if result == "player":
+                s["winnings"] = pot
+            elif result == "push":
+                s["winnings"] = int(pot / 2)
+            else:
+                s["winnings"] = 0
+        s["state"] = state
+        _update_session(session_id, s)
+        _add_event(session_id, "STATE_UPDATED", {"action": action})
+        return s
+    raise ValueError("invalid action")
+
 def player_action(session_id: str, token: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -701,10 +778,7 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
         result = updated.get("result")
         pot = int(s.get("pot") or 0)
         winnings = 0
-        if s["game_id"] == "poker":
-            multiplier = int(updated.get("multiplier") or 0)
-            winnings = pot * multiplier
-        elif result == "win":
+        if result == "win":
             winnings = pot
         elif result == "push":
             winnings = int(pot / 2)
@@ -726,6 +800,11 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             dealer = [dealer[0], hidden_card]
         state = dict(state)
         state["dealer_hand"] = dealer
+    if game_id == "poker" and view != "priestess":
+        state = dict(state)
+        if (state.get("status") or "") != "finished":
+            state["dealer_hand"] = []
+        state["community"] = _poker_visible_community(state)
     return {
         "session": {
             "session_id": session.get("session_id"),

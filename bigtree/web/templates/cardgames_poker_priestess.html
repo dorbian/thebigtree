@@ -31,7 +31,6 @@
       <div class="row">
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
-        <div>Draws left: <strong id="drawsLeft">0</strong></div>
       </div>
     </div>
     <div class="panel">
@@ -50,10 +49,19 @@
       <div class="hand" id="playerHand"></div>
     </div>
     <div class="panel">
+      <div class="muted">Dealer hand</div>
+      <div class="hand" id="dealerHand"></div>
+    </div>
+    <div class="panel">
+      <div class="muted">Community</div>
+      <div class="hand" id="communityCards"></div>
+    </div>
+    <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
     </div>
     <div class="panel actions">
       <button id="startBtn">Start</button>
+      <button id="nextBtn">Next</button>
       <button id="finishBtn">Finish</button>
     </div>
     <div class="panel">
@@ -67,14 +75,16 @@
   const statusLine = document.getElementById("statusLine");
   const potValue = document.getElementById("potValue");
   const winValue = document.getElementById("winValue");
-  const drawsLeft = document.getElementById("drawsLeft");
   const playerHand = document.getElementById("playerHand");
+  const dealerHand = document.getElementById("dealerHand");
+  const communityCards = document.getElementById("communityCards");
   const resultLine = document.getElementById("resultLine");
   const joinCodeEl = document.getElementById("joinCode");
   const copyPlayerLink = document.getElementById("copyPlayerLink");
   const createNext = document.getElementById("createNext");
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const startBtn = document.getElementById("startBtn");
+  const nextBtn = document.getElementById("nextBtn");
   const finishBtn = document.getElementById("finishBtn");
   const artistCredits = document.getElementById("artistCredits");
   const token = new URLSearchParams(window.location.search).get("token") || "";
@@ -87,8 +97,8 @@
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
-  function renderHand(hand){
-    playerHand.innerHTML = (hand || []).map(card => {
+  function renderHand(el, hand){
+    el.innerHTML = (hand || []).map(card => {
       if (card && card.image){
         return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
       }
@@ -149,6 +159,28 @@
     loadState();
   }
 
+  async function postHostAction(action){
+    if (!token){
+      statusLine.textContent = "Missing priestess token.";
+      return;
+    }
+    if (!sessionId) return;
+    try{
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/host-action`, {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({token, action})
+      });
+      const data = await res.json();
+      if (!data.ok){
+        statusLine.textContent = data.error || "Action failed.";
+      }
+    }catch(err){
+      statusLine.textContent = "Action failed.";
+    }
+    loadState();
+  }
+
   function render(state){
     if (!state || !state.session) return;
     sessionId = state.session.session_id || "";
@@ -158,20 +190,27 @@
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
-    const draws = (state.state && state.state.draws_left) || 0;
-    drawsLeft.textContent = draws;
-    const hand = (state.state && state.state.hand) || [];
-    renderHand(hand);
-    renderArtists(hand);
-    const rank = state.state && state.state.rank ? state.state.rank.replace(/_/g, " ") : "--";
+    const player = (state.state && state.state.player_hand) || [];
+    const dealer = (state.state && state.state.dealer_hand) || [];
+    const community = (state.state && state.state.community) || [];
+    renderHand(playerHand, player);
+    renderHand(dealerHand, dealer);
+    renderHand(communityCards, community);
+    renderArtists(player.concat(dealer).concat(community));
     const result = state.state && state.state.result ? state.state.result : "--";
-    resultLine.textContent = `Result: ${result} ${rank}`.trim();
+    const playerRank = state.state && state.state.player_rank ? state.state.player_rank.replace(/_/g, " ") : "";
+    const dealerRank = state.state && state.state.dealer_rank ? state.state.dealer_rank.replace(/_/g, " ") : "";
+    resultLine.textContent = `Result: ${result} ${playerRank} ${dealerRank}`.trim();
     const status = state.session.status;
     startBtn.disabled = status !== "created";
+    const stage = (state.state && state.state.stage) || "";
+    const finished = (state.state && state.state.status) === "finished";
+    nextBtn.disabled = status !== "live" || finished;
     finishBtn.disabled = status === "finished";
   }
 
   startBtn.addEventListener("click", () => postAdmin("start"));
+  nextBtn.addEventListener("click", () => postHostAction("advance"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
   copyPlayerLink.addEventListener("click", async () => {
     const url = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;
@@ -237,6 +276,9 @@
     }catch(err){}
   };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>
