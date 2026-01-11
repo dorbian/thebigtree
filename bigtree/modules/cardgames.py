@@ -199,9 +199,28 @@ def _extract_rank_suit(card: Dict[str, Any]) -> Tuple[Optional[str], Optional[st
         if candidate in text:
             suit = candidate
             break
-    for candidate in ("10", "9", "8", "7", "6", "5", "4", "3", "2", "a", "k", "q", "j"):
-        if f" {candidate} " in f" {text} ":
-            rank = _normalize_rank(candidate)
+    rank_aliases = {
+        "ace": "A",
+        "king": "K",
+        "queen": "Q",
+        "jack": "J",
+        "ten": "10",
+        "nine": "9",
+        "eight": "8",
+        "seven": "7",
+        "six": "6",
+        "five": "5",
+        "four": "4",
+        "three": "3",
+        "two": "2",
+        "a": "A",
+        "k": "K",
+        "q": "Q",
+        "j": "J",
+    }
+    for key, value in rank_aliases.items():
+        if f" {key} " in f" {text.replace('_', ' ')} ":
+            rank = _normalize_rank(value)
             break
     return rank, suit
 
