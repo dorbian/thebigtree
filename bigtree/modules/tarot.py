@@ -705,6 +705,10 @@ def list_decks() -> List[Dict[str, Any]]:
         return list_decks()
     return decks
 
+def get_deck_bundle(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    deck, cards, _path = _load_deck_bundle(deck_id)
+    return deck, cards or []
+
 def delete_deck(deck_id: str) -> bool:
     deck_id = (deck_id or "").strip()
     if not deck_id:

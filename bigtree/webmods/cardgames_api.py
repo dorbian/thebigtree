@@ -36,6 +36,9 @@ async def cardgame_session_page(req: web.Request):
     game_id = str(req.match_info["game_id"] or "").strip().lower()
     join_code = req.match_info["join_code"]
     view = _get_view(req)
+    s = await _run_blocking(cg.get_session_by_join_code, join_code)
+    if not s or s.get("game_id") != game_id:
+        raise web.HTTPFound("/tarot/gallery")
     tpl = _TEMPLATES.get((game_id, view))
     if not tpl:
         return web.Response(status=404, text="Not found")
@@ -50,8 +53,9 @@ async def create_session(req: web.Request):
     except Exception:
         body = {}
     pot = int(body.get("pot") or 0)
+    deck_id = str(body.get("deck_id") or "").strip() or None
     try:
-        s = await _run_blocking(cg.create_session, game_id, pot)
+        s = await _run_blocking(cg.create_session, game_id, pot, deck_id)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     return web.json_response({"ok": True, "session": s})
@@ -62,13 +66,18 @@ async def list_sessions(req: web.Request):
     sessions = await _run_blocking(cg.list_sessions, game_id)
     return web.json_response({"ok": True, "sessions": sessions})
 
+@route("GET", "/api/cardgames/sessions", scopes=["tarot:admin"])
+async def list_all_sessions(req: web.Request):
+    sessions = await _run_blocking(cg.list_sessions, None)
+    return web.json_response({"ok": True, "sessions": sessions})
+
 @route("POST", "/api/cardgames/{game_id}/sessions/{join_code}/join", allow_public=True)
 async def join_session(req: web.Request):
     join_code = req.match_info["join_code"]
     try:
         payload = await _run_blocking(cg.join_session, join_code)
     except Exception as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        return web.json_response({"ok": False, "error": str(exc), "redirect": "/tarot/gallery"}, status=400)
     return web.json_response({"ok": True, **payload})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/state", allow_public=True)
@@ -77,7 +86,7 @@ async def get_state(req: web.Request):
     view = _get_view(req)
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
-        return web.json_response({"ok": False, "error": "not found"}, status=404)
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
     return web.json_response({"ok": True, "state": cg.get_state(s, view=view)})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/stream", allow_public=True)
@@ -86,7 +95,7 @@ async def stream_events(req: web.Request):
     view = _get_view(req)
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
-        return web.json_response({"ok": False, "error": "not found"}, status=404)
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
 
     resp = web.StreamResponse(
         status=200,
@@ -100,10 +109,16 @@ async def stream_events(req: web.Request):
     last_seq = 0
     initial = {"type": "STATE", "state": cg.get_state(s, view=view)}
     await resp.write(f"data: {json.dumps(initial)}\n\n".encode("utf-8"))
+    session_id = s["session_id"]
     try:
         while True:
             await asyncio.sleep(1.0)
-            events = await _run_blocking(cg.list_events, s["session_id"], last_seq)
+            current = await _run_blocking(cg.get_session_by_id, session_id)
+            if not current:
+                payload = {"type": "SESSION_GONE", "redirect": "/tarot/gallery"}
+                await resp.write(f"data: {json.dumps(payload)}\n\n".encode("utf-8"))
+                break
+            events = await _run_blocking(cg.list_events, session_id, last_seq)
             if events:
                 last_seq = int(events[-1].get("seq", last_seq))
                 for ev in events:

@@ -11,7 +11,8 @@
     main{padding:18px;display:grid;gap:16px}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600}
+    .card{padding:10px 12px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);font-weight:600;display:flex;align-items:center;justify-content:center;min-width:56px;min-height:76px}
+    .card img{max-width:72px;max-height:96px;border-radius:8px;display:block}
     .actions button{padding:8px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
     .muted{color:#9fb4a6}
   </style>
@@ -83,8 +84,10 @@
     potValue.textContent = state.session.pot || 0;
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
-    currentCard.textContent = cardLabel(state.state && state.state.current);
-    nextCard.textContent = cardLabel(state.state && state.state.next);
+    const current = state.state && state.state.current;
+    const next = state.state && state.state.next;
+    currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
+    nextCard.innerHTML = next && next.image ? `<img src="${next.image}" alt="${cardLabel(next)}">` : cardLabel(next);
     const result = state.state && state.state.result ? state.state.result : "--";
     resultLine.textContent = `Result: ${result}`;
     const status = state.session.status;
@@ -98,7 +101,11 @@
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
     const data = await res.json();
-    if (data && data.state) render(data.state);
+    if (data && data.ok && data.state){
+      render(data.state);
+    }else if (data && data.redirect){
+      window.location.assign(data.redirect);
+    }
   }
 
   const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=priestess`);

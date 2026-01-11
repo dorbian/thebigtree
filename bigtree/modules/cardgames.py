@@ -24,6 +24,7 @@ _DB_PATH: Optional[str] = None
 _DB_READY = False
 _DB_CONFIGURED = False
 _DB_LOCK = threading.RLock()
+_FINISHED_TTL = 15.0
 
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["spades", "hearts", "diamonds", "clubs"]
@@ -85,6 +86,11 @@ def _configure_db(conn: sqlite3.Connection) -> None:
     conn.execute("PRAGMA journal_mode=DELETE")
     conn.execute("PRAGMA synchronous=NORMAL")
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_def: str) -> None:
+    cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+
 def _ensure_db() -> None:
     global _DB_READY, _DB_CONFIGURED
     if _DB_READY:
@@ -103,6 +109,7 @@ def _ensure_db() -> None:
                     priestess_token TEXT,
                     player_token TEXT,
                     game_id TEXT,
+                    deck_id TEXT,
                     status TEXT,
                     pot INTEGER,
                     winnings INTEGER,
@@ -112,6 +119,7 @@ def _ensure_db() -> None:
                 )
                 """
             )
+            _ensure_column(conn, "sessions", "deck_id", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -142,8 +150,95 @@ def _standard_deck() -> List[Dict[str, str]]:
                 "rank": rank,
                 "suit": suit,
                 "code": f"{rank}{suit[0].upper()}",
+                "name": f"{rank} of {suit.title()}",
             })
     return cards
+
+def _normalize_rank(value: Any) -> Optional[str]:
+    text = str(value or "").strip().upper()
+    if not text:
+        return None
+    if text in RANKS:
+        return text
+    if text.isdigit():
+        num = int(text)
+        if num == 1:
+            return "A"
+        if num == 11:
+            return "J"
+        if num == 12:
+            return "Q"
+        if num == 13:
+            return "K"
+        if 2 <= num <= 10:
+            return str(num)
+    roman = {"I":1,"II":2,"III":3,"IV":4,"V":5,"VI":6,"VII":7,"VIII":8,"IX":9,"X":10,"XI":11,"XII":12,"XIII":13}
+    if text in roman:
+        return _normalize_rank(roman[text])
+    return None
+
+def _normalize_suit(value: Any) -> Optional[str]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    aliases = {
+        "hearts": "hearts", "heart": "hearts", "h": "hearts",
+        "spades": "spades", "spade": "spades", "s": "spades",
+        "clubs": "clubs", "club": "clubs", "c": "clubs",
+        "diamonds": "diamonds", "diamond": "diamonds", "d": "diamonds",
+    }
+    return aliases.get(text)
+
+def _extract_rank_suit(card: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    suit = _normalize_suit(card.get("suit"))
+    rank = _normalize_rank(card.get("number") or card.get("rank"))
+    if suit and rank:
+        return rank, suit
+    text = " ".join([str(card.get(k) or "") for k in ("card_id", "name", "title")]).lower()
+    for candidate in ("hearts", "spades", "clubs", "diamonds"):
+        if candidate in text:
+            suit = candidate
+            break
+    for candidate in ("10", "9", "8", "7", "6", "5", "4", "3", "2", "a", "k", "q", "j"):
+        if f" {candidate} " in f" {text} ":
+            rank = _normalize_rank(candidate)
+            break
+    return rank, suit
+
+def _load_playing_deck(deck_id: Optional[str]) -> List[Dict[str, Any]]:
+    if not deck_id:
+        return _standard_deck()
+    try:
+        from bigtree.modules import tarot
+    except Exception:
+        return _standard_deck()
+    deck, cards = tarot.get_deck_bundle(deck_id)
+    if not cards:
+        raise ValueError("deck has no cards")
+    seen = set()
+    playing: List[Dict[str, Any]] = []
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        rank, suit = _extract_rank_suit(card)
+        if not rank or not suit:
+            continue
+        key = (rank, suit)
+        if key in seen:
+            continue
+        seen.add(key)
+        image = card.get("image") or card.get("img") or card.get("url") or card.get("image_url")
+        name = card.get("name") or card.get("title") or card.get("card_id")
+        playing.append({
+            "rank": rank,
+            "suit": suit,
+            "code": f"{rank}{suit[0].upper()}",
+            "image": image,
+            "name": name or f"{rank} of {suit.title()}",
+        })
+    if not playing:
+        raise ValueError("deck has no playing cards")
+    return playing
 
 def _draw(deck: List[Dict[str, str]], count: int = 1) -> List[Dict[str, str]]:
     drawn = []
@@ -170,8 +265,8 @@ def _blackjack_value(hand: List[Dict[str, str]]) -> int:
         aces -= 1
     return total
 
-def _init_blackjack_state() -> Dict[str, Any]:
-    deck = _standard_deck()
+def _init_blackjack_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
+    deck = _load_playing_deck(deck_id)
     random.shuffle(deck)
     return {
         "deck": deck,
@@ -221,8 +316,8 @@ def _apply_blackjack_action(state: Dict[str, Any], action: str) -> Tuple[Dict[st
         return state, None
     return state, "unknown action"
 
-def _init_highlow_state() -> Dict[str, Any]:
-    deck = _standard_deck()
+def _init_highlow_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
+    deck = _load_playing_deck(deck_id)
     random.shuffle(deck)
     return {
         "deck": deck,
@@ -261,8 +356,8 @@ def _apply_highlow_action(state: Dict[str, Any], guess: str) -> Tuple[Dict[str, 
     state["status"] = "finished"
     return state, None
 
-def _init_poker_state() -> Dict[str, Any]:
-    deck = _standard_deck()
+def _init_poker_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
+    deck = _load_playing_deck(deck_id)
     random.shuffle(deck)
     return {
         "deck": deck,
@@ -345,13 +440,13 @@ def _apply_poker_action(state: Dict[str, Any], action: str, payload: Dict[str, A
         return state, None
     return state, "unknown action"
 
-def _init_state(game_id: str) -> Dict[str, Any]:
+def _init_state(game_id: str, deck_id: Optional[str]) -> Dict[str, Any]:
     if game_id == "blackjack":
-        return _init_blackjack_state()
+        return _init_blackjack_state(deck_id)
     if game_id == "poker":
-        return _init_poker_state()
+        return _init_poker_state(deck_id)
     if game_id == "highlow":
-        return _init_highlow_state()
+        return _init_highlow_state(deck_id)
     raise ValueError("invalid game")
 
 def _start_game(game_id: str, state: Dict[str, Any]) -> None:
@@ -374,12 +469,18 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
     return state, "invalid game"
 
 def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
+    deck_id = None
+    try:
+        deck_id = row["deck_id"]
+    except Exception:
+        deck_id = None
     return {
         "session_id": row["session_id"],
         "join_code": row["join_code"],
         "priestess_token": row["priestess_token"],
         "player_token": row["player_token"],
         "game_id": row["game_id"],
+        "deck_id": deck_id,
         "status": row["status"],
         "pot": int(row["pot"] or 0),
         "winnings": int(row["winnings"] or 0),
@@ -388,7 +489,21 @@ def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         "updated_at": float(row["updated_at"] or 0),
     }
 
-def create_session(game_id: str, pot: int = 0) -> Dict[str, Any]:
+def _delete_session(conn: sqlite3.Connection, session_id: str) -> None:
+    conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+    conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+
+def _cleanup_finished(conn: sqlite3.Connection) -> None:
+    now = _now()
+    rows = conn.execute(
+        "SELECT session_id, updated_at FROM sessions WHERE status = 'finished'"
+    ).fetchall()
+    for row in rows:
+        updated = float(row["updated_at"] or 0)
+        if now - updated >= _FINISHED_TTL:
+            _delete_session(conn, row["session_id"])
+
+def create_session(game_id: str, pot: int = 0, deck_id: Optional[str] = None) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
         raise ValueError("invalid game")
@@ -396,15 +511,16 @@ def create_session(game_id: str, pot: int = 0) -> Dict[str, Any]:
     session_id = _new_id()
     join_code = _new_code()
     priestess_token = _new_id()
-    state = _init_state(game_id)
+    deck_id = (deck_id or "").strip() or None
+    state = _init_state(game_id, deck_id)
     now = _now()
     def _insert(conn):
         conn.execute(
             """
-            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, status, pot, winnings, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, status, pot, winnings, state_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, join_code, priestess_token, None, game_id, "created", int(pot or 0), 0, json.dumps(state), now, now)
+            (session_id, join_code, priestess_token, None, game_id, deck_id, "created", int(pot or 0), 0, json.dumps(state), now, now)
         )
     _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
@@ -413,28 +529,41 @@ def create_session(game_id: str, pot: int = 0) -> Dict[str, Any]:
 def list_sessions(game_id: Optional[str] = None) -> List[Dict[str, Any]]:
     _ensure_db()
     def _load(conn):
+        _cleanup_finished(conn)
         if game_id:
             return conn.execute(
-                "SELECT * FROM sessions WHERE game_id = ? ORDER BY created_at DESC",
+                "SELECT * FROM sessions WHERE game_id = ? AND status != 'finished' ORDER BY created_at DESC",
                 (game_id,),
             ).fetchall()
-        return conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
+        return conn.execute("SELECT * FROM sessions WHERE status != 'finished' ORDER BY created_at DESC").fetchall()
     rows = _with_conn(_load)
     return [_session_from_row(row) for row in rows]
 
 def get_session_by_join_code(join_code: str) -> Optional[Dict[str, Any]]:
     _ensure_db()
     def _load(conn):
+        _cleanup_finished(conn)
         return conn.execute("SELECT * FROM sessions WHERE join_code = ?", (join_code,)).fetchone()
     row = _with_conn(_load)
-    return _session_from_row(row) if row else None
+    if not row:
+        return None
+    s = _session_from_row(row)
+    if s.get("status") == "finished":
+        return None
+    return s
 
 def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
     _ensure_db()
     def _load(conn):
+        _cleanup_finished(conn)
         return conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
     row = _with_conn(_load)
-    return _session_from_row(row) if row else None
+    if not row:
+        return None
+    s = _session_from_row(row)
+    if s.get("status") == "finished":
+        return None
+    return s
 
 def _update_session(session_id: str, payload: Dict[str, Any]) -> None:
     _ensure_db()
@@ -507,6 +636,9 @@ def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     s["status"] = "finished"
     _update_session(session_id, s)
     _add_event(session_id, "SESSION_FINISHED", {})
+    def _delete(conn):
+        _delete_session(conn, session_id)
+    _with_conn(_delete)
     return s
 
 def player_action(session_id: str, token: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -537,6 +669,10 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
         s["winnings"] = winnings
     _update_session(session_id, s)
     _add_event(session_id, "STATE_UPDATED", {"action": action})
+    if s.get("status") == "finished":
+        def _delete(conn):
+            _delete_session(conn, session_id)
+        _with_conn(_delete)
     return s
 
 def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
@@ -553,6 +689,7 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
             "session_id": session.get("session_id"),
             "join_code": session.get("join_code"),
             "game_id": game_id,
+            "deck_id": session.get("deck_id"),
             "status": session.get("status"),
             "pot": int(session.get("pot") or 0),
             "winnings": int(session.get("winnings") or 0),

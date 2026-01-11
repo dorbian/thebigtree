@@ -65,9 +65,7 @@
           <div class="nav-block">
             <div class="nav-title">Cardgames</div>
             <div class="menu-item" id="menuTarotLinks" tabindex="0"><span class="menu-label">Tarot Sessions</span></div>
-            <div class="menu-item" id="menuCardgameBlackjack" tabindex="0"><span class="menu-label">Blackjack Sessions</span></div>
-            <div class="menu-item" id="menuCardgamePoker" tabindex="0"><span class="menu-label">Poker Sessions</span></div>
-            <div class="menu-item" id="menuCardgameHighlow" tabindex="0"><span class="menu-label">High/Low Sessions</span></div>
+            <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Cardgame Sessions</span></div>
             <div class="menu-item" id="menuTarotDecks" tabindex="0"><span class="menu-label">Deck Editor</span></div>
           </div>
 
@@ -659,190 +657,84 @@
           </div>
         </section>
 
-        <section class="panel hidden" style="animation-delay:.1s" id="cardgameBlackjackPanel">
-          <h2>Blackjack Sessions</h2>
-          <p>Create and manage blackjack sessions.</p>
+        <section class="panel hidden" style="animation-delay:.1s" id="cardgameSessionsPanel">
+          <h2>Cardgame Sessions</h2>
+          <p>Create and manage sessions for blackjack, poker, and high/low.</p>
           <div class="row">
             <div>
-              <label for="bjSessionSelect">Existing sessions</label>
-              <select id="bjSessionSelect"></select>
+              <label for="cgGameSelect">Game</label>
+              <select id="cgGameSelect">
+                <option value="blackjack">Blackjack</option>
+                <option value="poker">Poker</option>
+                <option value="highlow">High/Low</option>
+              </select>
+            </div>
+            <div>
+              <label for="cgDeckSelect">Deck</label>
+              <select id="cgDeckSelect"></select>
+            </div>
+            <div>
+              <label for="cgPot">Gil pot</label>
+              <input id="cgPot" placeholder="0">
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="bjSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+              <button id="cgCreateSession">Create session</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgCreateFromSelected">Create next from selected</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="cgSessionSelect">Existing sessions</label>
+              <select id="cgSessionSelect"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="cgSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
                 </svg>
               </button>
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="bjCreateSession">New session</button>
-            </div>
           </div>
           <div class="row">
             <div>
-              <label for="bjPot">Gil pot</label>
-              <input id="bjPot" placeholder="0">
+              <label for="cgJoinCode">Join code</label>
+              <input id="cgJoinCode" placeholder="e.g. AB12CD">
             </div>
             <div>
-              <label for="bjJoinCode">Join code</label>
-              <input id="bjJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="bjPriestessToken">Priestess token</label>
-              <input id="bjPriestessToken" placeholder="token (for priestess)">
+              <label for="cgPriestessToken">Host token</label>
+              <input id="cgPriestessToken" placeholder="token (for host)">
             </div>
           </div>
           <div class="row">
             <div>
               <label>&nbsp;</label>
-              <button id="bjOpenPlayer">Open player</button>
+              <button id="cgOpenPlayer">Open player</button>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="bjOpenPriestess">Open priestess</button>
+              <button id="cgOpenPriestess">Open host</button>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button class="btn-ghost" id="bjStartSession">Start session</button>
+              <button class="btn-ghost" id="cgStartSession">Start session</button>
             </div>
             <div>
               <label>&nbsp;</label>
-              <button class="btn-ghost" id="bjFinishSession">Finish session</button>
+              <button class="btn-ghost" id="cgFinishSession">Finish session</button>
             </div>
           </div>
           <div class="row links">
             <div>
               <span class="pill">Links</span>
-              <div id="bjLink">No join code entered.</div>
+              <div id="cgLink">No join code entered.</div>
             </div>
           </div>
-          <div class="status" id="bjStatus">Ready.</div>
-        </section>
-
-        <section class="panel hidden" style="animation-delay:.1s" id="cardgamePokerPanel">
-          <h2>Poker Sessions</h2>
-          <p>Create and manage poker sessions.</p>
-          <div class="row">
-            <div>
-              <label for="pkSessionSelect">Existing sessions</label>
-              <select id="pkSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="pkSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="pkCreateSession">New session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="pkPot">Gil pot</label>
-              <input id="pkPot" placeholder="0">
-            </div>
-            <div>
-              <label for="pkJoinCode">Join code</label>
-              <input id="pkJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="pkPriestessToken">Priestess token</label>
-              <input id="pkPriestessToken" placeholder="token (for priestess)">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="pkOpenPlayer">Open player</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="pkOpenPriestess">Open priestess</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="pkStartSession">Start session</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="pkFinishSession">Finish session</button>
-            </div>
-          </div>
-          <div class="row links">
-            <div>
-              <span class="pill">Links</span>
-              <div id="pkLink">No join code entered.</div>
-            </div>
-          </div>
-          <div class="status" id="pkStatus">Ready.</div>
-        </section>
-
-        <section class="panel hidden" style="animation-delay:.1s" id="cardgameHighlowPanel">
-          <h2>High/Low Sessions</h2>
-          <p>Create and manage high/low sessions.</p>
-          <div class="row">
-            <div>
-              <label for="hlSessionSelect">Existing sessions</label>
-              <select id="hlSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="hlSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="hlCreateSession">New session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="hlPot">Gil pot</label>
-              <input id="hlPot" placeholder="0">
-            </div>
-            <div>
-              <label for="hlJoinCode">Join code</label>
-              <input id="hlJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="hlPriestessToken">Priestess token</label>
-              <input id="hlPriestessToken" placeholder="token (for priestess)">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="hlOpenPlayer">Open player</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="hlOpenPriestess">Open priestess</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="hlStartSession">Start session</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="hlFinishSession">Finish session</button>
-            </div>
-          </div>
-          <div class="row links">
-            <div>
-              <span class="pill">Links</span>
-              <div id="hlLink">No join code entered.</div>
-            </div>
-          </div>
-          <div class="status" id="hlStatus">Ready.</div>
+          <div class="status" id="cgStatus">Ready.</div>
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
