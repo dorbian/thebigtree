@@ -1,0 +1,8 @@
+[Unit]
+Description=Rites starting page (error splash)
+
+[Kube]
+Yaml=/opt/honsefarm/traefik/middleware/rites-starting.yaml
+
+[Install]
+WantedBy=multi-user.target

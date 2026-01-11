@@ -103,14 +103,15 @@ data:
     <body>
       <div class="wrap">
         <div class="pulse-wrap">
-          <img src="/thebigtree.png" alt="The Big Tree" class="heart" />
+          <img src="/assets/thebigtree.png" alt="The Big Tree" class="heart" />
         </div>
         <h1>The Forest is waking</h1>
         <p>We are gathering the offerings. Your path will open shortly.</p>
         <div class="status"><span class="dot"></span><span id="statusText">Checking the rites...</span></div>
       </div>
       <script>
-        const target = "/tarot/gallery";
+        const target = "/healthz";
+        const redirect = "/tarot/gallery";
         const statusText = document.getElementById("statusText");
         let attempts = 0;
         async function probe(){
@@ -118,7 +119,7 @@ data:
           try{
             const res = await fetch(target, {cache:"no-store"});
             if (res && res.ok){
-              window.location.replace(target);
+              window.location.replace(redirect);
               return;
             }
           }catch(err){}
@@ -129,6 +130,18 @@ data:
       </script>
     </body>
     </html>
+  default.conf: |
+    server {
+      listen 8080;
+      server_name _;
+      root /usr/share/nginx/html;
+      location /assets/ {
+        try_files $uri =404;
+      }
+      location / {
+        try_files $uri /index.html;
+      }
+    }
 ---
 apiVersion: v1
 kind: Pod
@@ -146,14 +159,19 @@ spec:
         - name: rites-starting-html
           mountPath: /usr/share/nginx/html/index.html
           subPath: index.html
-        - name: rites-starting-logo
-          mountPath: /usr/share/nginx/html/thebigtree.png
-          subPath: thebigtree.png
+        - name: rites-starting-nginx
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        - name: rites-starting-assets
+          mountPath: /usr/share/nginx/html/assets
   volumes:
     - name: rites-starting-html
       configMap:
         name: rites-starting-page
-    - name: rites-starting-logo
+    - name: rites-starting-nginx
+      configMap:
+        name: rites-starting-page
+    - name: rites-starting-assets
       hostPath:
-        path: /opt/honsefarm/traefik/starting/thebigtree.png
-        type: File
+        path: /opt/honsefarm/traefik/starting
+        type: DirectoryOrCreate
