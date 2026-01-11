@@ -56,6 +56,16 @@
       <div class="muted">Player intent</div>
       <div class="intent" id="intentLine">Awaiting decision.</div>
     </div>
+    <div class="panel actions" id="hostPlayPanel">
+      <div class="muted">Host play controls</div>
+      <div class="row">
+        <button id="hostHigher">Higher</button>
+        <button id="hostLower">Lower</button>
+        <button id="hostDouble">Double</button>
+        <button id="hostStop">Stop</button>
+      </div>
+      <div class="muted" id="hostPlayHint">Choose the next move on behalf of the player.</div>
+    </div>
     <div class="panel">
       <div class="muted">Settlement preview</div>
       <div class="preview" id="settlementPreview">No payout pending.</div>
@@ -67,7 +77,7 @@
       <button id="startBtn">Start</button>
       <button id="finishBtn">Finish</button>
     </div>
-    <div class="panel">
+    <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -89,6 +99,12 @@
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const startBtn = document.getElementById("startBtn");
   const finishBtn = document.getElementById("finishBtn");
+  const hostHigher = document.getElementById("hostHigher");
+  const hostLower = document.getElementById("hostLower");
+  const hostDouble = document.getElementById("hostDouble");
+  const hostStop = document.getElementById("hostStop");
+  const hostPlayHint = document.getElementById("hostPlayHint");
+  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
   const token = new URLSearchParams(window.location.search).get("token") || "";
   let sessionId = "";
@@ -116,8 +132,10 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
+      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
+    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
@@ -131,17 +149,23 @@
     document.body.classList.add("has-bg");
   }
 
-  async function postAdmin(path){
+  async function postAdmin(path, payload){
     if (!token){
       statusLine.textContent = "Missing priestess token.";
       return;
     }
     if (!sessionId) return;
-    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/${path}`, {
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/${path}`, {
       method:"POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({token})
+      body: JSON.stringify({token, ...(payload || {})})
     });
+    if (res){
+      const data = await res.json().catch(() => ({}));
+      if (data && data.ok === false){
+        statusLine.textContent = data.error || "Request failed.";
+      }
+    }
   }
 
   function resultCopy(result, winnings){
@@ -187,6 +211,10 @@
     const winnings = state.session.winnings || 0;
     const phase = (state.state && state.state.phase) || "--";
     const intent = state.state && state.state.intent;
+    const phase = (state.state && state.state.phase) || "";
+    const winnings = state.session.winnings || 0;
+    const doublesUsed = (state.state && state.state.doubles_used) || 0;
+    const maxDoubles = (state.state && state.state.max_doubles) || 0;
 
     joinCodeEl.textContent = state.session.join_code || "-";
     potValue.textContent = pot;
@@ -208,10 +236,20 @@
     startBtn.disabled = status !== "created";
     finishBtn.disabled = status === "finished";
     createNext.disabled = status !== "live";
+    const canPlay = status === "live" && phase === "decision";
+    hostHigher.disabled = !canPlay;
+    hostLower.disabled = !canPlay;
+    hostStop.disabled = !(canPlay && winnings > 0);
+    hostDouble.disabled = !(canPlay && winnings > 0 && (!maxDoubles || doublesUsed < maxDoubles));
+    hostPlayHint.textContent = canPlay ? "Choose the next move on behalf of the player." : "Waiting for a live decision phase.";
   }
 
   startBtn.addEventListener("click", () => postAdmin("start"));
   finishBtn.addEventListener("click", () => postAdmin("finish"));
+  hostHigher.addEventListener("click", () => postAdmin("host-action", {action: "higher"}));
+  hostLower.addEventListener("click", () => postAdmin("host-action", {action: "lower"}));
+  hostDouble.addEventListener("click", () => postAdmin("host-action", {action: "double"}));
+  hostStop.addEventListener("click", () => postAdmin("host-action", {action: "stop"}));
   copyPlayerLink.addEventListener("click", async () => {
     const url = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;
     try{

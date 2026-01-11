@@ -12,6 +12,7 @@
 - High/Low: added decision-focused UI (double/stop, intent/settlement preview) and synced winnings/state flow.
 - Cardgame sessions: open media library now always opens the panel before scope checks.
 - Gallery: added Join game button that routes join codes to the right session page.
+- High/Low: host can play actions and action errors now surface in the UI; hide empty artist credits.
 
 ## 2026-01-11
 ### Cardgames

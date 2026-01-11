@@ -819,6 +819,17 @@ def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
         _update_session(session_id, s)
         _add_event(session_id, "STATE_UPDATED", {"action": action})
         return s
+    if s.get("game_id") == "highlow" and action in ("higher", "lower", "double", "stop"):
+        if not state.get("base_pot"):
+            state["base_pot"] = int(s.get("pot") or 0)
+        updated, err = _apply_highlow_action(state, action)
+        if err:
+            raise ValueError(err)
+        s["state"] = updated
+        s["winnings"] = int(updated.get("winnings") or 0)
+        _update_session(session_id, s)
+        _add_event(session_id, "STATE_UPDATED", {"action": action})
+        return s
     raise ValueError("invalid action")
 
 def player_action(session_id: str, token: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:

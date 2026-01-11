@@ -59,7 +59,7 @@
     <div class="panel">
       <div class="muted" id="resultLine">Result: --</div>
     </div>
-    <div class="panel">
+    <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -73,6 +73,7 @@
   const phaseLine = document.getElementById("phaseLine");
   const currentCard = document.getElementById("currentCard");
   const resultLine = document.getElementById("resultLine");
+  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
   const higherBtn = document.getElementById("higherBtn");
   const lowerBtn = document.getElementById("lowerBtn");
@@ -107,8 +108,10 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
+      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
+    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
@@ -143,11 +146,20 @@
     pendingAction = true;
     setButtonsState(false);
     decisionHint.textContent = "Waiting for the dealer...";
-    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({token: playerToken, action, payload: {}})
     });
+    if (res){
+      const data = await res.json().catch(() => ({}));
+      if (data && data.ok === false){
+        decisionHint.textContent = data.error || "Action failed.";
+        pendingAction = false;
+        setButtonsState(true);
+        return;
+      }
+    }
     loadState();
   }
 
