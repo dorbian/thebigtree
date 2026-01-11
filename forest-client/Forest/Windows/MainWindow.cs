@@ -739,7 +739,7 @@ public class MainWindow : Window, IDisposable
         if (_bingoGamesLoading)
         {
             ImGui.SameLine();
-            ImGui.TextDisabled("Loading…");
+            ImGui.TextDisabled("Loading--|");
         }
 
         ImGui.Separator();
@@ -1138,7 +1138,7 @@ public class MainWindow : Window, IDisposable
             else if (isImprisoned) color = new Vector4(0.2f, 0.2f, 1.0f, 1.0f);
             else if (isKiller) color = new Vector4(1.0f, 0.2f, 0.2f, 1.0f);
 
-            string display = $"• {playerName}" +
+            string display = $"--- {playerName}" +
                 (isDead ? " (Dead)" :
                  isImprisoned ? " (Imprisoned)" :
                  isKiller ? " (Killer)" : "");
@@ -2647,7 +2647,7 @@ public class MainWindow : Window, IDisposable
 
         foreach (var s in _cardgamesSessions)
         {
-            var label = $"{FormatCardgamesName(s.game_id)} · {s.join_code} · {s.status}";
+            var label = $"{FormatCardgamesName(s.game_id)} - {s.join_code} - {s.status}";
             if (ImGui.Selectable(label, _cardgamesSelectedSession?.session_id == s.session_id))
             {
                 _cardgamesSelectedSession = s;

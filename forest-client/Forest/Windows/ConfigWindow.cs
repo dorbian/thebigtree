@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
+ï»¿using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
 using Dalamud.Interface.Windowing;
 using System;
 using System.Numerics;
@@ -54,9 +54,9 @@ public class ConfigWindow : Window, IDisposable
             Plugin.Config.Save();
         }
         ImGui.Spacing();
-        var publicBase = Plugin.Config.CardgamesPublicBaseUrl ?? ""https://rites.thebigtree.life"";
+        var publicBase = Plugin.Config.CardgamesPublicBaseUrl ?? "https://rites.thebigtree.life";
         ImGui.SetNextItemWidth(360);
-        if (ImGui.InputText(""Cardgames Public URL"", ref publicBase, 512))
+        if (ImGui.InputText("Cardgames Public URL", ref publicBase, 512))
         {
             Plugin.Config.CardgamesPublicBaseUrl = string.IsNullOrWhiteSpace(publicBase) ? null : publicBase.Trim();
             Plugin.Config.Save();
@@ -76,7 +76,7 @@ public class ConfigWindow : Window, IDisposable
         }
         else
         {
-            ImGui.TextDisabled("Connecting…");
+            ImGui.TextDisabled("Connecting...");
         }
 
         ImGui.SameLine();
