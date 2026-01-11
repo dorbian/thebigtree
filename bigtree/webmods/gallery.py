@@ -23,6 +23,7 @@ _GALLERY_CACHE_TTL = 600.0
 _GALLERY_SHUFFLES: dict[int, list[int]] = {}
 _THUMB_WARM_AT = 0.0
 _THUMB_WARM_TTL = 30.0
+_CONTEST_THUMB_DIR = "thumbs"
 
 def invalidate_gallery_cache() -> None:
     global _GALLERY_CACHE, _GALLERY_CACHE_AT, _GALLERY_SHUFFLES
@@ -80,6 +81,55 @@ def _contest_name(meta: Dict[str, Any] | None, channel_id: int) -> str:
 def _contest_media_url(filename: str) -> str:
     return f"/contest/media/{filename}"
 
+def _contest_thumb_dir() -> str:
+    path = os.path.join(contest_mod._contest_dir(), _CONTEST_THUMB_DIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def _contest_thumb_path(filename: str) -> str:
+    return os.path.join(_contest_thumb_dir(), filename)
+
+def _ensure_contest_thumb(filename: str, size: tuple[int, int] = (480, 672)) -> bool:
+    if not filename:
+        return False
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _IMG_EXTS:
+        return False
+    thumb_path = _contest_thumb_path(filename)
+    if os.path.exists(thumb_path):
+        return True
+    source = os.path.join(contest_mod._contest_dir(), filename)
+    if not os.path.exists(source):
+        return False
+    try:
+        from PIL import Image
+    except Exception:
+        return False
+    try:
+        with Image.open(source) as img:
+            try:
+                img.seek(0)
+            except Exception:
+                pass
+            img.thumbnail(size)
+            fmt = {
+                ".jpg": "JPEG",
+                ".jpeg": "JPEG",
+                ".png": "PNG",
+                ".gif": "GIF",
+                ".bmp": "BMP",
+                ".webp": "WEBP",
+            }.get(ext, "PNG")
+            save_kwargs = {}
+            if fmt == "JPEG":
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                save_kwargs = {"quality": 82, "optimize": True, "progressive": True}
+            img.save(thumb_path, fmt, **save_kwargs)
+    except Exception:
+        return False
+    return True
+
 def _strip_emojis(text: str) -> str:
     if not text:
         return ""
@@ -101,6 +151,16 @@ def _strip_query(url: str) -> str:
 
 def _media_path(filename: str) -> str:
     return os.path.join(media_mod.get_media_dir(), filename)
+
+def _media_thumb_url(url: str) -> str:
+    if not url or not url.startswith("/media/"):
+        return ""
+    filename = url.split("/media/", 1)[1]
+    if not filename:
+        return ""
+    if media_mod.ensure_thumb(filename):
+        return f"/media/thumbs/{filename}"
+    return ""
 
 def _item_id(source: str, identifier: str) -> str:
     identifier = (identifier or "").strip()
@@ -151,10 +211,12 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                 item_id = _item_id("tarot-back", deck_id)
                 hidden = item_id in hidden_set
                 if include_hidden or not hidden:
+                    thumb_url = _media_thumb_url(url)
                     items.append({
                         "item_id": item_id,
                         "title": deck.get("name") or deck_id,
                         "url": url,
+                        "thumb_url": thumb_url,
                         "source": "tarot-back",
                         "type": "Tarot",
                         "artist": _artist_payload(deck.get("back_artist_id")),
@@ -174,10 +236,12 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             hidden = item_id in hidden_set
             if not include_hidden and hidden:
                 continue
+            thumb_url = _media_thumb_url(url)
             items.append({
                 "item_id": item_id,
                 "title": card.get("name") or card.get("card_id") or "Card",
                 "url": url,
+                "thumb_url": thumb_url,
                 "source": "tarot-card",
                 "type": "Tarot",
                 "artist": _artist_payload(card.get("artist_id")),
@@ -195,10 +259,15 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             hidden = item_id in hidden_set
             if not include_hidden and hidden:
                 continue
+            thumb_url = ""
+            if filename and _ensure_contest_thumb(filename):
+                thumb_url = f"/contest/media/thumbs/{filename}"
             entry["item_id"] = item_id
             entry["type"] = entry.get("type") or "Contest"
             entry["reactions"] = {}
             entry["hidden"] = hidden
+            if thumb_url:
+                entry["thumb_url"] = thumb_url
             if entry.get("contest"):
                 entry["event_name"] = entry.get("contest")
             items.append(entry)
@@ -235,30 +304,39 @@ def _schedule_thumb_warm(items: list[dict]) -> None:
         return
     loop.create_task(_warm_thumbnails(items))
 
-def _thumb_filenames(items: list[dict], limit: int = 36) -> list[str]:
-    names: list[str] = []
-    for item in items:
-        item_id = item.get("item_id") or ""
-        if not item_id.startswith("media:"):
-            continue
-        filename = item.get("filename") or item_id.split(":", 1)[1]
-        if not filename:
-            continue
-        names.append(filename)
-        if len(names) >= limit:
-            break
-    return names
+def _media_filename_from_url(url: str) -> str:
+    if not url or not url.startswith("/media/"):
+        return ""
+    return url.split("/media/", 1)[1]
 
-async def _warm_thumbnails(items: list[dict]) -> None:
-    names = _thumb_filenames(items)
-    if not names:
-        return
-    await asyncio.to_thread(_ensure_thumbs, names)
+def _contest_filename_from_url(url: str) -> str:
+    if not url or not url.startswith("/contest/media/"):
+        return ""
+    return url.split("/contest/media/", 1)[1]
 
-def _ensure_thumbs(names: list[str]) -> None:
-    for name in names:
-        try:
+def _ensure_thumb_for_item(item: dict) -> None:
+    url = (item.get("url") or "").strip()
+    if url.startswith("/media/"):
+        name = _media_filename_from_url(url)
+        if name:
             media_mod.ensure_thumb(name)
+        return
+    if url.startswith("/contest/media/"):
+        name = _contest_filename_from_url(url)
+        if name:
+            _ensure_contest_thumb(name)
+        return
+
+async def _warm_thumbnails(items: list[dict], limit: int = 48) -> None:
+    if not items:
+        return
+    slice_items = items[:limit]
+    await asyncio.to_thread(_ensure_thumbs_for_items, slice_items)
+
+def _ensure_thumbs_for_items(items: list[dict]) -> None:
+    for item in items:
+        try:
+            _ensure_thumb_for_item(item)
         except Exception:
             continue
 
@@ -269,6 +347,19 @@ async def contest_media_file(req: web.Request):
     if ext not in _IMG_EXTS:
         return web.Response(status=404)
     path = os.path.join(contest_mod._contest_dir(), filename)
+    if not os.path.exists(path):
+        return web.Response(status=404)
+    return web.FileResponse(path)
+
+@route("GET", "/contest/media/thumbs/{filename}", allow_public=True)
+async def contest_media_thumb(req: web.Request):
+    filename = os.path.basename(req.match_info["filename"])
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _IMG_EXTS:
+        return web.Response(status=404)
+    if not _ensure_contest_thumb(filename):
+        return web.Response(status=404)
+    path = _contest_thumb_path(filename)
     if not os.path.exists(path):
         return web.Response(status=404)
     return web.FileResponse(path)

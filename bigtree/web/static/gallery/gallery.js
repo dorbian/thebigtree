@@ -39,8 +39,8 @@
   const CARD_MIN_WIDTH = 220;
   const CARD_HEIGHT = 380;
   const VIRTUAL_BUFFER_ROWS = 2;
-  const USE_VIRTUAL = false;
-  const PAGE_SIZE = 120;
+  const USE_VIRTUAL = true;
+  const PAGE_SIZE = 20;
   let gallerySeed = null;
   let galleryTotal = 0;
   let galleryLoading = false;
@@ -228,7 +228,7 @@
     const max = Math.min(12, items.length);
     for (let i = 0; i < max; i += 1){
       const item = items[i] || {};
-      const href = item.thumb_url || item.url;
+      const href = item.thumb_url;
       if (!href) continue;
       const link = document.createElement("link");
       link.rel = "preload";
