@@ -30,6 +30,9 @@
       <div class="row">
         <div>Pot: <strong id="potValue">0</strong> gil</div>
         <div>Winnings: <strong id="winValue">0</strong> gil</div>
+        <div>Player: <strong id="playerTotal">0</strong></div>
+        <div>Dealer: <strong id="dealerTotal">0</strong></div>
+        <div>Lead: <strong id="leadStatus">-</strong></div>
       </div>
     </div>
     <div class="panel">
@@ -68,6 +71,9 @@
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const dealerHand = document.getElementById("dealerHand");
   const playerHand = document.getElementById("playerHand");
+  const playerTotal = document.getElementById("playerTotal");
+  const dealerTotal = document.getElementById("dealerTotal");
+  const leadStatus = document.getElementById("leadStatus");
   const startBtn = document.getElementById("startBtn");
   const finishBtn = document.getElementById("finishBtn");
   const token = new URLSearchParams(window.location.search).get("token") || "";
@@ -87,6 +93,59 @@
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
+  }
+
+  function handValue(hand){
+    let total = 0;
+    let aces = 0;
+    (hand || []).forEach(card => {
+      const rank = card ? card.rank : null;
+      if (rank === "A"){
+        aces += 1;
+        total += 11;
+      }else if (rank === "J" || rank === "Q" || rank === "K"){
+        total += 10;
+      }else{
+        const num = parseInt(rank || "0", 10);
+        total += isNaN(num) ? 0 : num;
+      }
+    });
+    while (total > 21 && aces > 0){
+      total -= 10;
+      aces -= 1;
+    }
+    return total;
+  }
+
+  function updateLead(player, dealer, status){
+    if (status === "finished"){
+      if (player > 21){
+        return "Player bust";
+      }
+      if (dealer > 21){
+        return "Dealer bust";
+      }
+      if (player > dealer){
+        return "Player leads";
+      }
+      if (dealer > player){
+        return "Dealer leads";
+      }
+      return "Push";
+    }
+    if (player > 21){
+      return "Player bust";
+    }
+    if (dealer > 21){
+      return "Dealer bust";
+    }
+    if (player > dealer){
+      return "Player leads";
+    }
+    if (dealer > player){
+      return "Dealer leads";
+    }
+    return "Even";
   }
 
   function applyBackground(url){
@@ -121,8 +180,15 @@
     winValue.textContent = state.session.winnings || 0;
     statusLine.textContent = `Status: ${state.session.status}`;
     applyBackground(state.session.background_url || "");
-    renderHand(dealerHand, (state.state && state.state.dealer_hand) || []);
-    renderHand(playerHand, (state.state && state.state.player_hand) || []);
+    const dealer = (state.state && state.state.dealer_hand) || [];
+    const player = (state.state && state.state.player_hand) || [];
+    renderHand(dealerHand, dealer);
+    renderHand(playerHand, player);
+    const dealerVal = handValue(dealer);
+    const playerVal = handValue(player);
+    dealerTotal.textContent = dealerVal;
+    playerTotal.textContent = playerVal;
+    leadStatus.textContent = updateLead(playerVal, dealerVal, state.session.status);
     const status = state.session.status;
     startBtn.disabled = status !== "created";
     finishBtn.disabled = status === "finished";
@@ -177,7 +243,9 @@
     if (data && data.ok && data.state){
       render(data.state);
     }else if (data && data.redirect){
-      window.location.assign(data.redirect);
+      statusLine.textContent = "Session closed.";
+      startBtn.disabled = true;
+      finishBtn.disabled = true;
     }
   }
 
@@ -187,6 +255,10 @@
       const payload = JSON.parse(ev.data);
       if (payload.type === "STATE" && payload.state){
         render(payload.state);
+      }else if (payload.type === "SESSION_GONE"){
+        statusLine.textContent = "Session closed.";
+        startBtn.disabled = true;
+        finishBtn.disabled = true;
       }else{
         loadState();
       }

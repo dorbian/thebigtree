@@ -261,6 +261,21 @@ def _load_playing_deck(deck_id: Optional[str]) -> List[Dict[str, Any]]:
         raise ValueError("deck has no playing cards")
     return playing
 
+def _get_deck_back_image(deck_id: Optional[str]) -> Optional[str]:
+    if not deck_id:
+        return None
+    try:
+        from bigtree.modules import tarot
+    except Exception:
+        return None
+    try:
+        deck, _cards = tarot.get_deck_bundle(deck_id)
+    except Exception:
+        return None
+    if not isinstance(deck, dict):
+        return None
+    return deck.get("back_image") or deck.get("back") or deck.get("back_url")
+
 def _draw(deck: List[Dict[str, str]], count: int = 1) -> List[Dict[str, str]]:
     drawn = []
     for _ in range(count):
@@ -709,7 +724,11 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
     if game_id == "blackjack" and view != "priestess":
         dealer = list(state.get("dealer_hand") or [])
         if session.get("status") == "live" and len(dealer) > 1:
-            dealer = [dealer[0], {"rank": "?", "suit": "hidden", "code": "??"}]
+            back_image = _get_deck_back_image(session.get("deck_id"))
+            hidden_card = {"rank": "?", "suit": "hidden", "code": "??"}
+            if back_image:
+                hidden_card["image"] = back_image
+            dealer = [dealer[0], hidden_card]
         state = dict(state)
         state["dealer_hand"] = dealer
     return {

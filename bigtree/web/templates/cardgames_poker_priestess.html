@@ -182,7 +182,9 @@
     if (data && data.ok && data.state){
       render(data.state);
     }else if (data && data.redirect){
-      window.location.assign(data.redirect);
+      statusLine.textContent = "Session closed.";
+      startBtn.disabled = true;
+      finishBtn.disabled = true;
     }
   }
 
@@ -192,6 +194,10 @@
       const payload = JSON.parse(ev.data);
       if (payload.type === "STATE" && payload.state){
         render(payload.state);
+      }else if (payload.type === "SESSION_GONE"){
+        statusLine.textContent = "Session closed.";
+        startBtn.disabled = true;
+        finishBtn.disabled = true;
       }else{
         loadState();
       }

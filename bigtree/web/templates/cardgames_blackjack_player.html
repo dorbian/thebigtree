@@ -107,6 +107,7 @@
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({token: playerToken, action, payload: payload || {}})
     });
+    loadState();
   }
 
   function render(state){
