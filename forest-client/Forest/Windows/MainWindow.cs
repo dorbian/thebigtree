@@ -2856,15 +2856,18 @@ public class MainWindow : Window, IDisposable
             string img = "";
             if (card.TryGetProperty("image", out var imgEl) && imgEl.ValueKind == JsonValueKind.String)
                 img = ResolveCardImageUrl(imgEl.GetString());
-            if (!string.IsNullOrWhiteSpace(img) && TryGetCardTexture(img, out var tex))
+            var rendered = false;
+            if (!string.IsNullOrWhiteSpace(img) && TryGetCardTexture(img, out var tex) && tex is not null)
             {
-                var wrap = tex!.GetWrapOrDefault();
-                ImGui.Image(wrap.Handle, new Vector2(cardW, cardH));
+                var wrap = tex.GetWrapOrDefault();
+                if (wrap is not null)
+                {
+                    ImGui.Image(wrap.Handle, new Vector2(cardW, cardH));
+                    rendered = true;
+                }
             }
-            else
-            {
+            if (!rendered)
                 ImGui.Button("...", new Vector2(cardW, cardH));
-            }
             if (i + 1 < cards.Count)
                 ImGui.SameLine();
         }

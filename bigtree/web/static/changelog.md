@@ -6,6 +6,7 @@
 - FFXIV client: add in-plugin host gameplay view with card images and actions.
 - Cardgames: add customizable currency and persist cardgame defaults in overlay/FFXIV.
 - FFXIV client: fix cardgames live view label rendering.
+- FFXIV client: guard card texture rendering to avoid null crashes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
 - Added dashboard changelog panel and refreshed dashboard content.
