@@ -16,6 +16,7 @@ using Forest.Features.HuntStaffed;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.IO;
@@ -44,8 +45,12 @@ public class MainWindow : Window, IDisposable
     private View _view = View.Home;
     private TopView _topView = TopView.Sessions;
     private bool _controlSurfaceOpen = false;
+    private float _controlSurfaceAnim = 0f;
     private string _connectRequiredGame = "";
     private string _gameDetailsText = "";
+    private SessionEntry? _selectedSession;
+    private string _lastCopyId = "";
+    private DateTime _lastCopyAt = DateTime.MinValue;
     private SessionCategory _sessionFilterCategory = SessionCategory.All;
     private SessionStatusFilter _sessionFilterStatus = SessionStatusFilter.All;
     private enum BingoUiState { NoGameLoaded, Ready, Running, StageComplete, Finished }
@@ -378,6 +383,11 @@ public class MainWindow : Window, IDisposable
     // ========================= DRAW =========================
     public override void Draw()
     {
+        float delta = ImGui.GetIO().DeltaTime;
+        float target = _controlSurfaceOpen ? 1f : 0f;
+        float step = Math.Clamp(delta * 8f, 0f, 1f);
+        _controlSurfaceAnim = Math.Clamp(_controlSurfaceAnim + (target - _controlSurfaceAnim) * step, 0f, 1f);
+
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
         if (ImGui.BeginMenuBar())
         {
@@ -389,10 +399,10 @@ public class MainWindow : Window, IDisposable
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
-            float settingsW = 90f;
+            float settingsW = 110f;
             ImGui.SameLine(0, 0);
             ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
-            if (ImGui.SmallButton("[Settings]"))
+            if (ImGui.SmallButton("⚙ Settings"))
                 Plugin.ToggleConfigUI();
 
             ImGui.EndMenuBar();
@@ -804,12 +814,14 @@ public class MainWindow : Window, IDisposable
     private void DrawHuntPanel()
     {
         ImGui.TextUnformatted("Staffed Scavenger Hunt");
+        ImGui.Separator();
+        ImGui.TextUnformatted("Setup");
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Host creates the hunt and manages the session. Staff claim checkpoints and confirm group check-ins on-site.");
         }
 
-        ImGui.Separator();
         ImGui.Spacing();
 
         if (string.IsNullOrWhiteSpace(_huntStaffName))
@@ -868,6 +880,9 @@ public class MainWindow : Window, IDisposable
             {
                 var hunt = _huntState.hunt;
                 ImGui.Spacing();
+                ImGui.TextUnformatted("Live");
+                ImGui.Separator();
+                ImGui.Spacing();
                 ImGui.Text($"Hunt: {hunt.title} ({hunt.hunt_id})");
                 ImGui.Text($"Join code: {hunt.join_code}");
                 ImGui.Text($"Status: {(hunt.active ? (hunt.started ? "Active" : "Ready") : "Ended")}");
@@ -900,6 +915,9 @@ public class MainWindow : Window, IDisposable
             return;
 
         var staffHunt = _huntState.hunt;
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Live");
+        ImGui.Separator();
         ImGui.Spacing();
         ImGui.Text($"Hunt: {staffHunt.title} ({staffHunt.hunt_id})");
         ImGui.Text($"Join code: {staffHunt.join_code}");
@@ -1020,6 +1038,8 @@ public class MainWindow : Window, IDisposable
             ImGui.TextWrapped("Use the left player list to add/remove participants. Pick the killer, start the 5-minute voting window, and capture whispers. Timers below control the hint cadence.");
         }
 
+        ImGui.TextUnformatted("Setup");
+        ImGui.Separator();
         ImGui.TextDisabled("Murder Mystery Details");
         ImGui.Separator();
         ImGui.Spacing();
@@ -1044,6 +1064,8 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Live");
         ImGui.Separator();
         ImGui.Text("Voting Period:");
 
@@ -1995,7 +2017,7 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(CategoryLabel(s.Category));
+                ImGui.TextUnformatted($"{CategoryIcon(s.Category)} {CategoryLabel(s.Category)}");
                 ImGui.TableNextColumn();
                 if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
                 {
@@ -2019,6 +2041,17 @@ public class MainWindow : Window, IDisposable
             SessionCategory.Draw => "Draw",
             SessionCategory.Party => "Party",
             _ => "All",
+        };
+    }
+
+    private static string CategoryIcon(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => "🎰",
+            SessionCategory.Draw => "🎁",
+            SessionCategory.Party => "🎉",
+            _ => "•",
         };
     }
 
@@ -2163,6 +2196,7 @@ public class MainWindow : Window, IDisposable
         _connectRequiredGame = "";
         _gameDetailsText = "";
         _view = entry.TargetView;
+        _selectedSession = entry;
 
         if (entry.TargetView == View.Cardgames && entry.Cardgame is not null)
         {
@@ -2206,17 +2240,153 @@ public class MainWindow : Window, IDisposable
             _gameDetailsText = "This game requires the admin key to prepare sessions.";
     }
 
-    private void DrawSessionsControlSurface()
+    private void DrawSessionHeader()
     {
-        if (!_controlSurfaceOpen)
+        var entry = _selectedSession;
+        if (entry == null)
         {
-            ImGui.TextDisabled("Select a session to manage.");
+            ImGui.TextUnformatted("Session");
             return;
         }
+
+        ImGui.TextUnformatted(entry.Name);
+        ImGui.SameLine();
+        ImGui.TextDisabled($"{CategoryIcon(entry.Category)} {CategoryLabel(entry.Category)}");
+        ImGui.TextDisabled($"Status: {entry.Status}");
+    }
+
+    private void DrawPlayerFunnelBlock()
+    {
+        ImGui.TextUnformatted("Player funnel");
+        ImGui.TextDisabled("Share the join code or open the player page.");
+        ImGui.Spacing();
+
+        var share = BuildShareInfo();
+        DrawCopyRow("Join code", share.JoinCode, "join-code");
+        DrawCopyRow("Player link", share.PlayerLink, "player-link");
+
+        using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(share.PlayerLink)))
+        {
+            if (ImGui.Button("Open player page"))
+                OpenUrl(share.PlayerLink);
+        }
+
+        if (!string.IsNullOrWhiteSpace(share.HostLink))
+        {
+            ImGui.Spacing();
+            DrawCopyRow("Host link", share.HostLink, "host-link");
+        }
+    }
+
+    private void DrawLiveReassuranceBlock()
+    {
+        var entry = _selectedSession;
+        ImGui.TextUnformatted("Live status");
+        if (entry == null)
+        {
+            ImGui.TextDisabled("No session selected.");
+            return;
+        }
+        ImGui.TextDisabled($"Current state: {entry.Status}");
+    }
+
+    private void DrawCopyRow(string label, string value, string id)
+    {
+        ImGui.TextDisabled(label);
+        float buttonW = 70f;
+        float avail = ImGui.GetContentRegionAvail().X;
+        float inputW = Math.Max(160f, avail - buttonW - 12f);
+        string display = string.IsNullOrWhiteSpace(value) ? "(not available)" : value;
+
+        ImGui.PushItemWidth(inputW);
+        using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(value)))
+        {
+            ImGui.InputText($"##copy-{id}", ref display, 512, ImGuiInputTextFlags.ReadOnly);
+        }
+        ImGui.PopItemWidth();
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(value)))
+        {
+            if (ImGui.Button($"Copy##{id}"))
+            {
+                ImGui.SetClipboardText(value);
+                _lastCopyId = id;
+                _lastCopyAt = DateTime.UtcNow;
+            }
+        }
+        if (WasRecentlyCopied(id))
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled("Copied");
+        }
+    }
+
+    private bool WasRecentlyCopied(string id)
+    {
+        return _lastCopyId == id && (DateTime.UtcNow - _lastCopyAt).TotalSeconds < 2.5;
+    }
+
+    private (string JoinCode, string PlayerLink, string HostLink) BuildShareInfo()
+    {
+        var entry = _selectedSession;
+        if (entry == null)
+            return ("", "", "");
+
+        if (entry.TargetView == View.Cardgames && entry.Cardgame is not null)
+        {
+            var baseUrl = GetCardgamesBaseUrl();
+            var joinCode = entry.Cardgame.join_code ?? "";
+            var playerLink = string.IsNullOrWhiteSpace(joinCode)
+                ? ""
+                : $"{baseUrl}/cardgames/{entry.Cardgame.game_id}/session/{joinCode}";
+            var hostLink = string.IsNullOrWhiteSpace(joinCode)
+                ? ""
+                : $"{baseUrl}/cardgames/{entry.Cardgame.game_id}/session/{joinCode}?view=priestess";
+            if (!string.IsNullOrWhiteSpace(entry.Cardgame.priestess_token))
+                hostLink += $"&token={Uri.EscapeDataString(entry.Cardgame.priestess_token)}";
+            return (joinCode, playerLink, hostLink);
+        }
+
+        return (entry.JoinCode ?? "", "", "");
+    }
+
+    private void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Plugin.ChatGui.PrintError($"[Forest] Could not open link: {ex.Message}");
+        }
+    }
+
+    private void DrawSessionsControlSurface()
+    {
+        if (!_controlSurfaceOpen && _controlSurfaceAnim <= 0.01f)
+        {
+            ImGui.TextDisabled("Control surface collapsed.");
+            return;
+        }
+
+        var avail = ImGui.GetContentRegionAvail();
+        float slideOffset = (1f - _controlSurfaceAnim) * Math.Min(80f, avail.X * 0.25f);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + slideOffset);
+        ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Math.Clamp(_controlSurfaceAnim, 0.05f, 1f));
+        ImGui.BeginChild("ControlSurface", new Vector2(avail.X - slideOffset, avail.Y), false, 0);
 
         if (ImGui.SmallButton("Collapse"))
         {
             _controlSurfaceOpen = false;
+            ImGui.EndChild();
+            ImGui.PopStyleVar();
             return;
         }
         ImGui.Separator();
@@ -2224,6 +2394,8 @@ public class MainWindow : Window, IDisposable
         if (!string.IsNullOrWhiteSpace(_connectRequiredGame) && !HasAdminKey())
         {
             DrawConnectRequiredPanel();
+            ImGui.EndChild();
+            ImGui.PopStyleVar();
             return;
         }
 
@@ -2232,6 +2404,12 @@ public class MainWindow : Window, IDisposable
             ImGui.TextWrapped(_gameDetailsText);
             ImGui.Spacing();
         }
+
+        DrawSessionHeader();
+        ImGui.Spacing();
+        DrawPlayerFunnelBlock();
+        ImGui.Spacing();
+        DrawLiveReassuranceBlock();
 
         ImGui.Separator();
         switch (_view)
@@ -2245,6 +2423,9 @@ public class MainWindow : Window, IDisposable
             case View.Glam: DrawGlamRoulettePanel(); break;
             default: ImGui.TextDisabled("Select a session."); break;
         }
+
+        ImGui.EndChild();
+        ImGui.PopStyleVar();
     }
 
     private void DrawPlayersView()
@@ -2266,16 +2447,16 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted("Games");
         ImGui.Separator();
 
-        DrawGameSection("Party Games",
+        DrawGameSection("🎉 Party Games",
             "Experiences run during gatherings and ceremonies.",
             new[]
             {
-                new GameCard("Scavenger Hunt", SessionCategory.Party, true, true, false, "Managed staff-led hunt with locations."),
+                new GameCard("Scavenger Hunt", SessionCategory.Party, true, true, false, "Managed staff-led hunt with shared locations."),
                 new GameCard("Murder Mystery", SessionCategory.Party, false, false, false, "Local story and text management."),
-                new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts.")
+                new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts and online lists.")
             });
 
-        DrawGameSection("Casino Games",
+        DrawGameSection("🎰 Casino Games",
             "Managed tables with join keys and shared decks.",
             new[]
             {
@@ -2284,13 +2465,12 @@ public class MainWindow : Window, IDisposable
                 new GameCard("High/Low", SessionCategory.Casino, true, true, true, "Managed high/low rounds.")
             });
 
-        DrawGameSection("Draws & Giveaways",
+        DrawGameSection("🎁 Draws & Giveaways",
             "Lightweight draws and rolling events.",
             new[]
             {
-                new GameCard("Bingo", SessionCategory.Draw, true, false, false, "Managed bingo with live calls."),
                 new GameCard("Raffle", SessionCategory.Draw, false, false, false, "Local raffle draw."),
-                new GameCard("Spin Wheel", SessionCategory.Draw, false, false, false, "Local wheel spin.")
+                new GameCard("Spin Wheel", SessionCategory.Draw, false, false, false, "Local wheel spin (managed later).")
             });
     }
 
@@ -2331,7 +2511,7 @@ public class MainWindow : Window, IDisposable
         ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, 92), true);
         ImGui.TextUnformatted(card.Title);
         ImGui.SameLine();
-        ImGui.TextDisabled($"({CategoryLabel(card.Category)})");
+        ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
         DrawBadge(card.Managed ? "Uses central service" : "Runs from this app");
         if (card.JoinKey) DrawBadge("Join key needed");
         if (card.InternetAssets) DrawBadge("Fetches online assets");
@@ -2339,6 +2519,9 @@ public class MainWindow : Window, IDisposable
         string actionLabel = card.Managed ? "Prepare session" : "Start";
         if (ImGui.Button(actionLabel))
         {
+            var targetView = ResolveGameCardView(card.Title);
+            if (targetView != View.Home)
+                SelectGameCard(card, targetView);
             if (card.Managed && !HasAdminKey())
             {
                 _connectRequiredGame = card.Title;
@@ -2353,42 +2536,30 @@ public class MainWindow : Window, IDisposable
             switch (card.Title)
             {
                 case "Scavenger Hunt":
-                    _view = View.Hunt;
                     _ = Hunt_LoadList();
                     break;
                 case "Murder Mystery":
-                    _view = View.MurderMystery;
                     break;
                 case "Glam Competition":
-                    _view = View.Glam;
                     break;
                 case "Blackjack":
-                    _view = View.Cardgames;
                     _cardgamesGameId = "blackjack";
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                     break;
                 case "Poker":
-                    _view = View.Cardgames;
                     _cardgamesGameId = "poker";
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                     break;
                 case "High/Low":
-                    _view = View.Cardgames;
                     _cardgamesGameId = "highlow";
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                     break;
-                case "Bingo":
-                    _view = View.Bingo;
-                    _ = Bingo_LoadGames();
-                    break;
                 case "Raffle":
-                    _view = View.Raffle;
                     break;
                 case "Spin Wheel":
-                    _view = View.SpinWheel;
                     break;
             }
         }
@@ -2400,6 +2571,37 @@ public class MainWindow : Window, IDisposable
             _topView = TopView.Sessions;
         }
         ImGui.EndChild();
+    }
+
+    private void SelectGameCard(GameCard card, View targetView)
+    {
+        _view = targetView;
+        _selectedSession = new SessionEntry
+        {
+            Id = $"gamecard-{card.Title}",
+            Name = card.Title,
+            Status = card.Managed ? "Waiting" : "Ready",
+            Category = card.Category,
+            Managed = card.Managed,
+            TargetView = targetView
+        };
+        _selectedSessionId = _selectedSession.Id;
+    }
+
+    private View ResolveGameCardView(string title)
+    {
+        return title switch
+        {
+            "Scavenger Hunt" => View.Hunt,
+            "Murder Mystery" => View.MurderMystery,
+            "Glam Competition" => View.Glam,
+            "Blackjack" => View.Cardgames,
+            "Poker" => View.Cardgames,
+            "High/Low" => View.Cardgames,
+            "Raffle" => View.Raffle,
+            "Spin Wheel" => View.SpinWheel,
+            _ => View.Home
+        };
     }
 
     private void DrawBadge(string text)
@@ -2569,6 +2771,8 @@ public class MainWindow : Window, IDisposable
 
         ImGui.TextUnformatted("Forest Raffle Roll");
         ImGui.Separator();
+        ImGui.TextUnformatted("Setup");
+        ImGui.Separator();
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
@@ -2650,7 +2854,8 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-
+        ImGui.TextUnformatted("Live");
+        ImGui.Separator();
         if (!string.IsNullOrWhiteSpace(_raffleStatus))
             ImGui.TextDisabled(_raffleStatus);
 
@@ -2703,6 +2908,8 @@ public class MainWindow : Window, IDisposable
 
 
         ImGui.TextUnformatted("Spin the Wheel");
+        ImGui.Separator();
+        ImGui.TextUnformatted("Setup");
         ImGui.Separator();
         ImGui.Spacing();
 
@@ -2759,6 +2966,8 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.TextUnformatted("Live");
+        ImGui.Separator();
         if (!string.IsNullOrWhiteSpace(_wheelStatus))
             ImGui.TextDisabled(_wheelStatus);
 
@@ -2809,6 +3018,8 @@ public class MainWindow : Window, IDisposable
 
         ImGui.TextUnformatted("Glam Roulette");
         ImGui.Separator();
+        ImGui.TextUnformatted("Setup");
+        ImGui.Separator();
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
@@ -2852,6 +3063,8 @@ public class MainWindow : Window, IDisposable
         if (ImGui.Checkbox("Tell", ref tell)) { glam.AllowTell = tell; Plugin.Config.Save(); }
 
         ImGui.Spacing();
+        ImGui.TextUnformatted("Live");
+        ImGui.Separator();
         if (!string.IsNullOrWhiteSpace(_glamStatus))
             ImGui.TextDisabled(_glamStatus);
 
@@ -2900,6 +3113,8 @@ public class MainWindow : Window, IDisposable
     private void DrawCardgamesPanel()
     {
         ImGui.TextUnformatted("Cardgames (Host)");
+        ImGui.Separator();
+        ImGui.TextUnformatted("Setup");
         ImGui.Separator();
         ImGui.Spacing();
 
@@ -3040,7 +3255,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted("Live view");
+        ImGui.TextUnformatted("Live");
         if (!string.IsNullOrWhiteSpace(_cardgamesStateError))
             ImGui.TextDisabled(_cardgamesStateError);
         if (_cardgamesStateDoc is null)
