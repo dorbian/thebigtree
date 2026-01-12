@@ -18,6 +18,8 @@
 - FFXIV client: add session close actions and throttled auto-refresh for sessions list.
 - FFXIV client: refine Games view spacing, badge wrapping, and panel resize behavior.
 - FFXIV client: return Bingo to party games and add extra panel padding.
+- FFXIV client: replace sessions list icons with ASCII markers and adjust game card padding.
+- FFXIV client: add badge tooltips for game requirements.
 - API: add auth permissions endpoint for clients to query allowed scopes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.

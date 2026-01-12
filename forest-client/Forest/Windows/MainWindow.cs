@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
+using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
 using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -6,6 +6,7 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Interface.Utility.Raii;
+using Dalamud.Interface;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
@@ -71,9 +72,9 @@ public class MainWindow : Window, IDisposable
     private float _lastWindowHeight = 0f;
     private const float MinWindowWidthExpanded = 900f;
     private const float MinWindowWidthCollapsed = 360f;
-    private const float GameCardInset = 8f;
-    private const float GameCardPaddingX = 24f;
-    private const float SectionHeaderPaddingX = GameCardInset + GameCardPaddingX;
+    private const float GameCardInset = 12f;
+    private const float GameCardPaddingX = 36f;
+    private const float SectionHeaderPaddingX = GameCardInset + GameCardPaddingX + 6f;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
@@ -441,10 +442,10 @@ public class MainWindow : Window, IDisposable
             float settingsW = 150f;
             ImGui.SameLine(0, 0);
             ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
-            if (ImGui.SmallButton(_rightPaneCollapsed ? "▶" : "◀"))
+            if (ImGui.SmallButton(_rightPaneCollapsed ? "?" : "?"))
                 SetRightPaneCollapsed(!_rightPaneCollapsed);
             ImGui.SameLine();
-            if (ImGui.SmallButton("⚙ Settings"))
+            if (ImGui.SmallButton("? Settings"))
                 Plugin.ToggleConfigUI();
 
             ImGui.EndMenuBar();
@@ -2023,25 +2024,62 @@ public class MainWindow : Window, IDisposable
         public string? GameId { get; set; }
         public int? Index { get; set; }
         public bool CanClose { get; set; } = false;
-        public string TypeIcon { get; set; } = "•";
+        public FontAwesomeIcon TypeIcon { get; set; } = FontAwesomeIcon.QuestionCircle;
     }
 
-    private static string StatusIcon(string status)
+    private static FontAwesomeIcon StatusIcon(string status)
     {
         var val = (status ?? "").ToLowerInvariant();
         return val switch
         {
-            "live" => "🟢",
-            "waiting" => "🟡",
-            "ready" => "🟡",
-            "created" => "🟡",
-            "finished" => "⚪",
-            _ => "⚪",
+            "live" => FontAwesomeIcon.CircleCheck,
+            "waiting" => FontAwesomeIcon.Circle,
+            "ready" => FontAwesomeIcon.Circle,
+            "created" => FontAwesomeIcon.Circle,
+            "finished" => FontAwesomeIcon.CircleXmark,
+            _ => FontAwesomeIcon.Circle,
         };
     }
 
-    private static string ModeIcon(bool managed) => managed ? "📶" : "📴";
+    private static FontAwesomeIcon ModeIcon(bool managed) => managed ? FontAwesomeIcon.Wifi : FontAwesomeIcon.WifiSlash;
 
+    private static Vector4 StatusColor(string status)
+    {
+        var val = (status ?? "").ToLowerInvariant();
+        return val switch
+        {
+            "live" => new Vector4(0.35f, 0.85f, 0.45f, 1.0f),
+            "waiting" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "ready" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "created" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "finished" => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+            _ => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+        };
+    }
+
+    private static Vector4 ModeColor(bool managed)
+    {
+        return managed
+            ? new Vector4(0.40f, 0.80f, 0.95f, 1.0f)
+            : new Vector4(0.65f, 0.65f, 0.65f, 1.0f);
+    }
+
+    private void DrawIconText(FontAwesomeIcon icon, Vector4 color)
+    {
+        ImGui.PushFont(Plugin.PluginInterface.UiBuilder.IconFont);
+        ImGui.TextColored(color, icon.ToIconString());
+        ImGui.PopFont();
+    }
+
+    private bool IconButton(FontAwesomeIcon icon, string id, Vector4 color)
+    {
+        ImGui.PushFont(Plugin.PluginInterface.UiBuilder.IconFont);
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(color));
+        bool clicked = ImGui.SmallButton($"{icon.ToIconString()}##{id}");
+        ImGui.PopStyleColor();
+        ImGui.PopFont();
+        return clicked;
+    }
     private void RequestSessionsRefresh(bool userAction)
     {
         if (_sessionsRefreshLoading)
@@ -2131,18 +2169,18 @@ public class MainWindow : Window, IDisposable
             | ImGuiTableFlags.ScrollY;
         if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
         {
-            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 36f);
+            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 26f);
             ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 46f);
-            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 46f);
-            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 46f);
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 26f);
+            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 26f);
+            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 32f);
             ImGui.TableHeadersRow();
 
             foreach (var s in sessions)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(s.TypeIcon);
+                DrawIconText(s.TypeIcon, CategoryColor(s.Category));
                 ImGui.TableNextColumn();
                 if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
                 {
@@ -2150,18 +2188,17 @@ public class MainWindow : Window, IDisposable
                     SelectSession(s);
                 }
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(StatusIcon(s.Status));
+                DrawIconText(StatusIcon(s.Status), StatusColor(s.Status));
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(ModeIcon(s.Managed));
+                DrawIconText(ModeIcon(s.Managed), ModeColor(s.Managed));
                 ImGui.TableNextColumn();
                 using (var dis = ImRaii.Disabled(!s.CanClose))
                 {
-                    ImGui.PushStyleColor(ImGuiCol.Text, s.CanClose
-                        ? ImGui.ColorConvertFloat4ToU32(new Vector4(0.95f, 0.95f, 0.95f, 1f))
-                        : ImGui.ColorConvertFloat4ToU32(new Vector4(0.55f, 0.55f, 0.55f, 1f)));
-                    if (ImGui.SmallButton($"🗑️##{s.Id}"))
+                    var color = s.CanClose
+                        ? new Vector4(0.95f, 0.95f, 0.95f, 1f)
+                        : new Vector4(0.55f, 0.55f, 0.55f, 1f);
+                    if (IconButton(FontAwesomeIcon.Trash, $"close-{s.Id}", color))
                         _ = CloseSession(s);
-                    ImGui.PopStyleColor();
                 }
             }
             ImGui.EndTable();
@@ -2184,13 +2221,23 @@ public class MainWindow : Window, IDisposable
     {
         return category switch
         {
-            SessionCategory.Casino => "🎰",
-            SessionCategory.Draw => "🎁",
-            SessionCategory.Party => "🎉",
-            _ => "•",
+            SessionCategory.Casino => "C",
+            SessionCategory.Draw => "D",
+            SessionCategory.Party => "P",
+            _ => "-",
         };
     }
 
+    private static FontAwesomeIcon CategoryTypeIcon(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => FontAwesomeIcon.Coins,
+            SessionCategory.Draw => FontAwesomeIcon.Gift,
+            SessionCategory.Party => FontAwesomeIcon.Users,
+            _ => FontAwesomeIcon.Circle,
+        };
+    }
     private static Vector4 CategoryColor(SessionCategory category)
     {
         return category switch
@@ -2220,7 +2267,7 @@ public class MainWindow : Window, IDisposable
                 TargetView = View.Cardgames,
                 Cardgame = s,
                 GameId = s.game_id,
-                TypeIcon = CategoryIcon(SessionCategory.Casino),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Casino),
                 CanClose = true
             });
         }
@@ -2239,7 +2286,7 @@ public class MainWindow : Window, IDisposable
                 Managed = true,
                 TargetView = View.Bingo,
                 GameId = id,
-                TypeIcon = CategoryIcon(SessionCategory.Draw),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
                 CanClose = g.active
             });
         }
@@ -2258,7 +2305,7 @@ public class MainWindow : Window, IDisposable
                 JoinCode = hunt.join_code ?? "",
                 TargetView = View.Hunt,
                 GameId = hunt.hunt_id,
-                TypeIcon = CategoryIcon(SessionCategory.Party),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
                 CanClose = hunt.active && !hunt.ended
             });
         }
@@ -2276,7 +2323,7 @@ public class MainWindow : Window, IDisposable
                 Managed = false,
                 TargetView = View.MurderMystery,
                 Index = Plugin.Config.CurrentGameIndex,
-                TypeIcon = CategoryIcon(SessionCategory.Party),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2293,7 +2340,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Party,
                 Managed = false,
                 TargetView = View.Glam,
-                TypeIcon = CategoryIcon(SessionCategory.Party),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2310,7 +2357,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.Raffle,
-                TypeIcon = CategoryIcon(SessionCategory.Draw),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -2325,7 +2372,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.SpinWheel,
-                TypeIcon = CategoryIcon(SessionCategory.Draw),
+                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -2771,7 +2818,7 @@ public class MainWindow : Window, IDisposable
         ImGui.TextDisabled("Choose a game template, then prepare or start a session.");
         ImGui.Separator();
 
-        DrawGameSection("🎉 Party Games",
+        DrawGameSection("?? Party Games",
             "Experiences run during gatherings and ceremonies.",
             new[]
             {
@@ -2781,7 +2828,7 @@ public class MainWindow : Window, IDisposable
                 new GameCard("Bingo", SessionCategory.Party, true, false, false, "Managed bingo with live calls.")
             });
 
-        DrawGameSection("🎰 Casino Games",
+        DrawGameSection("?? Casino Games",
             "Managed tables with join keys and shared decks.",
             new[]
             {
@@ -2790,7 +2837,7 @@ public class MainWindow : Window, IDisposable
                 new GameCard("High/Low", SessionCategory.Casino, true, true, true, "Managed high/low rounds.")
             });
 
-        DrawGameSection("🎁 Draws & Giveaways",
+        DrawGameSection("?? Draws & Giveaways",
             "Lightweight draws and rolling events.",
             new[]
             {
@@ -2883,9 +2930,23 @@ public class MainWindow : Window, IDisposable
         DrawBadgeWrapRow(textWrapX - pos.X - padding.X,
             new[]
             {
-                new BadgeSpec(card.Managed ? "Uses central service" : "Runs from this app", card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f)),
-                card.JoinKey ? new BadgeSpec("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f)) : BadgeSpec.Empty,
-                card.InternetAssets ? new BadgeSpec("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f)) : BadgeSpec.Empty,
+                new BadgeSpec(
+                    card.Managed ? "Uses central service" : "Runs from this app",
+                    card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f),
+                    card.Managed
+                        ? "Runs through the central service (admin key required)."
+                        : "Runs locally inside Forest Manager."
+                ),
+                card.JoinKey ? new BadgeSpec(
+                    "Join key needed",
+                    new Vector4(0.85f, 0.55f, 0.25f, 1.0f),
+                    "Players need a join key to enter this session."
+                ) : BadgeSpec.Empty,
+                card.InternetAssets ? new BadgeSpec(
+                    "Fetches online assets",
+                    new Vector4(0.55f, 0.70f, 0.90f, 1.0f),
+                    "Downloads shared assets from the internet."
+                ) : BadgeSpec.Empty,
             }
         );
         ImGui.Dummy(new Vector2(0, 8f));
@@ -2963,7 +3024,7 @@ public class MainWindow : Window, IDisposable
         ImGui.TextDisabled(description);
     }
 
-    private void DrawBadgeChip(string text, Vector4 color)
+    private void DrawBadgeChip(string text, Vector4 color, string tooltip)
     {
         var draw = ImGui.GetWindowDrawList();
         var pos = ImGui.GetCursorScreenPos();
@@ -2976,19 +3037,23 @@ public class MainWindow : Window, IDisposable
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 8f, 0, 1f);
         draw.AddText(new Vector2(pos.X + pad.X, pos.Y + pad.Y), ImGui.ColorConvertFloat4ToU32(new Vector4(0.95f, 0.95f, 0.95f, 1f)), text);
         ImGui.Dummy(size);
+        if (!string.IsNullOrWhiteSpace(tooltip) && ImGui.IsItemHovered())
+            ImGui.SetTooltip(tooltip);
     }
 
     private readonly struct BadgeSpec
     {
         public string Text { get; }
         public Vector4 Color { get; }
+        public string Tooltip { get; }
         public bool IsEmpty => string.IsNullOrWhiteSpace(Text);
-        public BadgeSpec(string text, Vector4 color)
+        public BadgeSpec(string text, Vector4 color, string tooltip)
         {
             Text = text;
             Color = color;
+            Tooltip = tooltip;
         }
-        public static BadgeSpec Empty => new BadgeSpec("", Vector4.Zero);
+        public static BadgeSpec Empty => new BadgeSpec("", Vector4.Zero, "");
     }
 
     private void DrawBadgeWrapRow(float maxWidth, BadgeSpec[] badges)
@@ -3008,7 +3073,7 @@ public class MainWindow : Window, IDisposable
             }
             if (used > 0f)
                 ImGui.SameLine();
-            DrawBadgeChip(badge.Text, badge.Color);
+            DrawBadgeChip(badge.Text, badge.Color, badge.Tooltip);
             used += width + 6f;
         }
     }
@@ -6132,6 +6197,8 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
+
+
 
 
 
