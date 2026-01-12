@@ -38,7 +38,16 @@ public class MainWindow : Window, IDisposable
 
     // ---------- View switch ----------
     private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam, Cardgames }
+    private enum TopView { Sessions, Games, Players }
+    private enum SessionCategory { All, Party, Casino, Draw }
+    private enum SessionStatusFilter { All, Live, Waiting, Finished }
     private View _view = View.Home;
+    private TopView _topView = TopView.Sessions;
+    private bool _controlSurfaceOpen = false;
+    private string _connectRequiredGame = "";
+    private string _gameDetailsText = "";
+    private SessionCategory _sessionFilterCategory = SessionCategory.All;
+    private SessionStatusFilter _sessionFilterStatus = SessionStatusFilter.All;
     private enum BingoUiState { NoGameLoaded, Ready, Running, StageComplete, Finished }
 
     // ---------- Left pane layout ----------
@@ -51,6 +60,7 @@ public class MainWindow : Window, IDisposable
     // ---------- Players (nearby, live) ----------
     private string[] _nearbyPlayers = Array.Empty<string>();
     private string? _selectedOwner;
+    private string _selectedSessionId = "";
 
     // ---------- Bingo (list) ----------
     private List<BingoGame> _bingoGames = new();
@@ -371,59 +381,11 @@ public class MainWindow : Window, IDisposable
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
         if (ImGui.BeginMenuBar())
         {
-            if (ImGui.Button("Home")) _view = View.Home;
+            if (ImGui.Button("Sessions")) _topView = TopView.Sessions;
             ImGui.SameLine();
-            if (ImGui.BeginMenu("Party"))
-            {
-                if (ImGui.MenuItem("Hunt")) _view = View.Hunt;
-                if (ImGui.MenuItem("Murder Mystery")) _view = View.MurderMystery;
-                if (ImGui.MenuItem("Glam Competition")) _view = View.Glam;
-                if (ImGui.MenuItem("Spin Wheel")) _view = View.SpinWheel;
-                ImGui.EndMenu();
-            }
+            if (ImGui.Button("Games")) _topView = TopView.Games;
             ImGui.SameLine();
-            if (ImGui.BeginMenu("Prizes"))
-            {
-                if (ImGui.MenuItem("Bingo"))
-                {
-                    _view = View.Bingo;
-                    _ = Bingo_LoadGames();
-                }
-                if (ImGui.MenuItem("Raffle")) _view = View.Raffle;
-                ImGui.EndMenu();
-            }
-            ImGui.SameLine();
-            if (ImGui.BeginMenu("Cardgames"))
-            {
-                if (ImGui.MenuItem("Blackjack"))
-                {
-                    _view = View.Cardgames;
-                    _cardgamesGameId = "blackjack";
-                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-                    Plugin.Config.Save();
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
-                }
-                if (ImGui.MenuItem("Poker"))
-                {
-                    _view = View.Cardgames;
-                    _cardgamesGameId = "poker";
-                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-                    Plugin.Config.Save();
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
-                }
-                if (ImGui.MenuItem("High/Low"))
-                {
-                    _view = View.Cardgames;
-                    _cardgamesGameId = "highlow";
-                    Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-                    Plugin.Config.Save();
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
-                }
-                ImGui.EndMenu();
-            }
+            if (ImGui.Button("Players")) _topView = TopView.Players;
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
@@ -454,16 +416,11 @@ public class MainWindow : Window, IDisposable
         ImGui.NextColumn();
         ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
         {
-            switch (_view)
+            switch (_topView)
             {
-                case View.Home: DrawHomePanel(); break;
-                case View.Hunt: DrawHuntPanel(); break;
-                case View.MurderMystery: DrawMurderMysteryPanel(); break;
-                case View.Bingo: DrawBingoAdminPanel(); break;
-                case View.Raffle: DrawRafflePanel(); break;
-                case View.SpinWheel: DrawSpinWheelPanel(); break;
-                case View.Glam: DrawGlamRoulettePanel(); break;
-                case View.Cardgames: DrawCardgamesPanel(); break;
+                case TopView.Games: DrawGamesView(); break;
+                case TopView.Players: DrawPlayersView(); break;
+                case TopView.Sessions: DrawSessionsControlSurface(); break;
             }
         }
         ImGui.EndChild();
@@ -495,20 +452,7 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.BeginChild("SavedBottom", new Vector2(0, bottomH), true, 0);
-        if (_view == View.Bingo)
-            DrawBingoGamesList();
-        else if (_view == View.Raffle)
-            DrawRaffleEntrantsList();
-        else if (_view == View.SpinWheel)
-            DrawSpinWheelPromptsList();
-        else if (_view == View.Glam)
-            DrawGlamContestantsList();
-        else if (_view == View.MurderMystery)
-            DrawSavedMurderGames();
-        else if (_view == View.Cardgames)
-            DrawCardgamesSessionsList();
-        else
-            ImGui.TextDisabled("Select a game from the menu above.");
+        DrawSessionsList();
         ImGui.EndChild();
     }
 
@@ -1977,6 +1921,493 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private sealed class SessionEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Status { get; set; } = "";
+        public SessionCategory Category { get; set; } = SessionCategory.Party;
+        public bool Managed { get; set; } = false;
+        public string JoinCode { get; set; } = "";
+        public View TargetView { get; set; } = View.Home;
+        public CardgameSession? Cardgame { get; set; }
+        public string? GameId { get; set; }
+        public int? Index { get; set; }
+    }
+
+    private void DrawSessionsList()
+    {
+        ImGui.TextDisabled("Sessions");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Refresh"))
+        {
+            _ = Cardgames_LoadSessions();
+            _ = Bingo_LoadGames();
+            _ = Hunt_LoadList();
+        }
+
+        ImGui.Spacing();
+        ImGui.SetNextItemWidth(120f);
+        if (ImGui.BeginCombo("Category", _sessionFilterCategory.ToString()))
+        {
+            foreach (SessionCategory cat in Enum.GetValues(typeof(SessionCategory)))
+            {
+                bool selected = _sessionFilterCategory == cat;
+                if (ImGui.Selectable(cat.ToString(), selected))
+                    _sessionFilterCategory = cat;
+            }
+            ImGui.EndCombo();
+        }
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120f);
+        if (ImGui.BeginCombo("Status", _sessionFilterStatus.ToString()))
+        {
+            foreach (SessionStatusFilter st in Enum.GetValues(typeof(SessionStatusFilter)))
+            {
+                bool selected = _sessionFilterStatus == st;
+                if (ImGui.Selectable(st.ToString(), selected))
+                    _sessionFilterStatus = st;
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.Separator();
+        var sessions = BuildSessionEntries();
+        if (sessions.Count == 0)
+        {
+            ImGui.TextDisabled("No sessions.");
+            return;
+        }
+
+        var tableFlags = ImGuiTableFlags.RowBg
+            | ImGuiTableFlags.BordersInnerV
+            | ImGuiTableFlags.Resizable
+            | ImGuiTableFlags.ScrollY;
+        if (ImGui.BeginTable("SessionsTable", 4, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
+        {
+            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableHeadersRow();
+
+            foreach (var s in sessions)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(CategoryLabel(s.Category));
+                ImGui.TableNextColumn();
+                if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
+                {
+                    _selectedSessionId = s.Id;
+                    SelectSession(s);
+                }
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(s.Status);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(s.Managed ? "Managed" : "Local");
+            }
+            ImGui.EndTable();
+        }
+    }
+
+    private static string CategoryLabel(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => "Casino",
+            SessionCategory.Draw => "Draw",
+            SessionCategory.Party => "Party",
+            _ => "All",
+        };
+    }
+
+    private List<SessionEntry> BuildSessionEntries()
+    {
+        var list = new List<SessionEntry>();
+
+        foreach (var s in _cardgamesSessions)
+        {
+            if (s is null) continue;
+            list.Add(new SessionEntry
+            {
+                Id = $"cardgame-{s.session_id}",
+                Name = $"{FormatCardgamesName(s.game_id)} ({s.join_code})",
+                Status = string.IsNullOrWhiteSpace(s.status) ? "Waiting" : s.status,
+                Category = SessionCategory.Casino,
+                Managed = true,
+                JoinCode = s.join_code,
+                TargetView = View.Cardgames,
+                Cardgame = s,
+                GameId = s.game_id
+            });
+        }
+
+        foreach (var g in _bingoGames)
+        {
+            var id = g.game_id ?? "";
+            var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
+            list.Add(new SessionEntry
+            {
+                Id = $"bingo-{id}",
+                Name = string.IsNullOrWhiteSpace(title) ? "Bingo" : $"Bingo: {title}",
+                Status = g.active ? "Live" : "Finished",
+                Category = SessionCategory.Draw,
+                Managed = true,
+                TargetView = View.Bingo,
+                GameId = id
+            });
+        }
+
+        if (_huntState?.hunt is not null)
+        {
+            var hunt = _huntState.hunt;
+            var status = hunt.active ? "Live" : hunt.ended ? "Finished" : "Waiting";
+            list.Add(new SessionEntry
+            {
+                Id = $"hunt-{hunt.hunt_id}",
+                Name = string.IsNullOrWhiteSpace(hunt.title) ? "Scavenger Hunt" : hunt.title,
+                Status = status,
+                Category = SessionCategory.Party,
+                Managed = true,
+                JoinCode = hunt.join_code ?? "",
+                TargetView = View.Hunt,
+                GameId = hunt.hunt_id
+            });
+        }
+
+        if (Plugin.Config.CurrentGame is not null)
+        {
+            var mm = Plugin.Config.CurrentGame;
+            var status = mm.ActivePlayers?.Count > 0 ? "Live" : "Waiting";
+            list.Add(new SessionEntry
+            {
+                Id = $"murder-{Plugin.Config.CurrentGameIndex}",
+                Name = string.IsNullOrWhiteSpace(mm.Title) ? "Murder Mystery" : mm.Title,
+                Status = status,
+                Category = SessionCategory.Party,
+                Managed = false,
+                TargetView = View.MurderMystery,
+                Index = Plugin.Config.CurrentGameIndex
+            });
+        }
+
+        if (Plugin.Config.GlamRoulette is not null)
+        {
+            var glam = Plugin.Config.GlamRoulette;
+            var status = glam.RoundActive ? "Live" : "Waiting";
+            list.Add(new SessionEntry
+            {
+                Id = "glam",
+                Name = string.IsNullOrWhiteSpace(glam.Title) ? "Glam Competition" : glam.Title,
+                Status = status,
+                Category = SessionCategory.Party,
+                Managed = false,
+                TargetView = View.Glam
+            });
+        }
+
+        if (Plugin.Config.Raffle is not null)
+        {
+            var raffle = Plugin.Config.Raffle;
+            var status = raffle.IsOpen ? "Live" : "Waiting";
+            list.Add(new SessionEntry
+            {
+                Id = "raffle",
+                Name = string.IsNullOrWhiteSpace(raffle.Title) ? "Raffle" : raffle.Title,
+                Status = status,
+                Category = SessionCategory.Draw,
+                Managed = false,
+                TargetView = View.Raffle
+            });
+        }
+
+        if (Plugin.Config.SpinWheel is not null)
+        {
+            list.Add(new SessionEntry
+            {
+                Id = "wheel",
+                Name = string.IsNullOrWhiteSpace(Plugin.Config.SpinWheel.Title) ? "Spin Wheel" : Plugin.Config.SpinWheel.Title,
+                Status = "Ready",
+                Category = SessionCategory.Draw,
+                Managed = false,
+                TargetView = View.SpinWheel
+            });
+        }
+
+        list = list.Where(ApplySessionFilters).ToList();
+        return list;
+    }
+
+    private bool ApplySessionFilters(SessionEntry entry)
+    {
+        if (_sessionFilterCategory != SessionCategory.All && entry.Category != _sessionFilterCategory)
+            return false;
+        if (_sessionFilterStatus != SessionStatusFilter.All)
+        {
+            var status = (entry.Status ?? "").ToLowerInvariant();
+            if (_sessionFilterStatus == SessionStatusFilter.Live && status != "live")
+                return false;
+            if (_sessionFilterStatus == SessionStatusFilter.Waiting && status != "waiting" && status != "ready" && status != "created")
+                return false;
+            if (_sessionFilterStatus == SessionStatusFilter.Finished && status != "finished")
+                return false;
+        }
+        return true;
+    }
+
+    private void SelectSession(SessionEntry entry)
+    {
+        _topView = TopView.Sessions;
+        _controlSurfaceOpen = true;
+        _connectRequiredGame = "";
+        _gameDetailsText = "";
+        _view = entry.TargetView;
+
+        if (entry.TargetView == View.Cardgames && entry.Cardgame is not null)
+        {
+            _cardgamesSelectedSession = entry.Cardgame;
+            _cardgamesGameId = entry.Cardgame.game_id;
+            _cardgamesStateLastFetch = DateTime.MinValue;
+            _ = Cardgames_LoadState();
+        }
+        else if (entry.TargetView == View.Bingo && !string.IsNullOrWhiteSpace(entry.GameId))
+        {
+            _bingoGameId = entry.GameId;
+            _ = Bingo_LoadGame(_bingoGameId);
+        }
+        else if (entry.TargetView == View.Hunt && !string.IsNullOrWhiteSpace(entry.GameId))
+        {
+            _huntId = entry.GameId;
+            _ = Hunt_LoadState();
+        }
+        else if (entry.TargetView == View.MurderMystery && entry.Index.HasValue)
+        {
+            Plugin.Config.CurrentGameIndex = entry.Index.Value;
+            Plugin.Config.Save();
+        }
+    }
+
+    private bool HasAdminKey()
+    {
+        return !string.IsNullOrWhiteSpace(Plugin.Config.BingoApiKey);
+    }
+
+    private void DrawConnectRequiredPanel()
+    {
+        ImGui.TextUnformatted("This game uses the central service");
+        if (!string.IsNullOrWhiteSpace(_connectRequiredGame))
+            ImGui.TextDisabled(_connectRequiredGame);
+        ImGui.Spacing();
+        if (ImGui.Button("Add admin key"))
+            Plugin.ToggleConfigUI();
+        ImGui.SameLine();
+        if (ImGui.Button("What does this mean?"))
+            _gameDetailsText = "This game requires the admin key to prepare sessions.";
+    }
+
+    private void DrawSessionsControlSurface()
+    {
+        if (!_controlSurfaceOpen)
+        {
+            ImGui.TextDisabled("Select a session to manage.");
+            return;
+        }
+
+        if (ImGui.SmallButton("Collapse"))
+        {
+            _controlSurfaceOpen = false;
+            return;
+        }
+        ImGui.Separator();
+
+        if (!string.IsNullOrWhiteSpace(_connectRequiredGame) && !HasAdminKey())
+        {
+            DrawConnectRequiredPanel();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_gameDetailsText))
+        {
+            ImGui.TextWrapped(_gameDetailsText);
+            ImGui.Spacing();
+        }
+
+        ImGui.Separator();
+        switch (_view)
+        {
+            case View.Cardgames: DrawCardgamesPanel(); break;
+            case View.Bingo: DrawBingoAdminPanel(); break;
+            case View.Hunt: DrawHuntPanel(); break;
+            case View.MurderMystery: DrawMurderMysteryPanel(); break;
+            case View.Raffle: DrawRafflePanel(); break;
+            case View.SpinWheel: DrawSpinWheelPanel(); break;
+            case View.Glam: DrawGlamRoulettePanel(); break;
+            default: ImGui.TextDisabled("Select a session."); break;
+        }
+    }
+
+    private void DrawPlayersView()
+    {
+        ImGui.TextUnformatted("Players");
+        ImGui.Separator();
+        if (string.IsNullOrWhiteSpace(_selectedOwner))
+        {
+            ImGui.TextDisabled("Select a player from the left list.");
+            return;
+        }
+        ImGui.TextUnformatted($"Selected: {_selectedOwner}");
+        ImGui.Spacing();
+        ImGui.TextDisabled("Use the context menu on the player list for actions.");
+    }
+
+    private void DrawGamesView()
+    {
+        ImGui.TextUnformatted("Games");
+        ImGui.Separator();
+
+        DrawGameSection("Party Games",
+            "Experiences run during gatherings and ceremonies.",
+            new[]
+            {
+                new GameCard("Scavenger Hunt", SessionCategory.Party, true, true, false, "Managed staff-led hunt with locations."),
+                new GameCard("Murder Mystery", SessionCategory.Party, false, false, false, "Local story and text management."),
+                new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts.")
+            });
+
+        DrawGameSection("Casino Games",
+            "Managed tables with join keys and shared decks.",
+            new[]
+            {
+                new GameCard("Blackjack", SessionCategory.Casino, true, true, true, "Managed blackjack table."),
+                new GameCard("Poker", SessionCategory.Casino, true, true, true, "Managed Texas Hold'em table."),
+                new GameCard("High/Low", SessionCategory.Casino, true, true, true, "Managed high/low rounds.")
+            });
+
+        DrawGameSection("Draws & Giveaways",
+            "Lightweight draws and rolling events.",
+            new[]
+            {
+                new GameCard("Bingo", SessionCategory.Draw, true, false, false, "Managed bingo with live calls."),
+                new GameCard("Raffle", SessionCategory.Draw, false, false, false, "Local raffle draw."),
+                new GameCard("Spin Wheel", SessionCategory.Draw, false, false, false, "Local wheel spin.")
+            });
+    }
+
+    private readonly struct GameCard
+    {
+        public string Title { get; }
+        public SessionCategory Category { get; }
+        public bool Managed { get; }
+        public bool JoinKey { get; }
+        public bool InternetAssets { get; }
+        public string Details { get; }
+        public GameCard(string title, SessionCategory category, bool managed, bool joinKey, bool internetAssets, string details)
+        {
+            Title = title;
+            Category = category;
+            Managed = managed;
+            JoinKey = joinKey;
+            InternetAssets = internetAssets;
+            Details = details;
+        }
+    }
+
+    private void DrawGameSection(string title, string description, GameCard[] cards)
+    {
+        ImGui.Spacing();
+        ImGui.TextUnformatted(title);
+        ImGui.TextDisabled(description);
+        ImGui.Separator();
+        foreach (var card in cards)
+        {
+            DrawGameCard(card);
+            ImGui.Spacing();
+        }
+    }
+
+    private void DrawGameCard(GameCard card)
+    {
+        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, 92), true);
+        ImGui.TextUnformatted(card.Title);
+        ImGui.SameLine();
+        ImGui.TextDisabled($"({CategoryLabel(card.Category)})");
+        DrawBadge(card.Managed ? "Uses central service" : "Runs from this app");
+        if (card.JoinKey) DrawBadge("Join key needed");
+        if (card.InternetAssets) DrawBadge("Fetches online assets");
+
+        string actionLabel = card.Managed ? "Prepare session" : "Start";
+        if (ImGui.Button(actionLabel))
+        {
+            if (card.Managed && !HasAdminKey())
+            {
+                _connectRequiredGame = card.Title;
+                _controlSurfaceOpen = true;
+                _topView = TopView.Sessions;
+                return;
+            }
+            _connectRequiredGame = "";
+            _controlSurfaceOpen = true;
+            _topView = TopView.Sessions;
+            _gameDetailsText = "";
+            switch (card.Title)
+            {
+                case "Scavenger Hunt":
+                    _view = View.Hunt;
+                    _ = Hunt_LoadList();
+                    break;
+                case "Murder Mystery":
+                    _view = View.MurderMystery;
+                    break;
+                case "Glam Competition":
+                    _view = View.Glam;
+                    break;
+                case "Blackjack":
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "blackjack";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                    break;
+                case "Poker":
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "poker";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                    break;
+                case "High/Low":
+                    _view = View.Cardgames;
+                    _cardgamesGameId = "highlow";
+                    _ = Cardgames_LoadDecks();
+                    _ = Cardgames_LoadSessions();
+                    break;
+                case "Bingo":
+                    _view = View.Bingo;
+                    _ = Bingo_LoadGames();
+                    break;
+                case "Raffle":
+                    _view = View.Raffle;
+                    break;
+                case "Spin Wheel":
+                    _view = View.SpinWheel;
+                    break;
+            }
+        }
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Details"))
+        {
+            _gameDetailsText = card.Details;
+            _controlSurfaceOpen = true;
+            _topView = TopView.Sessions;
+        }
+        ImGui.EndChild();
+    }
+
+    private void DrawBadge(string text)
+    {
+        ImGui.SameLine();
+        ImGui.TextDisabled($"[{text}]");
+    }
+
     private void DrawBingoHistoryTab(GameInfo? game)
     {
         ImGui.TextUnformatted("Action Log");
@@ -2833,13 +3264,22 @@ public class MainWindow : Window, IDisposable
 
     private static List<JsonElement> GetCardList(JsonElement state, string key)
     {
-        if (!state.TryGetProperty(key, out var cards))
+        try
+        {
+            if (state.ValueKind != JsonValueKind.Object)
+                return new List<JsonElement>();
+            if (!state.TryGetProperty(key, out var cards))
+                return new List<JsonElement>();
+            if (cards.ValueKind == JsonValueKind.Object)
+                return new List<JsonElement> { cards };
+            if (cards.ValueKind != JsonValueKind.Array)
+                return new List<JsonElement>();
+            return cards.EnumerateArray().ToList();
+        }
+        catch
+        {
             return new List<JsonElement>();
-        if (cards.ValueKind == JsonValueKind.Object)
-            return new List<JsonElement> { cards };
-        if (cards.ValueKind != JsonValueKind.Array)
-            return new List<JsonElement>();
-        return cards.EnumerateArray().ToList();
+        }
     }
 
     private static string GetString(JsonElement root, string key)

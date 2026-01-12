@@ -9,6 +9,8 @@
 - FFXIV client: guard card texture rendering to avoid null crashes.
 - FFXIV client: include priestess token in generated host links.
 - FFXIV client: allow background URL and clone-from-selected for cardgames.
+- FFXIV client: guard card list rendering against transient JSON state errors.
+- FFXIV client: add Sessions/Games/Players layout with categorized game cards and sessions list.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
 - Added dashboard changelog panel and refreshed dashboard content.
