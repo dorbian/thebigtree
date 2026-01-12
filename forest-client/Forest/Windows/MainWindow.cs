@@ -455,8 +455,8 @@ public class MainWindow : Window, IDisposable
             ImGui.Button("##SplitMain", new Vector2(VerticalSplitterThickness, avail.Y));
             if (ImGui.IsItemActive() && ImGui.IsMouseDragging(0))
             {
-                float delta = ImGui.GetIO().MouseDelta.X;
-                _leftPaneWidth = Math.Clamp(_leftPaneWidth + delta, minLeft, avail.X - minRight - VerticalSplitterThickness);
+                float dragDelta = ImGui.GetIO().MouseDelta.X;
+                _leftPaneWidth = Math.Clamp(_leftPaneWidth + dragDelta, minLeft, avail.X - minRight - VerticalSplitterThickness);
             }
 
             ImGui.SameLine(0, 0);
