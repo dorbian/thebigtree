@@ -188,6 +188,9 @@ public class MainWindow : Window, IDisposable
     private string _permissionsStatus = "";
     private DateTime _permissionsLastAttempt = DateTime.MinValue;
     private readonly HashSet<string> _allowedScopes = new(StringComparer.OrdinalIgnoreCase);
+    private bool _iconFontChecked = false;
+    private bool _iconFontLoaded = false;
+    private ImGuiNET.ImFontPtr _iconFont;
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -213,6 +216,7 @@ public class MainWindow : Window, IDisposable
             _cardgamesGameId = Plugin.Config.CardgamesLastGameId!;
         _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
         _allowedScopes.Clear();
+        TryInitIconFont();
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -2066,6 +2070,10 @@ public class MainWindow : Window, IDisposable
             _ => "-",
         };
     }
+
+    private static string ModeFallback(bool managed) => managed ? "M" : "L";
+    private static string TypeFallback(SessionCategory category)
+        => category switch { SessionCategory.Casino => "C", SessionCategory.Draw => "D", SessionCategory.Party => "P", _ => "-" };
     private void RequestSessionsRefresh(bool userAction)
     {
         if (_sessionsRefreshLoading)
@@ -2123,9 +2131,9 @@ public class MainWindow : Window, IDisposable
 
     private void DrawCenteredText(string text, Vector4 color)
     {
-        float colWidth = ImGui.TableGetColumnWidth();
+        float avail = ImGui.GetContentRegionAvail().X;
         float textWidth = ImGui.CalcTextSize(text).X;
-        float offset = Math.Max(0f, (colWidth - textWidth) * 0.5f);
+        float offset = Math.Max(0f, (avail - textWidth) * 0.5f);
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
         ImGui.TextColored(color, text);
     }
@@ -2133,10 +2141,10 @@ public class MainWindow : Window, IDisposable
     private bool CenteredSmallButton(string label, string id, Vector4 color)
     {
         var style = ImGui.GetStyle();
-        float colWidth = ImGui.TableGetColumnWidth();
+        float avail = ImGui.GetContentRegionAvail().X;
         float textWidth = ImGui.CalcTextSize(label).X;
         float btnWidth = textWidth + style.FramePadding.X * 2f;
-        float offset = Math.Max(0f, (colWidth - btnWidth) * 0.5f);
+        float offset = Math.Max(0f, (avail - btnWidth) * 0.5f);
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
         ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(color));
         bool clicked = ImGui.SmallButton($"{label}##{id}");
@@ -2144,13 +2152,37 @@ public class MainWindow : Window, IDisposable
         return clicked;
     }
 
+    private void TryInitIconFont()
+    {
+        if (_iconFontChecked)
+            return;
+        _iconFontChecked = true;
+        try
+        {
+            var uiBuilder = Plugin.PluginInterface.UiBuilder;
+            var prop = uiBuilder.GetType().GetProperty("IconFont");
+            if (prop == null)
+                return;
+            var value = prop.GetValue(uiBuilder);
+            if (value is ImGuiNET.ImFontPtr font)
+            {
+                _iconFont = font;
+                _iconFontLoaded = !font.Equals(default(ImGuiNET.ImFontPtr));
+            }
+        }
+        catch
+        {
+            _iconFontLoaded = false;
+        }
+    }
+
     private void DrawCenteredIconText(string icon, string fallback, Vector4 color)
     {
-        if (Plugin.IconFontLoaded)
+        if (_iconFontLoaded)
         {
-            ImGui.PushFont(Plugin.IconFont);
-            DrawCenteredText(icon, color);
-            ImGui.PopFont();
+            ImGuiNET.ImGui.PushFont(_iconFont);
+            DrawCenteredTextNet(icon, color);
+            ImGuiNET.ImGui.PopFont();
         }
         else
         {
@@ -2160,14 +2192,37 @@ public class MainWindow : Window, IDisposable
 
     private bool CenteredIconButton(string icon, string fallback, string id, Vector4 color)
     {
-        if (Plugin.IconFontLoaded)
+        if (_iconFontLoaded)
         {
-            ImGui.PushFont(Plugin.IconFont);
-            bool clicked = CenteredSmallButton(icon, id, color);
-            ImGui.PopFont();
+            ImGuiNET.ImGui.PushFont(_iconFont);
+            bool clicked = CenteredSmallButtonNet(icon, id, color);
+            ImGuiNET.ImGui.PopFont();
             return clicked;
         }
         return CenteredSmallButton(fallback, id, color);
+    }
+
+    private void DrawCenteredTextNet(string text, Vector4 color)
+    {
+        float avail = ImGuiNET.ImGui.GetContentRegionAvail().X;
+        float textWidth = ImGuiNET.ImGui.CalcTextSize(text).X;
+        float offset = Math.Max(0f, (avail - textWidth) * 0.5f);
+        ImGuiNET.ImGui.SetCursorPosX(ImGuiNET.ImGui.GetCursorPosX() + offset);
+        ImGuiNET.ImGui.TextColored(color, text);
+    }
+
+    private bool CenteredSmallButtonNet(string label, string id, Vector4 color)
+    {
+        var style = ImGuiNET.ImGui.GetStyle();
+        float avail = ImGuiNET.ImGui.GetContentRegionAvail().X;
+        float textWidth = ImGuiNET.ImGui.CalcTextSize(label).X;
+        float btnWidth = textWidth + style.FramePadding.X * 2f;
+        float offset = Math.Max(0f, (avail - btnWidth) * 0.5f);
+        ImGuiNET.ImGui.SetCursorPosX(ImGuiNET.ImGui.GetCursorPosX() + offset);
+        ImGuiNET.ImGui.PushStyleColor(ImGuiNET.ImGuiCol.Text, ImGuiNET.ImGui.GetColorU32(color));
+        bool clicked = ImGuiNET.ImGui.SmallButton($"{label}##{id}");
+        ImGuiNET.ImGui.PopStyleColor();
+        return clicked;
     }
     private void DrawSessionsList()
     {
@@ -2240,7 +2295,7 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                DrawCenteredIconText(s.TypeIcon, CategoryIcon(s.Category), CategoryColor(s.Category));
+                DrawCenteredIconText(s.TypeIcon, TypeFallback(s.Category), CategoryColor(s.Category));
                 ImGui.TableNextColumn();
                 if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
                 {
@@ -2250,7 +2305,7 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableNextColumn();
                 DrawCenteredIconText(StatusIcon(s.Status), StatusFallback(s.Status), StatusColor(s.Status));
                 ImGui.TableNextColumn();
-                DrawCenteredIconText(ModeIcon(s.Managed), ModeIcon(s.Managed) == "\uf1eb" ? "M" : "L", ModeColor(s.Managed));
+                DrawCenteredIconText(ModeIcon(s.Managed), ModeFallback(s.Managed), ModeColor(s.Managed));
                 ImGui.TableNextColumn();
                 using (var dis = ImRaii.Disabled(!s.CanClose))
                 {

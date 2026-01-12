@@ -20,7 +20,7 @@
 - FFXIV client: return Bingo to party games and add extra panel padding.
 - FFXIV client: replace sessions list icons with ASCII markers and adjust game card padding.
 - FFXIV client: add badge tooltips for game requirements.
-- FFXIV client: bundle Font Awesome and render session list icons with a fallback.
+- FFXIV client: keep ASCII session icons and centered layout without external fonts.
 - API: add auth permissions endpoint for clients to query allowed scopes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.

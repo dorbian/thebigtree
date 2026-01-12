@@ -8,7 +8,6 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using ImGuiNET;
 
 using Forest.Windows;
 
@@ -34,11 +33,6 @@ public sealed class Plugin : IDalamudPlugin
 
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
-    private ImFontPtr _iconFont;
-    private bool _iconFontLoaded;
-
-    public bool IconFontLoaded => _iconFontLoaded;
-    public ImFontPtr IconFont => _iconFont;
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
@@ -59,7 +53,6 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
 
-        LoadIconFont();
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -95,27 +88,6 @@ public sealed class Plugin : IDalamudPlugin
     public void ToggleConfigUI() => ConfigWindow.Toggle();
     public void ToggleMainUI() => MainWindow.Toggle();
 
-    private void LoadIconFont()
-    {
-        if (_iconFontLoaded)
-            return;
-        try
-        {
-            var baseDir = PluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
-            var fontPath = System.IO.Path.Combine(baseDir, "Resources", "fa-solid-900.ttf");
-            if (!System.IO.File.Exists(fontPath))
-                return;
-            var io = ImGui.GetIO();
-            var ranges = new ushort[] { 0xf000, 0xf6ff, 0 };
-            _iconFont = io.Fonts.AddFontFromFileTTF(fontPath, 14f, null, ranges);
-            io.Fonts.Build();
-            _iconFontLoaded = _iconFont.NativePtr != IntPtr.Zero;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning($"Icon font load failed: {ex.Message}");
-        }
-    }
 
     // -------------------- Connect / Announce --------------------
 
