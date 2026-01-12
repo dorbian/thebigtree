@@ -2804,17 +2804,21 @@ public class MainWindow : Window, IDisposable
         ImGui.SetCursorPos(padding);
         DrawSectionHeader(title, description);
         ImGui.Spacing();
+        float inset = 8f;
         foreach (var card in cards)
         {
-            DrawGameCard(card, cardRowHeight);
+            var cur = ImGui.GetCursorPos();
+            ImGui.SetCursorPos(new Vector2(cur.X + inset, cur.Y));
+            float width = Math.Max(0f, ImGui.GetContentRegionAvail().X - inset);
+            DrawGameCard(card, cardRowHeight, width);
             ImGui.Spacing();
         }
         ImGui.EndChild();
     }
 
-    private void DrawGameCard(GameCard card, float rowHeight)
+    private void DrawGameCard(GameCard card, float rowHeight, float width)
     {
-        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, rowHeight), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(width, rowHeight), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         var draw = ImGui.GetWindowDrawList();
         var pos = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
@@ -2824,7 +2828,7 @@ public class MainWindow : Window, IDisposable
         draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 6f);
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 6f, 0, 1.0f);
 
-        var padding = new Vector2(14f, 8f);
+        var padding = new Vector2(18f, 10f);
         ImGui.SetCursorPos(padding);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
 
@@ -6097,7 +6101,6 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
-
 
 
 
