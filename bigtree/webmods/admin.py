@@ -39,6 +39,46 @@ def _find_web_token(token: str) -> Dict[str, Any]:
             return t
     return {}
 
+def _split_scopes(raw: Any) -> list[str]:
+    if not raw:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        return [str(s).strip() for s in raw if str(s).strip()]
+    if isinstance(raw, str):
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    if isinstance(raw, dict):
+        return [str(s).strip() for s in raw.keys() if str(s).strip()]
+    return []
+
+def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
+    doc = _find_web_token(token)
+    if doc:
+        scopes = doc.get("scopes")
+        scope_list = _split_scopes(scopes)
+        return True, scope_list or ["*"], "web_token"
+
+    api_keys = set()
+    scopes_map: Dict[str, Any] = {}
+    try:
+        if hasattr(bigtree, "settings") and bigtree.settings:
+            sec = bigtree.settings.section("WEB")
+            if isinstance(sec, dict):
+                api_keys = set(sec.get("api_keys", []) or [])
+                scopes_map = sec.get("api_key_scopes", {}) or {}
+            else:
+                api_keys = set(bigtree.settings.get("WEB.api_keys", [], cast="json") or [])
+                scopes_map = bigtree.settings.get("WEB.api_key_scopes", {}, cast="json") or {}
+    except Exception:
+        api_keys = set()
+        scopes_map = {}
+
+    if token in api_keys:
+        if not scopes_map:
+            return True, ["*"], "api_key"
+        return True, _split_scopes(scopes_map.get(token)), "api_key"
+
+    return False, [], "unknown"
+
 @route("GET", "/api/auth/me")
 async def auth_me(req: web.Request):
     token = _extract_token(req)
@@ -50,6 +90,21 @@ async def auth_me(req: web.Request):
         "user_icon": doc.get("user_icon") if doc else None,
         "scopes": doc.get("scopes") if doc else [],
         "source": "web_token" if doc else "api_key",
+    })
+
+@route("GET", "/api/auth/permissions", allow_public=True)
+async def auth_permissions(req: web.Request):
+    token = _extract_token(req)
+    if not token:
+        return web.json_response({"ok": False, "error": "token required", "token_valid": False, "scopes": []})
+    valid, scopes, token_type = _resolve_token_scopes(token)
+    if not valid:
+        return web.json_response({"ok": False, "error": "invalid token", "token_valid": False, "scopes": []})
+    return web.json_response({
+        "ok": True,
+        "token_valid": True,
+        "token_type": token_type,
+        "scopes": scopes,
     })
 
 @route("GET", "/api/auth/tokens", scopes=["bingo:admin"])

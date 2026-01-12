@@ -13,6 +13,9 @@
 - FFXIV client: add Sessions/Games/Players layout with categorized game cards and sessions list.
 - FFXIV client: refresh Forest Manager layout with party-planner game categories, share controls, and a sliding control surface.
 - FFXIV client: polish Forest Manager Games cards with themed headers, accents, and badge chips.
+- FFXIV client: rebuild Games view into large colored section blocks with consistent button sizing.
+- FFXIV client: add resizable main split and right panel collapse toggle.
+- API: add auth permissions endpoint for clients to query allowed scopes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.
 - Added dashboard changelog panel and refreshed dashboard content.

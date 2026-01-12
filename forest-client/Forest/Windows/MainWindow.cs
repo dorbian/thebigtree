@@ -61,6 +61,8 @@ public class MainWindow : Window, IDisposable
     private const float SplitterThickness = 6f;
     private const float SplitterMinTop = 120f;
     private const float SplitterMinBottom = 120f;
+    private const float VerticalSplitterThickness = 6f;
+    private bool _rightPaneCollapsed = false;
 
     // ---------- Players (nearby, live) ----------
     private string[] _nearbyPlayers = Array.Empty<string>();
@@ -167,6 +169,11 @@ public class MainWindow : Window, IDisposable
     private readonly Dictionary<string, ISharedImmediateTexture> _cardgamesTextureCache = new();
     private readonly Dictionary<string, Task> _cardgamesTextureTasks = new();
     private readonly HttpClient _cardgamesHttp = new();
+    private bool _permissionsLoading = false;
+    private bool _permissionsChecked = false;
+    private string _permissionsStatus = "";
+    private DateTime _permissionsLastAttempt = DateTime.MinValue;
+    private readonly HashSet<string> _allowedScopes = new(StringComparer.OrdinalIgnoreCase);
 
     public MainWindow(Plugin plugin)
         : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
@@ -191,6 +198,7 @@ public class MainWindow : Window, IDisposable
         if (!string.IsNullOrWhiteSpace(Plugin.Config.CardgamesLastGameId))
             _cardgamesGameId = Plugin.Config.CardgamesLastGameId!;
         _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
+        _allowedScopes.Clear();
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -399,43 +407,57 @@ public class MainWindow : Window, IDisposable
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
-            float settingsW = 110f;
+            float settingsW = 220f;
             ImGui.SameLine(0, 0);
             ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
+            if (ImGui.SmallButton(_rightPaneCollapsed ? "▶ Panel" : "◀ Panel"))
+                _rightPaneCollapsed = !_rightPaneCollapsed;
+            ImGui.SameLine();
             if (ImGui.SmallButton("⚙ Settings"))
                 Plugin.ToggleConfigUI();
 
             ImGui.EndMenuBar();
         }
 
-        // left width slider
-        float w = _leftPaneWidth;
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(200f);
-        if (ImGui.SliderFloat("Left pane width", ref w, 240f, 600f))
-            _leftPaneWidth = w;
-
         ImGui.Separator();
 
-        // Two pane layout via Columns (API 13-safe)
-        ImGui.Columns(2, "MainColumns", true);
-        ImGui.SetColumnWidth(0, _leftPaneWidth);
-
-        DrawLeftPane();
-
-        ImGui.NextColumn();
-        ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
+        var avail = ImGui.GetContentRegionAvail();
+        float minRight = 260f;
+        float minLeft = 240f;
+        if (_rightPaneCollapsed)
         {
+            _leftPaneWidth = avail.X;
+        }
+        else
+        {
+            float maxLeft = Math.Max(minLeft, avail.X - minRight - VerticalSplitterThickness);
+            _leftPaneWidth = Math.Clamp(_leftPaneWidth, minLeft, maxLeft);
+        }
+
+        ImGui.BeginChild("LeftPaneWrap", new Vector2(_leftPaneWidth, 0), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        DrawLeftPane();
+        ImGui.EndChild();
+
+        if (!_rightPaneCollapsed)
+        {
+            ImGui.SameLine(0, 0);
+            ImGui.Button("##SplitMain", new Vector2(VerticalSplitterThickness, avail.Y));
+            if (ImGui.IsItemActive() && ImGui.IsMouseDragging(0))
+            {
+                float delta = ImGui.GetIO().MouseDelta.X;
+                _leftPaneWidth = Math.Clamp(_leftPaneWidth + delta, minLeft, avail.X - minRight - VerticalSplitterThickness);
+            }
+
+            ImGui.SameLine(0, 0);
+            ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
             switch (_topView)
             {
                 case TopView.Games: DrawGamesView(); break;
                 case TopView.Players: DrawPlayersView(); break;
                 case TopView.Sessions: DrawSessionsControlSurface(); break;
             }
+            ImGui.EndChild();
         }
-        ImGui.EndChild();
-
-        ImGui.Columns(1);
     }
 
     // ========================= LEFT PANE =========================
@@ -1963,12 +1985,21 @@ public class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Refresh"))
         {
-            _ = Cardgames_LoadSessions();
-            _ = Bingo_LoadGames();
-            _ = Hunt_LoadList();
+            if (!_permissionsChecked)
+                _ = Permissions_Load();
+            if (CanLoadCardgames()) _ = Cardgames_LoadSessions();
+            if (CanLoadBingo()) _ = Bingo_LoadGames();
+            if (CanLoadHunt()) _ = Hunt_LoadList();
         }
 
         ImGui.Spacing();
+        if (!_permissionsChecked && !_permissionsLoading)
+            _ = Permissions_Load();
+        if (_permissionsLoading)
+            ImGui.TextDisabled("Checking permissions...");
+        else if (!string.IsNullOrWhiteSpace(_permissionsStatus))
+            ImGui.TextDisabled(_permissionsStatus);
+
         ImGui.SetNextItemWidth(120f);
         if (ImGui.BeginCombo("Category", _sessionFilterCategory.ToString()))
         {
@@ -2236,6 +2267,111 @@ public class MainWindow : Window, IDisposable
     private bool HasAdminKey()
     {
         return !string.IsNullOrWhiteSpace(Plugin.Config.BingoApiKey);
+    }
+
+    private bool HasScope(string scope)
+    {
+        if (_allowedScopes.Contains("*"))
+            return true;
+        return _allowedScopes.Contains(scope);
+    }
+
+    private bool HasAnyScope(params string[] scopes)
+    {
+        if (_allowedScopes.Contains("*"))
+            return true;
+        foreach (var scope in scopes)
+        {
+            if (_allowedScopes.Contains(scope))
+                return true;
+        }
+        return false;
+    }
+
+    private bool CanLoadCardgames() => HasAnyScope("cardgames:admin", "tarot:admin");
+    private bool CanLoadBingo() => HasScope("bingo:admin");
+    private bool CanLoadHunt() => HasScope("hunt:admin");
+
+    private bool HasGamePermissions(string title)
+    {
+        return title switch
+        {
+            "Scavenger Hunt" => CanLoadHunt(),
+            "Blackjack" => CanLoadCardgames(),
+            "Poker" => CanLoadCardgames(),
+            "High/Low" => CanLoadCardgames(),
+            _ => true,
+        };
+    }
+
+    private async Task Permissions_Load()
+    {
+        if (_permissionsLoading)
+            return;
+        if ((DateTime.UtcNow - _permissionsLastAttempt).TotalSeconds < 5)
+            return;
+
+        _permissionsLastAttempt = DateTime.UtcNow;
+        _permissionsLoading = true;
+        _permissionsStatus = "Checking permissions...";
+        _allowedScopes.Clear();
+
+        try
+        {
+            var apiKey = Plugin.Config.BingoApiKey;
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _permissionsStatus = "Admin key missing; managed sessions hidden.";
+                _permissionsChecked = true;
+                return;
+            }
+
+            var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/auth/permissions");
+            req.Headers.Add("X-API-Key", apiKey);
+            using var resp = await http.SendAsync(req).ConfigureAwait(false);
+            var payload = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                _permissionsStatus = $"Permission check failed: {resp.StatusCode}";
+                _permissionsChecked = true;
+                return;
+            }
+
+            using var doc = JsonDocument.Parse(payload);
+            if (!doc.RootElement.TryGetProperty("ok", out var okEl) || !okEl.GetBoolean())
+            {
+                _permissionsStatus = "Permission check failed.";
+                _permissionsChecked = true;
+                return;
+            }
+
+            if (doc.RootElement.TryGetProperty("scopes", out var scopesEl) && scopesEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var scope in scopesEl.EnumerateArray())
+                {
+                    var val = scope.GetString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                        _allowedScopes.Add(val);
+                }
+            }
+
+            _permissionsStatus = _allowedScopes.Count == 0
+                ? "No managed scopes available for this key."
+                : $"Loaded permissions: {string.Join(", ", _allowedScopes)}";
+            _permissionsChecked = true;
+        }
+        catch (Exception ex)
+        {
+            _permissionsStatus = $"Permission check failed: {ex.Message}";
+            _permissionsChecked = true;
+        }
+        finally
+        {
+            _permissionsLoading = false;
+        }
     }
 
     private void DrawConnectRequiredPanel()
@@ -2507,36 +2643,62 @@ public class MainWindow : Window, IDisposable
 
     private void DrawGameSection(string title, string description, GameCard[] cards)
     {
+        const float cardRowHeight = 76f;
+        var padding = new Vector2(14f, 12f);
+        var titleSize = ImGui.CalcTextSize(title);
+        var descSize = ImGui.CalcTextSize(description);
+        float blockHeight = padding.Y * 2f + titleSize.Y + descSize.Y + 8f
+            + cards.Length * (cardRowHeight + 8f);
+
         ImGui.Spacing();
+        ImGui.BeginChild($"Section_{title}", new Vector2(0, blockHeight), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        var draw = ImGui.GetWindowDrawList();
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var accent = CategoryColor(cards.Length > 0 ? cards[0].Category : SessionCategory.Party);
+        var bg = new Vector4(accent.X * 0.15f, accent.Y * 0.15f, accent.Z * 0.15f, 0.85f);
+        var border = new Vector4(accent.X, accent.Y, accent.Z, 0.40f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 14f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 14f, 0, 1.2f);
+
+        ImGui.SetCursorPos(padding);
         DrawSectionHeader(title, description);
-        ImGui.Separator();
+        ImGui.Spacing();
         foreach (var card in cards)
         {
-            DrawGameCard(card);
+            DrawGameCard(card, cardRowHeight);
             ImGui.Spacing();
         }
+        ImGui.EndChild();
     }
 
-    private void DrawGameCard(GameCard card)
+    private void DrawGameCard(GameCard card, float rowHeight)
     {
-        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, 118), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, rowHeight), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         var draw = ImGui.GetWindowDrawList();
         var pos = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
         var accent = CategoryColor(card.Category);
-        var bg = new Vector4(0.10f, 0.10f, 0.11f, 0.95f);
-        var border = new Vector4(accent.X, accent.Y, accent.Z, 0.45f);
-        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 12f);
-        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 12f, 0, 1.2f);
-        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + 4f), ImGui.ColorConvertFloat4ToU32(accent), 12f, ImDrawFlags.RoundCornersTop);
+        var bg = new Vector4(0.08f, 0.08f, 0.10f, 0.92f);
+        var border = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 10f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 10f, 0, 1.0f);
 
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 6f));
+        var padding = new Vector2(10f, 8f);
+        ImGui.SetCursorPos(padding);
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
+
+        float actionW = 150f;
+        float detailsW = 80f;
+        float buttonAreaW = actionW + detailsW + 8f;
+        float textWrapX = pos.X + size.X - padding.X - buttonAreaW;
+        ImGui.PushTextWrapPos(textWrapX);
+
         ImGui.TextUnformatted(card.Title);
         ImGui.SameLine();
         ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
         ImGui.TextDisabled(card.Details);
 
-        ImGui.Spacing();
         DrawBadgeChip(card.Managed ? "Uses central service" : "Runs from this app", accent);
         if (card.JoinKey)
         {
@@ -2548,14 +2710,23 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             DrawBadgeChip("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f));
         }
+        ImGui.PopTextWrapPos();
 
-        ImGui.Spacing();
+        float buttonY = (rowHeight - 28f) * 0.5f;
+        ImGui.SetCursorPos(new Vector2(size.X - padding.X - buttonAreaW, buttonY));
         string actionLabel = card.Managed ? "Prepare session" : "Start";
-        if (DrawPrimaryActionButton(actionLabel, card.Managed, card.Title))
+        if (DrawPrimaryActionButton(actionLabel, card.Managed, card.Title, new Vector2(actionW, 28f)))
         {
             var targetView = ResolveGameCardView(card.Title);
             if (targetView != View.Home)
                 SelectGameCard(card, targetView);
+            if (card.Managed && !HasGamePermissions(card.Title))
+            {
+                _gameDetailsText = "Missing permissions for this game. Check your admin key scopes.";
+                _controlSurfaceOpen = true;
+                _topView = TopView.Sessions;
+                return;
+            }
             if (card.Managed && !HasAdminKey())
             {
                 _connectRequiredGame = card.Title;
@@ -2598,7 +2769,7 @@ public class MainWindow : Window, IDisposable
             }
         }
         ImGui.SameLine();
-        if (ImGui.SmallButton("Details"))
+        if (ImGui.Button($"Details##{card.Title}", new Vector2(detailsW, 28f)))
         {
             _gameDetailsText = card.Details;
             _controlSurfaceOpen = true;
@@ -2631,7 +2802,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Dummy(size);
     }
 
-    private bool DrawPrimaryActionButton(string label, bool managed, string id)
+    private bool DrawPrimaryActionButton(string label, bool managed, string id, Vector2? size = null)
     {
         var baseColor = managed
             ? new Vector4(0.30f, 0.55f, 0.85f, 1.0f)
@@ -2643,7 +2814,9 @@ public class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover);
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, active);
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(12f, 6f));
-        bool clicked = ImGui.Button($"{label}##{id}");
+        bool clicked = size.HasValue
+            ? ImGui.Button($"{label}##{id}", size.Value)
+            : ImGui.Button($"{label}##{id}");
         ImGui.PopStyleVar();
         ImGui.PopStyleColor(3);
         return clicked;
