@@ -298,7 +298,7 @@
     renderPreview(state.state || {}, pot, winnings, currency);
 
     const status = state.session.status;
-    startBtn.disabled = status !== "created";
+    startBtn.disabled = status !== "created" && status !== "draft";
     finishBtn.disabled = status === "finished";
     createNext.disabled = status !== "live";
     const canPlay = status === "live" && phase === "decision";

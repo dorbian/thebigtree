@@ -72,6 +72,9 @@ async def create_session(req: web.Request):
     background_artist_id = str(body.get("background_artist_id") or "").strip() or None
     background_artist_name = str(body.get("background_artist_name") or "").strip() or None
     currency = str(body.get("currency") or "").strip() or None
+    status = str(body.get("status") or "").strip().lower()
+    if not status and body.get("draft"):
+        status = "draft"
     try:
         s = await _run_blocking(
             cg.create_session,
@@ -82,6 +85,7 @@ async def create_session(req: web.Request):
             background_artist_id,
             background_artist_name,
             currency,
+            status or None,
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)

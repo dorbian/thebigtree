@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Cardgames: add draft session creation flag and draft-aware start handling.
+- Blackjack: support split/double actions with multi-hand state and payouts.
+- FFXIV client: move cardgame setup into a prepare popup with deck refresh and draft creation, plus updated session header and actions.
 - FFXIV client: add cardgames host panel for creating sessions and copying join links.
 - FFXIV client: add public cardgames URL setting for generated links.
 - FFXIV client: add in-plugin host gameplay view with card images and actions.
@@ -21,6 +24,39 @@
 - FFXIV client: replace sessions list icons with ASCII markers and adjust game card padding.
 - FFXIV client: add badge tooltips for game requirements.
 - FFXIV client: keep ASCII session icons and centered layout without external fonts.
+- FFXIV client: restore Font Awesome asset and use UiBuilder.IconFont when available.
+- FFXIV client: retry icon font init and support ImGuiNET IconFont bindings for Font Awesome.
+- FFXIV client: add glossy 3D primary buttons for Prepare session and Start.
+- FFXIV client: increase game section/card padding and add header icons with fallbacks.
+- FFXIV client: remember right pane state after starting games and move Games/Settings controls into sessions list header.
+- FFXIV client: apply initial right pane collapsed sizing on first draw.
+- FFXIV client: slightly widen collapsed window width.
+- FFXIV client: increase game card left padding and push action buttons further right.
+- FFXIV client: allow Games header button to toggle closed and align draw header icon with sessions list.
+- FFXIV client: remove category suffix from game cards and align section descriptions under titles.
+- FFXIV client: remove obsolete top menu bar from Forest Manager.
+- FFXIV client: only track nearby players when a session provides a roster (reduces idle scanning).
+- FFXIV client: restore nearby list when no roster is active; filter only when roster exists.
+- FFXIV client: switch players/sessions refresh controls to icon buttons.
+- FFXIV client: refresh nearby list only on open/area change/manual refresh, with accented refresh buttons.
+- FFXIV client: move sessions permissions status to footer with connection dot.
+- FFXIV client: add setting to disable nearby player scanning to reduce lag.
+- FFXIV client: make nearby player scanning manual (scan button + area change) and move permissions status to a separate footer panel.
+- FFXIV client: stop permissions polling after failures until the API key changes.
+- FFXIV client: avoid permission polling when no API key is set and start disconnected on launch.
+- FFXIV client: align permissions footer height and match session close button background to row.
+- FFXIV client: separate sessions footer from list scroll and restore game card left padding.
+- FFXIV client: tweak scan icon, footer height, and title/description alignment in Games.
+- FFXIV client: store game creation defaults per character and pad the permissions footer.
+- FFXIV client: tighten sessions/footer layout and prevent permissions text clipping.
+- FFXIV client: show disconnected state in permissions footer with a 3D red indicator.
+- FFXIV client: add settings button to delete all local plugin data with confirmation.
+- FFXIV client: rename cardgames public URL setting to Server and normalize https input.
+- FFXIV client: update Bingo admin default base URL to rites.thebigtree.life.
+- FFXIV client: update default/fallback Bingo API base URL to rites.thebigtree.life.
+- FFXIV client: split game card title and detail padding to tune alignment.
+- FFXIV client: load per-character defaults after login to avoid off-thread LocalPlayer access.
+- FFXIV client: add Defaults popup for game creation settings next to Games.
 - API: add auth permissions endpoint for clients to query allowed scopes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.

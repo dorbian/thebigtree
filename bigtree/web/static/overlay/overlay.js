@@ -4355,21 +4355,22 @@
         el.textContent = artistName ? `Background selected - ${artistName}.` : "Background selected.";
       }
 
-      async function createCardgameSession(payload){
-        if (!ensureCardgamesScope()) return;
-        try{
-          const data = await jsonFetch(`/api/cardgames/${payload.game_id}/sessions`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-              pot: payload.pot || 0,
-              deck_id: payload.deck_id || "",
-              currency: payload.currency || "",
-              background_url: payload.background_url || "",
-              background_artist_id: payload.background_artist_id || "",
-              background_artist_name: payload.background_artist_name || ""
-            })
-          }, true);
+        async function createCardgameSession(payload){
+          if (!ensureCardgamesScope()) return;
+          try{
+            const data = await jsonFetch(`/api/cardgames/${payload.game_id}/sessions`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                pot: payload.pot || 0,
+                deck_id: payload.deck_id || "",
+                currency: payload.currency || "",
+                background_url: payload.background_url || "",
+                background_artist_id: payload.background_artist_id || "",
+                background_artist_name: payload.background_artist_name || "",
+                draft: true
+              })
+            }, true);
           const session = data.session || {};
           $("cgJoinCode").value = session.join_code || "";
           $("cgPriestessToken").value = session.priestess_token || "";
@@ -4422,46 +4423,49 @@
         }
       }
 
-      if ($("cgCreateSession")){
-        $("cgCreateSession").addEventListener("click", () => {
-          const payload = {
-            game_id: $("cgGameSelect").value,
-            deck_id: $("cgDeckSelect").value,
-            pot: parseInt(($("cgPot").value || "0").trim(), 10) || 0,
-            currency: ($("cgCurrency").value || "").trim(),
-            background_url: ($("cgBackgroundUrl").value || "").trim(),
-            background_artist_id: $("cgBackgroundUrl").dataset.artistId || "",
-            background_artist_name: $("cgBackgroundUrl").dataset.artistName || ""
-          };
-          createCardgameSession(payload);
-        });
+        if ($("cgCreateSession")){
+          $("cgCreateSession").addEventListener("click", () => {
+            const payload = {
+              game_id: $("cgGameSelect").value,
+              deck_id: $("cgDeckSelect").value,
+              pot: parseInt(($("cgPot").value || "0").trim(), 10) || 0,
+              currency: ($("cgCurrency").value || "").trim(),
+              background_url: ($("cgBackgroundUrl").value || "").trim(),
+              background_artist_id: $("cgBackgroundUrl").dataset.artistId || "",
+              background_artist_name: $("cgBackgroundUrl").dataset.artistName || ""
+            };
+            createCardgameSession(payload);
+          });
         ["cgPot", "cgCurrency", "cgDeckSelect", "cgGameSelect", "cgBackgroundUrl"].forEach(id => {
           const el = $(id);
           if (!el) return;
           el.addEventListener("change", () => persistCardgameDefaults());
           el.addEventListener("blur", () => persistCardgameDefaults());
         });
-        $("cgCreateFromSelected").addEventListener("click", () => {
-          const sel = $("cgSessionSelect");
-          const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
-          if (!opt){
-            setCardgameStatus("Select a session to clone.", "err");
-            return;
-          }
-          if ((opt.dataset.status || "").toLowerCase() !== "live"){
-            setCardgameStatus("Create next requires a live session.", "err");
-            return;
-          }
-          createCardgameSession({
-            game_id: opt.dataset.gameId || "blackjack",
-            deck_id: opt.dataset.deckId || "",
-            pot: parseInt(opt.dataset.pot || "0", 10) || 0,
-            currency: opt.dataset.currency || "",
-            background_url: opt.dataset.background || "",
-            background_artist_id: opt.dataset.backgroundArtistId || "",
-            background_artist_name: opt.dataset.backgroundArtistName || ""
+          $("cgCreateFromSelected").addEventListener("click", () => {
+            const sel = $("cgSessionSelect");
+            const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
+            if (!opt){
+              setCardgameStatus("Select a session to clone.", "err");
+              return;
+            }
+            if ((opt.dataset.status || "").toLowerCase() !== "live"){
+              setCardgameStatus("Create next requires a live session.", "err");
+              return;
+            }
+            createCardgameSession({
+              game_id: opt.dataset.gameId || "blackjack",
+              deck_id: opt.dataset.deckId || "",
+              pot: parseInt(opt.dataset.pot || "0", 10) || 0,
+              currency: opt.dataset.currency || "",
+              background_url: opt.dataset.background || "",
+              background_artist_id: opt.dataset.backgroundArtistId || "",
+              background_artist_name: opt.dataset.backgroundArtistName || ""
+            });
           });
-        });
+          if ($("cgDeckRefresh")){
+            $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
+          }
         $("cgSessionRefresh").addEventListener("click", () => loadCardgameSessions());
         $("cgSessionSelect").addEventListener("change", (ev) => {
           const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;

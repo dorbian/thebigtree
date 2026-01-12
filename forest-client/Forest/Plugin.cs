@@ -65,10 +65,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"Loaded {pluginInterface.Manifest.Name} {pluginInterface.Manifest.AssemblyVersion}");
 
-        if (!string.IsNullOrWhiteSpace(Config.BingoApiKey))
-        {
-            _ = ConnectToServerAsync();
-        }
+        Config.BingoConnected = false;
     }
 
     public void Dispose()

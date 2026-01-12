@@ -12,6 +12,7 @@ public class ConfigWindow : Window, IDisposable
     private readonly Plugin Plugin;
     private ForestConfig Configuration;
     private bool _connecting = false;
+    private bool _confirmDelete = false;
 
     public ConfigWindow(Plugin plugin) : base("Forest Settings###ForestConfigWindow")
     {
@@ -39,6 +40,12 @@ public class ConfigWindow : Window, IDisposable
             Configuration.IsConfigWindowMovable = lockCols;
             Configuration.Save();
         }
+        var disableNearby = Configuration.DisableNearbyScan;
+        if (ImGui.Checkbox("Disable nearby player scan", ref disableNearby))
+        {
+            Configuration.DisableNearbyScan = disableNearby;
+            Configuration.Save();
+        }
 
         ImGui.Separator();
         ImGui.TextDisabled("Bingo Admin Connection");
@@ -51,11 +58,18 @@ public class ConfigWindow : Window, IDisposable
             Plugin.Config.Save();
         }
         ImGui.Spacing();
-        var publicBase = Plugin.Config.CardgamesPublicBaseUrl ?? "https://rites.thebigtree.life";
+        var publicBase = (Plugin.Config.CardgamesPublicBaseUrl ?? "https://rites.thebigtree.life").Trim();
+        if (publicBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            publicBase = publicBase.Substring("https://".Length);
+        else if (publicBase.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            publicBase = publicBase.Substring("http://".Length);
         ImGui.SetNextItemWidth(360);
-        if (ImGui.InputText("Cardgames Public URL", ref publicBase, 512))
+        if (ImGui.InputText("Server", ref publicBase, 512))
         {
-            Plugin.Config.CardgamesPublicBaseUrl = string.IsNullOrWhiteSpace(publicBase) ? null : publicBase.Trim();
+            var trimmed = publicBase.Trim();
+            Plugin.Config.CardgamesPublicBaseUrl = string.IsNullOrWhiteSpace(trimmed)
+                ? null
+                : $"https://{trimmed}";
             Plugin.Config.Save();
         }
         ImGui.Spacing();
@@ -94,6 +108,43 @@ public class ConfigWindow : Window, IDisposable
                 ImGui.SameLine();
                 ImGui.TextDisabled($"({Plugin.Config.BingoServerInfo})");
             }
+        }
+
+        ImGui.Separator();
+        ImGui.TextDisabled("Danger zone");
+        ImGui.TextWrapped("Delete all Forest plugin data on this machine.");
+        if (ImGui.Button("Delete all plugin data"))
+            _confirmDelete = true;
+        if (_confirmDelete)
+        {
+            ImGui.OpenPopup("ConfirmDeleteData");
+            _confirmDelete = false;
+        }
+        ImGui.SetNextWindowSize(new Vector2(420, 160), ImGuiCond.Appearing);
+        if (ImGui.BeginPopupModal("ConfirmDeleteData"))
+        {
+            ImGui.TextWrapped("This will delete all Forest config files and local plugin data. This cannot be undone.");
+            ImGui.Spacing();
+            if (ImGui.Button("Delete now"))
+            {
+                try
+                {
+                    var configDir = Plugin.PluginInterface.GetPluginConfigDirectory();
+                    if (System.IO.Directory.Exists(configDir))
+                    {
+                        System.IO.Directory.Delete(configDir, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log?.Error($"Failed to delete plugin data: {ex.Message}");
+                }
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
         }
     }
 }

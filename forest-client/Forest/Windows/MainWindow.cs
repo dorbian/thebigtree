@@ -70,13 +70,22 @@ public class MainWindow : Window, IDisposable
     private float _windowExtraWidth = 0f;
     private float _lastWindowHeight = 0f;
     private const float MinWindowWidthExpanded = 900f;
-    private const float MinWindowWidthCollapsed = 360f;
-    private const float GameCardInset = 12f;
-    private const float GameCardPaddingX = 36f;
-    private const float SectionHeaderPaddingX = GameCardInset + GameCardPaddingX + 6f;
+    private const float MinWindowWidthCollapsed = 368f;
+    private const float GameCardInset = 16f;
+    private const float GameCardTitlePaddingLeft = 20f;
+    private const float GameCardDetailsPaddingLeft = 36f;
+    private const float GameCardPaddingRight = 30f;
+    private const float SectionHeaderPaddingX = GameCardInset + GameCardTitlePaddingLeft + 10f;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
+    private bool _nearbyPlayersDirty = true;
+    private bool _nearbyPlayersInitialized = false;
+    private bool _nearbyPlayersAutoRefresh = false;
+    private bool _nearbyPlayersScanRequested = false;
+    private int _lastTerritoryId = -1;
+    private string _characterKey = "global";
+    private bool _characterDefaultsLoaded = false;
 
     // ---------- Players (nearby, live) ----------
     private string[] _nearbyPlayers = Array.Empty<string>();
@@ -179,6 +188,11 @@ public class MainWindow : Window, IDisposable
     private JsonDocument? _cardgamesStateDoc;
     private string _cardgamesStateError = "";
     private bool _cardgamesStateLoading = false;
+    private bool _cardgamesCreatePopupPending = false;
+    private string _cardgamesCreateGameId = "";
+    private bool _cardgamesOpenAfterCreate = false;
+    private bool _cardgamesCreateWindowOpen = false;
+    private bool _cardgamesPendingExpandAfterCreate = false;
     private readonly Dictionary<string, string> _cardgamesPlayerTokens = new();
     private readonly Dictionary<string, ISharedImmediateTexture> _cardgamesTextureCache = new();
     private readonly Dictionary<string, Task> _cardgamesTextureTasks = new();
@@ -188,12 +202,18 @@ public class MainWindow : Window, IDisposable
     private string _permissionsStatus = "";
     private DateTime _permissionsLastAttempt = DateTime.MinValue;
     private readonly HashSet<string> _allowedScopes = new(StringComparer.OrdinalIgnoreCase);
-    private bool _iconFontChecked = false;
+    private bool _permissionsBlockedUntilKeyChange = false;
+    private string _permissionsLastKey = "";
+    private DateTime _iconFontLastAttempt = DateTime.MinValue;
     private bool _iconFontLoaded = false;
-    private ImGuiNET.ImFontPtr _iconFont;
+    private object? _iconFontObj;
+    private Action? _pushIconFont;
+    private Action? _popIconFont;
+    private bool _rememberRightPaneState = false;
+    private bool _applyInitialRightPaneState = true;
 
     public MainWindow(Plugin plugin)
-        : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.MenuBar)
+        : base("Forest Manager##Main", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         Plugin = plugin;
         var baseDir = Forest.Plugin.PluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
@@ -217,6 +237,9 @@ public class MainWindow : Window, IDisposable
         _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
         _allowedScopes.Clear();
         TryInitIconFont();
+        _rememberRightPaneState = Plugin.Config.RightPaneRemembered;
+        _rightPaneCollapsed = true;
+        _permissionsLastKey = Plugin.Config.BingoApiKey ?? "";
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -368,6 +391,13 @@ public class MainWindow : Window, IDisposable
         if ((DateTime.UtcNow - _pluginStartTime).TotalSeconds < 5) return;
         if (!Plugin.ClientState.IsLoggedIn || Plugin.ClientState.LocalPlayer == null) return;
 
+        if (!_characterDefaultsLoaded)
+        {
+            _characterKey = Plugin.ClientState.LocalPlayer?.Name.TextValue ?? "global";
+            LoadCharacterDefaults();
+            _characterDefaultsLoaded = true;
+        }
+
         CheckVotingPeriod();
         CheckCountdownCompletion();
 
@@ -375,15 +405,16 @@ public class MainWindow : Window, IDisposable
         _lastRefreshTime = DateTime.UtcNow;
 
         Raffle_CheckAutoClose();
-
-        // nearby players (live)
-        _nearbyPlayers = Plugin.ObjectTable
-            .Where(o => o is IPlayerCharacter)
-            .Cast<IPlayerCharacter>()
-            .Select(pc => pc.Name.TextValue)
-            .Distinct()
-            .OrderBy(n => n)
-            .ToArray();
+        if (!Plugin.Config.DisableNearbyScan)
+        {
+            int territoryId = (int)Plugin.ClientState.TerritoryType;
+            if (_lastTerritoryId != territoryId)
+            {
+                _lastTerritoryId = territoryId;
+                _nearbyPlayersDirty = true;
+                _nearbyPlayersAutoRefresh = true;
+            }
+        }
 
         if (_view == View.Hunt && _huntState?.hunt != null
             && (DateTime.UtcNow - _huntLastRefresh).TotalSeconds >= 10)
@@ -414,47 +445,98 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private void UpdateTrackedPlayers()
+    {
+        var tracked = BuildTrackedPlayerSet();
+        bool filterToRoster = tracked.Count > 0;
+        _nearbyPlayers = Plugin.ObjectTable
+            .Where(o => o is IPlayerCharacter pc
+                && (!filterToRoster || tracked.Contains(pc.Name.TextValue)))
+            .Cast<IPlayerCharacter>()
+            .Select(pc => pc.Name.TextValue)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToArray();
+    }
+
+    private void EnsureNearbyPlayersLoaded()
+    {
+        if (Plugin.Config.DisableNearbyScan)
+        {
+            _nearbyPlayers = Array.Empty<string>();
+            _nearbyPlayersInitialized = true;
+            _nearbyPlayersDirty = false;
+            return;
+        }
+        if (!_nearbyPlayersScanRequested && !_nearbyPlayersAutoRefresh)
+            return;
+        if (!_nearbyPlayersDirty && _nearbyPlayersInitialized)
+            return;
+        UpdateTrackedPlayers();
+        _nearbyPlayersInitialized = true;
+        _nearbyPlayersDirty = false;
+        _nearbyPlayersScanRequested = false;
+        _nearbyPlayersAutoRefresh = false;
+    }
+
+    private HashSet<string> BuildTrackedPlayerSet()
+    {
+        var tracked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_selectedSession is null && _view != View.MurderMystery)
+            return tracked;
+
+        switch (_selectedSession?.TargetView ?? _view)
+        {
+            case View.MurderMystery:
+            {
+                var game = Plugin.Config.CurrentGame;
+                if (game == null)
+                    return tracked;
+                if (!string.IsNullOrWhiteSpace(game.Killer))
+                    tracked.Add(game.Killer);
+                if (game.ActivePlayers != null)
+                    foreach (var name in game.ActivePlayers)
+                        tracked.Add(name);
+                if (game.DeadPlayers != null)
+                    foreach (var name in game.DeadPlayers)
+                        tracked.Add(name);
+                if (game.ImprisonedPlayers != null)
+                    foreach (var name in game.ImprisonedPlayers)
+                        tracked.Add(name);
+                break;
+            }
+        }
+
+        return tracked;
+    }
+
     // ========================= DRAW =========================
     public override void Draw()
     {
+        if (!_iconFontLoaded)
+            TryInitIconFont();
         float delta = ImGui.GetIO().DeltaTime;
         float target = _controlSurfaceOpen ? 1f : 0f;
         float step = Math.Clamp(delta * 8f, 0f, 1f);
         _controlSurfaceAnim = Math.Clamp(_controlSurfaceAnim + (target - _controlSurfaceAnim) * step, 0f, 1f);
         _lastWindowHeight = ImGui.GetWindowSize().Y;
+        if (_applyInitialRightPaneState)
+        {
+            _applyInitialRightPaneState = false;
+            if (_rightPaneCollapsed)
+                SetRightPaneCollapsed(true, true);
+        }
         if (_pendingWindowResize)
         {
             ImGui.SetWindowSize(new Vector2(_pendingWindowWidth, _lastWindowHeight), ImGuiCond.Always);
             _pendingWindowResize = false;
             _pendingWindowWidth = 0f;
         }
-
-        // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
-        if (ImGui.BeginMenuBar())
+        if (_cardgamesPendingExpandAfterCreate)
         {
-            if (ImGui.Button("Games"))
-            {
-                _topView = TopView.Games;
-                if (_rightPaneCollapsed)
-                    SetRightPaneCollapsed(false);
-            }
-            ImGui.SameLine();
-
-            // push to right
-            float rightEdge = ImGui.GetWindowContentRegionMax().X;
-            float settingsW = 150f;
-            ImGui.SameLine(0, 0);
-            ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
-            if (ImGui.SmallButton(_rightPaneCollapsed ? "?" : "?"))
-                SetRightPaneCollapsed(!_rightPaneCollapsed);
-            ImGui.SameLine();
-            if (ImGui.SmallButton("? Settings"))
-                Plugin.ToggleConfigUI();
-
-            ImGui.EndMenuBar();
+            _cardgamesPendingExpandAfterCreate = false;
+            SetRightPaneCollapsed(false, true);
         }
-
-        ImGui.Separator();
 
         var avail = ImGui.GetContentRegionAvail();
         float minRight = 260f;
@@ -498,9 +580,11 @@ public class MainWindow : Window, IDisposable
                 case TopView.Players: DrawPlayersView(); break;
                 case TopView.Sessions: DrawSessionsControlSurface(); break;
             }
-            ImGui.EndChild();
-            ImGui.PopStyleVar();
+              ImGui.EndChild();
+              ImGui.PopStyleVar();
         }
+
+        DrawCardgamesCreateWindow();
     }
 
     // ========================= LEFT PANE =========================
@@ -529,9 +613,16 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f));
-        ImGui.BeginChild("SavedBottom", new Vector2(0, bottomH), true, 0);
+        float footerH = Math.Max(36f, ImGui.GetTextLineHeightWithSpacing() + 12f);
+        float sessionsH = Math.Max(0f, bottomH - footerH);
+        ImGui.BeginChild("SessionsArea", new Vector2(0, sessionsH), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         DrawSessionsList();
         ImGui.EndChild();
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 6f));
+        ImGui.BeginChild("SessionsStatusFooter", new Vector2(0, footerH), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        DrawPermissionsStatusFooter();
+        ImGui.EndChild();
+        ImGui.PopStyleVar();
         ImGui.PopStyleVar();
     }
 
@@ -539,15 +630,28 @@ public class MainWindow : Window, IDisposable
     private void DrawPlayersList()
     {
         ImGui.TextDisabled("Players (nearby)");
+        ImGui.SameLine();
+        if (SmallAccentIconButton("\uf021", "Scan", "players-scan"))
+        {
+            if (!Plugin.Config.DisableNearbyScan)
+            {
+                _nearbyPlayersDirty = true;
+                _nearbyPlayersScanRequested = true;
+                EnsureNearbyPlayersLoaded();
+            }
+        }
         ImGui.Separator();
         ImGui.Spacing();
 
         float rowH = ImGui.GetTextLineHeightWithSpacing();
         float padX = 6f;
 
+        EnsureNearbyPlayersLoaded();
         if (_nearbyPlayers.Length == 0)
         {
-            ImGui.TextDisabled("No players nearby.");
+            ImGui.TextDisabled(Plugin.Config.DisableNearbyScan
+                ? "Nearby scan disabled."
+                : _nearbyPlayersInitialized ? "No players nearby." : "Press Scan to load nearby players.");
             return;
         }
 
@@ -776,7 +880,6 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    // -------- bottom-left when Bingo tab is active --------
     // -------- bottom-left when Bingo tab is active --------
     private void DrawBingoGamesList()
     {
@@ -2039,6 +2142,7 @@ public class MainWindow : Window, IDisposable
             "waiting" => "\uf111",
             "ready" => "\uf111",
             "created" => "\uf111",
+            "draft" => "\uf111",
             "finished" => "\uf057",
             _ => "\uf111",
         };
@@ -2066,6 +2170,7 @@ public class MainWindow : Window, IDisposable
             "waiting" => "W",
             "ready" => "W",
             "created" => "W",
+            "draft" => "W",
             "finished" => "F",
             _ => "-",
         };
@@ -2117,6 +2222,7 @@ public class MainWindow : Window, IDisposable
             "waiting" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
             "ready" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
             "created" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "draft" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
             "finished" => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
             _ => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
         };
@@ -2154,9 +2260,11 @@ public class MainWindow : Window, IDisposable
 
     private void TryInitIconFont()
     {
-        if (_iconFontChecked)
+        if (_iconFontLoaded)
             return;
-        _iconFontChecked = true;
+        if ((DateTime.UtcNow - _iconFontLastAttempt).TotalSeconds < 2)
+            return;
+        _iconFontLastAttempt = DateTime.UtcNow;
         try
         {
             var uiBuilder = Plugin.PluginInterface.UiBuilder;
@@ -2164,10 +2272,21 @@ public class MainWindow : Window, IDisposable
             if (prop == null)
                 return;
             var value = prop.GetValue(uiBuilder);
-            if (value is ImGuiNET.ImFontPtr font)
+            if (value is ImFontPtr bindingFont)
             {
-                _iconFont = font;
-                _iconFontLoaded = !font.Equals(default(ImGuiNET.ImFontPtr));
+                _iconFontObj = bindingFont;
+                _pushIconFont = () => ImGui.PushFont(bindingFont);
+                _popIconFont = () => ImGui.PopFont();
+                _iconFontLoaded = true;
+                return;
+            }
+            if (value is ImGuiNET.ImFontPtr netFont)
+            {
+                _iconFontObj = netFont;
+                _pushIconFont = () => ImGuiNET.ImGui.PushFont(netFont);
+                _popIconFont = () => ImGuiNET.ImGui.PopFont();
+                _iconFontLoaded = true;
+                return;
             }
         }
         catch
@@ -2180,9 +2299,9 @@ public class MainWindow : Window, IDisposable
     {
         if (_iconFontLoaded)
         {
-            ImGuiNET.ImGui.PushFont(_iconFont);
-            DrawCenteredTextNet(icon, color);
-            ImGuiNET.ImGui.PopFont();
+            _pushIconFont?.Invoke();
+            DrawCenteredText(icon, color);
+            _popIconFont?.Invoke();
         }
         else
         {
@@ -2194,55 +2313,134 @@ public class MainWindow : Window, IDisposable
     {
         if (_iconFontLoaded)
         {
-            ImGuiNET.ImGui.PushFont(_iconFont);
-            bool clicked = CenteredSmallButtonNet(icon, id, color);
-            ImGuiNET.ImGui.PopFont();
+            _pushIconFont?.Invoke();
+            bool clicked = CenteredSmallButton(icon, id, color);
+            _popIconFont?.Invoke();
             return clicked;
         }
         return CenteredSmallButton(fallback, id, color);
     }
 
-    private void DrawCenteredTextNet(string text, Vector4 color)
+    private float CalcSmallButtonWidth(string label)
     {
-        float avail = ImGuiNET.ImGui.GetContentRegionAvail().X;
-        float textWidth = ImGuiNET.ImGui.CalcTextSize(text).X;
-        float offset = Math.Max(0f, (avail - textWidth) * 0.5f);
-        ImGuiNET.ImGui.SetCursorPosX(ImGuiNET.ImGui.GetCursorPosX() + offset);
-        ImGuiNET.ImGui.TextColored(color, text);
+        var style = ImGui.GetStyle();
+        return ImGui.CalcTextSize(label).X + style.FramePadding.X * 2f;
     }
 
-    private bool CenteredSmallButtonNet(string label, string id, Vector4 color)
+    private bool SquareIconButton(string icon, string fallback, string id)
     {
-        var style = ImGuiNET.ImGui.GetStyle();
-        float avail = ImGuiNET.ImGui.GetContentRegionAvail().X;
-        float textWidth = ImGuiNET.ImGui.CalcTextSize(label).X;
-        float btnWidth = textWidth + style.FramePadding.X * 2f;
-        float offset = Math.Max(0f, (avail - btnWidth) * 0.5f);
-        ImGuiNET.ImGui.SetCursorPosX(ImGuiNET.ImGui.GetCursorPosX() + offset);
-        ImGuiNET.ImGui.PushStyleColor(ImGuiNET.ImGuiCol.Text, ImGuiNET.ImGui.GetColorU32(color));
-        bool clicked = ImGuiNET.ImGui.SmallButton($"{label}##{id}");
-        ImGuiNET.ImGui.PopStyleColor();
+        float size = ImGui.GetFrameHeight();
+        if (_iconFontLoaded)
+        {
+            _pushIconFont?.Invoke();
+            bool clicked = ImGui.Button($"{icon}##{id}", new Vector2(size, size));
+            _popIconFont?.Invoke();
+            return clicked;
+        }
+        return ImGui.Button($"{fallback}##{id}", new Vector2(size, size));
+    }
+
+    private bool SmallIconButton(string icon, string fallback, string id)
+    {
+        if (_iconFontLoaded)
+        {
+            _pushIconFont?.Invoke();
+            bool clicked = ImGui.SmallButton($"{icon}##{id}");
+            _popIconFont?.Invoke();
+            return clicked;
+        }
+        return ImGui.SmallButton($"{fallback}##{id}");
+    }
+
+    private bool SmallAccentIconButton(string icon, string fallback, string id)
+    {
+        var style = ImGui.GetStyle();
+        var baseColor = style.Colors[(int)ImGuiCol.ChildBg];
+        var hover = Tint(baseColor, 0.04f);
+        var active = Tint(baseColor, -0.04f);
+        ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, active);
+        bool clicked = SmallIconButton(icon, fallback, id);
+        ImGui.PopStyleColor(3);
         return clicked;
     }
     private void DrawSessionsList()
     {
         ImGui.TextDisabled("Sessions");
         ImGui.SameLine();
-        if (ImGui.SmallButton("Refresh"))
-        {
+        if (SmallAccentIconButton("\uf021", "Refresh", "sessions-refresh"))
             RequestSessionsRefresh(true);
+        float rightEdge = ImGui.GetWindowContentRegionMax().X;
+        string gamesLabel = "Games";
+        string settingsLabel = _iconFontLoaded ? "\uf013" : "Settings";
+        string defaultsLabel = _iconFontLoaded ? "\uf007" : "Defaults";
+        float gamesW = CalcSmallButtonWidth(gamesLabel);
+        float iconW = ImGui.GetFrameHeight();
+        float totalW = gamesW + iconW * 2f + 12f;
+        ImGui.SameLine();
+        ImGui.SetCursorPosX(Math.Max(0f, rightEdge - totalW));
+        var headerBg = ImGui.GetStyle().Colors[(int)ImGuiCol.ChildBg];
+        ImGui.PushStyleColor(ImGuiCol.Button, headerBg);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(headerBg, 0.04f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(headerBg, -0.04f));
+        if (ImGui.SmallButton(gamesLabel))
+        {
+            if (!_rightPaneCollapsed && _topView == TopView.Games)
+            {
+                SetRightPaneCollapsed(true);
+            }
+            else
+            {
+                _topView = TopView.Games;
+                if (_rightPaneCollapsed)
+                    SetRightPaneCollapsed(false);
+            }
+        }
+        ImGui.SameLine();
+        if (SquareIconButton("\uf007", "Defaults", "defaults"))
+            ImGui.OpenPopup("DefaultsPopup");
+        ImGui.SameLine();
+        if (SquareIconButton("\uf013", "Settings", "settings"))
+            Plugin.ToggleConfigUI();
+        ImGui.PopStyleColor(3);
+        if (ImGui.BeginPopup("DefaultsPopup"))
+        {
+            ImGui.TextDisabled("Defaults for new game sessions");
+            ImGui.Separator();
+            var defaults = GetCharacterDefaults();
+            var currency = defaults.CurrencyLabel ?? "gil";
+            ImGui.SetNextItemWidth(200f);
+            if (ImGui.InputText("Currency label", ref currency, 64))
+            {
+                defaults.CurrencyLabel = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim();
+                SaveCharacterDefaults(defaults);
+            }
+            int pot = defaults.RequiredAmount;
+            ImGui.SetNextItemWidth(120f);
+            if (ImGui.InputInt("Required amount", ref pot))
+            {
+                defaults.RequiredAmount = Math.Max(0, pot);
+                SaveCharacterDefaults(defaults);
+            }
+            var bgUrl = defaults.BackgroundImageUrl ?? "";
+            ImGui.SetNextItemWidth(280f);
+            if (ImGui.InputText("Background image URL", ref bgUrl, 512))
+            {
+                defaults.BackgroundImageUrl = string.IsNullOrWhiteSpace(bgUrl) ? null : bgUrl.Trim();
+                SaveCharacterDefaults(defaults);
+            }
+            if (ImGui.Button("Close"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
         }
 
         ImGui.Spacing();
         if (!_permissionsChecked && !_permissionsLoading)
             _ = Permissions_Load();
-        if (_permissionsLoading)
-            ImGui.TextDisabled("Checking permissions...");
-        else if (!string.IsNullOrWhiteSpace(_permissionsStatus))
-            ImGui.TextDisabled(_permissionsStatus);
 
         ImGui.SetNextItemWidth(120f);
-        if (ImGui.BeginCombo("Category", _sessionFilterCategory.ToString()))
+        if (ImGui.BeginCombo("Type", _sessionFilterCategory.ToString()))
         {
             foreach (SessionCategory cat in Enum.GetValues(typeof(SessionCategory)))
             {
@@ -2267,44 +2465,47 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Separator();
         var sessions = BuildSessionEntries();
+        float tableHeight = Math.Max(0f, ImGui.GetContentRegionAvail().Y);
         if (sessions.Count == 0)
         {
             ImGui.TextDisabled("No sessions.");
-            return;
         }
-
-        var tableFlags = ImGuiTableFlags.RowBg
-            | ImGuiTableFlags.BordersInnerV
-            | ImGuiTableFlags.ScrollY;
-        if (!Plugin.Config.IsConfigWindowMovable)
-            tableFlags |= ImGuiTableFlags.Resizable;
-        if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
+        else
         {
-            float typeW = ImGui.CalcTextSize("Type").X + 14f;
-            float statusW = ImGui.CalcTextSize("Status").X + 14f;
-            float modeW = ImGui.CalcTextSize("Mode").X + 14f;
-            float closeW = ImGui.CalcTextSize("Close").X + 14f;
-            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, typeW);
-            ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, statusW);
-            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, modeW);
-            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, closeW);
-            ImGui.TableHeadersRow();
-
-            foreach (var s in sessions)
+            var tableFlags = ImGuiTableFlags.RowBg
+                | ImGuiTableFlags.BordersInnerV
+                | ImGuiTableFlags.ScrollY;
+            if (!Plugin.Config.IsConfigWindowMovable)
+                tableFlags |= ImGuiTableFlags.Resizable;
+            if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, tableHeight)))
             {
+                float typeW = ImGui.CalcTextSize("Type").X + 14f;
+                float statusW = ImGui.CalcTextSize("Status").X + 14f;
+                float modeW = ImGui.CalcTextSize("Mode").X + 14f;
+                float closeW = ImGui.CalcTextSize("Close").X + 14f;
+                ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, typeW);
+                ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, statusW);
+                ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, modeW);
+                ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, closeW);
+                ImGui.TableHeadersRow();
+
+            var style = ImGui.GetStyle();
+            for (int i = 0; i < sessions.Count; i++)
+            {
+                var s = sessions[i];
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
                 DrawCenteredIconText(s.TypeIcon, TypeFallback(s.Category), CategoryColor(s.Category));
                 ImGui.TableNextColumn();
-                if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
-                {
-                    _selectedSessionId = s.Id;
-                    SelectSession(s);
-                }
-                ImGui.TableNextColumn();
-                DrawCenteredIconText(StatusIcon(s.Status), StatusFallback(s.Status), StatusColor(s.Status));
-                ImGui.TableNextColumn();
+                    if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
+                    {
+                        _selectedSessionId = s.Id;
+                        SelectSession(s);
+                    }
+                    ImGui.TableNextColumn();
+                    DrawCenteredIconText(StatusIcon(s.Status), StatusFallback(s.Status), StatusColor(s.Status));
+                    ImGui.TableNextColumn();
                 DrawCenteredIconText(ModeIcon(s.Managed), ModeFallback(s.Managed), ModeColor(s.Managed));
                 ImGui.TableNextColumn();
                 using (var dis = ImRaii.Disabled(!s.CanClose))
@@ -2312,13 +2513,76 @@ public class MainWindow : Window, IDisposable
                     var color = s.CanClose
                         ? new Vector4(0.95f, 0.95f, 0.95f, 1f)
                         : new Vector4(0.55f, 0.55f, 0.55f, 1f);
-                    if (CenteredIconButton("\uf1f8", "X", $"close-{s.Id}", color))
+                    var rowBg = style.Colors[(int)ImGuiCol.TableRowBg];
+                    var rowAlt = style.Colors[(int)ImGuiCol.TableRowBgAlt];
+                    var baseBg = (i % 2 == 0 ? rowBg : rowAlt);
+                    if (baseBg.W < 0.05f)
+                        baseBg = style.Colors[(int)ImGuiCol.ChildBg];
+                    ImGui.PushStyleColor(ImGuiCol.Button, baseBg);
+                    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(baseBg, 0.04f));
+                    ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(baseBg, -0.04f));
+                    bool closed = CenteredIconButton("\uf1f8", "X", $"close-{s.Id}", color);
+                    ImGui.PopStyleColor(3);
+                    if (closed)
                         _ = CloseSession(s);
                 }
             }
-            ImGui.EndTable();
+                ImGui.EndTable();
+            }
         }
-        ImGui.Dummy(new Vector2(0, 8f));
+    }
+
+    private void DrawPermissionsStatusFooter()
+    {
+        float frameH = ImGui.GetFrameHeight();
+        float availH = ImGui.GetContentRegionAvail().Y;
+        float offsetY = Math.Max(0f, (availH - frameH) * 0.5f);
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + offsetY);
+        ImGui.AlignTextToFramePadding();
+        float lineHeight = ImGui.GetTextLineHeight();
+        var currentKey = Plugin.Config.BingoApiKey ?? "";
+        if (!string.Equals(currentKey, _permissionsLastKey, StringComparison.Ordinal))
+        {
+            _permissionsLastKey = currentKey;
+            _permissionsBlockedUntilKeyChange = false;
+            _permissionsChecked = false;
+            _permissionsStatus = "";
+        }
+        if (string.IsNullOrWhiteSpace(currentKey))
+        {
+            _permissionsStatus = "Admin key missing; managed sessions hidden.";
+            _permissionsChecked = true;
+            _permissionsBlockedUntilKeyChange = true;
+        }
+        if (!_permissionsChecked && !_permissionsLoading && !_permissionsBlockedUntilKeyChange)
+            _ = Permissions_Load();
+        var statusText = _permissionsLoading
+            ? "Checking permissions..."
+            : (_permissionsStatus ?? "");
+        bool isConnected = !_permissionsLoading && _allowedScopes.Count > 0;
+        bool isFailed = _permissionsBlockedUntilKeyChange
+            && statusText.Contains("failed", StringComparison.OrdinalIgnoreCase);
+        if (isFailed)
+            statusText = "Disconnected";
+        var dotColor = _permissionsLoading
+            ? new Vector4(0.90f, 0.70f, 0.20f, 1.0f)
+            : (isFailed
+                ? new Vector4(0.90f, 0.25f, 0.25f, 1.0f)
+                : (isConnected ? new Vector4(0.20f, 0.85f, 0.45f, 1.0f) : new Vector4(0.70f, 0.70f, 0.70f, 1.0f)));
+        var draw = ImGui.GetWindowDrawList();
+        float radius = lineHeight * 0.25f;
+        var start = ImGui.GetCursorScreenPos();
+        var center = new Vector2(start.X + radius, start.Y + frameH * 0.5f);
+        draw.AddCircleFilled(center, radius, ImGui.ColorConvertFloat4ToU32(dotColor));
+        var highlight = Tint(dotColor, 0.20f);
+        var shadow = Tint(dotColor, -0.20f);
+        draw.AddCircleFilled(new Vector2(center.X - radius * 0.35f, center.Y - radius * 0.35f),
+            radius * 0.55f, ImGui.ColorConvertFloat4ToU32(highlight));
+        draw.AddCircleFilled(new Vector2(center.X + radius * 0.25f, center.Y + radius * 0.25f),
+            radius * 0.45f, ImGui.ColorConvertFloat4ToU32(shadow));
+        ImGui.Dummy(new Vector2(radius * 2f + 4f, frameH));
+        ImGui.SameLine();
+        ImGui.TextDisabled(string.IsNullOrWhiteSpace(statusText) ? "Permissions status unavailable." : statusText);
     }
 
     private static string CategoryLabel(SessionCategory category)
@@ -2340,6 +2604,17 @@ public class MainWindow : Window, IDisposable
             SessionCategory.Draw => "D",
             SessionCategory.Party => "P",
             _ => "-",
+        };
+    }
+
+    private static string CategoryHeaderIcon(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => "\uf522", // dice
+            SessionCategory.Draw => "\uf06b", // gift (match sessions list)
+            SessionCategory.Party => "\uf0c0", // users
+            _ => "",
         };
     }
     private static Vector4 CategoryColor(SessionCategory category)
@@ -2563,11 +2838,16 @@ public class MainWindow : Window, IDisposable
         return !string.IsNullOrWhiteSpace(Plugin.Config.BingoApiKey);
     }
 
-    private void SetRightPaneCollapsed(bool collapsed)
+    private void SetRightPaneCollapsed(bool collapsed, bool force = false)
     {
-        if (_rightPaneCollapsed == collapsed)
+        if (!force && _rightPaneCollapsed == collapsed)
             return;
         _rightPaneCollapsed = collapsed;
+        if (_rememberRightPaneState)
+        {
+            Plugin.Config.RightPaneCollapsed = _rightPaneCollapsed;
+            Plugin.Config.Save();
+        }
 
         var size = ImGui.GetWindowSize();
         var contentWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
@@ -2595,6 +2875,16 @@ public class MainWindow : Window, IDisposable
         _pendingWindowResize = true;
     }
 
+    private void MarkRightPaneRemembered()
+    {
+        if (_rememberRightPaneState)
+            return;
+        _rememberRightPaneState = true;
+        Plugin.Config.RightPaneRemembered = true;
+        Plugin.Config.RightPaneCollapsed = _rightPaneCollapsed;
+        Plugin.Config.Save();
+    }
+
     private bool HasScope(string scope)
     {
         if (_allowedScopes.Contains("*"))
@@ -2618,6 +2908,35 @@ public class MainWindow : Window, IDisposable
     private bool CanLoadBingo() => HasScope("bingo:admin");
     private bool CanLoadHunt() => HasScope("hunt:admin");
 
+    private ForestConfig.GameDefaults GetCharacterDefaults()
+    {
+        if (!Plugin.Config.PerCharacterGameDefaults.TryGetValue(_characterKey, out var defaults))
+        {
+            defaults = new ForestConfig.GameDefaults
+            {
+                RequiredAmount = Plugin.Config.CardgamesPreferredPot,
+                CurrencyLabel = Plugin.Config.CardgamesPreferredCurrency,
+                BackgroundImageUrl = Plugin.Config.CardgamesPreferredBackgroundUrl,
+            };
+            Plugin.Config.PerCharacterGameDefaults[_characterKey] = defaults;
+        }
+        return defaults;
+    }
+
+    private void LoadCharacterDefaults()
+    {
+        var defaults = GetCharacterDefaults();
+        _cardgamesPot = defaults.RequiredAmount;
+        _cardgamesCurrency = defaults.CurrencyLabel ?? "gil";
+        _cardgamesBackgroundUrl = defaults.BackgroundImageUrl ?? "";
+    }
+
+    private void SaveCharacterDefaults(ForestConfig.GameDefaults defaults)
+    {
+        Plugin.Config.PerCharacterGameDefaults[_characterKey] = defaults;
+        Plugin.Config.Save();
+    }
+
     private bool HasGamePermissions(string title)
     {
         return title switch
@@ -2635,6 +2954,8 @@ public class MainWindow : Window, IDisposable
     {
         if (_permissionsLoading)
             return;
+        if (_permissionsBlockedUntilKeyChange)
+            return;
         if ((DateTime.UtcNow - _permissionsLastAttempt).TotalSeconds < 5)
             return;
 
@@ -2650,10 +2971,11 @@ public class MainWindow : Window, IDisposable
             {
                 _permissionsStatus = "Admin key missing; managed sessions hidden.";
                 _permissionsChecked = true;
+                _permissionsBlockedUntilKeyChange = true;
                 return;
             }
 
-            var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+            var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life").TrimEnd('/');
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/auth/permissions");
             req.Headers.Add("X-API-Key", apiKey);
@@ -2664,6 +2986,7 @@ public class MainWindow : Window, IDisposable
             {
                 _permissionsStatus = $"Permission check failed: {resp.StatusCode}";
                 _permissionsChecked = true;
+                _permissionsBlockedUntilKeyChange = true;
                 return;
             }
 
@@ -2672,6 +2995,7 @@ public class MainWindow : Window, IDisposable
             {
                 _permissionsStatus = "Permission check failed.";
                 _permissionsChecked = true;
+                _permissionsBlockedUntilKeyChange = true;
                 return;
             }
 
@@ -2694,6 +3018,7 @@ public class MainWindow : Window, IDisposable
         {
             _permissionsStatus = $"Permission check failed: {ex.Message}";
             _permissionsChecked = true;
+            _permissionsBlockedUntilKeyChange = true;
         }
         finally
         {
@@ -2918,11 +3243,16 @@ public class MainWindow : Window, IDisposable
 
     private void DrawGamesView()
     {
+        ImGui.Indent(GameCardTitlePaddingLeft);
+        if (SmallIconButton("\uf053", "<", "collapse-games"))
+            SetRightPaneCollapsed(true);
+        ImGui.SameLine(0, 6f);
         ImGui.TextUnformatted("Games");
         ImGui.TextDisabled("Choose a game template, then prepare or start a session.");
         ImGui.Separator();
+        ImGui.Unindent(GameCardTitlePaddingLeft);
 
-        DrawGameSection("?? Party Games",
+        DrawGameSection(SessionCategory.Party, "Party Games",
             "Experiences run during gatherings and ceremonies.",
             new[]
             {
@@ -2932,7 +3262,7 @@ public class MainWindow : Window, IDisposable
                 new GameCard("Bingo", SessionCategory.Party, true, false, false, "Managed bingo with live calls.")
             });
 
-        DrawGameSection("?? Casino Games",
+        DrawGameSection(SessionCategory.Casino, "Casino Games",
             "Managed tables with join keys and shared decks.",
             new[]
             {
@@ -2941,13 +3271,167 @@ public class MainWindow : Window, IDisposable
                 new GameCard("High/Low", SessionCategory.Casino, true, true, true, "Managed high/low rounds.")
             });
 
-        DrawGameSection("?? Draws & Giveaways",
+        DrawGameSection(SessionCategory.Draw, "Draws & Giveaways",
             "Lightweight draws and rolling events.",
             new[]
             {
                 new GameCard("Raffle", SessionCategory.Draw, false, false, false, "Local raffle draw."),
                 new GameCard("Spin Wheel", SessionCategory.Draw, false, false, false, "Local wheel spin (managed later).")
             });
+    }
+
+    private void OpenCardgamesCreatePopup(string gameId)
+    {
+        _cardgamesCreateGameId = gameId;
+        _cardgamesGameId = gameId;
+        _cardgamesCreatePopupPending = true;
+        _cardgamesCreateWindowOpen = true;
+        _cardgamesStatus = "";
+        Plugin.Config.CardgamesLastGameId = gameId;
+        Plugin.Config.Save();
+        if (CanLoadCardgames())
+        {
+            _ = Cardgames_LoadDecks();
+            _ = Cardgames_LoadSessions();
+        }
+        var defaults = GetCharacterDefaults();
+        _cardgamesPot = defaults.RequiredAmount;
+        _cardgamesCurrency = defaults.CurrencyLabel ?? "gil";
+        _cardgamesBackgroundUrl = defaults.BackgroundImageUrl ?? "";
+    }
+
+    private void DrawCardgamesCreateWindow()
+    {
+        if (!_cardgamesCreateWindowOpen)
+            return;
+        if (_cardgamesCreatePopupPending)
+            _cardgamesCreatePopupPending = false;
+        ImGui.SetNextWindowPos(ImGui.GetMainViewport().GetCenter(), ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
+        ImGui.SetNextWindowSize(new Vector2(520f, 0f), ImGuiCond.Appearing);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, ImGui.ColorConvertFloat4ToU32(new Vector4(0.08f, 0.09f, 0.10f, 0.98f)));
+        if (!ImGui.Begin("Prepare cardgame session", ref _cardgamesCreateWindowOpen, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.End();
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        ImGui.TextUnformatted($"Prepare {FormatCardgamesName(_cardgamesCreateGameId)}");
+        ImGui.TextDisabled("Sessions stay idle until started.");
+        ImGui.Separator();
+
+        ImGui.TextDisabled("Deck");
+        ImGui.SetNextItemWidth(280f);
+        string deckLabel = string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId) ? "(default deck)" : _cardgamesSelectedDeckId;
+        if (ImGui.BeginCombo("##CardgamesDeck", deckLabel))
+        {
+            if (ImGui.Selectable("(default deck)", string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId)))
+            {
+                _cardgamesSelectedDeckId = "";
+                Plugin.Config.CardgamesPreferredDeckId = null;
+                Plugin.Config.Save();
+            }
+
+            foreach (var deck in _cardgamesDecks)
+            {
+                var label = string.IsNullOrWhiteSpace(deck.name) ? deck.deck_id : $"{deck.name} ({deck.deck_id})";
+                bool selected = string.Equals(_cardgamesSelectedDeckId, deck.deck_id, StringComparison.Ordinal);
+                if (ImGui.Selectable(label, selected))
+                {
+                    _cardgamesSelectedDeckId = deck.deck_id;
+                    Plugin.Config.CardgamesPreferredDeckId = _cardgamesSelectedDeckId;
+                    Plugin.Config.Save();
+                }
+            }
+            ImGui.EndCombo();
+        }
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(_cardgamesDecksLoading))
+        {
+            if (SmallIconButton("\uf021", "Refresh", "cardgames-decks-refresh"))
+                _ = Cardgames_LoadDecks();
+        }
+
+        ImGui.TextDisabled("Currency");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120f);
+        string currency = _cardgamesCurrency;
+        if (ImGui.InputText("##CardgamesCurrency", ref currency, 32))
+        {
+            _cardgamesCurrency = string.IsNullOrWhiteSpace(currency) ? "gil" : currency.Trim();
+            var defaults = GetCharacterDefaults();
+            defaults.CurrencyLabel = _cardgamesCurrency;
+            SaveCharacterDefaults(defaults);
+        }
+
+        ImGui.SameLine();
+        int pot = Math.Max(0, _cardgamesPot);
+        ImGui.SetNextItemWidth(110f);
+        if (ImGui.InputInt("##CardgamesPot", ref pot))
+        {
+            _cardgamesPot = Math.Max(0, pot);
+            var defaults = GetCharacterDefaults();
+            defaults.RequiredAmount = _cardgamesPot;
+            SaveCharacterDefaults(defaults);
+        }
+
+        var backgrounds = _cardgamesSessions
+            .Select(s => s.background_url)
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        string bgLabel = string.IsNullOrWhiteSpace(_cardgamesBackgroundUrl) ? "(none)" : _cardgamesBackgroundUrl;
+        ImGui.SetNextItemWidth(360f);
+        if (ImGui.BeginCombo("Background", bgLabel))
+        {
+            if (ImGui.Selectable("(none)", string.IsNullOrWhiteSpace(_cardgamesBackgroundUrl)))
+            {
+                _cardgamesBackgroundUrl = "";
+                var defaults = GetCharacterDefaults();
+                defaults.BackgroundImageUrl = null;
+                SaveCharacterDefaults(defaults);
+            }
+            foreach (var url in backgrounds)
+            {
+                bool selected = string.Equals(_cardgamesBackgroundUrl, url, StringComparison.OrdinalIgnoreCase);
+                if (ImGui.Selectable(url, selected))
+                {
+                    _cardgamesBackgroundUrl = url;
+                    var defaults = GetCharacterDefaults();
+                    defaults.BackgroundImageUrl = _cardgamesBackgroundUrl;
+                    SaveCharacterDefaults(defaults);
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SetNextItemWidth(360f);
+        string bgUrl = _cardgamesBackgroundUrl;
+        if (ImGui.InputText("Custom URL", ref bgUrl, 512))
+        {
+            _cardgamesBackgroundUrl = bgUrl.Trim();
+            var defaults = GetCharacterDefaults();
+            defaults.BackgroundImageUrl = string.IsNullOrWhiteSpace(_cardgamesBackgroundUrl) ? null : _cardgamesBackgroundUrl;
+            SaveCharacterDefaults(defaults);
+        }
+
+        ImGui.Spacing();
+        using (var dis = ImRaii.Disabled(_cardgamesLoading))
+        {
+            if (ImGui.Button("Create session"))
+            {
+                _cardgamesOpenAfterCreate = true;
+                _cardgamesOpenAfterCreate = true;
+                _ = Cardgames_CreateSession(true);
+                _cardgamesCreateWindowOpen = false;
+            }
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel"))
+            _cardgamesCreateWindowOpen = false;
+
+        ImGui.End();
+        ImGui.PopStyleColor();
     }
 
     private readonly struct GameCard
@@ -2969,7 +3453,7 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawGameSection(string title, string description, GameCard[] cards)
+    private void DrawGameSection(SessionCategory category, string title, string description, GameCard[] cards)
     {
         const float cardRowHeight = 84f;
         var padding = new Vector2(SectionHeaderPaddingX, 12f);
@@ -2983,14 +3467,14 @@ public class MainWindow : Window, IDisposable
         var draw = ImGui.GetWindowDrawList();
         var pos = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
-        var accent = CategoryColor(cards.Length > 0 ? cards[0].Category : SessionCategory.Party);
+        var accent = CategoryColor(cards.Length > 0 ? cards[0].Category : category);
         var bg = new Vector4(accent.X * 0.15f, accent.Y * 0.15f, accent.Z * 0.15f, 0.85f);
         var border = new Vector4(accent.X, accent.Y, accent.Z, 0.40f);
         draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 8f);
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 8f, 0, 1.2f);
 
         ImGui.SetCursorPos(padding);
-        DrawSectionHeader(title, description);
+        DrawSectionHeader(category, title, description);
         ImGui.Spacing();
         float inset = GameCardInset;
         foreach (var card in cards)
@@ -3016,26 +3500,26 @@ public class MainWindow : Window, IDisposable
         draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 6f);
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 6f, 0, 1.0f);
 
-        var padding = new Vector2(GameCardPaddingX, 10f);
+        var padding = new Vector2(GameCardTitlePaddingLeft, 4f);
         ImGui.SetCursorPos(padding);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
 
         float actionW = 150f;
         float buttonAreaW = actionW + 8f;
-        float textWrapX = pos.X + size.X - padding.X - buttonAreaW;
+        float textWrapX = pos.X + size.X - GameCardPaddingRight - buttonAreaW;
         ImGui.PushTextWrapPos(textWrapX);
 
         ImGui.TextUnformatted(card.Title);
-        ImGui.SameLine();
-        ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
+        float descIndent = Math.Max(0f, GameCardDetailsPaddingLeft - GameCardTitlePaddingLeft);
+        ImGui.Indent(descIndent);
         ImGui.TextDisabled(card.Details);
 
-        ImGui.Dummy(new Vector2(2f, 6f));
-        DrawBadgeWrapRow(textWrapX - pos.X - padding.X,
+        ImGui.Dummy(new Vector2(2f, 10f));
+        DrawBadgeWrapRow(textWrapX - pos.X - padding.X - descIndent,
             new[]
             {
                 new BadgeSpec(
-                    card.Managed ? "Uses central service" : "Runs from this app",
+                    card.Managed ? "Online" : "Local",
                     card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f),
                     card.Managed
                         ? "Runs through the central service (admin key required)."
@@ -3047,20 +3531,22 @@ public class MainWindow : Window, IDisposable
                     "Players need a join key to enter this session."
                 ) : BadgeSpec.Empty,
                 card.InternetAssets ? new BadgeSpec(
-                    "Fetches online assets",
+                    "Downloads online assets",
                     new Vector4(0.55f, 0.70f, 0.90f, 1.0f),
                     "Downloads shared assets from the internet."
                 ) : BadgeSpec.Empty,
             }
         );
-        ImGui.Dummy(new Vector2(0, 8f));
+        ImGui.Dummy(new Vector2(0, 10f));
+        ImGui.Unindent(descIndent);
         ImGui.PopTextWrapPos();
 
         float buttonY = (rowHeight - 28f) * 0.5f;
-        ImGui.SetCursorPos(new Vector2(size.X - padding.X - buttonAreaW, buttonY));
+        ImGui.SetCursorPos(new Vector2(size.X - GameCardPaddingRight - buttonAreaW, buttonY));
         string actionLabel = card.Managed ? "Prepare session" : "Start";
         if (DrawPrimaryActionButton(actionLabel, card.Managed, card.Title, new Vector2(actionW, 28f)))
         {
+            MarkRightPaneRemembered();
             var targetView = ResolveGameCardView(card.Title);
             if (targetView != View.Home)
                 SelectGameCard(card, targetView);
@@ -3079,36 +3565,34 @@ public class MainWindow : Window, IDisposable
                 return;
             }
             _connectRequiredGame = "";
-            _controlSurfaceOpen = true;
-            _topView = TopView.Sessions;
+            bool isCardgame = card.Title is "Blackjack" or "Poker" or "High/Low";
+            _controlSurfaceOpen = !isCardgame;
+            _topView = isCardgame ? TopView.Games : TopView.Sessions;
             _gameDetailsText = "";
             switch (card.Title)
             {
-                case "Scavenger Hunt":
-                    _ = Hunt_LoadList();
-                    break;
-                case "Murder Mystery":
-                    break;
-                case "Glam Competition":
-                    break;
+                    case "Scavenger Hunt":
+                        _ = Hunt_LoadList();
+                        break;
+                    case "Murder Mystery":
+                        break;
+                    case "Glam Competition":
+                        break;
                 case "Blackjack":
                     _cardgamesGameId = "blackjack";
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
+                    OpenCardgamesCreatePopup(_cardgamesGameId);
                     break;
                 case "Poker":
                     _cardgamesGameId = "poker";
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
+                    OpenCardgamesCreatePopup(_cardgamesGameId);
                     break;
                 case "High/Low":
                     _cardgamesGameId = "highlow";
-                    _ = Cardgames_LoadDecks();
-                    _ = Cardgames_LoadSessions();
+                    OpenCardgamesCreatePopup(_cardgamesGameId);
                     break;
-                case "Bingo":
-                    _ = Bingo_LoadGames();
-                    break;
+                    case "Bingo":
+                        _ = Bingo_LoadGames();
+                        break;
                 case "Raffle":
                     break;
                 case "Spin Wheel":
@@ -3120,12 +3604,31 @@ public class MainWindow : Window, IDisposable
         ImGui.EndChild();
     }
 
-    private void DrawSectionHeader(string title, string description)
+    private void DrawSectionHeader(SessionCategory category, string title, string description)
     {
         ImGui.SetWindowFontScale(1.1f);
+        var iconColor = CategoryColor(category);
+        var icon = CategoryHeaderIcon(category);
+        float iconWidth = 0f;
+        if (_iconFontLoaded && !string.IsNullOrWhiteSpace(icon))
+        {
+            _pushIconFont?.Invoke();
+            iconWidth = ImGui.CalcTextSize(icon).X;
+            ImGui.TextColored(iconColor, icon);
+            _popIconFont?.Invoke();
+        }
+        else
+        {
+            iconWidth = ImGui.CalcTextSize(CategoryIcon(category)).X;
+            ImGui.TextColored(iconColor, CategoryIcon(category));
+        }
+        ImGui.SameLine();
         ImGui.TextUnformatted(title);
         ImGui.SetWindowFontScale(1.0f);
+        float indent = iconWidth + 16f;
+        ImGui.Indent(indent);
         ImGui.TextDisabled(description);
+        ImGui.Unindent(indent);
     }
 
     private void DrawBadgeChip(string text, Vector4 color, string tooltip)
@@ -3133,7 +3636,7 @@ public class MainWindow : Window, IDisposable
         var draw = ImGui.GetWindowDrawList();
         var pos = ImGui.GetCursorScreenPos();
         var textSize = ImGui.CalcTextSize(text);
-        var pad = new Vector2(6f, 3f);
+        var pad = new Vector2(8f, 4f);
         var size = new Vector2(textSize.X + pad.X * 2f, textSize.Y + pad.Y * 2f);
         var bg = new Vector4(color.X, color.Y, color.Z, 0.25f);
         var border = new Vector4(color.X, color.Y, color.Z, 0.55f);
@@ -3182,23 +3685,60 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private static float Clamp01(float value)
+        => value < 0f ? 0f : value > 1f ? 1f : value;
+
+    private static Vector4 Tint(Vector4 color, float delta)
+        => new Vector4(
+            Clamp01(color.X + delta),
+            Clamp01(color.Y + delta),
+            Clamp01(color.Z + delta),
+            color.W);
+
     private bool DrawPrimaryActionButton(string label, bool managed, string id, Vector2? size = null)
     {
+        var style = ImGui.GetStyle();
+        var textSize = ImGui.CalcTextSize(label);
+        var buttonSize = size ?? new Vector2(
+            textSize.X + style.FramePadding.X * 2f,
+            textSize.Y + style.FramePadding.Y * 2f);
+
+        var pos = ImGui.GetCursorScreenPos();
+        ImGui.InvisibleButton($"{label}##{id}", buttonSize);
+        bool hovered = ImGui.IsItemHovered();
+        bool active = ImGui.IsItemActive();
+        bool clicked = ImGui.IsItemClicked();
+
         var baseColor = managed
             ? new Vector4(0.30f, 0.55f, 0.85f, 1.0f)
             : new Vector4(0.35f, 0.70f, 0.50f, 1.0f);
-        var hover = new Vector4(baseColor.X + 0.05f, baseColor.Y + 0.05f, baseColor.Z + 0.05f, 1.0f);
-        var active = new Vector4(baseColor.X + 0.10f, baseColor.Y + 0.10f, baseColor.Z + 0.10f, 1.0f);
+        if (hovered)
+            baseColor = Tint(baseColor, 0.06f);
+        if (active)
+            baseColor = Tint(baseColor, -0.05f);
 
-        ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover);
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, active);
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(12f, 6f));
-        bool clicked = size.HasValue
-            ? ImGui.Button($"{label}##{id}", size.Value)
-            : ImGui.Button($"{label}##{id}");
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor(3);
+        var highlight = Tint(baseColor, 0.18f);
+        var shadow = Tint(baseColor, -0.18f);
+        var border = Tint(baseColor, -0.25f);
+
+        var draw = ImGui.GetWindowDrawList();
+        var bottom = new Vector2(pos.X + buttonSize.X, pos.Y + buttonSize.Y);
+        float radius = 6f;
+
+        draw.AddRectFilled(pos, bottom, ImGui.ColorConvertFloat4ToU32(baseColor), radius);
+        float glossHeight = buttonSize.Y * 0.55f;
+        var glossEnd = new Vector2(bottom.X, pos.Y + glossHeight);
+        draw.AddRectFilled(pos, glossEnd, ImGui.ColorConvertFloat4ToU32(new Vector4(highlight.X, highlight.Y, highlight.Z, 0.35f)), radius, ImDrawFlags.RoundCornersTop);
+        draw.AddRectFilled(new Vector2(pos.X, glossEnd.Y), bottom, ImGui.ColorConvertFloat4ToU32(new Vector4(shadow.X, shadow.Y, shadow.Z, 0.28f)), radius, ImDrawFlags.RoundCornersBottom);
+        draw.AddRect(pos, bottom, ImGui.ColorConvertFloat4ToU32(new Vector4(border.X, border.Y, border.Z, 0.9f)), radius, 0, 1f);
+        draw.AddRect(new Vector2(pos.X + 1f, pos.Y + 1f), new Vector2(bottom.X - 1f, bottom.Y - 1f),
+            ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 1f, 1f, 0.08f)), radius - 1f, 0, 1f);
+
+        var textPos = new Vector2(
+            pos.X + (buttonSize.X - textSize.X) * 0.5f,
+            pos.Y + (buttonSize.Y - textSize.Y) * 0.5f + (active ? 1f : 0f));
+        draw.AddText(textPos, ImGui.ColorConvertFloat4ToU32(new Vector4(0.96f, 0.97f, 0.98f, 1f)), label);
+
         return clicked;
     }
 
@@ -3742,150 +4282,27 @@ public class MainWindow : Window, IDisposable
     // ========================= Cardgames (Host) =========================
     private void DrawCardgamesPanel()
     {
-        ImGui.TextUnformatted("Cardgames (Host)");
+        ImGui.TextUnformatted("Cardgames");
         ImGui.Separator();
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        ImGui.TextDisabled("Game");
-        if (ImGui.RadioButton("Blackjack", _cardgamesGameId == "blackjack"))
-        {
-            _cardgamesGameId = "blackjack";
-            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-            Plugin.Config.Save();
-            _ = Cardgames_LoadSessions();
-        }
-        ImGui.SameLine();
-        if (ImGui.RadioButton("Poker", _cardgamesGameId == "poker"))
-        {
-            _cardgamesGameId = "poker";
-            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-            Plugin.Config.Save();
-            _ = Cardgames_LoadSessions();
-        }
-        ImGui.SameLine();
-        if (ImGui.RadioButton("High/Low", _cardgamesGameId == "highlow"))
-        {
-            _cardgamesGameId = "highlow";
-            Plugin.Config.CardgamesLastGameId = _cardgamesGameId;
-            Plugin.Config.Save();
-            _ = Cardgames_LoadSessions();
-        }
-
-        ImGui.Spacing();
-        if (ImGui.Button("Refresh sessions"))
-            _ = Cardgames_LoadSessions();
-        ImGui.SameLine();
-        using (var dis = ImRaii.Disabled(_cardgamesDecksLoading))
-        {
-            if (ImGui.Button("Load decks"))
-                _ = Cardgames_LoadDecks();
-        }
-
-        ImGui.Spacing();
-        ImGui.Separator();
-
-        ImGui.SetNextItemWidth(240);
-        string deckLabel = string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId) ? "(default deck)" : _cardgamesSelectedDeckId;
-        if (ImGui.BeginCombo("Deck", deckLabel))
-        {
-            if (ImGui.Selectable("(default deck)", string.IsNullOrWhiteSpace(_cardgamesSelectedDeckId)))
-            {
-                _cardgamesSelectedDeckId = "";
-                Plugin.Config.CardgamesPreferredDeckId = null;
-                Plugin.Config.Save();
-            }
-
-            foreach (var deck in _cardgamesDecks)
-            {
-                var label = string.IsNullOrWhiteSpace(deck.name) ? deck.deck_id : $"{deck.name} ({deck.deck_id})";
-                bool selected = string.Equals(_cardgamesSelectedDeckId, deck.deck_id, StringComparison.Ordinal);
-                if (ImGui.Selectable(label, selected))
-                {
-                    _cardgamesSelectedDeckId = deck.deck_id;
-                    Plugin.Config.CardgamesPreferredDeckId = _cardgamesSelectedDeckId;
-                    Plugin.Config.Save();
-                }
-            }
-            ImGui.EndCombo();
-        }
-
-        ImGui.SetNextItemWidth(120);
-        int pot = Math.Max(0, _cardgamesPot);
-        if (ImGui.InputInt("Pot", ref pot))
-        {
-            _cardgamesPot = Math.Max(0, pot);
-            Plugin.Config.CardgamesPreferredPot = _cardgamesPot;
-            Plugin.Config.Save();
-        }
-
-        ImGui.SetNextItemWidth(120);
-        string currency = _cardgamesCurrency;
-        if (ImGui.InputText("Currency", ref currency, 32))
-        {
-            _cardgamesCurrency = string.IsNullOrWhiteSpace(currency) ? "gil" : currency.Trim();
-            Plugin.Config.CardgamesPreferredCurrency = _cardgamesCurrency;
-            Plugin.Config.Save();
-        }
-
-        ImGui.SetNextItemWidth(320);
-        string bgUrl = _cardgamesBackgroundUrl;
-        if (ImGui.InputText("Background URL", ref bgUrl, 512))
-        {
-            _cardgamesBackgroundUrl = bgUrl.Trim();
-            Plugin.Config.CardgamesPreferredBackgroundUrl = _cardgamesBackgroundUrl;
-            Plugin.Config.Save();
-        }
-
-        ImGui.Spacing();
-        using (var dis = ImRaii.Disabled(_cardgamesLoading))
-        {
-            if (ImGui.Button("Create session"))
-                _ = Cardgames_CreateSession();
-        }
-        ImGui.SameLine();
-        using (var dis = ImRaii.Disabled(_cardgamesLoading || _cardgamesSelectedSession is null))
-        {
-            if (ImGui.Button("Create from selected"))
-                _ = Cardgames_CloneSelected();
-        }
-
-        if (!string.IsNullOrWhiteSpace(_cardgamesStatus))
-        {
-            ImGui.Spacing();
-            ImGui.TextDisabled(_cardgamesStatus);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_cardgamesLastJoinCode))
-        {
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.TextUnformatted("Latest session");
-            ImGui.TextWrapped($"Join code: {_cardgamesLastJoinCode}");
-            var baseUrl = GetCardgamesBaseUrl();
-            var playerLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}";
-            var hostLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}?view=priestess";
-            if (!string.IsNullOrWhiteSpace(_cardgamesLastPriestessToken))
-                hostLink += $"&token={Uri.EscapeDataString(_cardgamesLastPriestessToken)}";
-            ImGui.TextWrapped($"Player link: {playerLink}");
-            ImGui.TextWrapped($"Host link: {hostLink}");
-            if (ImGui.Button("Copy join code"))
-                ImGui.SetClipboardText(_cardgamesLastJoinCode);
-            ImGui.SameLine();
-            if (ImGui.Button("Copy player link"))
-                ImGui.SetClipboardText(playerLink);
-            ImGui.SameLine();
-            if (ImGui.Button("Copy host link"))
-                ImGui.SetClipboardText(hostLink);
-        }
-
         if (_cardgamesSelectedSession is null)
+        {
+            ImGui.TextDisabled("Select a cardgame session from the list.");
             return;
+        }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextUnformatted("Live");
+        var selected = _cardgamesSelectedSession;
+        var baseUrl = GetCardgamesBaseUrl();
+        var playerLink = $"{baseUrl}/cardgames/{selected.game_id}/session/{selected.join_code}";
+        ImGui.TextUnformatted($"{FormatCardgamesName(selected.game_id)} session");
+        ImGui.TextDisabled($"Status: {selected.status}");
+        ImGui.SameLine();
+        if (ImGui.Button("Copy player link"))
+            ImGui.SetClipboardText(playerLink);
+        ImGui.SameLine();
+        if (SmallIconButton("\uf24d", "Duplicate", "cardgames-duplicate"))
+            _ = Cardgames_CloneSelected();
+        ImGui.TextDisabled($"Join: {selected.join_code}");
+
         if (!string.IsNullOrWhiteSpace(_cardgamesStateError))
             ImGui.TextDisabled(_cardgamesStateError);
         if (_cardgamesStateDoc is null)
@@ -3908,34 +4325,60 @@ public class MainWindow : Window, IDisposable
         if (!string.IsNullOrWhiteSpace(stage) || !string.IsNullOrWhiteSpace(phase))
             ImGui.TextDisabled($"Stage: {FormatGameLabel(stage != "" ? stage : phase)}");
         if (!string.IsNullOrWhiteSpace(status))
-            ImGui.TextDisabled($"Status: {status}");
+            ImGui.TextDisabled($"Round: {status}");
         if (!string.IsNullOrWhiteSpace(result))
             ImGui.TextDisabled($"Result: {result}");
 
         ImGui.Spacing();
 
-        if (_cardgamesSelectedSession.game_id == "blackjack")
+        if (selected.game_id == "blackjack")
         {
-            DrawCardRow("Player hand", GetCardList(state, "player_hand"));
-            ImGui.Spacing();
+            var hands = GetCardHands(state, "player_hands");
+            var handResults = GetStringList(state, "hand_results");
+            var multipliers = GetIntList(state, "hand_multipliers");
+            if (hands.Count == 0)
+            {
+                DrawCardRow("Player hand", GetCardList(state, "player_hand"));
+                ImGui.Spacing();
+            }
+            else
+            {
+                for (int i = 0; i < hands.Count; i++)
+                {
+                    var label = $"Player hand {i + 1}";
+                    if (i < multipliers.Count && multipliers[i] > 1)
+                        label += $" x{multipliers[i]}";
+                    if (i < handResults.Count && !string.IsNullOrWhiteSpace(handResults[i]))
+                        label += $" ({handResults[i]})";
+                    DrawCardRow(label, hands[i]);
+                    ImGui.Spacing();
+                }
+            }
             DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
             ImGui.Spacing();
-            using (var dis = ImRaii.Disabled(status != "live"))
+            bool live = selected.status == "live";
+            using (var dis = ImRaii.Disabled(!live))
             {
                 if (ImGui.Button("Hit"))
                     _ = Cardgames_PlayerAction("hit");
                 ImGui.SameLine();
                 if (ImGui.Button("Stand"))
                     _ = Cardgames_PlayerAction("stand");
+                ImGui.SameLine();
+                if (ImGui.Button("Double"))
+                    _ = Cardgames_PlayerAction("double");
+                ImGui.SameLine();
+                if (ImGui.Button("Split"))
+                    _ = Cardgames_PlayerAction("split");
             }
         }
-        else if (_cardgamesSelectedSession.game_id == "highlow")
+        else if (selected.game_id == "highlow")
         {
             DrawCardRow("Current", GetCardList(state, "current"));
             ImGui.Spacing();
             DrawCardRow("Revealed", GetCardList(state, "revealed"));
             ImGui.Spacing();
-            using (var dis = ImRaii.Disabled(status != "live"))
+            using (var dis = ImRaii.Disabled(selected.status != "live"))
             {
                 if (ImGui.Button("Higher"))
                     _ = Cardgames_HostAction("higher");
@@ -3950,7 +4393,7 @@ public class MainWindow : Window, IDisposable
                     _ = Cardgames_HostAction("stop");
             }
         }
-        else if (_cardgamesSelectedSession.game_id == "poker")
+        else if (selected.game_id == "poker")
         {
             DrawCardRow("Player hand", GetCardList(state, "player_hand"));
             ImGui.Spacing();
@@ -3958,7 +4401,7 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             DrawCardRow("Community", GetCardList(state, "community"));
             ImGui.Spacing();
-            using (var dis = ImRaii.Disabled(status != "live"))
+            using (var dis = ImRaii.Disabled(selected.status != "live"))
             {
                 if (ImGui.Button("Advance round"))
                     _ = Cardgames_HostAction("advance");
@@ -3966,13 +4409,13 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        using (var dis = ImRaii.Disabled(_cardgamesSelectedSession.status == "live"))
+        using (var dis = ImRaii.Disabled(selected.status != "created" && selected.status != "draft"))
         {
             if (ImGui.Button("Start session"))
                 _ = Cardgames_StartSelected();
         }
         ImGui.SameLine();
-        using (var dis = ImRaii.Disabled(_cardgamesSelectedSession.status != "live"))
+        using (var dis = ImRaii.Disabled(selected.status != "live"))
         {
             if (ImGui.Button("Finish session"))
                 _ = Cardgames_FinishSelected();
@@ -4037,7 +4480,7 @@ public class MainWindow : Window, IDisposable
         var publicBase = Plugin.Config.CardgamesPublicBaseUrl;
         if (!string.IsNullOrWhiteSpace(publicBase))
             return publicBase.TrimEnd('/');
-        return (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+        return (Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life").TrimEnd('/');
     }
 
     private string ResolveCardImageUrl(string? url)
@@ -4124,6 +4567,77 @@ public class MainWindow : Window, IDisposable
         catch
         {
             return new List<JsonElement>();
+        }
+    }
+
+    private static List<List<JsonElement>> GetCardHands(JsonElement state, string key)
+    {
+        try
+        {
+            if (state.ValueKind != JsonValueKind.Object)
+                return new List<List<JsonElement>>();
+            if (!state.TryGetProperty(key, out var hands))
+                return new List<List<JsonElement>>();
+            if (hands.ValueKind != JsonValueKind.Array)
+                return new List<List<JsonElement>>();
+            var list = new List<List<JsonElement>>();
+            foreach (var hand in hands.EnumerateArray())
+            {
+                if (hand.ValueKind == JsonValueKind.Array)
+                    list.Add(hand.EnumerateArray().ToList());
+                else if (hand.ValueKind == JsonValueKind.Object)
+                    list.Add(new List<JsonElement> { hand });
+            }
+            return list;
+        }
+        catch
+        {
+            return new List<List<JsonElement>>();
+        }
+    }
+
+    private static List<string> GetStringList(JsonElement state, string key)
+    {
+        try
+        {
+            if (state.ValueKind != JsonValueKind.Object)
+                return new List<string>();
+            if (!state.TryGetProperty(key, out var list))
+                return new List<string>();
+            if (list.ValueKind != JsonValueKind.Array)
+                return new List<string>();
+            return list.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString() ?? "")
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private static List<int> GetIntList(JsonElement state, string key)
+    {
+        try
+        {
+            if (state.ValueKind != JsonValueKind.Object)
+                return new List<int>();
+            if (!state.TryGetProperty(key, out var list))
+                return new List<int>();
+            if (list.ValueKind != JsonValueKind.Array)
+                return new List<int>();
+            var values = new List<int>();
+            foreach (var item in list.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var val))
+                    values.Add(val);
+            }
+            return values;
+        }
+        catch
+        {
+            return new List<int>();
         }
     }
 
@@ -5104,7 +5618,7 @@ public class MainWindow : Window, IDisposable
 
     private void Bingo_EnsureClient()
     {
-        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443";
+        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life";
         var apiKey = Plugin.Config.BingoApiKey;
         var needsRefresh = _bingoApi is null
                            || !string.Equals(_bingoApiBaseUrl, baseUrl, StringComparison.Ordinal)
@@ -5125,7 +5639,7 @@ public class MainWindow : Window, IDisposable
 
     private void Cardgames_EnsureClient()
     {
-        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443";
+        var baseUrl = Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life";
         var apiKey = Plugin.Config.BingoApiKey;
         var needsRefresh = _cardgamesApi is null
                            || !string.Equals(_cardgamesApiBaseUrl, baseUrl, StringComparison.Ordinal)
@@ -5186,18 +5700,18 @@ public class MainWindow : Window, IDisposable
             if (_cardgamesSelectedSession is not null)
             {
                 var updated = _cardgamesSessions.FirstOrDefault(s => s.session_id == _cardgamesSelectedSession.session_id);
-            _cardgamesSelectedSession = updated;
-            if (_cardgamesSelectedSession is not null)
-            {
-                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.deck_id))
-                    _cardgamesSelectedDeckId = _cardgamesSelectedSession.deck_id!;
-                if (_cardgamesSelectedSession.pot >= 0)
-                    _cardgamesPot = _cardgamesSelectedSession.pot;
-                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.currency))
-                    _cardgamesCurrency = _cardgamesSelectedSession.currency!;
-                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.background_url))
-                    _cardgamesBackgroundUrl = _cardgamesSelectedSession.background_url!;
-            }
+                _cardgamesSelectedSession = updated;
+                if (_cardgamesSelectedSession is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.deck_id))
+                        _cardgamesSelectedDeckId = _cardgamesSelectedSession.deck_id!;
+                    if (_cardgamesSelectedSession.pot >= 0)
+                        _cardgamesPot = _cardgamesSelectedSession.pot;
+                    if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.currency))
+                        _cardgamesCurrency = _cardgamesSelectedSession.currency!;
+                    if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.background_url))
+                        _cardgamesBackgroundUrl = _cardgamesSelectedSession.background_url!;
+                }
             }
             if (_cardgamesSelectedSession is null && _cardgamesStateDoc is not null)
             {
@@ -5215,7 +5729,7 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private async Task Cardgames_CreateSession()
+    private async Task Cardgames_CreateSession(bool draft)
     {
         if (string.IsNullOrWhiteSpace(_cardgamesGameId))
         {
@@ -5231,7 +5745,8 @@ public class MainWindow : Window, IDisposable
                 _cardgamesPot,
                 _cardgamesSelectedDeckId,
                 _cardgamesCurrency,
-                _cardgamesBackgroundUrl
+                _cardgamesBackgroundUrl,
+                draft
             );
             if (!resp.ok || resp.session is null)
             {
@@ -5243,6 +5758,16 @@ public class MainWindow : Window, IDisposable
             _cardgamesLastPriestessToken = s.priestess_token;
             _cardgamesStatus = $"Session created: {s.join_code}.";
             RequestSessionsRefresh(true);
+            if (_cardgamesOpenAfterCreate)
+            {
+                _cardgamesOpenAfterCreate = false;
+                _cardgamesSelectedSession = s;
+                _view = View.Cardgames;
+                _controlSurfaceOpen = true;
+                _topView = TopView.Sessions;
+                _cardgamesPendingExpandAfterCreate = true;
+                _ = Cardgames_LoadState();
+            }
         }
         catch (Exception ex)
         {
@@ -5480,7 +6005,7 @@ public class MainWindow : Window, IDisposable
     {
         if (_huntApi is not null) return;
         _huntApi = new HuntAdminApiClient(
-            Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443",
+            Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life",
             Plugin.Config.BingoApiKey
         );
     }
@@ -6287,7 +6812,7 @@ public class MainWindow : Window, IDisposable
                 string.Equals(o.owner_name, owner, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(ownerInfo?.token))
             {
-                var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://server.thebigtree.life:8443").TrimEnd('/');
+                var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life").TrimEnd('/');
                 _bingoBuyLink = $"{baseUrl}/bingo/owner-token/{ownerInfo.token}";
                 _bingoBuyOwner = ownerInfo.owner_name;
                 _bingoShowBuyLink = true;
@@ -6301,25 +6826,3 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

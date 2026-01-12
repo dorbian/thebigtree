@@ -314,6 +314,10 @@ def _init_blackjack_state(deck_id: Optional[str] = None) -> Dict[str, Any]:
     return {
         "deck": deck,
         "player_hand": [],
+        "player_hands": [],
+        "hand_multipliers": [],
+        "hand_results": [],
+        "active_hand": 0,
         "dealer_hand": [],
         "status": "created",
         "result": None,
@@ -323,7 +327,12 @@ def _start_blackjack(state: Dict[str, Any]) -> None:
     if state.get("status") == "live":
         return
     deck = state.get("deck") or []
-    state["player_hand"] = _draw(deck, 2)
+    player_hand = _draw(deck, 2)
+    state["player_hand"] = player_hand
+    state["player_hands"] = [player_hand]
+    state["hand_multipliers"] = [1]
+    state["hand_results"] = [None]
+    state["active_hand"] = 0
     state["dealer_hand"] = _draw(deck, 2)
     state["status"] = "live"
     state["result"] = None
@@ -333,28 +342,122 @@ def _finish_blackjack(state: Dict[str, Any], result: str) -> None:
     state["status"] = "finished"
     state["result"] = result
 
+def _advance_blackjack_hand(state: Dict[str, Any]) -> bool:
+    hands = state.get("player_hands") or []
+    results = state.get("hand_results") or []
+    for idx in range(len(hands)):
+        if idx >= len(results) or results[idx] is None:
+            state["active_hand"] = idx
+            return True
+    return False
+
+def _resolve_blackjack(state: Dict[str, Any]) -> None:
+    deck = state.get("deck") or []
+    dealer = state.get("dealer_hand") or []
+    while _blackjack_value(dealer) < 17:
+        dealer += _draw(deck, 1)
+    state["dealer_hand"] = dealer
+    state["deck"] = deck
+
+    hands = state.get("player_hands") or []
+    results = list(state.get("hand_results") or [])
+    while len(results) < len(hands):
+        results.append(None)
+    dealer_total = _blackjack_value(dealer)
+    overall = []
+    for idx, hand in enumerate(hands):
+        if results[idx] == "bust":
+            overall.append("lose")
+            continue
+        player_total = _blackjack_value(hand)
+        if player_total > 21:
+            results[idx] = "bust"
+            overall.append("lose")
+            continue
+        if dealer_total > 21 or player_total > dealer_total:
+            results[idx] = "win"
+        elif player_total < dealer_total:
+            results[idx] = "lose"
+        else:
+            results[idx] = "push"
+        overall.append(results[idx])
+    state["hand_results"] = results
+    state["result"] = overall[0] if overall and all(r == overall[0] for r in overall) else "mixed"
+    state["status"] = "finished"
+
 def _apply_blackjack_action(state: Dict[str, Any], action: str) -> Tuple[Dict[str, Any], Optional[str]]:
     deck = state.get("deck") or []
+    hands = state.get("player_hands") or []
+    results = list(state.get("hand_results") or [])
+    multipliers = list(state.get("hand_multipliers") or [])
+    if not hands:
+        hands = [state.get("player_hand") or []]
+    while len(results) < len(hands):
+        results.append(None)
+    while len(multipliers) < len(hands):
+        multipliers.append(1)
+    active = int(state.get("active_hand") or 0)
+    if active < 0 or active >= len(hands):
+        active = 0
     if action == "hit":
-        state["player_hand"] = (state.get("player_hand") or []) + _draw(deck, 1)
-        player_total = _blackjack_value(state["player_hand"])
+        hands[active] = (hands[active] or []) + _draw(deck, 1)
+        player_total = _blackjack_value(hands[active])
         if player_total > 21:
-            _finish_blackjack(state, "bust")
+            results[active] = "bust"
+            if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
+                state["player_hands"] = hands
+                state["hand_results"] = results
+                state["hand_multipliers"] = multipliers
+                _resolve_blackjack(state)
+                return state, None
+        state["player_hands"] = hands
+        state["hand_results"] = results
+        state["hand_multipliers"] = multipliers
+        state["active_hand"] = active
+        state["player_hand"] = hands[active]
         state["deck"] = deck
         return state, None
     if action == "stand":
-        dealer = state.get("dealer_hand") or []
-        while _blackjack_value(dealer) < 17:
-            dealer += _draw(deck, 1)
-        state["dealer_hand"] = dealer
-        player_total = _blackjack_value(state.get("player_hand") or [])
-        dealer_total = _blackjack_value(dealer)
-        if dealer_total > 21 or player_total > dealer_total:
-            _finish_blackjack(state, "win")
-        elif player_total < dealer_total:
-            _finish_blackjack(state, "lose")
+        results[active] = results[active] or "pending"
+        state["player_hands"] = hands
+        state["hand_results"] = results
+        state["hand_multipliers"] = multipliers
+        if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
+            _resolve_blackjack(state)
+        state["player_hand"] = hands[state.get("active_hand", 0)] if hands else []
+        return state, None
+    if action == "double":
+        if len(hands[active]) != 2:
+            return state, "double down requires two cards"
+        multipliers[active] = 2
+        hands[active] = (hands[active] or []) + _draw(deck, 1)
+        if _blackjack_value(hands[active]) > 21:
+            results[active] = "bust"
         else:
-            _finish_blackjack(state, "push")
+            results[active] = results[active] or "pending"
+        state["player_hands"] = hands
+        state["hand_results"] = results
+        state["hand_multipliers"] = multipliers
+        if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
+            _resolve_blackjack(state)
+        state["player_hand"] = hands[state.get("active_hand", 0)] if hands else []
+        state["deck"] = deck
+        return state, None
+    if action == "split":
+        if len(hands) >= 2:
+            return state, "already split"
+        hand = hands[active]
+        if len(hand) != 2:
+            return state, "split requires two cards"
+        if hand[0].get("rank") != hand[1].get("rank"):
+            return state, "split requires matching ranks"
+        left = [hand[0]] + _draw(deck, 1)
+        right = [hand[1]] + _draw(deck, 1)
+        state["player_hands"] = [left, right]
+        state["hand_multipliers"] = [1, 1]
+        state["hand_results"] = [None, None]
+        state["active_hand"] = 0
+        state["player_hand"] = left
         state["deck"] = deck
         return state, None
     return state, "unknown action"
@@ -726,6 +829,7 @@ def create_session(
     background_artist_id: Optional[str] = None,
     background_artist_name: Optional[str] = None,
     currency: Optional[str] = None,
+    status: Optional[str] = None,
 ) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
@@ -739,6 +843,9 @@ def create_session(
     background_artist_id = (background_artist_id or "").strip() or None
     background_artist_name = (background_artist_name or "").strip() or None
     currency = (currency or "").strip() or None
+    status = str(status or "").strip().lower() or "created"
+    if status not in ("created", "draft"):
+        status = "created"
     state = _init_state(game_id, deck_id)
     now = _now()
     def _insert(conn):
@@ -747,7 +854,7 @@ def create_session(
             INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, status, pot, winnings, state_json, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, "created", int(pot or 0), 0, json.dumps(state), now, now)
+            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, status, int(pot or 0), 0, json.dumps(state), now, now)
         )
     _with_conn(_insert)
     _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
@@ -935,6 +1042,24 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
                 winnings = pot
             elif result == "push":
                 winnings = int(pot / 2)
+        elif s.get("game_id") == "blackjack":
+            results = updated.get("hand_results") or []
+            multipliers = updated.get("hand_multipliers") or []
+            if not results and result:
+                results = [result]
+            for idx, hand_result in enumerate(results):
+                if hand_result not in ("win", "push"):
+                    continue
+                multiplier = 1
+                if idx < len(multipliers):
+                    try:
+                        multiplier = int(multipliers[idx] or 1)
+                    except Exception:
+                        multiplier = 1
+                if hand_result == "win":
+                    winnings += pot * max(1, multiplier)
+                else:
+                    winnings += int(pot * max(1, multiplier) / 2)
         else:
             if result == "win":
                 winnings = pot

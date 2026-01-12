@@ -500,28 +500,35 @@
         <section class="panel hidden" style="animation-delay:.1s" id="cardgameSessionsPanel">
           <h2>Cardgame Sessions</h2>
           <p>Create and manage sessions for blackjack, poker, and high/low.</p>
-          <div class="row">
-            <div>
-              <label for="cgGameSelect">Game</label>
-              <select id="cgGameSelect">
-                <option value="blackjack">Blackjack</option>
-                <option value="poker">Poker</option>
-                <option value="highlow">High/Low</option>
-              </select>
+            <div class="row">
+              <div>
+                <label for="cgGameSelect">Game</label>
+                <select id="cgGameSelect">
+                  <option value="blackjack">Blackjack</option>
+                  <option value="poker">Poker</option>
+                  <option value="highlow">High/Low</option>
+                </select>
+              </div>
+              <div>
+                <label for="cgDeckSelect">Deck</label>
+                <div class="row">
+                  <select id="cgDeckSelect"></select>
+                  <button class="btn-ghost icon-btn" id="cgDeckRefresh" title="Refresh decks" aria-label="Refresh decks">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <input id="cgPot" placeholder="0">
+              </div>
+              <div>
+                <label for="cgCurrency">Currency</label>
+                <input id="cgCurrency" placeholder="gil">
+              </div>
             </div>
-            <div>
-              <label for="cgDeckSelect">Deck</label>
-              <select id="cgDeckSelect"></select>
-            </div>
-            <div>
-              <label for="cgPot">Pot</label>
-              <input id="cgPot" placeholder="0">
-            </div>
-            <div>
-              <label for="cgCurrency">Currency</label>
-              <input id="cgCurrency" placeholder="gil">
-            </div>
-          </div>
           <div class="row">
             <div>
               <label for="cgBackgroundUrl">Background image</label>
@@ -537,16 +544,16 @@
             </div>
           </div>
           <div class="status" id="cgBackgroundStatus">No background selected.</div>
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="cgCreateSession">Create session</button>
+            <div class="row">
+              <div>
+                <label>&nbsp;</label>
+                <button id="cgCreateSession">Create draft</button>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn-ghost" id="cgCreateFromSelected">Create next from selected</button>
+              </div>
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgCreateFromSelected">Create next from selected</button>
-            </div>
-          </div>
           <div class="row">
             <div>
               <label for="cgSessionSelect">Existing sessions</label>

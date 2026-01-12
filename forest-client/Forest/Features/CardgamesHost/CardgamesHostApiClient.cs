@@ -47,6 +47,7 @@ public sealed class CardgamesHostApiClient : IDisposable
         string? deckId,
         string? currency,
         string? backgroundUrl,
+        bool draft,
         CancellationToken ct = default)
     {
         var body = new Dictionary<string, object?>
@@ -54,7 +55,8 @@ public sealed class CardgamesHostApiClient : IDisposable
             ["pot"] = pot,
             ["deck_id"] = string.IsNullOrWhiteSpace(deckId) ? null : deckId,
             ["currency"] = string.IsNullOrWhiteSpace(currency) ? null : currency,
-            ["background_url"] = string.IsNullOrWhiteSpace(backgroundUrl) ? null : backgroundUrl
+            ["background_url"] = string.IsNullOrWhiteSpace(backgroundUrl) ? null : backgroundUrl,
+            ["draft"] = draft
         };
         return Post<CreateSessionResponse>($"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions", body, ct);
     }

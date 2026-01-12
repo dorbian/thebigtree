@@ -15,11 +15,11 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("A sample plugin.")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.0.0.1")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.0.1+5b1e27633c97c32fee94b9cb0f1fba43af4a567b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.0.1+ccba25e345d3a2f6e36942eac1a0cd92d204e4e1")]
 [assembly: System.Reflection.AssemblyProductAttribute("Forest")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Forest")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.0.0.1")]
-[assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/dorbian/forest_client")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/dorbian/thebigtree.git")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
 [assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
 

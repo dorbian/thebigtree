@@ -25,13 +25,22 @@ namespace Forest
         public DateTime? BingoLastConnectedUtc { get; set; } = null; // last successful connect time (UTC)
 
         public string? BingoAdminJwt { get; set; } = null;
-        public string? BingoApiBaseUrl { get; set; } = "https://server.thebigtree.life:8443";
+        public string? BingoApiBaseUrl { get; set; } = "https://rites.thebigtree.life";
         public string? BingoApiKey { get; set; } = null;
         public string? CardgamesPublicBaseUrl { get; set; } = "https://rites.thebigtree.life";
         public string? CardgamesPreferredDeckId { get; set; } = null;
         public int CardgamesPreferredPot { get; set; } = 0;
         public string? CardgamesPreferredCurrency { get; set; } = "gil";
         public string? CardgamesPreferredBackgroundUrl { get; set; } = null;
+        public Dictionary<string, GameDefaults> PerCharacterGameDefaults { get; set; } = new();
+
+        [Serializable]
+        public sealed class GameDefaults
+        {
+            public int RequiredAmount { get; set; } = 0;
+            public string? CurrencyLabel { get; set; } = "gil";
+            public string? BackgroundImageUrl { get; set; } = null;
+        }
         public string? CardgamesLastGameId { get; set; } = null;
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;
@@ -79,6 +88,9 @@ namespace Forest
 
         public bool SomePropertyToBeSavedAndWithADefault { get; set; } = false;
         public bool IsConfigWindowMovable { get; set; } = true;
+        public bool RightPaneCollapsed { get; set; } = true;
+        public bool RightPaneRemembered { get; set; } = false;
+        public bool DisableNearbyScan { get; set; } = false;
 
         // Example setting you can store
         public int MaxColumnWidth { get; set; } = 200;

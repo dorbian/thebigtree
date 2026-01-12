@@ -361,7 +361,7 @@
     playerAction.textContent = actionCopy(state.state && state.state.last_action);
     resultLine.textContent = resultCopy(state.state || {});
     const status = state.session.status;
-    startBtn.disabled = status !== "created";
+    startBtn.disabled = status !== "created" && status !== "draft";
     finishBtn.disabled = status === "finished";
     createNext.disabled = status !== "live";
   }

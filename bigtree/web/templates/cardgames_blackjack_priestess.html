@@ -14,6 +14,10 @@
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     .hand{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .hands{display:grid;gap:12px;width:100%}
+    .hand-block{background:#0e1813;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px}
+    .hand-block.active{border-color:rgba(107,212,162,.6);box-shadow:0 0 0 1px rgba(107,212,162,.25)}
+    .hand-title{display:flex;gap:8px;align-items:center;justify-content:center;font-size:14px;margin-bottom:6px}
     .card{padding:6px 10px;border-radius:10px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;min-width:80px;min-height:120px}
     .card img{max-width:120px;max-height:170px;border-radius:8px;display:block}
     .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
@@ -61,7 +65,7 @@
     </div>
     <div class="panel">
       <div class="muted">Player</div>
-      <div class="hand" id="playerHand"></div>
+      <div class="hands" id="playerHands"></div>
     </div>
     <div class="panel actions">
       <button id="startBtn">Start</button>
@@ -97,7 +101,7 @@
   const createNext = document.getElementById("createNext");
   const nextSessionLinks = document.getElementById("nextSessionLinks");
   const dealerHand = document.getElementById("dealerHand");
-  const playerHand = document.getElementById("playerHand");
+  const playerHands = document.getElementById("playerHands");
   const artistCredits = document.getElementById("artistCredits");
   const playerTotal = document.getElementById("playerTotal");
   const dealerTotal = document.getElementById("dealerTotal");
@@ -114,12 +118,31 @@
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
-  function renderHand(el, hand){
-    el.innerHTML = (hand || []).map(card => {
+  function renderHandHtml(hand){
+    return (hand || []).map(card => {
       if (card && card.image){
         return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
       }
       return `<div class="card">${cardLabel(card)}</div>`;
+    }).join("");
+  }
+
+  function renderHand(el, hand){
+    el.innerHTML = renderHandHtml(hand);
+  }
+
+  function renderHands(el, hands, activeHand, results, multipliers){
+    const list = (hands && hands.length) ? hands : [];
+    el.innerHTML = list.map((hand, idx) => {
+      const active = idx === activeHand ? " active" : "";
+      const result = (results && results[idx]) ? results[idx] : "";
+      const mult = (multipliers && multipliers[idx] && multipliers[idx] > 1) ? `x${multipliers[idx]}` : "";
+      const label = `Hand ${idx + 1}${mult ? " " + mult : ""}`;
+      return `<div class="hand-block${active}">
+        <div class="hand-title">${label}</div>
+        <div class="hand">${renderHandHtml(hand)}</div>
+        ${result ? `<div class="muted">Result: ${result}</div>` : ""}
+      </div>`;
     }).join("");
   }
 
@@ -282,17 +305,22 @@
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
     const dealer = (state.state && state.state.dealer_hand) || [];
-    const player = (state.state && state.state.player_hand) || [];
+    const hands = (state.state && state.state.player_hands) || [];
+    const activeHand = (state.state && typeof state.state.active_hand === "number") ? state.state.active_hand : 0;
+    const results = (state.state && state.state.hand_results) || [];
+    const multipliers = (state.state && state.state.hand_multipliers) || [];
+    const fallbackHand = (state.state && state.state.player_hand) ? [state.state.player_hand] : [];
+    const renderList = hands.length ? hands : fallbackHand;
     renderHand(dealerHand, dealer);
-    renderHand(playerHand, player);
-    renderArtists(dealer.concat(player));
+    renderHands(playerHands, renderList, activeHand, results, multipliers);
+    renderArtists(dealer.concat(...renderList));
     const dealerVal = handValue(dealer);
-    const playerVal = handValue(player);
+    const playerVal = handValue(renderList[activeHand] || []);
     dealerTotal.textContent = dealerVal;
     playerTotal.textContent = playerVal;
     leadStatus.textContent = updateLead(playerVal, dealerVal, (state.state && state.state.status) || state.session.status);
     const status = state.session.status;
-    startBtn.disabled = status !== "created";
+    startBtn.disabled = status !== "created" && status !== "draft";
     finishBtn.disabled = status === "finished";
   }
 

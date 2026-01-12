@@ -9,7 +9,7 @@ namespace Forest.Features.BingoAdmin
     {
         public int Version { get; set; } = 1;
 
-        public string BaseUrl { get; set; } = "https://server.thebigtree.life:8443";
+        public string BaseUrl { get; set; } = "https://rites.thebigtree.life";
         public string? ApiKey { get; set; } = null;
 
         public string? LastSelectedGameId { get; set; }
