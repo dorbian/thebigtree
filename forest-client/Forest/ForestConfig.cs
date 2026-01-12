@@ -31,6 +31,7 @@ namespace Forest
         public string? CardgamesPreferredDeckId { get; set; } = null;
         public int CardgamesPreferredPot { get; set; } = 0;
         public string? CardgamesPreferredCurrency { get; set; } = "gil";
+        public string? CardgamesPreferredBackgroundUrl { get; set; } = null;
         public string? CardgamesLastGameId { get; set; } = null;
         public string? BingoLastSelectedGameId { get; set; } = null;
         public string? AdminClientId { get; set; } = null;

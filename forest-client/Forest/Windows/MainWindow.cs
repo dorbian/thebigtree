@@ -140,7 +140,9 @@ public class MainWindow : Window, IDisposable
     private string _cardgamesSelectedDeckId = "";
     private int _cardgamesPot = 0;
     private string _cardgamesCurrency = "gil";
+    private string _cardgamesBackgroundUrl = "";
     private string _cardgamesLastJoinCode = "";
+    private string _cardgamesLastPriestessToken = "";
     private DateTime _cardgamesLastRefresh = DateTime.MinValue;
     private DateTime _cardgamesStateLastFetch = DateTime.MinValue;
     private JsonDocument? _cardgamesStateDoc;
@@ -170,6 +172,7 @@ public class MainWindow : Window, IDisposable
         _cardgamesSelectedDeckId = Plugin.Config.CardgamesPreferredDeckId ?? "";
         _cardgamesPot = Plugin.Config.CardgamesPreferredPot;
         _cardgamesCurrency = Plugin.Config.CardgamesPreferredCurrency ?? "gil";
+        _cardgamesBackgroundUrl = Plugin.Config.CardgamesPreferredBackgroundUrl ?? "";
         if (!string.IsNullOrWhiteSpace(Plugin.Config.CardgamesLastGameId))
             _cardgamesGameId = Plugin.Config.CardgamesLastGameId!;
         _cardgamesHttp.Timeout = TimeSpan.FromSeconds(10);
@@ -2550,11 +2553,26 @@ public class MainWindow : Window, IDisposable
             Plugin.Config.Save();
         }
 
+        ImGui.SetNextItemWidth(320);
+        string bgUrl = _cardgamesBackgroundUrl;
+        if (ImGui.InputText("Background URL", ref bgUrl, 512))
+        {
+            _cardgamesBackgroundUrl = bgUrl.Trim();
+            Plugin.Config.CardgamesPreferredBackgroundUrl = _cardgamesBackgroundUrl;
+            Plugin.Config.Save();
+        }
+
         ImGui.Spacing();
         using (var dis = ImRaii.Disabled(_cardgamesLoading))
         {
             if (ImGui.Button("Create session"))
                 _ = Cardgames_CreateSession();
+        }
+        ImGui.SameLine();
+        using (var dis = ImRaii.Disabled(_cardgamesLoading || _cardgamesSelectedSession is null))
+        {
+            if (ImGui.Button("Create from selected"))
+                _ = Cardgames_CloneSelected();
         }
 
         if (!string.IsNullOrWhiteSpace(_cardgamesStatus))
@@ -2572,6 +2590,8 @@ public class MainWindow : Window, IDisposable
             var baseUrl = GetCardgamesBaseUrl();
             var playerLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}";
             var hostLink = $"{baseUrl}/cardgames/{_cardgamesGameId}/session/{_cardgamesLastJoinCode}?view=priestess";
+            if (!string.IsNullOrWhiteSpace(_cardgamesLastPriestessToken))
+                hostLink += $"&token={Uri.EscapeDataString(_cardgamesLastPriestessToken)}";
             ImGui.TextWrapped($"Player link: {playerLink}");
             ImGui.TextWrapped($"Host link: {hostLink}");
             if (ImGui.Button("Copy join code"))
@@ -2713,6 +2733,8 @@ public class MainWindow : Window, IDisposable
         var baseUrl = GetCardgamesBaseUrl();
         var playerLink = $"{baseUrl}/cardgames/{_cardgamesSelectedSession.game_id}/session/{_cardgamesSelectedSession.join_code}";
         var hostLink = $"{baseUrl}/cardgames/{_cardgamesSelectedSession.game_id}/session/{_cardgamesSelectedSession.join_code}?view=priestess";
+        if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.priestess_token))
+            hostLink += $"&token={Uri.EscapeDataString(_cardgamesSelectedSession.priestess_token)}";
         if (ImGui.Button("Copy join code"))
             ImGui.SetClipboardText(_cardgamesSelectedSession.join_code);
         ImGui.SameLine();
@@ -3879,7 +3901,18 @@ public class MainWindow : Window, IDisposable
             if (_cardgamesSelectedSession is not null)
             {
                 var updated = _cardgamesSessions.FirstOrDefault(s => s.session_id == _cardgamesSelectedSession.session_id);
-                _cardgamesSelectedSession = updated;
+            _cardgamesSelectedSession = updated;
+            if (_cardgamesSelectedSession is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.deck_id))
+                    _cardgamesSelectedDeckId = _cardgamesSelectedSession.deck_id!;
+                if (_cardgamesSelectedSession.pot >= 0)
+                    _cardgamesPot = _cardgamesSelectedSession.pot;
+                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.currency))
+                    _cardgamesCurrency = _cardgamesSelectedSession.currency!;
+                if (!string.IsNullOrWhiteSpace(_cardgamesSelectedSession.background_url))
+                    _cardgamesBackgroundUrl = _cardgamesSelectedSession.background_url!;
+            }
             }
             if (_cardgamesSelectedSession is null && _cardgamesStateDoc is not null)
             {
@@ -3912,7 +3945,8 @@ public class MainWindow : Window, IDisposable
                 _cardgamesGameId,
                 _cardgamesPot,
                 _cardgamesSelectedDeckId,
-                _cardgamesCurrency
+                _cardgamesCurrency,
+                _cardgamesBackgroundUrl
             );
             if (!resp.ok || resp.session is null)
             {
@@ -3921,6 +3955,7 @@ public class MainWindow : Window, IDisposable
             }
             var s = resp.session;
             _cardgamesLastJoinCode = s.join_code;
+            _cardgamesLastPriestessToken = s.priestess_token;
             _cardgamesStatus = $"Session created: {s.join_code}.";
             _ = Cardgames_LoadSessions();
         }
@@ -3931,6 +3966,36 @@ public class MainWindow : Window, IDisposable
         finally
         {
             _cardgamesLoading = false;
+        }
+    }
+
+    private async Task Cardgames_CloneSelected()
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        Cardgames_EnsureClient();
+        _cardgamesStatus = "Cloning session.";
+        try
+        {
+            var resp = await _cardgamesApi!.CloneSessionAsync(
+                _cardgamesSelectedSession.game_id,
+                _cardgamesSelectedSession.session_id,
+                _cardgamesSelectedSession.priestess_token
+            );
+            if (!resp.ok || resp.session is null)
+            {
+                _cardgamesStatus = resp.error ?? "Clone failed.";
+                return;
+            }
+            var s = resp.session;
+            _cardgamesLastJoinCode = s.join_code;
+            _cardgamesLastPriestessToken = s.priestess_token;
+            _cardgamesStatus = $"Session cloned: {s.join_code}.";
+            _ = Cardgames_LoadSessions();
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Clone failed: {ex.Message}";
         }
     }
 

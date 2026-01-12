@@ -46,15 +46,27 @@ public sealed class CardgamesHostApiClient : IDisposable
         int pot,
         string? deckId,
         string? currency,
+        string? backgroundUrl,
         CancellationToken ct = default)
     {
         var body = new Dictionary<string, object?>
         {
             ["pot"] = pot,
             ["deck_id"] = string.IsNullOrWhiteSpace(deckId) ? null : deckId,
-            ["currency"] = string.IsNullOrWhiteSpace(currency) ? null : currency
+            ["currency"] = string.IsNullOrWhiteSpace(currency) ? null : currency,
+            ["background_url"] = string.IsNullOrWhiteSpace(backgroundUrl) ? null : backgroundUrl
         };
         return Post<CreateSessionResponse>($"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions", body, ct);
+    }
+
+    public Task<CreateSessionResponse> CloneSessionAsync(string gameId, string sessionId, string priestessToken, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?> { ["token"] = priestessToken };
+        return Post<CreateSessionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/clone",
+            body,
+            ct
+        );
     }
 
     public Task<JoinSessionResponse> JoinSessionAsync(string gameId, string joinCode, CancellationToken ct = default)
