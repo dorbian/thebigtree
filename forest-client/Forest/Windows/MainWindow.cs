@@ -2319,6 +2319,8 @@ public class MainWindow : Window, IDisposable
     private void SelectSession(SessionEntry entry)
     {
         _topView = TopView.Sessions;
+        if (_rightPaneCollapsed)
+            SetRightPaneCollapsed(false);
         _controlSurfaceOpen = true;
         _connectRequiredGame = "";
         _gameDetailsText = "";
@@ -2784,7 +2786,7 @@ public class MainWindow : Window, IDisposable
     private void DrawGameSection(string title, string description, GameCard[] cards)
     {
         const float cardRowHeight = 84f;
-        var padding = new Vector2(14f, 12f);
+        var padding = new Vector2(20f, 12f);
         var titleSize = ImGui.CalcTextSize(title);
         var descSize = ImGui.CalcTextSize(description);
         float blockHeight = padding.Y * 2f + titleSize.Y + descSize.Y + 8f
@@ -2828,13 +2830,12 @@ public class MainWindow : Window, IDisposable
         draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 6f);
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 6f, 0, 1.0f);
 
-        var padding = new Vector2(18f, 10f);
+        var padding = new Vector2(24f, 10f);
         ImGui.SetCursorPos(padding);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
 
         float actionW = 150f;
-        float detailsW = 80f;
-        float buttonAreaW = 8f + actionW + detailsW + 8f;
+        float buttonAreaW = actionW + 8f;
         float textWrapX = pos.X + size.X - padding.X - buttonAreaW;
         ImGui.PushTextWrapPos(textWrapX);
 
@@ -2843,15 +2844,16 @@ public class MainWindow : Window, IDisposable
         ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
         ImGui.TextDisabled(card.Details);
 
-        ImGui.Dummy(new Vector2(2f, 4f));
+        ImGui.Dummy(new Vector2(2f, 6f));
         DrawBadgeWrapRow(textWrapX - pos.X - padding.X,
             new[]
             {
- 
+                new BadgeSpec(card.Managed ? "Uses central service" : "Runs from this app", card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f)),
                 card.JoinKey ? new BadgeSpec("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f)) : BadgeSpec.Empty,
                 card.InternetAssets ? new BadgeSpec("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f)) : BadgeSpec.Empty,
             }
         );
+        ImGui.Dummy(new Vector2(0, 4f));
         ImGui.PopTextWrapPos();
 
         float buttonY = (rowHeight - 28f) * 0.5f;
@@ -2913,13 +2915,7 @@ public class MainWindow : Window, IDisposable
                     break;
             }
         }
-        ImGui.SameLine();
-        if (ImGui.Button($"Details##{card.Title}", new Vector2(detailsW, 28f)))
-        {
-            _gameDetailsText = card.Details;
-            _controlSurfaceOpen = true;
-            _topView = TopView.Sessions;
-        }
+        ImGui.Dummy(new Vector2(0, 4f));
         ImGui.PopStyleVar();
         ImGui.EndChild();
     }
@@ -6101,11 +6097,6 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
-
-
-
-
-
 
 
 
