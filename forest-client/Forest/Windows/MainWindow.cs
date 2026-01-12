@@ -69,7 +69,7 @@ public class MainWindow : Window, IDisposable
     private float _lastExpandedWidth = 0f;
     private float _windowExtraWidth = 0f;
     private const float MinWindowWidthExpanded = 900f;
-    private const float MinWindowWidthCollapsed = 520f;
+    private const float MinWindowWidthCollapsed = 360f;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
@@ -422,45 +422,21 @@ public class MainWindow : Window, IDisposable
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
         if (ImGui.BeginMenuBar())
         {
-            if (ImGui.Button("Control")) _topView = TopView.Sessions;
+            if (ImGui.Button("Games"))
+            {
+                _topView = TopView.Games;
+                if (_rightPaneCollapsed)
+                    SetRightPaneCollapsed(false);
+            }
             ImGui.SameLine();
-            if (ImGui.Button("Games")) _topView = TopView.Games;
-            ImGui.SameLine();
-            if (ImGui.Button("Players")) _topView = TopView.Players;
 
             // push to right
             float rightEdge = ImGui.GetWindowContentRegionMax().X;
-            float settingsW = 220f;
+            float settingsW = 150f;
             ImGui.SameLine(0, 0);
             ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
-            if (ImGui.SmallButton(_rightPaneCollapsed ? "▶ Panel" : "◀ Panel"))
-            {
-                _rightPaneCollapsed = !_rightPaneCollapsed;
-                var size = ImGui.GetWindowSize();
-                var contentWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
-                _windowExtraWidth = Math.Max(0f, size.X - contentWidth);
-                if (_rightPaneCollapsed)
-                {
-                    _lastExpandedWidth = size.X;
-                    _pendingWindowSize = new Vector2(_leftPaneWidth + _windowExtraWidth, size.Y);
-                    SizeConstraints = new WindowSizeConstraints
-                    {
-                        MinimumSize = new Vector2(MinWindowWidthCollapsed, 560),
-                        MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
-                    };
-                }
-                else
-                {
-                    float targetWidth = _lastExpandedWidth > 0f ? _lastExpandedWidth : size.X + 240f;
-                    _pendingWindowSize = new Vector2(targetWidth, size.Y);
-                    SizeConstraints = new WindowSizeConstraints
-                    {
-                        MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
-                        MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
-                    };
-                }
-                _pendingWindowResize = true;
-            }
+            if (ImGui.SmallButton(_rightPaneCollapsed ? "▶" : "◀"))
+                SetRightPaneCollapsed(!_rightPaneCollapsed);
             ImGui.SameLine();
             if (ImGui.SmallButton("⚙ Settings"))
                 Plugin.ToggleConfigUI();
@@ -2397,6 +2373,38 @@ public class MainWindow : Window, IDisposable
     private bool HasAdminKey()
     {
         return !string.IsNullOrWhiteSpace(Plugin.Config.BingoApiKey);
+    }
+
+    private void SetRightPaneCollapsed(bool collapsed)
+    {
+        if (_rightPaneCollapsed == collapsed)
+            return;
+        _rightPaneCollapsed = collapsed;
+
+        var size = ImGui.GetWindowSize();
+        var contentWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
+        _windowExtraWidth = Math.Max(0f, size.X - contentWidth);
+        if (_rightPaneCollapsed)
+        {
+            _lastExpandedWidth = size.X;
+            _pendingWindowSize = new Vector2(_leftPaneWidth + _windowExtraWidth, size.Y);
+            SizeConstraints = new WindowSizeConstraints
+            {
+                MinimumSize = new Vector2(MinWindowWidthCollapsed, 560),
+                MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+            };
+        }
+        else
+        {
+            float targetWidth = _lastExpandedWidth > 0f ? _lastExpandedWidth : size.X + 240f;
+            _pendingWindowSize = new Vector2(targetWidth, size.Y);
+            SizeConstraints = new WindowSizeConstraints
+            {
+                MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
+                MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+            };
+        }
+        _pendingWindowResize = true;
     }
 
     private bool HasScope(string scope)
