@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Cardgames: finish now archives sessions instead of deleting them.
+- FFXIV client: add blackjack start/end and clone+end controls in the host view.
 - Cardgames: allow host actions for blackjack (hit/stand/double/split) in the FFXIV client.
 - Cardgames: add draft session creation flag and draft-aware start handling.
 - Blackjack: support split/double actions with multi-hand state and payouts.

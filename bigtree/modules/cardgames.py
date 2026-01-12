@@ -974,9 +974,6 @@ def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     s["status"] = "finished"
     _update_session(session_id, s)
     _add_event(session_id, "SESSION_FINISHED", {})
-    def _delete(conn):
-        _delete_session(conn, session_id)
-    _with_conn(_delete)
     return s
 
 def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
