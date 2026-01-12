@@ -2055,6 +2055,17 @@ public class MainWindow : Window, IDisposable
         };
     }
 
+    private static Vector4 CategoryColor(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => new Vector4(0.95f, 0.76f, 0.30f, 1.0f),
+            SessionCategory.Draw => new Vector4(0.92f, 0.50f, 0.70f, 1.0f),
+            SessionCategory.Party => new Vector4(0.40f, 0.78f, 0.62f, 1.0f),
+            _ => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+        };
+    }
+
     private List<SessionEntry> BuildSessionEntries()
     {
         var list = new List<SessionEntry>();
@@ -2377,10 +2388,10 @@ public class MainWindow : Window, IDisposable
         }
 
         var avail = ImGui.GetContentRegionAvail();
-        float slideOffset = (1f - _controlSurfaceAnim) * Math.Min(80f, avail.X * 0.25f);
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + slideOffset);
-        ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Math.Clamp(_controlSurfaceAnim, 0.05f, 1f));
-        ImGui.BeginChild("ControlSurface", new Vector2(avail.X - slideOffset, avail.Y), false, 0);
+        float width = Math.Max(1f, avail.X * _controlSurfaceAnim);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail.X - width));
+        ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Math.Clamp(_controlSurfaceAnim, 0f, 1f));
+        ImGui.BeginChild("ControlSurface", new Vector2(width, avail.Y), false, 0);
 
         if (ImGui.SmallButton("Collapse"))
         {
@@ -2445,6 +2456,7 @@ public class MainWindow : Window, IDisposable
     private void DrawGamesView()
     {
         ImGui.TextUnformatted("Games");
+        ImGui.TextDisabled("Choose a game template, then prepare or start a session.");
         ImGui.Separator();
 
         DrawGameSection("🎉 Party Games",
@@ -2496,8 +2508,7 @@ public class MainWindow : Window, IDisposable
     private void DrawGameSection(string title, string description, GameCard[] cards)
     {
         ImGui.Spacing();
-        ImGui.TextUnformatted(title);
-        ImGui.TextDisabled(description);
+        DrawSectionHeader(title, description);
         ImGui.Separator();
         foreach (var card in cards)
         {
@@ -2508,16 +2519,39 @@ public class MainWindow : Window, IDisposable
 
     private void DrawGameCard(GameCard card)
     {
-        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, 92), true);
+        ImGui.BeginChild($"GameCard_{card.Title}", new Vector2(0, 118), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        var draw = ImGui.GetWindowDrawList();
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var accent = CategoryColor(card.Category);
+        var bg = new Vector4(0.10f, 0.10f, 0.11f, 0.95f);
+        var border = new Vector4(accent.X, accent.Y, accent.Z, 0.45f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 12f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 12f, 0, 1.2f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + 4f), ImGui.ColorConvertFloat4ToU32(accent), 12f, ImDrawFlags.RoundCornersTop);
+
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 6f));
         ImGui.TextUnformatted(card.Title);
         ImGui.SameLine();
         ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
-        DrawBadge(card.Managed ? "Uses central service" : "Runs from this app");
-        if (card.JoinKey) DrawBadge("Join key needed");
-        if (card.InternetAssets) DrawBadge("Fetches online assets");
+        ImGui.TextDisabled(card.Details);
 
+        ImGui.Spacing();
+        DrawBadgeChip(card.Managed ? "Uses central service" : "Runs from this app", accent);
+        if (card.JoinKey)
+        {
+            ImGui.SameLine();
+            DrawBadgeChip("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f));
+        }
+        if (card.InternetAssets)
+        {
+            ImGui.SameLine();
+            DrawBadgeChip("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f));
+        }
+
+        ImGui.Spacing();
         string actionLabel = card.Managed ? "Prepare session" : "Start";
-        if (ImGui.Button(actionLabel))
+        if (DrawPrimaryActionButton(actionLabel, card.Managed, card.Title))
         {
             var targetView = ResolveGameCardView(card.Title);
             if (targetView != View.Home)
@@ -2570,7 +2604,49 @@ public class MainWindow : Window, IDisposable
             _controlSurfaceOpen = true;
             _topView = TopView.Sessions;
         }
+        ImGui.PopStyleVar();
         ImGui.EndChild();
+    }
+
+    private void DrawSectionHeader(string title, string description)
+    {
+        ImGui.SetWindowFontScale(1.1f);
+        ImGui.TextUnformatted(title);
+        ImGui.SetWindowFontScale(1.0f);
+        ImGui.TextDisabled(description);
+    }
+
+    private void DrawBadgeChip(string text, Vector4 color)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var pos = ImGui.GetCursorScreenPos();
+        var textSize = ImGui.CalcTextSize(text);
+        var pad = new Vector2(6f, 3f);
+        var size = new Vector2(textSize.X + pad.X * 2f, textSize.Y + pad.Y * 2f);
+        var bg = new Vector4(color.X, color.Y, color.Z, 0.25f);
+        var border = new Vector4(color.X, color.Y, color.Z, 0.55f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 8f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 8f, 0, 1f);
+        draw.AddText(new Vector2(pos.X + pad.X, pos.Y + pad.Y), ImGui.ColorConvertFloat4ToU32(new Vector4(0.95f, 0.95f, 0.95f, 1f)), text);
+        ImGui.Dummy(size);
+    }
+
+    private bool DrawPrimaryActionButton(string label, bool managed, string id)
+    {
+        var baseColor = managed
+            ? new Vector4(0.30f, 0.55f, 0.85f, 1.0f)
+            : new Vector4(0.35f, 0.70f, 0.50f, 1.0f);
+        var hover = new Vector4(baseColor.X + 0.05f, baseColor.Y + 0.05f, baseColor.Z + 0.05f, 1.0f);
+        var active = new Vector4(baseColor.X + 0.10f, baseColor.Y + 0.10f, baseColor.Z + 0.10f, 1.0f);
+
+        ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, active);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(12f, 6f));
+        bool clicked = ImGui.Button($"{label}##{id}");
+        ImGui.PopStyleVar();
+        ImGui.PopStyleColor(3);
+        return clicked;
     }
 
     private void SelectGameCard(GameCard card, View targetView)
