@@ -106,6 +106,16 @@ public sealed class CardgamesHostApiClient : IDisposable
         );
     }
 
+    public Task<CardgameActionResponse> DeleteSessionAsync(string gameId, string sessionId, string priestessToken, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?> { ["token"] = priestessToken };
+        return Post<CardgameActionResponse>(
+            $"api/cardgames/{Uri.EscapeDataString(gameId)}/sessions/{Uri.EscapeDataString(sessionId)}/delete",
+            body,
+            ct
+        );
+    }
+
     public Task<CardgameActionResponse> HostActionAsync(
         string gameId,
         string sessionId,

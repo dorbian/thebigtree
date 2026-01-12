@@ -15,6 +15,7 @@
 - FFXIV client: polish Forest Manager Games cards with themed headers, accents, and badge chips.
 - FFXIV client: rebuild Games view into large colored section blocks with consistent button sizing.
 - FFXIV client: add resizable main split and right panel collapse toggle.
+- FFXIV client: add session close actions and throttled auto-refresh for sessions list.
 - API: add auth permissions endpoint for clients to query allowed scopes.
 - Added delete session for cardgames and background image selection in the dashboard.
 - Cardgame host/player pages now render the session background.

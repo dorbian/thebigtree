@@ -63,6 +63,9 @@ public class MainWindow : Window, IDisposable
     private const float SplitterMinBottom = 120f;
     private const float VerticalSplitterThickness = 6f;
     private bool _rightPaneCollapsed = false;
+    private DateTime _lastSessionsPoll = DateTime.MinValue;
+    private bool _sessionsRefreshQueued = false;
+    private bool _sessionsRefreshLoading = false;
 
     // ---------- Players (nearby, live) ----------
     private string[] _nearbyPlayers = Array.Empty<string>();
@@ -385,6 +388,14 @@ public class MainWindow : Window, IDisposable
             && !_cardgamesStateLoading)
         {
             _ = Cardgames_LoadState();
+        }
+
+        if ((DateTime.UtcNow - _lastSessionsPoll).TotalSeconds >= 60)
+            RequestSessionsRefresh(false);
+        if (_sessionsRefreshQueued && (DateTime.UtcNow - _lastSessionsPoll).TotalSeconds >= 10)
+        {
+            _sessionsRefreshQueued = false;
+            RequestSessionsRefresh(false);
         }
     }
 
@@ -1977,6 +1988,41 @@ public class MainWindow : Window, IDisposable
         public CardgameSession? Cardgame { get; set; }
         public string? GameId { get; set; }
         public int? Index { get; set; }
+        public bool CanClose { get; set; } = false;
+    }
+
+    private void RequestSessionsRefresh(bool userAction)
+    {
+        if (_sessionsRefreshLoading)
+            return;
+        if ((DateTime.UtcNow - _lastSessionsPoll).TotalSeconds < 10)
+        {
+            if (userAction)
+                _sessionsRefreshQueued = true;
+            return;
+        }
+        _sessionsRefreshQueued = false;
+        _ = RefreshSessionsAsync();
+    }
+
+    private async Task RefreshSessionsAsync()
+    {
+        if (_sessionsRefreshLoading)
+            return;
+        _sessionsRefreshLoading = true;
+        _lastSessionsPoll = DateTime.UtcNow;
+        try
+        {
+            if (!_permissionsChecked && !_permissionsLoading)
+                await Permissions_Load();
+            if (CanLoadCardgames()) _ = Cardgames_LoadSessions();
+            if (CanLoadBingo()) _ = Bingo_LoadGames();
+            if (CanLoadHunt()) _ = Hunt_LoadList();
+        }
+        finally
+        {
+            _sessionsRefreshLoading = false;
+        }
     }
 
     private void DrawSessionsList()
@@ -1985,11 +2031,7 @@ public class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Refresh"))
         {
-            if (!_permissionsChecked)
-                _ = Permissions_Load();
-            if (CanLoadCardgames()) _ = Cardgames_LoadSessions();
-            if (CanLoadBingo()) _ = Bingo_LoadGames();
-            if (CanLoadHunt()) _ = Hunt_LoadList();
+            RequestSessionsRefresh(true);
         }
 
         ImGui.Spacing();
@@ -2036,12 +2078,13 @@ public class MainWindow : Window, IDisposable
             | ImGuiTableFlags.BordersInnerV
             | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.ScrollY;
-        if (ImGui.BeginTable("SessionsTable", 4, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
+        if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
         {
             ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f);
             ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 70f);
             ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 70f);
             ImGui.TableHeadersRow();
 
             foreach (var s in sessions)
@@ -2059,6 +2102,12 @@ public class MainWindow : Window, IDisposable
                 ImGui.TextUnformatted(s.Status);
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(s.Managed ? "Managed" : "Local");
+                ImGui.TableNextColumn();
+                using (var dis = ImRaii.Disabled(!s.CanClose))
+                {
+                    if (ImGui.SmallButton($"Close##{s.Id}"))
+                        _ = CloseSession(s);
+                }
             }
             ImGui.EndTable();
         }
@@ -2114,7 +2163,8 @@ public class MainWindow : Window, IDisposable
                 JoinCode = s.join_code,
                 TargetView = View.Cardgames,
                 Cardgame = s,
-                GameId = s.game_id
+                GameId = s.game_id,
+                CanClose = true
             });
         }
 
@@ -2130,7 +2180,8 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = true,
                 TargetView = View.Bingo,
-                GameId = id
+                GameId = id,
+                CanClose = g.active
             });
         }
 
@@ -2147,7 +2198,8 @@ public class MainWindow : Window, IDisposable
                 Managed = true,
                 JoinCode = hunt.join_code ?? "",
                 TargetView = View.Hunt,
-                GameId = hunt.hunt_id
+                GameId = hunt.hunt_id,
+                CanClose = hunt.active && !hunt.ended
             });
         }
 
@@ -2163,7 +2215,8 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Party,
                 Managed = false,
                 TargetView = View.MurderMystery,
-                Index = Plugin.Config.CurrentGameIndex
+                Index = Plugin.Config.CurrentGameIndex,
+                CanClose = false
             });
         }
 
@@ -2178,7 +2231,8 @@ public class MainWindow : Window, IDisposable
                 Status = status,
                 Category = SessionCategory.Party,
                 Managed = false,
-                TargetView = View.Glam
+                TargetView = View.Glam,
+                CanClose = false
             });
         }
 
@@ -2193,7 +2247,8 @@ public class MainWindow : Window, IDisposable
                 Status = status,
                 Category = SessionCategory.Draw,
                 Managed = false,
-                TargetView = View.Raffle
+                TargetView = View.Raffle,
+                CanClose = false
             });
         }
 
@@ -2206,7 +2261,8 @@ public class MainWindow : Window, IDisposable
                 Status = "Ready",
                 Category = SessionCategory.Draw,
                 Managed = false,
-                TargetView = View.SpinWheel
+                TargetView = View.SpinWheel,
+                CanClose = false
             });
         }
 
@@ -2262,6 +2318,27 @@ public class MainWindow : Window, IDisposable
             Plugin.Config.CurrentGameIndex = entry.Index.Value;
             Plugin.Config.Save();
         }
+    }
+
+    private async Task CloseSession(SessionEntry entry)
+    {
+        switch (entry.TargetView)
+        {
+            case View.Cardgames:
+                if (entry.Cardgame is null)
+                    return;
+                await Cardgames_CloseSession(entry.Cardgame);
+                break;
+            case View.Bingo:
+                if (!string.IsNullOrWhiteSpace(entry.GameId))
+                    await Bingo_EndGame(entry.GameId);
+                break;
+            case View.Hunt:
+                if (!string.IsNullOrWhiteSpace(entry.GameId))
+                    await Hunt_EndGame(entry.GameId);
+                break;
+        }
+        RequestSessionsRefresh(true);
     }
 
     private bool HasAdminKey()
@@ -4861,7 +4938,7 @@ public class MainWindow : Window, IDisposable
             _cardgamesLastJoinCode = s.join_code;
             _cardgamesLastPriestessToken = s.priestess_token;
             _cardgamesStatus = $"Session created: {s.join_code}.";
-            _ = Cardgames_LoadSessions();
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex)
         {
@@ -4895,7 +4972,7 @@ public class MainWindow : Window, IDisposable
             _cardgamesLastJoinCode = s.join_code;
             _cardgamesLastPriestessToken = s.priestess_token;
             _cardgamesStatus = $"Session cloned: {s.join_code}.";
-            _ = Cardgames_LoadSessions();
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex)
         {
@@ -4952,7 +5029,7 @@ public class MainWindow : Window, IDisposable
                 return;
             }
             _cardgamesStatus = "Session started.";
-            _ = Cardgames_LoadSessions();
+            RequestSessionsRefresh(true);
             _ = Cardgames_LoadState();
         }
         catch (Exception ex)
@@ -4983,7 +5060,7 @@ public class MainWindow : Window, IDisposable
             _cardgamesSelectedSession = null;
             _cardgamesStateDoc?.Dispose();
             _cardgamesStateDoc = null;
-            _ = Cardgames_LoadSessions();
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex)
         {
@@ -5015,6 +5092,38 @@ public class MainWindow : Window, IDisposable
         catch (Exception ex)
         {
             _cardgamesStatus = $"Action failed: {ex.Message}";
+        }
+    }
+
+    private async Task Cardgames_CloseSession(CardgameSession session)
+    {
+        Cardgames_EnsureClient();
+        _cardgamesStatus = "Closing session.";
+        try
+        {
+            if (string.Equals(session.status, "live", StringComparison.OrdinalIgnoreCase))
+            {
+                var resp = await _cardgamesApi!.FinishSessionAsync(session.game_id, session.session_id, session.priestess_token);
+                if (!resp.ok)
+                {
+                    _cardgamesStatus = resp.error ?? "Close failed.";
+                    return;
+                }
+            }
+            else
+            {
+                var resp = await _cardgamesApi!.DeleteSessionAsync(session.game_id, session.session_id, session.priestess_token);
+                if (!resp.ok)
+                {
+                    _cardgamesStatus = resp.error ?? "Delete failed.";
+                    return;
+                }
+            }
+            _cardgamesStatus = "Session closed.";
+        }
+        catch (Exception ex)
+        {
+            _cardgamesStatus = $"Close failed: {ex.Message}";
         }
     }
 
@@ -5166,6 +5275,7 @@ public class MainWindow : Window, IDisposable
             _huntStatus = $"Created hunt '{resp.hunt.title}'.";
             await Hunt_LoadState();
             await Hunt_LoadList();
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex)
         {
@@ -5191,6 +5301,7 @@ public class MainWindow : Window, IDisposable
             await _huntApi!.StartAsync(_huntId);
             await Hunt_LoadState();
             _huntStatus = "Hunt started.";
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex)
         {
@@ -5215,6 +5326,28 @@ public class MainWindow : Window, IDisposable
         {
             await _huntApi!.EndAsync(_huntId);
             await Hunt_LoadState();
+            _huntStatus = "Hunt ended.";
+            RequestSessionsRefresh(true);
+        }
+        catch (Exception ex)
+        {
+            _huntStatus = $"End failed: {ex.Message}";
+        }
+        finally
+        {
+            _huntLoading = false;
+        }
+    }
+
+    private async Task Hunt_EndGame(string huntId)
+    {
+        if (string.IsNullOrWhiteSpace(huntId))
+            return;
+        Hunt_EnsureClient();
+        _huntLoading = true;
+        try
+        {
+            await _huntApi!.EndAsync(huntId);
             _huntStatus = "Hunt ended.";
         }
         catch (Exception ex)
@@ -5384,6 +5517,7 @@ public class MainWindow : Window, IDisposable
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Game started.";
             Bingo_AddAction("Game started");
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex) { _bingoStatus = $"Start failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
@@ -5498,9 +5632,33 @@ public class MainWindow : Window, IDisposable
             await Bingo_LoadGame(_bingoState.game.game_id);
             _bingoStatus = "Game ended.";
             Bingo_AddAction("Game ended");
+            RequestSessionsRefresh(true);
         }
         catch (Exception ex) { _bingoStatus = $"End failed: {ex.Message}"; }
         finally { _bingoLoading = false; }
+    }
+
+    private async Task Bingo_EndGame(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return;
+        Bingo_EnsureClient();
+        _bingoLoading = true;
+        _bingoStatus = "Ending game.";
+        try
+        {
+            await _bingoApi!.EndGameAsync(gameId);
+            _bingoStatus = "Game ended.";
+            RequestSessionsRefresh(true);
+        }
+        catch (Exception ex)
+        {
+            _bingoStatus = $"End failed: {ex.Message}";
+        }
+        finally
+        {
+            _bingoLoading = false;
+        }
     }
 
     private async Task Bingo_AdvanceStage()
