@@ -62,7 +62,11 @@ public class MainWindow : Window, IDisposable
     private const float SplitterMinTop = 120f;
     private const float SplitterMinBottom = 120f;
     private const float VerticalSplitterThickness = 6f;
+    private const float MainSplitterPad = 6f;
     private bool _rightPaneCollapsed = false;
+    private bool _pendingWindowResize = false;
+    private Vector2 _pendingWindowSize = Vector2.Zero;
+    private float _lastExpandedWidth = 0f;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
@@ -406,11 +410,16 @@ public class MainWindow : Window, IDisposable
         float target = _controlSurfaceOpen ? 1f : 0f;
         float step = Math.Clamp(delta * 8f, 0f, 1f);
         _controlSurfaceAnim = Math.Clamp(_controlSurfaceAnim + (target - _controlSurfaceAnim) * step, 0f, 1f);
+        if (_pendingWindowResize)
+        {
+            ImGui.SetWindowSize(_pendingWindowSize, ImGuiCond.Always);
+            _pendingWindowResize = false;
+        }
 
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
         if (ImGui.BeginMenuBar())
         {
-            if (ImGui.Button("Sessions")) _topView = TopView.Sessions;
+            if (ImGui.Button("Control")) _topView = TopView.Sessions;
             ImGui.SameLine();
             if (ImGui.Button("Games")) _topView = TopView.Games;
             ImGui.SameLine();
@@ -422,7 +431,21 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine(0, 0);
             ImGui.SetCursorPosX(Math.Max(0, rightEdge - settingsW));
             if (ImGui.SmallButton(_rightPaneCollapsed ? "▶ Panel" : "◀ Panel"))
+            {
                 _rightPaneCollapsed = !_rightPaneCollapsed;
+                var size = ImGui.GetWindowSize();
+                if (_rightPaneCollapsed)
+                {
+                    _lastExpandedWidth = size.X;
+                    _pendingWindowSize = new Vector2(_leftPaneWidth + 20f, size.Y);
+                }
+                else
+                {
+                    float targetWidth = _lastExpandedWidth > 0f ? _lastExpandedWidth : size.X + 240f;
+                    _pendingWindowSize = new Vector2(targetWidth, size.Y);
+                }
+                _pendingWindowResize = true;
+            }
             ImGui.SameLine();
             if (ImGui.SmallButton("⚙ Settings"))
                 Plugin.ToggleConfigUI();
@@ -435,13 +458,14 @@ public class MainWindow : Window, IDisposable
         var avail = ImGui.GetContentRegionAvail();
         float minRight = 260f;
         float minLeft = 240f;
+        float splitTotal = VerticalSplitterThickness + MainSplitterPad * 2f;
         if (_rightPaneCollapsed)
         {
-            _leftPaneWidth = avail.X;
+            _leftPaneWidth = Math.Max(minLeft, avail.X);
         }
         else
         {
-            float maxLeft = Math.Max(minLeft, avail.X - minRight - VerticalSplitterThickness);
+            float maxLeft = Math.Max(minLeft, avail.X - minRight - splitTotal);
             _leftPaneWidth = Math.Clamp(_leftPaneWidth, minLeft, maxLeft);
         }
 
@@ -452,13 +476,16 @@ public class MainWindow : Window, IDisposable
         if (!_rightPaneCollapsed)
         {
             ImGui.SameLine(0, 0);
+            ImGui.Dummy(new Vector2(MainSplitterPad, avail.Y));
+            ImGui.SameLine(0, 0);
             ImGui.Button("##SplitMain", new Vector2(VerticalSplitterThickness, avail.Y));
             if (ImGui.IsItemActive() && ImGui.IsMouseDragging(0))
             {
                 float dragDelta = ImGui.GetIO().MouseDelta.X;
-                _leftPaneWidth = Math.Clamp(_leftPaneWidth + dragDelta, minLeft, avail.X - minRight - VerticalSplitterThickness);
+                _leftPaneWidth = Math.Clamp(_leftPaneWidth + dragDelta, minLeft, avail.X - minRight - splitTotal);
             }
-
+            ImGui.SameLine(0, 0);
+            ImGui.Dummy(new Vector2(MainSplitterPad, avail.Y));
             ImGui.SameLine(0, 0);
             ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
             switch (_topView)
@@ -2720,7 +2747,7 @@ public class MainWindow : Window, IDisposable
 
     private void DrawGameSection(string title, string description, GameCard[] cards)
     {
-        const float cardRowHeight = 76f;
+        const float cardRowHeight = 84f;
         var padding = new Vector2(14f, 12f);
         var titleSize = ImGui.CalcTextSize(title);
         var descSize = ImGui.CalcTextSize(description);
@@ -2735,8 +2762,8 @@ public class MainWindow : Window, IDisposable
         var accent = CategoryColor(cards.Length > 0 ? cards[0].Category : SessionCategory.Party);
         var bg = new Vector4(accent.X * 0.15f, accent.Y * 0.15f, accent.Z * 0.15f, 0.85f);
         var border = new Vector4(accent.X, accent.Y, accent.Z, 0.40f);
-        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 14f);
-        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 14f, 0, 1.2f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 8f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 8f, 0, 1.2f);
 
         ImGui.SetCursorPos(padding);
         DrawSectionHeader(title, description);
@@ -2758,10 +2785,10 @@ public class MainWindow : Window, IDisposable
         var accent = CategoryColor(card.Category);
         var bg = new Vector4(0.08f, 0.08f, 0.10f, 0.92f);
         var border = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
-        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 10f);
-        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 10f, 0, 1.0f);
+        draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 6f);
+        draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 6f, 0, 1.0f);
 
-        var padding = new Vector2(10f, 8f);
+        var padding = new Vector2(14f, 8f);
         ImGui.SetCursorPos(padding);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
 
@@ -2776,17 +2803,15 @@ public class MainWindow : Window, IDisposable
         ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
         ImGui.TextDisabled(card.Details);
 
-        DrawBadgeChip(card.Managed ? "Uses central service" : "Runs from this app", accent);
-        if (card.JoinKey)
-        {
-            ImGui.SameLine();
-            DrawBadgeChip("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f));
-        }
-        if (card.InternetAssets)
-        {
-            ImGui.SameLine();
-            DrawBadgeChip("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f));
-        }
+        ImGui.Dummy(new Vector2(0, 4f));
+        DrawBadgeWrapRow(textWrapX - pos.X - padding.X,
+            new[]
+            {
+                new BadgeSpec(card.Managed ? "Uses central service" : "Runs from this app", card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f)),
+                card.JoinKey ? new BadgeSpec("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f)) : BadgeSpec.Empty,
+                card.InternetAssets ? new BadgeSpec("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f)) : BadgeSpec.Empty,
+            }
+        );
         ImGui.PopTextWrapPos();
 
         float buttonY = (rowHeight - 28f) * 0.5f;
@@ -2877,6 +2902,41 @@ public class MainWindow : Window, IDisposable
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 8f, 0, 1f);
         draw.AddText(new Vector2(pos.X + pad.X, pos.Y + pad.Y), ImGui.ColorConvertFloat4ToU32(new Vector4(0.95f, 0.95f, 0.95f, 1f)), text);
         ImGui.Dummy(size);
+    }
+
+    private readonly struct BadgeSpec
+    {
+        public string Text { get; }
+        public Vector4 Color { get; }
+        public bool IsEmpty => string.IsNullOrWhiteSpace(Text);
+        public BadgeSpec(string text, Vector4 color)
+        {
+            Text = text;
+            Color = color;
+        }
+        public static BadgeSpec Empty => new BadgeSpec("", Vector4.Zero);
+    }
+
+    private void DrawBadgeWrapRow(float maxWidth, BadgeSpec[] badges)
+    {
+        float used = 0f;
+        foreach (var badge in badges)
+        {
+            if (badge.IsEmpty)
+                continue;
+            var textSize = ImGui.CalcTextSize(badge.Text);
+            var pad = new Vector2(6f, 3f);
+            float width = textSize.X + pad.X * 2f;
+            if (used > 0f && used + width > maxWidth)
+            {
+                ImGui.NewLine();
+                used = 0f;
+            }
+            if (used > 0f)
+                ImGui.SameLine();
+            DrawBadgeChip(badge.Text, badge.Color);
+            used += width + 6f;
+        }
     }
 
     private bool DrawPrimaryActionButton(string label, bool managed, string id, Vector2? size = null)
