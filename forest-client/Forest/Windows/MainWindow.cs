@@ -2023,7 +2023,24 @@ public class MainWindow : Window, IDisposable
         public string? GameId { get; set; }
         public int? Index { get; set; }
         public bool CanClose { get; set; } = false;
+        public string TypeIcon { get; set; } = "•";
     }
+
+    private static string StatusIcon(string status)
+    {
+        var val = (status ?? "").ToLowerInvariant();
+        return val switch
+        {
+            "live" => "🟢",
+            "waiting" => "🟡",
+            "ready" => "🟡",
+            "created" => "🟡",
+            "finished" => "⚪",
+            _ => "⚪",
+        };
+    }
+
+    private static string ModeIcon(bool managed) => managed ? "📶" : "📴";
 
     private void RequestSessionsRefresh(bool userAction)
     {
@@ -2114,18 +2131,18 @@ public class MainWindow : Window, IDisposable
             | ImGuiTableFlags.ScrollY;
         if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
         {
-            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 36f);
             ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 70f);
-            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 70f);
-            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 70f);
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 46f);
+            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 46f);
+            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 46f);
             ImGui.TableHeadersRow();
 
             foreach (var s in sessions)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{CategoryIcon(s.Category)} {CategoryLabel(s.Category)}");
+                ImGui.TextUnformatted(s.TypeIcon);
                 ImGui.TableNextColumn();
                 if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
                 {
@@ -2133,14 +2150,18 @@ public class MainWindow : Window, IDisposable
                     SelectSession(s);
                 }
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(s.Status);
+                ImGui.TextUnformatted(StatusIcon(s.Status));
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(s.Managed ? "Managed" : "Local");
+                ImGui.TextUnformatted(ModeIcon(s.Managed));
                 ImGui.TableNextColumn();
                 using (var dis = ImRaii.Disabled(!s.CanClose))
                 {
-                    if (ImGui.SmallButton($"Close##{s.Id}"))
+                    ImGui.PushStyleColor(ImGuiCol.Text, s.CanClose
+                        ? ImGui.ColorConvertFloat4ToU32(new Vector4(0.95f, 0.95f, 0.95f, 1f))
+                        : ImGui.ColorConvertFloat4ToU32(new Vector4(0.55f, 0.55f, 0.55f, 1f)));
+                    if (ImGui.SmallButton($"🗑️##{s.Id}"))
                         _ = CloseSession(s);
+                    ImGui.PopStyleColor();
                 }
             }
             ImGui.EndTable();
@@ -2199,6 +2220,7 @@ public class MainWindow : Window, IDisposable
                 TargetView = View.Cardgames,
                 Cardgame = s,
                 GameId = s.game_id,
+                TypeIcon = CategoryIcon(SessionCategory.Casino),
                 CanClose = true
             });
         }
@@ -2207,15 +2229,17 @@ public class MainWindow : Window, IDisposable
         {
             var id = g.game_id ?? "";
             var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
+            var label = string.IsNullOrWhiteSpace(title) ? "Bingo" : $"Bingo: {title}";
             list.Add(new SessionEntry
             {
                 Id = $"bingo-{id}",
-                Name = string.IsNullOrWhiteSpace(title) ? "Bingo" : $"Bingo: {title}",
+                Name = label,
                 Status = g.active ? "Live" : "Finished",
                 Category = SessionCategory.Draw,
                 Managed = true,
                 TargetView = View.Bingo,
                 GameId = id,
+                TypeIcon = CategoryIcon(SessionCategory.Draw),
                 CanClose = g.active
             });
         }
@@ -2234,6 +2258,7 @@ public class MainWindow : Window, IDisposable
                 JoinCode = hunt.join_code ?? "",
                 TargetView = View.Hunt,
                 GameId = hunt.hunt_id,
+                TypeIcon = CategoryIcon(SessionCategory.Party),
                 CanClose = hunt.active && !hunt.ended
             });
         }
@@ -2251,6 +2276,7 @@ public class MainWindow : Window, IDisposable
                 Managed = false,
                 TargetView = View.MurderMystery,
                 Index = Plugin.Config.CurrentGameIndex,
+                TypeIcon = CategoryIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2267,6 +2293,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Party,
                 Managed = false,
                 TargetView = View.Glam,
+                TypeIcon = CategoryIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2283,6 +2310,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.Raffle,
+                TypeIcon = CategoryIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -2297,6 +2325,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.SpinWheel,
+                TypeIcon = CategoryIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -6103,11 +6132,6 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
-
-
-
-
-
 
 
 
