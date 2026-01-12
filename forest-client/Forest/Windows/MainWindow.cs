@@ -67,6 +67,9 @@ public class MainWindow : Window, IDisposable
     private bool _pendingWindowResize = false;
     private Vector2 _pendingWindowSize = Vector2.Zero;
     private float _lastExpandedWidth = 0f;
+    private float _windowExtraWidth = 0f;
+    private const float MinWindowWidthExpanded = 900f;
+    private const float MinWindowWidthCollapsed = 520f;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
@@ -209,7 +212,7 @@ public class MainWindow : Window, IDisposable
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(900, 560),
+            MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
@@ -434,15 +437,27 @@ public class MainWindow : Window, IDisposable
             {
                 _rightPaneCollapsed = !_rightPaneCollapsed;
                 var size = ImGui.GetWindowSize();
+                var contentWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
+                _windowExtraWidth = Math.Max(0f, size.X - contentWidth);
                 if (_rightPaneCollapsed)
                 {
                     _lastExpandedWidth = size.X;
-                    _pendingWindowSize = new Vector2(_leftPaneWidth + 20f, size.Y);
+                    _pendingWindowSize = new Vector2(_leftPaneWidth + _windowExtraWidth, size.Y);
+                    SizeConstraints = new WindowSizeConstraints
+                    {
+                        MinimumSize = new Vector2(MinWindowWidthCollapsed, 560),
+                        MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+                    };
                 }
                 else
                 {
                     float targetWidth = _lastExpandedWidth > 0f ? _lastExpandedWidth : size.X + 240f;
                     _pendingWindowSize = new Vector2(targetWidth, size.Y);
+                    SizeConstraints = new WindowSizeConstraints
+                    {
+                        MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
+                        MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+                    };
                 }
                 _pendingWindowResize = true;
             }
@@ -469,9 +484,11 @@ public class MainWindow : Window, IDisposable
             _leftPaneWidth = Math.Clamp(_leftPaneWidth, minLeft, maxLeft);
         }
 
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f));
         ImGui.BeginChild("LeftPaneWrap", new Vector2(_leftPaneWidth, 0), false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         DrawLeftPane();
         ImGui.EndChild();
+        ImGui.PopStyleVar();
 
         if (!_rightPaneCollapsed)
         {
@@ -487,6 +504,7 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine(0, 0);
             ImGui.Dummy(new Vector2(MainSplitterPad, avail.Y));
             ImGui.SameLine(0, 0);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10f, 10f));
             ImGui.BeginChild("RightPane", Vector2.Zero, false, 0);
             switch (_topView)
             {
@@ -495,6 +513,7 @@ public class MainWindow : Window, IDisposable
                 case TopView.Sessions: DrawSessionsControlSurface(); break;
             }
             ImGui.EndChild();
+            ImGui.PopStyleVar();
         }
     }
 
@@ -505,9 +524,11 @@ public class MainWindow : Window, IDisposable
         float topH = Math.Max(SplitterMinTop, totalH * _leftSplitRatio - SplitterThickness * 0.5f);
         float bottomH = Math.Max(SplitterMinBottom, totalH - topH - SplitterThickness);
 
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f));
         ImGui.BeginChild("PlayersTop", new Vector2(0, topH), true, 0);
         DrawPlayersList();
         ImGui.EndChild();
+        ImGui.PopStyleVar();
 
         // splitter
         ImGui.Button(" ", new Vector2(-1, SplitterThickness));
@@ -521,9 +542,11 @@ public class MainWindow : Window, IDisposable
             _leftSplitRatio = Math.Clamp(newRatio, minRatio, maxRatio);
         }
 
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f));
         ImGui.BeginChild("SavedBottom", new Vector2(0, bottomH), true, 0);
         DrawSessionsList();
         ImGui.EndChild();
+        ImGui.PopStyleVar();
     }
 
     // --- Player list: full-width hit area; right-click opens context ---
@@ -702,6 +725,8 @@ public class MainWindow : Window, IDisposable
                 ImGui.EndPopup();
             }
         }
+
+        ImGui.Dummy(new Vector2(0, 8f));
     }
 
     // -------- bottom-left when Murder tab is active --------
@@ -2138,6 +2163,7 @@ public class MainWindow : Window, IDisposable
             }
             ImGui.EndTable();
         }
+        ImGui.Dummy(new Vector2(0, 8f));
     }
 
     private static string CategoryLabel(SessionCategory category)
@@ -2401,6 +2427,7 @@ public class MainWindow : Window, IDisposable
         return title switch
         {
             "Scavenger Hunt" => CanLoadHunt(),
+            "Bingo" => CanLoadBingo(),
             "Blackjack" => CanLoadCardgames(),
             "Poker" => CanLoadCardgames(),
             "High/Low" => CanLoadCardgames(),
@@ -2705,7 +2732,8 @@ public class MainWindow : Window, IDisposable
             {
                 new GameCard("Scavenger Hunt", SessionCategory.Party, true, true, false, "Managed staff-led hunt with shared locations."),
                 new GameCard("Murder Mystery", SessionCategory.Party, false, false, false, "Local story and text management."),
-                new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts and online lists.")
+                new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts and online lists."),
+                new GameCard("Bingo", SessionCategory.Party, true, false, false, "Managed bingo with live calls.")
             });
 
         DrawGameSection("🎰 Casino Games",
@@ -2864,6 +2892,9 @@ public class MainWindow : Window, IDisposable
                     _ = Cardgames_LoadDecks();
                     _ = Cardgames_LoadSessions();
                     break;
+                case "Bingo":
+                    _ = Bingo_LoadGames();
+                    break;
                 case "Raffle":
                     break;
                 case "Spin Wheel":
@@ -2984,6 +3015,7 @@ public class MainWindow : Window, IDisposable
             "Blackjack" => View.Cardgames,
             "Poker" => View.Cardgames,
             "High/Low" => View.Cardgames,
+            "Bingo" => View.Bingo,
             "Raffle" => View.Raffle,
             "Spin Wheel" => View.SpinWheel,
             _ => View.Home
