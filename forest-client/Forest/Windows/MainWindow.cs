@@ -65,11 +65,15 @@ public class MainWindow : Window, IDisposable
     private const float MainSplitterPad = 6f;
     private bool _rightPaneCollapsed = false;
     private bool _pendingWindowResize = false;
-    private Vector2 _pendingWindowSize = Vector2.Zero;
+    private float _pendingWindowWidth = 0f;
     private float _lastExpandedWidth = 0f;
     private float _windowExtraWidth = 0f;
+    private float _lastWindowHeight = 0f;
     private const float MinWindowWidthExpanded = 900f;
     private const float MinWindowWidthCollapsed = 360f;
+    private const float GameCardInset = 8f;
+    private const float GameCardPaddingX = 24f;
+    private const float SectionHeaderPaddingX = GameCardInset + GameCardPaddingX;
     private DateTime _lastSessionsPoll = DateTime.MinValue;
     private bool _sessionsRefreshQueued = false;
     private bool _sessionsRefreshLoading = false;
@@ -413,10 +417,12 @@ public class MainWindow : Window, IDisposable
         float target = _controlSurfaceOpen ? 1f : 0f;
         float step = Math.Clamp(delta * 8f, 0f, 1f);
         _controlSurfaceAnim = Math.Clamp(_controlSurfaceAnim + (target - _controlSurfaceAnim) * step, 0f, 1f);
+        _lastWindowHeight = ImGui.GetWindowSize().Y;
         if (_pendingWindowResize)
         {
-            ImGui.SetWindowSize(_pendingWindowSize, ImGuiCond.Always);
+            ImGui.SetWindowSize(new Vector2(_pendingWindowWidth, _lastWindowHeight), ImGuiCond.Always);
             _pendingWindowResize = false;
+            _pendingWindowWidth = 0f;
         }
 
         // Top menu bar with buttons (Hunt / Murder Mystery / Bingo) + Settings to the right
@@ -2389,7 +2395,7 @@ public class MainWindow : Window, IDisposable
         if (_rightPaneCollapsed)
         {
             _lastExpandedWidth = size.X;
-            _pendingWindowSize = new Vector2(_leftPaneWidth + _windowExtraWidth, size.Y);
+            _pendingWindowWidth = Math.Max(MinWindowWidthCollapsed, _leftPaneWidth + _windowExtraWidth);
             SizeConstraints = new WindowSizeConstraints
             {
                 MinimumSize = new Vector2(MinWindowWidthCollapsed, 560),
@@ -2399,7 +2405,7 @@ public class MainWindow : Window, IDisposable
         else
         {
             float targetWidth = _lastExpandedWidth > 0f ? _lastExpandedWidth : size.X + 240f;
-            _pendingWindowSize = new Vector2(targetWidth, size.Y);
+            _pendingWindowWidth = Math.Max(MinWindowWidthExpanded, targetWidth);
             SizeConstraints = new WindowSizeConstraints
             {
                 MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
@@ -2786,7 +2792,7 @@ public class MainWindow : Window, IDisposable
     private void DrawGameSection(string title, string description, GameCard[] cards)
     {
         const float cardRowHeight = 84f;
-        var padding = new Vector2(20f, 12f);
+        var padding = new Vector2(SectionHeaderPaddingX, 12f);
         var titleSize = ImGui.CalcTextSize(title);
         var descSize = ImGui.CalcTextSize(description);
         float blockHeight = padding.Y * 2f + titleSize.Y + descSize.Y + 8f
@@ -2806,7 +2812,7 @@ public class MainWindow : Window, IDisposable
         ImGui.SetCursorPos(padding);
         DrawSectionHeader(title, description);
         ImGui.Spacing();
-        float inset = 8f;
+        float inset = GameCardInset;
         foreach (var card in cards)
         {
             var cur = ImGui.GetCursorPos();
@@ -2830,7 +2836,7 @@ public class MainWindow : Window, IDisposable
         draw.AddRectFilled(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(bg), 6f);
         draw.AddRect(pos, new Vector2(pos.X + size.X, pos.Y + size.Y), ImGui.ColorConvertFloat4ToU32(border), 6f, 0, 1.0f);
 
-        var padding = new Vector2(24f, 10f);
+        var padding = new Vector2(GameCardPaddingX, 10f);
         ImGui.SetCursorPos(padding);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
 
@@ -2853,7 +2859,7 @@ public class MainWindow : Window, IDisposable
                 card.InternetAssets ? new BadgeSpec("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f)) : BadgeSpec.Empty,
             }
         );
-        ImGui.Dummy(new Vector2(0, 4f));
+        ImGui.Dummy(new Vector2(0, 8f));
         ImGui.PopTextWrapPos();
 
         float buttonY = (rowHeight - 28f) * 0.5f;
@@ -6097,11 +6103,6 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
-
-
-
-
-
 
 
 
