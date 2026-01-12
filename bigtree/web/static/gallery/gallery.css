@@ -567,6 +567,8 @@
     box-shadow:0 12px 22px rgba(0,0,0,.18);
     margin:0 0 20px;
     break-inside:avoid;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
   .post-game-banner{
     display:none;
