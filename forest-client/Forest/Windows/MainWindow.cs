@@ -2830,7 +2830,7 @@ public class MainWindow : Window, IDisposable
 
         float actionW = 150f;
         float detailsW = 80f;
-        float buttonAreaW = actionW + detailsW + 8f;
+        float buttonAreaW = 8f + actionW + detailsW + 8f;
         float textWrapX = pos.X + size.X - padding.X - buttonAreaW;
         ImGui.PushTextWrapPos(textWrapX);
 
@@ -2839,11 +2839,11 @@ public class MainWindow : Window, IDisposable
         ImGui.TextDisabled($"{CategoryIcon(card.Category)} {CategoryLabel(card.Category)}");
         ImGui.TextDisabled(card.Details);
 
-        ImGui.Dummy(new Vector2(0, 4f));
+        ImGui.Dummy(new Vector2(2f, 4f));
         DrawBadgeWrapRow(textWrapX - pos.X - padding.X,
             new[]
             {
-                new BadgeSpec(card.Managed ? "Uses central service" : "Runs from this app", card.Managed ? new Vector4(0.30f, 0.65f, 0.70f, 1.0f) : new Vector4(0.40f, 0.75f, 0.55f, 1.0f)),
+ 
                 card.JoinKey ? new BadgeSpec("Join key needed", new Vector4(0.85f, 0.55f, 0.25f, 1.0f)) : BadgeSpec.Empty,
                 card.InternetAssets ? new BadgeSpec("Fetches online assets", new Vector4(0.55f, 0.70f, 0.90f, 1.0f)) : BadgeSpec.Empty,
             }
