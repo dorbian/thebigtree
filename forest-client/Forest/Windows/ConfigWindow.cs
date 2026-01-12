@@ -27,19 +27,16 @@ public class ConfigWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        if (Configuration.IsConfigWindowMovable)
-            Flags &= ~ImGuiWindowFlags.NoMove;
-        else
-            Flags |= ImGuiWindowFlags.NoMove;
+        Flags &= ~ImGuiWindowFlags.NoMove;
     }
 
     public override void Draw()
     {
         // General (demo) settings kept minimal
-        var movable = Configuration.IsConfigWindowMovable;
-        if (ImGui.Checkbox("Movable Settings Window", ref movable))
+        var lockCols = Configuration.IsConfigWindowMovable;
+        if (ImGui.Checkbox("Lock session columns", ref lockCols))
         {
-            Configuration.IsConfigWindowMovable = movable;
+            Configuration.IsConfigWindowMovable = lockCols;
             Configuration.Save();
         }
 

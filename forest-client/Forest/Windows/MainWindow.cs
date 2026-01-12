@@ -6,7 +6,6 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Interface.Utility.Raii;
-using Dalamud.Interface;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
@@ -2024,61 +2023,48 @@ public class MainWindow : Window, IDisposable
         public string? GameId { get; set; }
         public int? Index { get; set; }
         public bool CanClose { get; set; } = false;
-        public FontAwesomeIcon TypeIcon { get; set; } = FontAwesomeIcon.QuestionCircle;
+        public string TypeIcon { get; set; } = "-";
     }
 
-    private static FontAwesomeIcon StatusIcon(string status)
+    private static string StatusIcon(string status)
     {
         var val = (status ?? "").ToLowerInvariant();
         return val switch
         {
-            "live" => FontAwesomeIcon.CircleCheck,
-            "waiting" => FontAwesomeIcon.Circle,
-            "ready" => FontAwesomeIcon.Circle,
-            "created" => FontAwesomeIcon.Circle,
-            "finished" => FontAwesomeIcon.CircleXmark,
-            _ => FontAwesomeIcon.Circle,
+            "live" => "\uf058",
+            "waiting" => "\uf111",
+            "ready" => "\uf111",
+            "created" => "\uf111",
+            "finished" => "\uf057",
+            _ => "\uf111",
         };
     }
 
-    private static FontAwesomeIcon ModeIcon(bool managed) => managed ? FontAwesomeIcon.Wifi : FontAwesomeIcon.WifiSlash;
+    private static string ModeIcon(bool managed) => managed ? "\uf1eb" : "\uf6ac";
 
-    private static Vector4 StatusColor(string status)
+    private static string TypeIcon(SessionCategory category)
+    {
+        return category switch
+        {
+            SessionCategory.Casino => "\uf51e",
+            SessionCategory.Draw => "\uf06b",
+            SessionCategory.Party => "\uf0c0",
+            _ => "\uf111",
+        };
+    }
+
+    private static string StatusFallback(string status)
     {
         var val = (status ?? "").ToLowerInvariant();
         return val switch
         {
-            "live" => new Vector4(0.35f, 0.85f, 0.45f, 1.0f),
-            "waiting" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
-            "ready" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
-            "created" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
-            "finished" => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
-            _ => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+            "live" => "L",
+            "waiting" => "W",
+            "ready" => "W",
+            "created" => "W",
+            "finished" => "F",
+            _ => "-",
         };
-    }
-
-    private static Vector4 ModeColor(bool managed)
-    {
-        return managed
-            ? new Vector4(0.40f, 0.80f, 0.95f, 1.0f)
-            : new Vector4(0.65f, 0.65f, 0.65f, 1.0f);
-    }
-
-    private void DrawIconText(FontAwesomeIcon icon, Vector4 color)
-    {
-        ImGui.PushFont(Plugin.PluginInterface.UiBuilder.IconFont);
-        ImGui.TextColored(color, icon.ToIconString());
-        ImGui.PopFont();
-    }
-
-    private bool IconButton(FontAwesomeIcon icon, string id, Vector4 color)
-    {
-        ImGui.PushFont(Plugin.PluginInterface.UiBuilder.IconFont);
-        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(color));
-        bool clicked = ImGui.SmallButton($"{icon.ToIconString()}##{id}");
-        ImGui.PopStyleColor();
-        ImGui.PopFont();
-        return clicked;
     }
     private void RequestSessionsRefresh(bool userAction)
     {
@@ -2114,6 +2100,75 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private static Vector4 StatusColor(string status)
+    {
+        var val = (status ?? "").ToLowerInvariant();
+        return val switch
+        {
+            "live" => new Vector4(0.35f, 0.85f, 0.45f, 1.0f),
+            "waiting" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "ready" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "created" => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            "finished" => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+            _ => new Vector4(0.70f, 0.70f, 0.70f, 1.0f),
+        };
+    }
+
+    private static Vector4 ModeColor(bool managed)
+    {
+        return managed
+            ? new Vector4(0.40f, 0.80f, 0.95f, 1.0f)
+            : new Vector4(0.65f, 0.65f, 0.65f, 1.0f);
+    }
+
+    private void DrawCenteredText(string text, Vector4 color)
+    {
+        float colWidth = ImGui.TableGetColumnWidth();
+        float textWidth = ImGui.CalcTextSize(text).X;
+        float offset = Math.Max(0f, (colWidth - textWidth) * 0.5f);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
+        ImGui.TextColored(color, text);
+    }
+
+    private bool CenteredSmallButton(string label, string id, Vector4 color)
+    {
+        var style = ImGui.GetStyle();
+        float colWidth = ImGui.TableGetColumnWidth();
+        float textWidth = ImGui.CalcTextSize(label).X;
+        float btnWidth = textWidth + style.FramePadding.X * 2f;
+        float offset = Math.Max(0f, (colWidth - btnWidth) * 0.5f);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(color));
+        bool clicked = ImGui.SmallButton($"{label}##{id}");
+        ImGui.PopStyleColor();
+        return clicked;
+    }
+
+    private void DrawCenteredIconText(string icon, string fallback, Vector4 color)
+    {
+        if (Plugin.IconFontLoaded)
+        {
+            ImGui.PushFont(Plugin.IconFont);
+            DrawCenteredText(icon, color);
+            ImGui.PopFont();
+        }
+        else
+        {
+            DrawCenteredText(fallback, color);
+        }
+    }
+
+    private bool CenteredIconButton(string icon, string fallback, string id, Vector4 color)
+    {
+        if (Plugin.IconFontLoaded)
+        {
+            ImGui.PushFont(Plugin.IconFont);
+            bool clicked = CenteredSmallButton(icon, id, color);
+            ImGui.PopFont();
+            return clicked;
+        }
+        return CenteredSmallButton(fallback, id, color);
+    }
     private void DrawSessionsList()
     {
         ImGui.TextDisabled("Sessions");
@@ -2165,22 +2220,27 @@ public class MainWindow : Window, IDisposable
 
         var tableFlags = ImGuiTableFlags.RowBg
             | ImGuiTableFlags.BordersInnerV
-            | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.ScrollY;
+        if (!Plugin.Config.IsConfigWindowMovable)
+            tableFlags |= ImGuiTableFlags.Resizable;
         if (ImGui.BeginTable("SessionsTable", 5, tableFlags, new Vector2(0, ImGui.GetContentRegionAvail().Y)))
         {
-            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 26f);
+            float typeW = ImGui.CalcTextSize("Type").X + 14f;
+            float statusW = ImGui.CalcTextSize("Status").X + 14f;
+            float modeW = ImGui.CalcTextSize("Mode").X + 14f;
+            float closeW = ImGui.CalcTextSize("Close").X + 14f;
+            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, typeW);
             ImGui.TableSetupColumn("Game", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 26f);
-            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 26f);
-            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, 32f);
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, statusW);
+            ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, modeW);
+            ImGui.TableSetupColumn("Close", ImGuiTableColumnFlags.WidthFixed, closeW);
             ImGui.TableHeadersRow();
 
             foreach (var s in sessions)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                DrawIconText(s.TypeIcon, CategoryColor(s.Category));
+                DrawCenteredIconText(s.TypeIcon, CategoryIcon(s.Category), CategoryColor(s.Category));
                 ImGui.TableNextColumn();
                 if (ImGui.Selectable(s.Name, _selectedSessionId == s.Id))
                 {
@@ -2188,16 +2248,16 @@ public class MainWindow : Window, IDisposable
                     SelectSession(s);
                 }
                 ImGui.TableNextColumn();
-                DrawIconText(StatusIcon(s.Status), StatusColor(s.Status));
+                DrawCenteredIconText(StatusIcon(s.Status), StatusFallback(s.Status), StatusColor(s.Status));
                 ImGui.TableNextColumn();
-                DrawIconText(ModeIcon(s.Managed), ModeColor(s.Managed));
+                DrawCenteredIconText(ModeIcon(s.Managed), ModeIcon(s.Managed) == "\uf1eb" ? "M" : "L", ModeColor(s.Managed));
                 ImGui.TableNextColumn();
                 using (var dis = ImRaii.Disabled(!s.CanClose))
                 {
                     var color = s.CanClose
                         ? new Vector4(0.95f, 0.95f, 0.95f, 1f)
                         : new Vector4(0.55f, 0.55f, 0.55f, 1f);
-                    if (IconButton(FontAwesomeIcon.Trash, $"close-{s.Id}", color))
+                    if (CenteredIconButton("\uf1f8", "X", $"close-{s.Id}", color))
                         _ = CloseSession(s);
                 }
             }
@@ -2225,17 +2285,6 @@ public class MainWindow : Window, IDisposable
             SessionCategory.Draw => "D",
             SessionCategory.Party => "P",
             _ => "-",
-        };
-    }
-
-    private static FontAwesomeIcon CategoryTypeIcon(SessionCategory category)
-    {
-        return category switch
-        {
-            SessionCategory.Casino => FontAwesomeIcon.Coins,
-            SessionCategory.Draw => FontAwesomeIcon.Gift,
-            SessionCategory.Party => FontAwesomeIcon.Users,
-            _ => FontAwesomeIcon.Circle,
         };
     }
     private static Vector4 CategoryColor(SessionCategory category)
@@ -2267,7 +2316,7 @@ public class MainWindow : Window, IDisposable
                 TargetView = View.Cardgames,
                 Cardgame = s,
                 GameId = s.game_id,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Casino),
+                TypeIcon = TypeIcon(SessionCategory.Casino),
                 CanClose = true
             });
         }
@@ -2286,7 +2335,7 @@ public class MainWindow : Window, IDisposable
                 Managed = true,
                 TargetView = View.Bingo,
                 GameId = id,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
+                TypeIcon = TypeIcon(SessionCategory.Draw),
                 CanClose = g.active
             });
         }
@@ -2305,7 +2354,7 @@ public class MainWindow : Window, IDisposable
                 JoinCode = hunt.join_code ?? "",
                 TargetView = View.Hunt,
                 GameId = hunt.hunt_id,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
+                TypeIcon = TypeIcon(SessionCategory.Party),
                 CanClose = hunt.active && !hunt.ended
             });
         }
@@ -2323,7 +2372,7 @@ public class MainWindow : Window, IDisposable
                 Managed = false,
                 TargetView = View.MurderMystery,
                 Index = Plugin.Config.CurrentGameIndex,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
+                TypeIcon = TypeIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2340,7 +2389,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Party,
                 Managed = false,
                 TargetView = View.Glam,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Party),
+                TypeIcon = TypeIcon(SessionCategory.Party),
                 CanClose = false
             });
         }
@@ -2357,7 +2406,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.Raffle,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
+                TypeIcon = TypeIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -2372,7 +2421,7 @@ public class MainWindow : Window, IDisposable
                 Category = SessionCategory.Draw,
                 Managed = false,
                 TargetView = View.SpinWheel,
-                TypeIcon = CategoryTypeIcon(SessionCategory.Draw),
+                TypeIcon = TypeIcon(SessionCategory.Draw),
                 CanClose = false
             });
         }
@@ -6197,6 +6246,10 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 }
+
+
+
+
 
 
 
