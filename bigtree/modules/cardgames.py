@@ -986,6 +986,38 @@ def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
     if token != s.get("priestess_token"):
         raise PermissionError("unauthorized")
     state = s.get("state") or {}
+    if s.get("game_id") == "blackjack" and action in ("hit", "stand", "double", "split"):
+        if s.get("status") != "live":
+            raise ValueError("session not live")
+        updated, err = _apply_action(s["game_id"], state, action, {})
+        if err:
+            raise ValueError(err)
+        s["state"] = updated
+        if updated.get("status") == "finished":
+            result = updated.get("result")
+            pot = int(s.get("pot") or 0)
+            winnings = 0
+            results = updated.get("hand_results") or []
+            multipliers = updated.get("hand_multipliers") or []
+            if not results and result:
+                results = [result]
+            for idx, hand_result in enumerate(results):
+                if hand_result not in ("win", "push"):
+                    continue
+                multiplier = 1
+                if idx < len(multipliers):
+                    try:
+                        multiplier = int(multipliers[idx] or 1)
+                    except Exception:
+                        multiplier = 1
+                if hand_result == "win":
+                    winnings += pot * max(1, multiplier)
+                else:
+                    winnings += int(pot * max(1, multiplier) / 2)
+            s["winnings"] = winnings
+        _update_session(session_id, s)
+        _add_event(session_id, "STATE_UPDATED", {"action": action})
+        return s
     if s.get("game_id") == "poker" and action == "advance":
         _advance_poker(state)
         if state.get("status") == "finished":

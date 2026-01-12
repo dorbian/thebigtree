@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Cardgames: allow host actions for blackjack (hit/stand/double/split) in the FFXIV client.
 - Cardgames: add draft session creation flag and draft-aware start handling.
 - Blackjack: support split/double actions with multi-hand state and payouts.
 - FFXIV client: move cardgame setup into a prepare popup with deck refresh and draft creation, plus updated session header and actions.
