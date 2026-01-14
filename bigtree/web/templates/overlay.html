@@ -188,6 +188,7 @@
                       <a href="/overlay">Overlay dashboard</a>
                       <a href="/tarot/gallery" target="_blank" rel="noreferrer">Forest gallery</a>
                       <a href="/tarot/overlay" target="_blank" rel="noreferrer">Tarot overlay</a>
+                      <button id="updatePlogonmasterBtn" class="btn btn-sm btn-secondary">Update Plugin Master</button>
                     </div>
                   </div>
                   <div class="dash-block">
@@ -1733,6 +1734,44 @@
     </div>
     <div class="toast-stack" id="toastStack"></div>
     <script src="/static/overlay/overlay.js" defer></script>
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const btn = document.getElementById("updatePlogonmasterBtn");
+      if (btn) {
+        btn.addEventListener("click", async function() {
+          btn.disabled = true;
+          btn.textContent = "Updating...";
+          try {
+            const resp = await fetch("/admin/update_with_leaf", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              }
+            });
+            const data = await resp.json();
+            if (data.ok) {
+              showToast("with.leaf updated successfully.");
+            } else {
+              showToast("Update failed: " + (data.error || "Unknown error"));
+            }
+          } catch (err) {
+            showToast("Update failed: " + err);
+          }
+          btn.disabled = false;
+          btn.textContent = "Update Plugin Master";
+        });
+      }
+      function showToast(msg) {
+        const stack = document.getElementById("toastStack");
+        if (!stack) return;
+        const toast = document.createElement("div");
+        toast.className = "toast";
+        toast.textContent = msg;
+        stack.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 3500);
+      }
+    });
+    </script>
   </body>
 </html>
 

@@ -1,0 +1,10 @@
+{
+  "plugins": [
+    {
+      "name": "ExamplePlugin",
+      "version": "1.0.0",
+      "author": "dorbikiraly",
+      "description": "Example plugin entry for overlay gallery."
+    }
+  ]
+}

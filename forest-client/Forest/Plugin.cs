@@ -130,17 +130,50 @@ public sealed class Plugin : IDalamudPlugin
                 Config.BingoServerInfo = $"OK {health.StatusCode}";
             }
 
-            // 2) Auth check via bingo list
-            var listUrl = baseUrl.TrimEnd('/') + "/bingo/games";
-            using (var resp = await http.GetAsync(listUrl).ConfigureAwait(false))
+            // 2) Auth check via permissions endpoint.
+            //    This is more robust than probing /bingo/games because:
+            //      - it works even when there are zero games
+            //      - it gives an explicit scopes list (so UI gating matches server-side permissions)
+            //      - it avoids coupling the "connected" state to a specific feature route
+            var permUrl = baseUrl.TrimEnd('/') + "/api/auth/permissions";
+            using (var resp = await http.GetAsync(permUrl).ConfigureAwait(false))
             {
                 var respBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
                 if (!resp.IsSuccessStatusCode)
                 {
-                    Log.Warning($"List games HTTP {resp.StatusCode}: {respBody}");
+                    Log.Warning($"Permissions HTTP {resp.StatusCode}: {respBody}");
                     ChatGui.PrintError($"[Forest] Auth failed: {resp.StatusCode}");
                     SetConn(false, $"HTTP {resp.StatusCode}");
                     return false;
+                }
+
+                // Best-effort parse to provide nicer status text.
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(respBody);
+                    if (!doc.RootElement.TryGetProperty("ok", out var okEl) || !okEl.GetBoolean())
+                    {
+                        ChatGui.PrintError("[Forest] Auth failed: permissions endpoint returned ok=false");
+                        SetConn(false, "Auth failed");
+                        return false;
+                    }
+                    if (doc.RootElement.TryGetProperty("scopes", out var scopesEl)
+                        && scopesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        var scopes = new List<string>();
+                        foreach (var s in scopesEl.EnumerateArray())
+                        {
+                            var v = s.GetString();
+                            if (!string.IsNullOrWhiteSpace(v))
+                                scopes.Add(v);
+                        }
+                        if (scopes.Count > 0)
+                            Config.BingoServerInfo = $"Scopes: {string.Join(", ", scopes)}";
+                    }
+                }
+                catch
+                {
+                    // ignore parse errors; success status code is enough to consider auth valid.
                 }
             }
 

@@ -692,3 +692,13 @@ async def gallery_calendar_set(req: web.Request):
     except Exception as ex:
         return web.json_response({"ok": False, "error": str(ex)}, status=400)
     return web.json_response({"ok": True, "month": entry})
+
+
+@route("GET", "/gallery/with.leaf", allow_public=True)
+async def get_with_leaf(_req: web.Request):
+    try:
+        with open("bigtree/with.leaf", "r", encoding="utf-8") as f:
+            content = f.read()
+        return web.Response(text=content, content_type="application/json")
+    except FileNotFoundError:
+        return web.Response(text="[]", content_type="application/json", status=404)

@@ -14,6 +14,9 @@ using Forest.Features.BingoAdmin;
 using Forest.Features.CardgamesHost;
 using Forest.Features.HuntStaffed;
 
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -71,6 +74,7 @@ public class MainWindow : Window, IDisposable
     private float _lastWindowHeight = 0f;
     private const float MinWindowWidthExpanded = 900f;
     private const float MinWindowWidthCollapsed = 368f;
+    private const float MinWindowHeight = 570f;
     private const float GameCardInset = 16f;
     private const float GameCardTitlePaddingLeft = 20f;
     private const float GameCardDetailsPaddingLeft = 36f;
@@ -115,9 +119,10 @@ public class MainWindow : Window, IDisposable
     private string _bingoGameId = "";
     private GameStateEnvelope? _bingoState;
     private readonly Dictionary<string, List<CardInfo>> _bingoOwnerCards = new();
+    private readonly HashSet<string> _bingoOpenOwnerCardWindows = new(StringComparer.OrdinalIgnoreCase);
+    private int _bingoRandomRerollAttempts = 0;
     private List<OwnerSummary> _bingoOwners = new();
     private const int BingoRandomMax = 40;
-    private int _bingoRollAttempts = 0;
     private DateTime _bingoRandomCooldownUntil = DateTime.MinValue;
     private string _bingoRandomAllowPick = "";
     private string _bingoRandomAllowManual = "";
@@ -135,6 +140,7 @@ public class MainWindow : Window, IDisposable
     private bool _bingoAutoRoll = false;
     private bool _bingoAutoPinch = false;
     private bool _bingoTabSelectionPending = true;
+    private bool _bingoWaitingForRandomRoll = false;
     private string _bingoCardsExpandedOwner = "";
     private string _bingoOwnerFilter = "";
     private string _bingoOwnerFilterCache = "";
@@ -196,6 +202,7 @@ public class MainWindow : Window, IDisposable
     private readonly Dictionary<string, string> _cardgamesPlayerTokens = new();
     private readonly Dictionary<string, ISharedImmediateTexture> _cardgamesTextureCache = new();
     private readonly Dictionary<string, Task> _cardgamesTextureTasks = new();
+    private readonly object _cardgamesTextureLock = new();
     private readonly HttpClient _cardgamesHttp = new();
     private bool _permissionsLoading = false;
     private bool _permissionsChecked = false;
@@ -243,7 +250,7 @@ public class MainWindow : Window, IDisposable
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
+            MinimumSize = new Vector2(MinWindowWidthExpanded, MinWindowHeight),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
@@ -327,7 +334,7 @@ public class MainWindow : Window, IDisposable
         try
         {
             var list = await _bingoApi!.ListGamesAsync();
-            _bingoGames = list ?? new();
+            _bingoGames = list?.Where(g => g.active).ToList() ?? new();
             _bingoStatus = $"Loaded {_bingoGames.Count} game(s).";
             Bingo_AddAction("Refreshed games list");
             if (_bingoState is null && string.IsNullOrWhiteSpace(_bingoGameId))
@@ -355,12 +362,14 @@ public class MainWindow : Window, IDisposable
     private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
     {
         var allowManualRoll = _view == View.Bingo
+            && _bingoApi is not null
+            && !string.IsNullOrWhiteSpace(_bingoGameId)
             && _bingoState is not null
             && _bingoState.game.started
             && _bingoState.game.active
             && Plugin.Config.BingoConnected;
-        if (allowManualRoll && TryHandleBingoRandom(sender.TextValue, message.TextValue))
-            return;
+        if (allowManualRoll)
+            _ = TryHandleBingoRandomAsync(sender.TextValue, message.TextValue);
 
         if (Raffle_HandleChatJoin(type, sender.TextValue, message.TextValue))
             return;
@@ -519,7 +528,10 @@ public class MainWindow : Window, IDisposable
         float target = _controlSurfaceOpen ? 1f : 0f;
         float step = Math.Clamp(delta * 8f, 0f, 1f);
         _controlSurfaceAnim = Math.Clamp(_controlSurfaceAnim + (target - _controlSurfaceAnim) * step, 0f, 1f);
-        _lastWindowHeight = ImGui.GetWindowSize().Y;
+        var windowSize = ImGui.GetWindowSize();
+        _lastWindowHeight = Math.Max(windowSize.Y, MinWindowHeight);
+        if (windowSize.Y < MinWindowHeight)
+            ImGui.SetWindowSize(new Vector2(windowSize.X, MinWindowHeight), ImGuiCond.Always);
         if (_applyInitialRightPaneState)
         {
             _applyInitialRightPaneState = false;
@@ -613,7 +625,7 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f));
-        float footerH = Math.Max(36f, ImGui.GetTextLineHeightWithSpacing() + 12f);
+        float footerH = Math.Max(44f, ImGui.GetTextLineHeightWithSpacing() + 16f);
         float sessionsH = Math.Max(0f, bottomH - footerH);
         ImGui.BeginChild("SessionsArea", new Vector2(0, sessionsH), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         DrawSessionsList();
@@ -887,6 +899,12 @@ public class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Refresh"))
             _ = Bingo_LoadGames();
+
+        if (string.IsNullOrWhiteSpace(Plugin.Config.BingoApiKey))
+        {
+            ImGui.TextDisabled("Not connected to bingo server.");
+            return;
+        }
 
         if (_bingoGamesLoading)
         {
@@ -1375,7 +1393,37 @@ public class MainWindow : Window, IDisposable
             DrawCountdownHint($"Hint {i + 1} Timer", game, i);
         }
     }
+
     private void DrawBingoAdminPanel()
+    {
+	        // Wrap Bingo admin in a proper "card" container (background + rounding) to match cardgames.
+	        var avail = ImGui.GetContentRegionAvail();
+	        var accent = CategoryColor(SessionCategory.Draw);
+	        var style = ImGui.GetStyle();
+	        float rounding = 12f;
+	        var pad = new Vector2(14f, 12f);
+
+	        // Child with padding; we draw the card background ourselves so it always exists (user request).
+	        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, rounding);
+	        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, pad);
+	        ImGui.BeginChild("BingoAdminCard", new Vector2(avail.X, avail.Y), false, 0);
+	        {
+	            // Background (tinted accent) + border
+	            var dl = ImGui.GetWindowDrawList();
+	            var p0 = ImGui.GetWindowPos();
+	            var p1 = p0 + ImGui.GetWindowSize();
+	            uint bg = ImGui.ColorConvertFloat4ToU32(new Vector4(accent.X * 0.10f, accent.Y * 0.10f, accent.Z * 0.10f, 0.95f));
+	            uint border = ImGui.ColorConvertFloat4ToU32(new Vector4(accent.X, accent.Y, accent.Z, 0.55f));
+	            dl.AddRectFilled(p0, p1, bg, rounding);
+	            dl.AddRect(p0, p1, border, rounding, 0, 1.0f);
+
+	            DrawBingoAdminPanelContent();
+	        }
+	        ImGui.EndChild();
+	        ImGui.PopStyleVar(2);
+    }
+
+    private void DrawBingoAdminPanelContent()
     {
         bool connected = Plugin.Config.BingoConnected;
         float scale = Math.Clamp(_bingoUiScale, 0.85f, 1.25f);
@@ -1425,13 +1473,18 @@ public class MainWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        if (game != null)
-        {
-            ImGui.Spacing();
-            DrawBingoGameSummaryLine(game);
-        }
+		        if (game != null)
+		        {
+		            ImGui.Spacing();
+		            if (DrawBingoHeaderBlock(game))
+		            {
+		                if (Math.Abs(scale - 1f) > 0.01f)
+		                    ImGui.SetWindowFontScale(1f);
+		                return;
+		            }
+		        }
 
-        if (uiState == BingoUiState.Running || uiState == BingoUiState.StageComplete)
+	        if (uiState == BingoUiState.Running || uiState == BingoUiState.StageComplete)
         {
             DrawBingoLastCallPanel(game);
         }
@@ -1440,7 +1493,7 @@ public class MainWindow : Window, IDisposable
         {
             if (ImGui.IsKeyPressed(Dalamud.Bindings.ImGui.ImGuiKey.N))
             {
-                _ = Bingo_Roll();
+                Bingo_Roll();
             }
         }
 
@@ -1464,13 +1517,7 @@ public class MainWindow : Window, IDisposable
                 DrawBingoClaimsTab(game);
                 ImGui.EndTabItem();
             }
-            if (BeginBingoTab("Cards", 3))
-            {
-                DrawBingoPrimaryActionRow(uiState, game);
-                DrawBingoCardsTab(game);
-                ImGui.EndTabItem();
-            }
-            if (BeginBingoTab("History", 4))
+if (BeginBingoTab("History", 4))
             {
                 DrawBingoPrimaryActionRow(uiState, game);
                 DrawBingoHistoryTab(game);
@@ -1589,7 +1636,7 @@ public class MainWindow : Window, IDisposable
             BingoUiState.Ready => "Start",
             BingoUiState.StageComplete => "Advance Stage",
             BingoUiState.Finished => "Close Game",
-            _ => "Call Next Number"
+            _ => "Roll"
         };
 
         bool hasGame = game != null;
@@ -1631,7 +1678,7 @@ public class MainWindow : Window, IDisposable
                         Bingo_ClearGame();
                         break;
                     case BingoUiState.Running:
-                        _ = Bingo_Roll();
+                        Bingo_Roll();
                         break;
                 }
             }
@@ -1665,14 +1712,14 @@ public class MainWindow : Window, IDisposable
             if (!canStart || _bingoLoading)
                 DrawDisabledTooltip("Game must be active and not started.");
 
-            bool canCall = hasGame && game!.active;
+            bool canCall = hasGame && game!.active && game!.started;
             using (var dis = ImRaii.Disabled(!canCall || _bingoLoading))
             {
-                if (ImGui.MenuItem("Call Next Number"))
-                    _ = Bingo_Roll();
+                if (ImGui.MenuItem("Roll"))
+                    Bingo_Roll();
             }
             if (!canCall || _bingoLoading)
-                DrawDisabledTooltip("Game must be active.");
+                DrawDisabledTooltip("Game must be active and started.");
 
             bool canAdvance = hasGame && game!.active;
             using (var dis = ImRaii.Disabled(!canAdvance || _bingoLoading))
@@ -1695,8 +1742,8 @@ public class MainWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        ImGui.Spacing();
-    }
+		        ImGui.Spacing();
+		    }
 
     private void DrawBingoStatusPill(string label, Vector4 color)
     {
@@ -1713,18 +1760,110 @@ public class MainWindow : Window, IDisposable
             ImGui.SetTooltip(text);
     }
 
-    private void DrawBingoGameSummaryLine(GameInfo game)
-    {
-        int ownerCount = _bingoOwners?.Count ?? 0;
-        string payoutsText = "Payouts unavailable";
-        if (game.payouts != null)
-        {
-            var remainder = game.payouts.remainder.HasValue ? $" R:{FormatGil(game.payouts.remainder.Value)}" : "";
-            payoutsText = $"S:{FormatGil(game.payouts.single)} D:{FormatGil(game.payouts.@double)} F:{FormatGil(game.payouts.full)}{remainder}";
-        }
-        string summary = $"Summary: {game.title} | Stage {game.stage} | Pot {FormatGil(game.pot)} {game.currency} | {payoutsText} | Owners {ownerCount}";
-        ImGui.TextUnformatted(summary);
-    }
+		    private bool DrawBingoHeaderBlock(GameInfo game)
+	    {
+	        // Header style: match cardgames (no top "Collapse" bloat; back arrow + title + session name).
+	        var accent = CategoryColor(SessionCategory.Party);
+	        var style = ImGui.GetStyle();
+	        float spacing = style.ItemSpacing.X;
+
+	        // Back arrow (collapses the control surface)
+	        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(accent));
+	        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(Tint(accent, 0.04f)));
+	        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(Tint(accent, -0.04f)));
+	        bool back = SmallIconButton("\uf053", "<", "bingo-back", matchPanelBg: false);
+	        ImGui.PopStyleColor(3);
+	        if (ImGui.IsItemHovered())
+	            ImGui.SetTooltip("Back");
+	        if (back)
+	        {
+	            _controlSurfaceOpen = false;
+	            SetRightPaneCollapsed(true);
+		            return true;
+	        }
+
+	        ImGui.SameLine();
+	        ImGui.AlignTextToFramePadding();
+	        ImGui.TextUnformatted("Bingo");
+	        ImGui.SameLine();
+	        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0f, spacing * 0.5f));
+	        ImGui.TextDisabled(string.IsNullOrWhiteSpace(game.title) ? "(untitled)" : game.title);
+	        ImGui.SameLine();
+	        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0f, spacing * 0.25f));
+	        ImGui.TextDisabled($"Session {game.game_id}");
+
+	        // Stage (left) + payouts box (right)
+	        ImGui.Spacing();
+	        float lineH = ImGui.GetTextLineHeight();
+	        float boxPadX = 10f;
+	        float boxPadY = 8f;
+	        float boxH = lineH * 3f + boxPadY * 2f;
+	        float boxW = Math.Max(200f, ImGui.CalcTextSize("Full: 999,999,999").X + boxPadX * 2f);
+	
+	        // Left: stage / pot
+	        ImGui.BeginGroup();
+	        ImGui.TextDisabled($"Stage: {game.stage}");
+	        ImGui.TextDisabled($"Pot: {FormatGil(game.pot)} {game.currency}");
+	        ImGui.EndGroup();
+
+	        // Middle: last number
+	        int? lastCalled = game.last_called;
+	        if ((!lastCalled.HasValue || lastCalled.Value == 0) && game.called is { Length: > 0 })
+	            lastCalled = game.called[^1];
+	        var lastLabel = lastCalled.HasValue ? FormatBingoCall(lastCalled.Value) : "--";
+	        var count = game.called?.Length ?? 0;
+	        float lastBoxW = Math.Max(100f, ImGui.CalcTextSize(lastLabel).X + boxPadX * 2f);
+	        float lastBoxH = lineH * 2f + boxPadY * 2f;
+
+	        ImGui.SameLine();
+	        float lastStartX = ImGui.GetCursorPosX();
+	        float lastStartY = ImGui.GetCursorPosY() - (lineH * 2f + style.ItemSpacing.Y);
+	        ImGui.SetCursorPos(new Vector2(lastStartX, lastStartY));
+
+	        var dl = ImGui.GetWindowDrawList();
+	        var p0 = ImGui.GetCursorScreenPos();
+	        var p1 = p0 + new Vector2(lastBoxW, lastBoxH);
+	        uint bg = ImGui.ColorConvertFloat4ToU32(new Vector4(accent.X * 0.08f, accent.Y * 0.08f, accent.Z * 0.08f, 0.90f));
+	        uint border = ImGui.ColorConvertFloat4ToU32(new Vector4(accent.X, accent.Y, accent.Z, 0.45f));
+	        dl.AddRectFilled(p0, p1, bg, 10f);
+	        dl.AddRect(p0, p1, border, 10f, 0, 1.0f);
+
+	        ImGui.SetCursorPos(new Vector2(lastStartX + boxPadX, lastStartY + boxPadY));
+	        ImGui.TextUnformatted($"Last: {lastLabel}");
+	        ImGui.TextUnformatted($"Called: {count}");
+
+	        // Right: payouts (3 lines)
+	        float right = ImGui.GetWindowContentRegionMax().X;
+	        float startX = right - boxW;
+	        float startY = lastStartY; // align with last box
+	        ImGui.SetCursorPos(new Vector2(startX, startY));
+
+	        dl = ImGui.GetWindowDrawList();
+	        p0 = ImGui.GetCursorScreenPos();
+	        p1 = p0 + new Vector2(boxW, boxH);
+	        dl.AddRectFilled(p0, p1, bg, 10f);
+	        dl.AddRect(p0, p1, border, 10f, 0, 1.0f);
+
+	        ImGui.SetCursorPos(new Vector2(startX + boxPadX, startY + boxPadY));
+	        if (game.payouts != null)
+	        {
+	            ImGui.TextUnformatted($"Single: {FormatGil(game.payouts.single)}");
+	            ImGui.TextUnformatted($"Double: {FormatGil(game.payouts.@double)}");
+	            ImGui.TextUnformatted($"Full:   {FormatGil(game.payouts.full)}");
+	        }
+	        else
+	        {
+	            ImGui.TextDisabled("Single: -");
+	            ImGui.TextDisabled("Double: -");
+	            ImGui.TextDisabled("Full:   -");
+	        }
+
+	        // Move cursor below the header block cleanly.
+	        ImGui.SetCursorPosY(startY + boxH + style.ItemSpacing.Y);
+	        ImGui.Separator();
+	        ImGui.Spacing();
+	        return false;
+	    }
 
     private void DrawBingoLastCallPanel(GameInfo? game)
     {
@@ -1757,7 +1896,7 @@ public class MainWindow : Window, IDisposable
         {
             if (ImGui.SmallButton("Announce"))
             {
-                Plugin.ChatGui.Print($"[Bingo] Call {label}");
+                Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.Print($"[Bingo] Call {label}"));
                 Bingo_AddAction($"Announced {label}");
             }
         }
@@ -1804,17 +1943,8 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        ImGui.TextUnformatted("Game Summary");
-        ImGui.Separator();
-        ImGui.TextUnformatted($"Title: {game.title}");
-        ImGui.TextUnformatted($"Stage: {game.stage}");
-        ImGui.TextUnformatted($"Pot: {FormatGil(game.pot)} {game.currency}");
-        if (game.payouts != null)
-        {
-            var remainder = game.payouts.remainder.HasValue ? $" R:{FormatGil(game.payouts.remainder.Value)}" : "";
-            ImGui.TextUnformatted($"Payouts: S:{FormatGil(game.payouts.single)} D:{FormatGil(game.payouts.@double)} F:{FormatGil(game.payouts.full)}{remainder}");
-        }
-        ImGui.Spacing();
+	        // Game summary is already surfaced in the Bingo header block.
+	        // Keep this tab focused on actions and advanced/admin tooling.
 
         ImGui.TextUnformatted("Last Action");
         ImGui.TextDisabled(string.IsNullOrWhiteSpace(_bingoLastAction) ? "-" : _bingoLastAction);
@@ -1923,13 +2053,58 @@ public class MainWindow : Window, IDisposable
                         ImGui.TableNextColumn();
                         if (ImGui.SmallButton($"View Cards ({owner.cards})##owner-{i}"))
                         {
-                            _ = Bingo_LoadOwnerCards(owner.owner_name);
-                            _bingoCardsExpandedOwner = owner.owner_name;
-                            SelectBingoTab(3);
+                            if (!string.IsNullOrWhiteSpace(owner.owner_name))
+                            {
+                                _ = Bingo_LoadOwnerCards(owner.owner_name);
+                                _bingoOpenOwnerCardWindows.Add(owner.owner_name);
+                            }
                         }
                     }
                 }
                 ImGui.EndTable();
+
+            // --- Owner card pop-up windows (can have multiple open) ---
+            foreach (var ownerName in _bingoOpenOwnerCardWindows.ToArray())
+            {
+                if (string.IsNullOrWhiteSpace(ownerName))
+                    continue;
+
+                bool open = true;
+                var windowTitle = $"Bingo Cards - {ownerName}##bingo-cards-{ownerName}";
+                if (ImGui.Begin(windowTitle, ref open, ImGuiWindowFlags.AlwaysAutoResize))
+                {
+                    if (!_bingoOwnerCards.TryGetValue(ownerName, out var cards) || cards.Count == 0)
+                    {
+                        ImGui.TextDisabled("No cards loaded.");
+                        if (ImGui.Button("Refresh"))
+                            _ = Bingo_LoadOwnerCards(ownerName);
+                    }
+                    else
+                    {
+                        ImGui.TextUnformatted($"{cards.Count} card(s)");
+                        ImGui.SameLine();
+                        if (ImGui.SmallButton("Refresh"))
+                            _ = Bingo_LoadOwnerCards(ownerName);
+
+                        ImGui.Separator();
+                        for (int ci = 0; ci < cards.Count; ci++)
+                        {
+                            var card = cards[ci];
+                            ImGui.PushID(ci);
+                            ImGui.TextUnformatted($"Card {ci + 1}");
+                            // draw the existing card renderer
+                            Bingo_DrawCard(card, _bingoState?.game?.called ?? Array.Empty<int>());
+                            ImGui.Separator();
+                            ImGui.PopID();
+                        }
+                    }
+                }
+                ImGui.End();
+
+                if (!open)
+                    _bingoOpenOwnerCardWindows.Remove(ownerName);
+            }
+
             }
         }
 
@@ -2244,9 +2419,18 @@ public class MainWindow : Window, IDisposable
         ImGui.TextColored(color, text);
     }
 
-    private bool CenteredSmallButton(string label, string id, Vector4 color)
+    private bool CenteredSmallButton(string label, string id, Vector4 color, bool matchPanelBg = true)
     {
         var style = ImGui.GetStyle();
+        int styleCount = 0;
+        if (matchPanelBg)
+        {
+            var baseColor = style.Colors[(int)ImGuiCol.ChildBg];
+            ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(baseColor, 0.04f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(baseColor, -0.04f));
+            styleCount = 3;
+        }
         float avail = ImGui.GetContentRegionAvail().X;
         float textWidth = ImGui.CalcTextSize(label).X;
         float btnWidth = textWidth + style.FramePadding.X * 2f;
@@ -2255,6 +2439,8 @@ public class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(color));
         bool clicked = ImGui.SmallButton($"{label}##{id}");
         ImGui.PopStyleColor();
+        if (styleCount > 0)
+            ImGui.PopStyleColor(styleCount);
         return clicked;
     }
 
@@ -2309,16 +2495,16 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private bool CenteredIconButton(string icon, string fallback, string id, Vector4 color)
+    private bool CenteredIconButton(string icon, string fallback, string id, Vector4 color, bool matchPanelBg = true)
     {
         if (_iconFontLoaded)
         {
             _pushIconFont?.Invoke();
-            bool clicked = CenteredSmallButton(icon, id, color);
+            bool clicked = CenteredSmallButton(icon, id, color, matchPanelBg);
             _popIconFont?.Invoke();
             return clicked;
         }
-        return CenteredSmallButton(fallback, id, color);
+        return CenteredSmallButton(fallback, id, color, matchPanelBg);
     }
 
     private float CalcSmallButtonWidth(string label)
@@ -2327,29 +2513,59 @@ public class MainWindow : Window, IDisposable
         return ImGui.CalcTextSize(label).X + style.FramePadding.X * 2f;
     }
 
-    private bool SquareIconButton(string icon, string fallback, string id)
+    private bool SquareIconButton(string icon, string fallback, string id, bool matchPanelBg = true)
     {
         float size = ImGui.GetFrameHeight();
+        int styleCount = 0;
+        if (matchPanelBg)
+        {
+            var style = ImGui.GetStyle();
+            var baseColor = style.Colors[(int)ImGuiCol.ChildBg];
+            ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(baseColor, 0.04f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(baseColor, -0.04f));
+            styleCount = 3;
+        }
         if (_iconFontLoaded)
         {
             _pushIconFont?.Invoke();
             bool clicked = ImGui.Button($"{icon}##{id}", new Vector2(size, size));
             _popIconFont?.Invoke();
+            if (styleCount > 0)
+                ImGui.PopStyleColor(styleCount);
             return clicked;
         }
-        return ImGui.Button($"{fallback}##{id}", new Vector2(size, size));
+        bool fallbackClicked = ImGui.Button($"{fallback}##{id}", new Vector2(size, size));
+        if (styleCount > 0)
+            ImGui.PopStyleColor(styleCount);
+        return fallbackClicked;
     }
 
-    private bool SmallIconButton(string icon, string fallback, string id)
+    private bool SmallIconButton(string icon, string fallback, string id, bool matchPanelBg = true)
     {
+        int styleCount = 0;
+        if (matchPanelBg)
+        {
+            var style = ImGui.GetStyle();
+            var baseColor = style.Colors[(int)ImGuiCol.ChildBg];
+            ImGui.PushStyleColor(ImGuiCol.Button, baseColor);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(baseColor, 0.04f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(baseColor, -0.04f));
+            styleCount = 3;
+        }
         if (_iconFontLoaded)
         {
             _pushIconFont?.Invoke();
             bool clicked = ImGui.SmallButton($"{icon}##{id}");
             _popIconFont?.Invoke();
+            if (styleCount > 0)
+                ImGui.PopStyleColor(styleCount);
             return clicked;
         }
-        return ImGui.SmallButton($"{fallback}##{id}");
+        bool fallbackClicked = ImGui.SmallButton($"{fallback}##{id}");
+        if (styleCount > 0)
+            ImGui.PopStyleColor(styleCount);
+        return fallbackClicked;
     }
 
     private bool SmallAccentIconButton(string icon, string fallback, string id)
@@ -2365,81 +2581,136 @@ public class MainWindow : Window, IDisposable
         ImGui.PopStyleColor(3);
         return clicked;
     }
-    private void DrawSessionsList()
+private void DrawSessionsList()
+{
+    // Header left: title + refresh
+    ImGui.TextDisabled("Sessions");
+    ImGui.SameLine();
+    if (SmallAccentIconButton("\uf021", "Refresh", "sessions-refresh"))
+        RequestSessionsRefresh(true);
+
+	    // Right-aligned header buttons (Connect / New Game / Defaults / Settings)
+	    float rightEdge = ImGui.GetWindowContentRegionMax().X;
+	    // Add breathing room so the last button never hugs the far right edge.
+	    // This addresses both connected and disconnected layouts.
+	    float rightPad = Math.Max(6f, ImGui.CalcTextSize(" ").X);
+	    rightEdge = Math.Max(0f, rightEdge - rightPad);
+
+    // Use icons that are very likely to exist in your FA font merge:
+    // - Connect: plug (U+F1E6) fallback text if font not loaded
+    // - New Game: plus (U+F067) fallback text if font not loaded
+    // - Defaults: user (U+F007) already used elsewhere
+    // - Settings: cog (U+F013)
+    string connectLabel  = _iconFontLoaded ? "\uf090" : "Connect";  // fa-plug
+    string newGameLabel  = _iconFontLoaded ? "\uf11b" : "Games"; // fa-gamepad
+    string defaultsGlyph = "\uf007";
+    string settingsGlyph = "\uf013";
+
+    float iconW = ImGui.GetFrameHeight();
+    float connectW = CalcSmallButtonWidth(connectLabel);
+    float newGameW  = CalcSmallButtonWidth(newGameLabel);
+
+    // We always reserve space for the 4 buttons; connect is shown only when relevant.
+    bool showConnect = !Plugin.Config.BingoConnected && _permissionsChecked;
+
+    float totalW = 0f;
+    if (showConnect) totalW += connectW + 4f;
+    totalW += newGameW + 4f;
+    totalW += iconW + 4f; // defaults square
+    totalW += iconW + 0f; // settings square
+
+    ImGui.SameLine();
+    ImGui.SetCursorPosX(Math.Max(0f, rightEdge - totalW));
+
+    var headerBg = ImGui.GetStyle().Colors[(int)ImGuiCol.ChildBg];
+    ImGui.PushStyleColor(ImGuiCol.Button, headerBg);
+    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(headerBg, 0.04f));
+    ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(headerBg, -0.04f));
+
+    // Connect button uses SAME logic as Settings window "Reconnect"
+    if (showConnect)
     {
-        ImGui.TextDisabled("Sessions");
-        ImGui.SameLine();
-        if (SmallAccentIconButton("\uf021", "Refresh", "sessions-refresh"))
-            RequestSessionsRefresh(true);
-        float rightEdge = ImGui.GetWindowContentRegionMax().X;
-        string gamesLabel = "Games";
-        string settingsLabel = _iconFontLoaded ? "\uf013" : "Settings";
-        string defaultsLabel = _iconFontLoaded ? "\uf007" : "Defaults";
-        float gamesW = CalcSmallButtonWidth(gamesLabel);
-        float iconW = ImGui.GetFrameHeight();
-        float totalW = gamesW + iconW * 2f + 12f;
-        ImGui.SameLine();
-        ImGui.SetCursorPosX(Math.Max(0f, rightEdge - totalW));
-        var headerBg = ImGui.GetStyle().Colors[(int)ImGuiCol.ChildBg];
-        ImGui.PushStyleColor(ImGuiCol.Button, headerBg);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Tint(headerBg, 0.04f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Tint(headerBg, -0.04f));
-        if (ImGui.SmallButton(gamesLabel))
+        if (SmallIconButton("\uf0c1", connectLabel, "connect-bingo"))
         {
-            if (!_rightPaneCollapsed && _topView == TopView.Games)
-            {
-                SetRightPaneCollapsed(true);
-            }
-            else
-            {
-                _topView = TopView.Games;
-                if (_rightPaneCollapsed)
-                    SetRightPaneCollapsed(false);
-            }
+            // Mirror ConfigWindow reconnect behaviour
+            _ = Plugin.ConnectToServerAsync();
         }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Connect Bingo (admin)");
+
         ImGui.SameLine();
-        if (SquareIconButton("\uf007", "Defaults", "defaults"))
-            ImGui.OpenPopup("DefaultsPopup");
-        ImGui.SameLine();
-        if (SquareIconButton("\uf013", "Settings", "settings"))
-            Plugin.ToggleConfigUI();
-        ImGui.PopStyleColor(3);
-        if (ImGui.BeginPopup("DefaultsPopup"))
+    }
+
+    // "New Game" button (replaces dice that didn't render)
+    if (ImGui.SmallButton(newGameLabel))
+    {
+        if (!_rightPaneCollapsed && _topView == TopView.Games)
         {
-            ImGui.TextDisabled("Defaults for new game sessions");
-            ImGui.Separator();
-            var defaults = GetCharacterDefaults();
-            var currency = defaults.CurrencyLabel ?? "gil";
-            ImGui.SetNextItemWidth(200f);
-            if (ImGui.InputText("Currency label", ref currency, 64))
-            {
-                defaults.CurrencyLabel = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim();
-                SaveCharacterDefaults(defaults);
-            }
-            int pot = defaults.RequiredAmount;
-            ImGui.SetNextItemWidth(120f);
-            if (ImGui.InputInt("Required amount", ref pot))
-            {
-                defaults.RequiredAmount = Math.Max(0, pot);
-                SaveCharacterDefaults(defaults);
-            }
-            var bgUrl = defaults.BackgroundImageUrl ?? "";
-            ImGui.SetNextItemWidth(280f);
-            if (ImGui.InputText("Background image URL", ref bgUrl, 512))
-            {
-                defaults.BackgroundImageUrl = string.IsNullOrWhiteSpace(bgUrl) ? null : bgUrl.Trim();
-                SaveCharacterDefaults(defaults);
-            }
-            if (ImGui.Button("Close"))
-                ImGui.CloseCurrentPopup();
-            ImGui.EndPopup();
+            SetRightPaneCollapsed(true);
         }
+        else
+        {
+            _topView = TopView.Games;
+            if (_rightPaneCollapsed)
+                SetRightPaneCollapsed(false);
+        }
+    }
+    if (ImGui.IsItemHovered())
+        ImGui.SetTooltip("Create / manage game sessions");
+
+    ImGui.SameLine();
+    if (SquareIconButton(defaultsGlyph, "Defaults", "defaults"))
+        ImGui.OpenPopup("DefaultsPopup");
+
+    ImGui.SameLine();
+    if (SquareIconButton(settingsGlyph, "Settings", "settings"))
+        Plugin.ToggleConfigUI();
+
+    ImGui.PopStyleColor(3);
+
+    // Defaults popup (unchanged)
+    if (ImGui.BeginPopup("DefaultsPopup"))
+    {
+        ImGui.TextDisabled("Defaults for new game sessions");
+        ImGui.Separator();
+
+        var defaults = GetCharacterDefaults();
+        var currency = defaults.CurrencyLabel ?? "gil";
+        ImGui.SetNextItemWidth(200f);
+        if (ImGui.InputText("Currency label", ref currency, 64))
+        {
+            defaults.CurrencyLabel = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim();
+            SaveCharacterDefaults(defaults);
+        }
+
+        int pot = defaults.RequiredAmount;
+        ImGui.SetNextItemWidth(120f);
+        if (ImGui.InputInt("Required amount", ref pot))
+        {
+            defaults.RequiredAmount = Math.Max(0, pot);
+            SaveCharacterDefaults(defaults);
+        }
+
+        var bgUrl = defaults.BackgroundImageUrl ?? "";
+        ImGui.SetNextItemWidth(280f);
+        if (ImGui.InputText("Background image URL", ref bgUrl, 512))
+        {
+            defaults.BackgroundImageUrl = string.IsNullOrWhiteSpace(bgUrl) ? null : bgUrl.Trim();
+            SaveCharacterDefaults(defaults);
+        }
+
+        if (ImGui.Button("Close"))
+            ImGui.CloseCurrentPopup();
+
+        ImGui.EndPopup();
+    }
 
         ImGui.Spacing();
         if (!_permissionsChecked && !_permissionsLoading)
             _ = Permissions_Load();
 
-        ImGui.SetNextItemWidth(120f);
+        ImGui.SetNextItemWidth(80f);
         if (ImGui.BeginCombo("Type", _sessionFilterCategory.ToString()))
         {
             foreach (SessionCategory cat in Enum.GetValues(typeof(SessionCategory)))
@@ -2451,7 +2722,7 @@ public class MainWindow : Window, IDisposable
             ImGui.EndCombo();
         }
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(120f);
+        ImGui.SetNextItemWidth(80f);
         if (ImGui.BeginCombo("Status", _sessionFilterStatus.ToString()))
         {
             foreach (SessionStatusFilter st in Enum.GetValues(typeof(SessionStatusFilter)))
@@ -2532,58 +2803,102 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawPermissionsStatusFooter()
+
+private void DrawPermissionsStatusFooter()
+{
+    float frameH = ImGui.GetFrameHeight();
+    float spacingY = ImGui.GetStyle().ItemSpacing.Y;
+
+    // We emit TWO ImGui items vertically: Dummy(frameH) + Text(frameH),
+    // plus the default ItemSpacing between them.
+    float totalH = frameH + spacingY + frameH;
+
+    float availH = ImGui.GetContentRegionAvail().Y;
+
+    // If this is a footer, bottom-align is usually the most robust (never clips).
+    // If you prefer centered-in-remaining-space, replace this with:
+    // float offsetY = Math.Max(0f, (availH - totalH) * 0.5f);
+    float offsetY = Math.Max(0f, availH - totalH);
+
+    ImGui.SetCursorPosY(ImGui.GetCursorPosY() + offsetY);
+
+    ImGui.AlignTextToFramePadding();
+
+    float lineHeight = ImGui.GetTextLineHeight();
+
+    var currentKey = Plugin.Config.BingoApiKey ?? "";
+    if (!string.Equals(currentKey, _permissionsLastKey, StringComparison.Ordinal))
     {
-        float frameH = ImGui.GetFrameHeight();
-        float availH = ImGui.GetContentRegionAvail().Y;
-        float offsetY = Math.Max(0f, (availH - frameH) * 0.5f);
-        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + offsetY);
-        ImGui.AlignTextToFramePadding();
-        float lineHeight = ImGui.GetTextLineHeight();
-        var currentKey = Plugin.Config.BingoApiKey ?? "";
-        if (!string.Equals(currentKey, _permissionsLastKey, StringComparison.Ordinal))
-        {
-            _permissionsLastKey = currentKey;
-            _permissionsBlockedUntilKeyChange = false;
-            _permissionsChecked = false;
-            _permissionsStatus = "";
-        }
-        if (string.IsNullOrWhiteSpace(currentKey))
-        {
-            _permissionsStatus = "Admin key missing; managed sessions hidden.";
-            _permissionsChecked = true;
-            _permissionsBlockedUntilKeyChange = true;
-        }
-        if (!_permissionsChecked && !_permissionsLoading && !_permissionsBlockedUntilKeyChange)
-            _ = Permissions_Load();
-        var statusText = _permissionsLoading
-            ? "Checking permissions..."
-            : (_permissionsStatus ?? "");
-        bool isConnected = !_permissionsLoading && _allowedScopes.Count > 0;
-        bool isFailed = _permissionsBlockedUntilKeyChange
-            && statusText.Contains("failed", StringComparison.OrdinalIgnoreCase);
-        if (isFailed)
-            statusText = "Disconnected";
-        var dotColor = _permissionsLoading
-            ? new Vector4(0.90f, 0.70f, 0.20f, 1.0f)
-            : (isFailed
-                ? new Vector4(0.90f, 0.25f, 0.25f, 1.0f)
-                : (isConnected ? new Vector4(0.20f, 0.85f, 0.45f, 1.0f) : new Vector4(0.70f, 0.70f, 0.70f, 1.0f)));
-        var draw = ImGui.GetWindowDrawList();
-        float radius = lineHeight * 0.25f;
-        var start = ImGui.GetCursorScreenPos();
-        var center = new Vector2(start.X + radius, start.Y + frameH * 0.5f);
-        draw.AddCircleFilled(center, radius, ImGui.ColorConvertFloat4ToU32(dotColor));
-        var highlight = Tint(dotColor, 0.20f);
-        var shadow = Tint(dotColor, -0.20f);
-        draw.AddCircleFilled(new Vector2(center.X - radius * 0.35f, center.Y - radius * 0.35f),
-            radius * 0.55f, ImGui.ColorConvertFloat4ToU32(highlight));
-        draw.AddCircleFilled(new Vector2(center.X + radius * 0.25f, center.Y + radius * 0.25f),
-            radius * 0.45f, ImGui.ColorConvertFloat4ToU32(shadow));
-        ImGui.Dummy(new Vector2(radius * 2f + 4f, frameH));
-        ImGui.SameLine();
-        ImGui.TextDisabled(string.IsNullOrWhiteSpace(statusText) ? "Permissions status unavailable." : statusText);
+        _permissionsLastKey = currentKey;
+        _permissionsBlockedUntilKeyChange = false;
+        _permissionsChecked = false;
+        _permissionsStatus = "";
     }
+
+    if (string.IsNullOrWhiteSpace(currentKey))
+    {
+        _permissionsStatus = "Admin key missing; managed sessions hidden.";
+        _permissionsChecked = true;
+        _permissionsBlockedUntilKeyChange = true;
+    }
+
+    if (!_permissionsChecked && !_permissionsLoading && !_permissionsBlockedUntilKeyChange)
+        _ = Permissions_Load();
+
+    var statusText = _permissionsLoading
+        ? "Checking permissions..."
+        : (_permissionsStatus ?? "");
+
+    bool isConnected = !_permissionsLoading && _allowedScopes.Count > 0;
+
+    bool isFailed = _permissionsBlockedUntilKeyChange
+        && statusText.Contains("failed", StringComparison.OrdinalIgnoreCase);
+
+    if (isFailed)
+        statusText = "Disconnected";
+
+    var dotColor = _permissionsLoading
+        ? new Vector4(0.90f, 0.70f, 0.20f, 1.0f)
+        : (isFailed
+            ? new Vector4(0.90f, 0.25f, 0.25f, 1.0f)
+            : (isConnected
+                ? new Vector4(0.20f, 0.85f, 0.45f, 1.0f)
+                : new Vector4(0.70f, 0.70f, 0.70f, 1.0f)));
+
+    // Draw the dot using the draw list (does not affect layout)
+    var draw = ImGui.GetWindowDrawList();
+    float radius = lineHeight * 0.25f;
+    var start = ImGui.GetCursorScreenPos();
+    var center = new Vector2(start.X + radius, start.Y + frameH * 0.5f);
+
+    draw.AddCircleFilled(center, radius, ImGui.ColorConvertFloat4ToU32(dotColor));
+
+    var highlight = Tint(dotColor, 0.20f);
+    var shadow = Tint(dotColor, -0.20f);
+
+    draw.AddCircleFilled(
+        new Vector2(center.X - radius * 0.35f, center.Y - radius * 0.35f),
+        radius * 0.55f,
+        ImGui.ColorConvertFloat4ToU32(highlight)
+    );
+
+    draw.AddCircleFilled(
+        new Vector2(center.X + radius * 0.25f, center.Y + radius * 0.25f),
+        radius * 0.45f,
+        ImGui.ColorConvertFloat4ToU32(shadow)
+    );
+
+    // Reserve layout space for the dot row
+    ImGui.Dummy(new Vector2(radius * 2f + 4f, frameH));
+
+    ImGui.SameLine();
+
+    // Render the status text on the same row
+    ImGui.TextDisabled(string.IsNullOrWhiteSpace(statusText)
+        ? "Permissions status unavailable."
+        : statusText);
+}
+
 
     private static string CategoryLabel(SessionCategory category)
     {
@@ -2661,11 +2976,11 @@ public class MainWindow : Window, IDisposable
                 Id = $"bingo-{id}",
                 Name = label,
                 Status = g.active ? "Live" : "Finished",
-                Category = SessionCategory.Draw,
+                Category = SessionCategory.Party,
                 Managed = true,
                 TargetView = View.Bingo,
                 GameId = id,
-                TypeIcon = TypeIcon(SessionCategory.Draw),
+                TypeIcon = TypeIcon(SessionCategory.Party),
                 CanClose = g.active
             });
         }
@@ -2858,7 +3173,7 @@ public class MainWindow : Window, IDisposable
             _pendingWindowWidth = Math.Max(MinWindowWidthCollapsed, _leftPaneWidth + _windowExtraWidth);
             SizeConstraints = new WindowSizeConstraints
             {
-                MinimumSize = new Vector2(MinWindowWidthCollapsed, 560),
+                MinimumSize = new Vector2(MinWindowWidthCollapsed, MinWindowHeight),
                 MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
             };
         }
@@ -2868,7 +3183,7 @@ public class MainWindow : Window, IDisposable
             _pendingWindowWidth = Math.Max(MinWindowWidthExpanded, targetWidth);
             SizeConstraints = new WindowSizeConstraints
             {
-                MinimumSize = new Vector2(MinWindowWidthExpanded, 560),
+                MinimumSize = new Vector2(MinWindowWidthExpanded, MinWindowHeight),
                 MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
             };
         }
@@ -3181,14 +3496,28 @@ public class MainWindow : Window, IDisposable
         ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Math.Clamp(_controlSurfaceAnim, 0f, 1f));
         ImGui.BeginChild("ControlSurface", new Vector2(width, avail.Y), false, 0);
 
-        if (ImGui.SmallButton("Collapse"))
+	    // Don't show the generic "Collapse" bloat for Bingo; the Bingo panel has its own back header.
+	    bool showCollapse = _view != View.Bingo && !(_view == View.Cardgames
+	        && _cardgamesSelectedSession is not null
+	        && _cardgamesSelectedSession.game_id == "blackjack");
+        if (showCollapse)
         {
-            _controlSurfaceOpen = false;
-            ImGui.EndChild();
-            ImGui.PopStyleVar();
-            return;
+            ImGui.Spacing();
+            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.78f, 0.30f, 0.95f)));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.98f, 0.84f, 0.35f, 1.0f)));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.82f, 0.68f, 0.25f, 1.0f)));
+            if (ImGui.SmallButton("Collapse"))
+            {
+                ImGui.PopStyleColor(3);
+                _controlSurfaceOpen = false;
+                SetRightPaneCollapsed(true);
+                ImGui.EndChild();
+                ImGui.PopStyleVar();
+                return;
+            }
+            ImGui.PopStyleColor(3);
+            ImGui.Separator();
         }
-        ImGui.Separator();
 
         if (!string.IsNullOrWhiteSpace(_connectRequiredGame) && !HasAdminKey())
         {
@@ -3204,17 +3533,27 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
         }
 
-        DrawSessionHeader();
-        ImGui.Spacing();
-        DrawPlayerFunnelBlock();
-        ImGui.Spacing();
-        DrawLiveReassuranceBlock();
+        if (!(_view == View.Cardgames
+            && _cardgamesSelectedSession is not null
+            && _cardgamesSelectedSession.game_id == "blackjack"))
+        {
+            DrawSessionHeader();
+            ImGui.Spacing();
 
-        ImGui.Separator();
+            if (_view != View.Bingo)
+            {
+                DrawPlayerFunnelBlock();
+                ImGui.Spacing();
+                DrawLiveReassuranceBlock();
+            }
+
+            ImGui.Separator();
+
+        }
         switch (_view)
         {
             case View.Cardgames: DrawCardgamesPanel(); break;
-            case View.Bingo: DrawBingoAdminPanel(); break;
+            case View.Bingo: ImGui.PushStyleColor(ImGuiCol.ChildBg, ImGui.ColorConvertFloat4ToU32(CategoryColor(SessionCategory.Party))); DrawBingoAdminPanel(); ImGui.PopStyleColor(); break;
             case View.Hunt: DrawHuntPanel(); break;
             case View.MurderMystery: DrawMurderMysteryPanel(); break;
             case View.Raffle: DrawRafflePanel(); break;
@@ -4282,10 +4621,10 @@ public class MainWindow : Window, IDisposable
     // ========================= Cardgames (Host) =========================
     private void DrawCardgamesPanel()
     {
-        ImGui.TextUnformatted("Cardgames");
-        ImGui.Separator();
         if (_cardgamesSelectedSession is null)
         {
+            ImGui.TextUnformatted("Cardgames");
+            ImGui.Separator();
             ImGui.TextDisabled("Select a cardgame session from the list.");
             return;
         }
@@ -4293,15 +4632,21 @@ public class MainWindow : Window, IDisposable
         var selected = _cardgamesSelectedSession;
         var baseUrl = GetCardgamesBaseUrl();
         var playerLink = $"{baseUrl}/cardgames/{selected.game_id}/session/{selected.join_code}";
-        ImGui.TextUnformatted($"{FormatCardgamesName(selected.game_id)} session");
-        ImGui.TextDisabled($"Status: {selected.status}");
-        ImGui.SameLine();
-        if (ImGui.Button("Copy player link"))
-            ImGui.SetClipboardText(playerLink);
-        ImGui.SameLine();
-        if (SmallIconButton("\uf24d", "Duplicate", "cardgames-duplicate"))
-            _ = Cardgames_CloneSelected();
-        ImGui.TextDisabled($"Join: {selected.join_code}");
+        bool isCardgameCard = selected.game_id is "blackjack" or "poker" or "highlow";
+        if (!isCardgameCard)
+        {
+            ImGui.TextUnformatted("Cardgames");
+            ImGui.Separator();
+            ImGui.TextUnformatted($"{FormatCardgamesName(selected.game_id)} session");
+            ImGui.TextDisabled($"Status: {selected.status}");
+            ImGui.SameLine();
+            if (ImGui.Button("Copy player link"))
+                ImGui.SetClipboardText(playerLink);
+            ImGui.SameLine();
+            if (SmallIconButton("\uf24d", "Duplicate", "cardgames-duplicate"))
+                _ = Cardgames_CloneSelected();
+            ImGui.TextDisabled($"Join: {selected.join_code}");
+        }
 
         if (!string.IsNullOrWhiteSpace(_cardgamesStateError))
             ImGui.TextDisabled(_cardgamesStateError);
@@ -4311,10 +4656,26 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        var root = _cardgamesStateDoc.RootElement;
-        if (!root.TryGetProperty("state", out var state))
+        JsonDocument? stateDoc = _cardgamesStateDoc;
+        if (stateDoc is null)
         {
-            ImGui.TextDisabled("No state payload.");
+            ImGui.TextDisabled("Waiting for state...");
+            return;
+        }
+        JsonElement state;
+        try
+        {
+            var root = stateDoc.RootElement;
+            if (!root.TryGetProperty("state", out state))
+            {
+                ImGui.TextDisabled("No state payload.");
+                return;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            _cardgamesStateDoc = null;
+            ImGui.TextDisabled("Refreshing state...");
             return;
         }
 
@@ -4322,103 +4683,189 @@ public class MainWindow : Window, IDisposable
         var result = GetString(state, "result");
         var stage = GetString(state, "stage");
         var phase = GetString(state, "phase");
+        ImGui.Spacing();
+
+        if (isCardgameCard)
+        {
+            var cardAccent = CategoryColor(SessionCategory.Casino);
+            var cardBg = new Vector4(cardAccent.X * 0.12f, cardAccent.Y * 0.12f, cardAccent.Z * 0.12f, 0.95f);
+            var cardBorder = new Vector4(cardAccent.X, cardAccent.Y, cardAccent.Z, 0.55f);
+            ImGui.BeginChild("CardgamesCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            var cardPos = ImGui.GetWindowPos();
+            var cardSize = ImGui.GetWindowSize();
+            var cardDraw = ImGui.GetWindowDrawList();
+            cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+                ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+            cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+                ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+            ImGui.Dummy(new Vector2(0, 6f));
+            ImGui.Indent(10f);
+            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+            if (SmallIconButton("\uf053", "<", "cardgames-back"))
+            {
+                ImGui.PopStyleColor(3);
+                _controlSurfaceOpen = false;
+                SetRightPaneCollapsed(true);
+                ImGui.Unindent(10f);
+                ImGui.EndChild();
+                return;
+            }
+            ImGui.PopStyleColor(3);
+            ImGui.SameLine();
+            ImGui.TextUnformatted(FormatCardgamesName(selected.game_id));
+            ImGui.SameLine();
+            ImGui.TextDisabled($"Session {selected.join_code}");
+            ImGui.SameLine();
+            if (SmallIconButton("\uf0c5", "Copy", "cardgames-copy"))
+                ImGui.SetClipboardText(selected.join_code);
+            ImGui.SameLine();
+            if (SmallIconButton("\uf0ac", "Web link", "cardgames-copy-link"))
+                ImGui.SetClipboardText(playerLink);
+
+            var statusColor = StatusColor(selected.status);
+            string turnLabel = selected.status switch
+            {
+                "live" => (status == "finished" ? "Round complete" : "Host turn"),
+                "created" => "Waiting to start",
+                "draft" => "Waiting to start",
+                "finished" => "Finished",
+                _ => "Waiting to start"
+            };
+            var dotDraw = ImGui.GetWindowDrawList();
+            float dotRadius = ImGui.GetTextLineHeight() * 0.25f;
+            var dotPos = ImGui.GetCursorScreenPos();
+            var dotCenter = new Vector2(dotPos.X + dotRadius, dotPos.Y + ImGui.GetFrameHeight() * 0.5f);
+            dotDraw.AddCircleFilled(dotCenter, dotRadius, ImGui.ColorConvertFloat4ToU32(statusColor));
+            ImGui.Dummy(new Vector2(dotRadius * 2f + 6f, ImGui.GetFrameHeight()));
+            ImGui.SameLine();
+            ImGui.TextDisabled(turnLabel);
+            if (!string.IsNullOrWhiteSpace(status))
+                ImGui.TextDisabled($"Round: {status}");
         if (!string.IsNullOrWhiteSpace(stage) || !string.IsNullOrWhiteSpace(phase))
             ImGui.TextDisabled($"Stage: {FormatGameLabel(stage != "" ? stage : phase)}");
-        if (!string.IsNullOrWhiteSpace(status))
+        if (!isCardgameCard && !string.IsNullOrWhiteSpace(status))
             ImGui.TextDisabled($"Round: {status}");
         if (!string.IsNullOrWhiteSpace(result))
             ImGui.TextDisabled($"Result: {result}");
+            ImGui.Spacing();
+            using (var dis = ImRaii.Disabled(selected.status != "created" && selected.status != "draft"))
+            {
+                if (ImGui.Button("Start"))
+                    _ = Cardgames_StartSelected();
+            }
+            ImGui.SameLine();
+            using (var dis = ImRaii.Disabled(selected.status != "live"))
+            {
+                if (ImGui.Button("End"))
+                    _ = Cardgames_FinishSelected();
+            }
+            ImGui.SameLine();
+            using (var dis = ImRaii.Disabled(selected.status != "live"))
+            {
+                if (ImGui.Button("Clone + End"))
+                    _ = Cardgames_CloneAndFinishSelected();
+            }
+            ImGui.Spacing();
+            ImGui.Dummy(new Vector2(0, 2f));
 
-        ImGui.Spacing();
-
-        if (selected.game_id == "blackjack")
-        {
-            var hands = GetCardHands(state, "player_hands");
-            var handResults = GetStringList(state, "hand_results");
-            var multipliers = GetIntList(state, "hand_multipliers");
-            if (hands.Count == 0)
+            if (selected.game_id == "blackjack")
+            {
+                var hands = GetCardHands(state, "player_hands");
+                var handResults = GetStringList(state, "hand_results");
+                var multipliers = GetIntList(state, "hand_multipliers");
+                if (hands.Count == 0)
+                {
+                    DrawCardRow("Player hand", GetCardList(state, "player_hand"));
+                    ImGui.Spacing();
+                }
+                else
+                {
+                    for (int i = 0; i < hands.Count; i++)
+                    {
+                        var label = $"Player hand {i + 1}";
+                        if (i < multipliers.Count && multipliers[i] > 1)
+                            label += $" x{multipliers[i]}";
+                        if (i < handResults.Count && !string.IsNullOrWhiteSpace(handResults[i]))
+                            label += $" ({handResults[i]})";
+                        DrawCardRow(label, hands[i]);
+                        ImGui.Spacing();
+                    }
+                }
+                DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
+                ImGui.Spacing();
+                bool live = selected.status == "live";
+                using (var dis = ImRaii.Disabled(!live))
+                {
+                    if (ImGui.Button("Hit"))
+                        _ = Cardgames_HostAction("hit");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Stand"))
+                        _ = Cardgames_HostAction("stand");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Double"))
+                        _ = Cardgames_HostAction("double");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Split"))
+                        _ = Cardgames_HostAction("split");
+                }
+            }
+            else if (selected.game_id == "highlow")
+            {
+                DrawCardRow("Current", GetCardList(state, "current"));
+                ImGui.Spacing();
+                DrawCardRow("Revealed", GetCardList(state, "revealed"));
+                ImGui.Spacing();
+                using (var dis = ImRaii.Disabled(selected.status != "live"))
+                {
+                    if (ImGui.Button("Higher"))
+                        _ = Cardgames_HostAction("higher");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Lower"))
+                        _ = Cardgames_HostAction("lower");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Double"))
+                        _ = Cardgames_HostAction("double");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Stop"))
+                        _ = Cardgames_HostAction("stop");
+                }
+            }
+            else if (selected.game_id == "poker")
             {
                 DrawCardRow("Player hand", GetCardList(state, "player_hand"));
                 ImGui.Spacing();
-            }
-            else
-            {
-                for (int i = 0; i < hands.Count; i++)
+                DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
+                ImGui.Spacing();
+                DrawCardRow("Community", GetCardList(state, "community"));
+                ImGui.Spacing();
+                using (var dis = ImRaii.Disabled(selected.status != "live"))
                 {
-                    var label = $"Player hand {i + 1}";
-                    if (i < multipliers.Count && multipliers[i] > 1)
-                        label += $" x{multipliers[i]}";
-                    if (i < handResults.Count && !string.IsNullOrWhiteSpace(handResults[i]))
-                        label += $" ({handResults[i]})";
-                    DrawCardRow(label, hands[i]);
-                    ImGui.Spacing();
+                    if (ImGui.Button("Advance round"))
+                        _ = Cardgames_HostAction("advance");
                 }
             }
-            DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
-            ImGui.Spacing();
-            bool live = selected.status == "live";
-            using (var dis = ImRaii.Disabled(!live))
-            {
-                if (ImGui.Button("Hit"))
-                    _ = Cardgames_PlayerAction("hit");
-                ImGui.SameLine();
-                if (ImGui.Button("Stand"))
-                    _ = Cardgames_PlayerAction("stand");
-                ImGui.SameLine();
-                if (ImGui.Button("Double"))
-                    _ = Cardgames_PlayerAction("double");
-                ImGui.SameLine();
-                if (ImGui.Button("Split"))
-                    _ = Cardgames_PlayerAction("split");
-            }
-        }
-        else if (selected.game_id == "highlow")
-        {
-            DrawCardRow("Current", GetCardList(state, "current"));
-            ImGui.Spacing();
-            DrawCardRow("Revealed", GetCardList(state, "revealed"));
-            ImGui.Spacing();
-            using (var dis = ImRaii.Disabled(selected.status != "live"))
-            {
-                if (ImGui.Button("Higher"))
-                    _ = Cardgames_HostAction("higher");
-                ImGui.SameLine();
-                if (ImGui.Button("Lower"))
-                    _ = Cardgames_HostAction("lower");
-                ImGui.SameLine();
-                if (ImGui.Button("Double"))
-                    _ = Cardgames_HostAction("double");
-                ImGui.SameLine();
-                if (ImGui.Button("Stop"))
-                    _ = Cardgames_HostAction("stop");
-            }
-        }
-        else if (selected.game_id == "poker")
-        {
-            DrawCardRow("Player hand", GetCardList(state, "player_hand"));
-            ImGui.Spacing();
-            DrawCardRow("Dealer hand", GetCardList(state, "dealer_hand"));
-            ImGui.Spacing();
-            DrawCardRow("Community", GetCardList(state, "community"));
-            ImGui.Spacing();
-            using (var dis = ImRaii.Disabled(selected.status != "live"))
-            {
-                if (ImGui.Button("Advance round"))
-                    _ = Cardgames_HostAction("advance");
-            }
-        }
 
-        ImGui.Spacing();
-        using (var dis = ImRaii.Disabled(selected.status != "created" && selected.status != "draft"))
-        {
-            if (ImGui.Button("Start session"))
-                _ = Cardgames_StartSelected();
+            ImGui.Unindent(10f);
+            ImGui.Dummy(new Vector2(0, 6f));
+            ImGui.EndChild();
         }
-        ImGui.SameLine();
-        using (var dis = ImRaii.Disabled(selected.status != "live"))
+        if (!isCardgameCard)
         {
-            if (ImGui.Button("Finish session"))
-                _ = Cardgames_FinishSelected();
+            ImGui.Spacing();
+            using (var dis = ImRaii.Disabled(selected.status != "created" && selected.status != "draft"))
+            {
+                if (ImGui.Button("Start session"))
+                    _ = Cardgames_StartSelected();
+            }
+            ImGui.SameLine();
+            using (var dis = ImRaii.Disabled(selected.status != "live"))
+            {
+                if (ImGui.Button("Finish session"))
+                    _ = Cardgames_FinishSelected();
+            }
         }
     }
 
@@ -4500,15 +4947,16 @@ public class MainWindow : Window, IDisposable
         texture = null;
         if (string.IsNullOrWhiteSpace(url))
             return false;
-        if (_cardgamesTextureCache.TryGetValue(url, out var cached))
+        lock (_cardgamesTextureLock)
         {
-            texture = cached;
-            return true;
-        }
-        if (_cardgamesTextureTasks.ContainsKey(url))
-            return false;
-
-        _cardgamesTextureTasks[url] = Task.Run(async () =>
+            if (_cardgamesTextureCache.TryGetValue(url, out var cached))
+            {
+                texture = cached;
+                return true;
+            }
+            if (_cardgamesTextureTasks.ContainsKey(url))
+                return false;
+            _cardgamesTextureTasks[url] = Task.Run(async () =>
         {
             try
             {
@@ -4525,7 +4973,10 @@ public class MainWindow : Window, IDisposable
                     await File.WriteAllBytesAsync(filePath, bytes).ConfigureAwait(false);
                 }
                 var tex = Forest.Plugin.TextureProvider.GetFromFile(filePath);
-                _cardgamesTextureCache[url] = tex;
+                lock (_cardgamesTextureLock)
+                {
+                    _cardgamesTextureCache[url] = tex;
+                }
             }
             catch (Exception ex)
             {
@@ -4533,9 +4984,13 @@ public class MainWindow : Window, IDisposable
             }
             finally
             {
-                _cardgamesTextureTasks.Remove(url);
+                lock (_cardgamesTextureLock)
+                {
+                    _cardgamesTextureTasks.Remove(url);
+                }
             }
         });
+        }
         return false;
     }
 
@@ -4675,8 +5130,15 @@ public class MainWindow : Window, IDisposable
         {
             var card = cards[i];
             string img = "";
-            if (card.TryGetProperty("image", out var imgEl) && imgEl.ValueKind == JsonValueKind.String)
-                img = ResolveCardImageUrl(imgEl.GetString());
+            try
+            {
+                if (card.TryGetProperty("image", out var imgEl) && imgEl.ValueKind == JsonValueKind.String)
+                    img = ResolveCardImageUrl(imgEl.GetString());
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                img = "";
+            }
             var rendered = false;
             if (!string.IsNullOrWhiteSpace(img) && TryGetCardTexture(img, out var tex) && tex is not null)
             {
@@ -5809,6 +6271,14 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private async Task Cardgames_CloneAndFinishSelected()
+    {
+        if (_cardgamesSelectedSession is null)
+            return;
+        await Cardgames_CloneSelected();
+        await Cardgames_FinishSelected();
+    }
+
     private async Task Cardgames_LoadState()
     {
         if (_cardgamesSelectedSession is null)
@@ -6590,55 +7060,42 @@ public class MainWindow : Window, IDisposable
         finally { _bingoLoading = false; }
     }
 
-    private async Task Bingo_Roll()
+    /// <summary>
+    /// Executes a chat command in the game. Can be used for any command like /say, /saddlebag, /random, etc.
+    /// Must be called on the Framework thread.
+    /// </summary>
+    private unsafe void ExecuteChatCommand(string cmd)
+    {
+        var uiModule = UIModule.Instance();
+        var shell = uiModule->GetRaptureShellModule();
+        var command = new Utf8String();
+        command.SetString(cmd);
+        shell->ExecuteCommandInner(&command, uiModule);
+        command.Dtor();
+    }
+
+    private void Bingo_Roll()
     {
         if (_bingoState is null)
         {
             _bingoStatus = "Load a game first.";
-            Plugin.ChatGui.PrintError("[Forest] Load a game first.");
+            Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.PrintError("[Forest] Load a game first."));
+            return;
+        }
+        if (_bingoWaitingForRandomRoll)
+        {
+            _bingoStatus = "Already rolling.";
             return;
         }
         Bingo_EnsureClient();
-        _bingoRollAttempts = 0;
         _bingoLoading = true;
-        _bingoStatus = "Rolling on server.";
+        _bingoWaitingForRandomRoll = true;
+        _bingoStatus = "Rolling...";
 
-        try
-        {
-            var previous = _bingoState.game.called ?? Array.Empty<int>();
-            var prevSet = new HashSet<int>(previous);
-
-            var res = await _bingoApi!.RollAsync(_bingoState.game.game_id);
-            var called = res.called ?? previous;
-
-            int? last = null;
-            foreach (var num in called)
-            {
-                if (prevSet.Contains(num)) continue;
-                if (!last.HasValue || num > last.Value)
-                    last = num;
-            }
-            if (!last.HasValue && called.Length > 0)
-                last = called[^1];
-
-            _bingoState = _bingoState with { game = _bingoState.game with { called = called, last_called = last } };
-            _bingoStatus = last.HasValue ? $"Rolled {last.Value}." : "Rolled.";
-            if (last.HasValue)
-            {
-                Bingo_AddAction($"Called {FormatBingoCall(last.Value)}");
-                if (_bingoAnnounceCalls)
-                    Plugin.ChatGui.Print($"[Forest] Called number {last.Value}.");
-            }
-        }
-        catch (Exception ex)
-        {
-            _bingoStatus = $"Failed: {ex.Message}";
-            Plugin.ChatGui.PrintError($"[Forest] Roll failed: {ex.Message}");
-        }
-        finally
-        {
-            _bingoLoading = false;
-        }
+        
+        _bingoRandomRerollAttempts = 0;
+// Execute /random 40 command in-game, result will be parsed from chat
+        Plugin.Framework.RunOnFrameworkThread(() => ExecuteChatCommand("/random 40"));
     }
 
     private List<string> Bingo_GetRandomAllowList(string? gameId)
@@ -6693,66 +7150,114 @@ public class MainWindow : Window, IDisposable
         return false;
     }
 
-    private bool TryHandleBingoRandom(string senderText, string messageText)
+    private async Task<bool> TryHandleBingoRandomAsync(string senderText, string messageText)
     {
-        if (DateTime.UtcNow < _bingoRandomCooldownUntil)
-            return false;
-        if (string.IsNullOrWhiteSpace(messageText)) return false;
-        var lower = messageText.ToLowerInvariant();
-        if (!lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
-
-        var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
-        var localLower = string.IsNullOrWhiteSpace(localName) ? "" : localName.ToLowerInvariant();
-        var messageMatches =
-            lower.Contains("you roll") ||
-            lower.Contains("you rolled") ||
-            lower.StartsWith("you ");
-        var senderMatchesLocal = false;
-        if (!string.IsNullOrWhiteSpace(localLower))
+        try
         {
-            senderMatchesLocal = !string.IsNullOrWhiteSpace(senderText) &&
-                                 string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
-            messageMatches = messageMatches || lower.Contains(localLower);
+            // Only accept manual /random results when we are connected to the online Bingo game.
+            // Otherwise we'd risk diverging local state from the server state.
+            if (!Plugin.Config.BingoConnected || _bingoApi is null || string.IsNullOrWhiteSpace(_bingoGameId) || _bingoState is null || !_bingoState.game.active)
+                return false;
+                        if (DateTime.UtcNow < _bingoRandomCooldownUntil)
+                return false;
+            if (string.IsNullOrWhiteSpace(messageText)) return false;
+            var lower = messageText.ToLowerInvariant();
+            if (!_bingoWaitingForRandomRoll && !lower.Contains("roll") && !lower.Contains("random") && !lower.Contains("lot")) return false;
+
+            var matches = Regex.Matches(messageText, "\\d+");
+            if (matches.Count == 0) return false;
+            if (!int.TryParse(matches[0].Value, out var rolled)) return false;
+            if (rolled < 1 || rolled > 40) return false;
+
+            if (_bingoWaitingForRandomRoll)
+            {
+                _bingoWaitingForRandomRoll = false;
+                var success = await Bingo_HandleRandomResult(rolled);
+                if (success)
+                    _bingoLoading = false;
+                return true;
+            }
+
+            var localName = Plugin.ClientState.LocalPlayer?.Name.TextValue;
+            var localLower = string.IsNullOrWhiteSpace(localName) ? "" : localName.ToLowerInvariant();
+            var messageMatches =
+                lower.Contains("you roll") ||
+                lower.Contains("you rolled") ||
+                lower.StartsWith("you ");
+            var senderMatchesLocal = false;
+            if (!string.IsNullOrWhiteSpace(localLower))
+            {
+                senderMatchesLocal = !string.IsNullOrWhiteSpace(senderText) &&
+                                     string.Equals(senderText, localName, StringComparison.OrdinalIgnoreCase);
+                messageMatches = messageMatches || lower.Contains(localLower);
+            }
+            if (!senderMatchesLocal && !messageMatches && !Bingo_IsRandomAllowedSender(senderText, messageText))
+                return false;
+
+            _ = Bingo_HandleRandomResult(rolled);
+            return true;
         }
-        if (!senderMatchesLocal && !messageMatches && !Bingo_IsRandomAllowedSender(senderText, messageText))
+        catch (Exception ex)
+        {
+            Plugin.ChatGui.PrintError($"[Forest] Error handling bingo random: {ex.Message}");
             return false;
-        var matches = Regex.Matches(messageText, "\\d+");
-        if (matches.Count == 0) return false;
-        if (!int.TryParse(matches[0].Value, out var rolled)) return false;
-        _ = Bingo_HandleRandomResult(rolled);
-        return true;
+        }
     }
 
-    private async Task Bingo_HandleRandomResult(int rolled)
+    private async Task<bool> Bingo_HandleRandomResult(int rolled)
     {
         if (_bingoState is null)
         {
             _bingoStatus = "Load a game first.";
-            Plugin.ChatGui.PrintError("[Forest] Load a game first.");
-            return;
+            Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.PrintError("[Forest] Load a game first."));
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
         }
-        if (rolled < 1 || rolled > BingoRandomMax) return;
+        if (!_bingoState.game.started)
+        {
+            _bingoStatus = "Game not started.";
+            Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.PrintError("[Forest] Game not started."));
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
+        }
+        if (rolled < 1 || rolled > BingoRandomMax) 
+        {
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
+        }
 
         var called = new HashSet<int>(_bingoState.game.called ?? Array.Empty<int>());
         if (called.Count >= BingoRandomMax)
         {
             _bingoStatus = "All numbers called.";
-            Plugin.ChatGui.PrintError("[Forest] All numbers called.");
-            return;
+            Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.PrintError("[Forest] All numbers called."));
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
         }
 
         if (called.Contains(rolled))
         {
-            _bingoRollAttempts += 1;
-            if (_bingoRollAttempts > BingoRandomMax * 2)
+            // Duplicate roll: try again up to 5 times, then stop.
+            _bingoRandomRerollAttempts++;
+            if (_bingoRandomRerollAttempts <= 5)
             {
-                _bingoStatus = "Too many repeats.";
-                Plugin.ChatGui.PrintError("[Forest] Too many repeats while rolling.");
-                return;
+                _bingoStatus = $"Duplicate ({rolled}) — retrying ({_bingoRandomRerollAttempts}/5)...";
+                // Duplicate roll: wait 1s and trigger another roll; result will be parsed from chat.
+                _bingoWaitingForRandomRoll = true;
+                _bingoLoading = true;
+                await Task.Delay(1000);
+                Plugin.Framework.RunOnFrameworkThread(() => ExecuteChatCommand("/random 40"));
+                return false;
             }
-            _bingoStatus = $"Number {rolled} already called.";
-            Plugin.ChatGui.PrintError($"[Forest] Number {rolled} already called.");
-            return;
+
+            _bingoStatus = $"Rolled a duplicate number {rolled} too many times. Stopping.";
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
         }
 
         try
@@ -6763,13 +7268,19 @@ public class MainWindow : Window, IDisposable
             _bingoStatus = $"Rolled {rolled}.";
             Bingo_AddAction($"Called {FormatBingoCall(rolled)}");
             if (_bingoAnnounceCalls)
-                Plugin.ChatGui.Print($"[Forest] Called number {rolled}.");
+                Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.Print($"[Forest] Called number {rolled}."));
             _bingoRandomCooldownUntil = DateTime.UtcNow.AddSeconds(5);
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return true; // success
         }
         catch (Exception ex)
         {
             _bingoStatus = $"Failed: {ex.Message}";
-            Plugin.ChatGui.PrintError($"[Forest] Call failed: {ex.Message}");
+            Plugin.Framework.RunOnFrameworkThread(() => Plugin.ChatGui.PrintError($"[Forest] Call failed: {ex.Message}"));
+            _bingoWaitingForRandomRoll = false;
+            _bingoLoading = false;
+            return false;
         }
     }
 

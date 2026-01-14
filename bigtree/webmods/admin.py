@@ -423,3 +423,19 @@ async def admin_announce(req: web.Request):
         client_id, doc["app"], doc["version"], doc["character"], doc["world"], ip
     )
     return web.json_response({"ok": True, "client_id": client_id})
+
+
+@route("POST", "/admin/update_with_leaf", scopes=["bingo:admin"])
+async def update_with_leaf(req: web.Request):
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://raw.githubusercontent.com/dorbian/forest_repo/main/plogonmaster.json") as resp:
+                if resp.status != 200:
+                    return web.json_response({"ok": False, "error": f"Failed to fetch: {resp.status}"}, status=400)
+                content = await resp.text()
+        with open("bigtree/with.leaf", "w", encoding="utf-8") as f:
+            f.write(content)
+        return web.json_response({"ok": True, "message": "Updated with.leaf"})
+    except Exception as ex:
+        return web.json_response({"ok": False, "error": str(ex)}, status=500)
