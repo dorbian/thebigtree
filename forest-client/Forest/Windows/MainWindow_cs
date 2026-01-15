@@ -1398,7 +1398,7 @@ public class MainWindow : Window, IDisposable
     {
 	        // Wrap Bingo admin in a proper "card" container (background + rounding) to match cardgames.
 	        var avail = ImGui.GetContentRegionAvail();
-	        var accent = new Vector4(0.25f, 0.90f, 0.45f, 1.0f); // Bingo green
+	        var accent = CategoryColor(SessionCategory.Draw);
 	        var style = ImGui.GetStyle();
 	        float rounding = 12f;
 	        var pad = new Vector2(14f, 12f);
@@ -1441,14 +1441,6 @@ public class MainWindow : Window, IDisposable
 
         var game = _bingoState?.game;
         var uiState = GetBingoUiState(game);
-
-        // Settings tab removed: clamp any legacy saved index
-        if (_bingoUiTabIndex == 5)
-        {
-            _bingoUiTabIndex = 0;
-            Plugin.Config.BingoUiTabIndex = 0;
-            Plugin.Config.Save();
-        }
 
 
         if (_bingoShowBuyLink)
@@ -1514,7 +1506,12 @@ if (BeginBingoTab("History", 4))
                 DrawBingoHistoryTab(game);
                 ImGui.EndTabItem();
             }
-
+            if (BeginBingoTab("Settings", 5))
+            {
+                DrawBingoPrimaryActionRow(uiState, game);
+                DrawBingoSettingsTab(game);
+                ImGui.EndTabItem();
+            }
             ImGui.EndTabBar();
         }
 
@@ -1637,7 +1634,7 @@ if (BeginBingoTab("History", 4))
         };
         string disabledReason = state switch
         {
-            BingoUiState.NoGameLoaded => "Select a game from the list on the left.",
+            BingoUiState.NoGameLoaded => "Select a game from the list or enter a Game Id in Advanced.",
             BingoUiState.Ready => "Load a game first.",
             BingoUiState.Running => "Game must be active.",
             BingoUiState.StageComplete => "Game must be active.",
@@ -1750,12 +1747,16 @@ if (BeginBingoTab("History", 4))
 private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
         {
             // Compact header: only connection/status + stage/pot + last call + payouts.
-            var accent = new Vector4(0.25f, 0.90f, 0.45f, 1.0f);
+            var accent = CategoryColor(SessionCategory.Party);
             var style = ImGui.GetStyle();
             float spacing = style.ItemSpacing.X;
 
-            // Back arrow (collapses the control surface) — match the card background (no orange/red button)
-            bool back = SmallIconButton("\uf053", "<", "bingo-back", matchPanelBg: true);
+            // Back arrow (collapses the control surface)
+            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(accent));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(Tint(accent, 0.04f)));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(Tint(accent, -0.04f)));
+            bool back = SmallIconButton("\uf053", "<", "bingo-back", matchPanelBg: false);
+            ImGui.PopStyleColor(3);
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Back");
             if (back)
@@ -1771,8 +1772,8 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
             float boxPadY = 8f;
             float rounding = 10f;
 
-            uint bg = ImGui.ColorConvertFloat4ToU32(new Vector4(0.45f, 0.95f, 0.70f, 0.95f));
-            uint border = ImGui.ColorConvertFloat4ToU32(new Vector4(0.22f, 0.70f, 0.38f, 0.92f));
+            uint bg = ImGui.ColorConvertFloat4ToU32(new Vector4(0.40f, 0.85f, 0.65f, 0.95f));
+            uint border = ImGui.ColorConvertFloat4ToU32(new Vector4(0.20f, 0.55f, 0.35f, 0.90f));
 
             void DrawInfoBox(string id, string l1, string? l2 = null)
             {
@@ -1874,13 +1875,7 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
                 ImGui.TextUnformatted(stage2);
             }
 
-            // Payouts box (right)
-            float payoutsH = lineH * 3f + boxPadY * 2f;
-            float payoutsW = Math.Max(200f, ImGui.CalcTextSize("Full: 999,999,999").X + boxPadX * 2f);
-            float right = ImGui.GetWindowContentRegionMax().X;
-            float payoutsX = right - payoutsW;
-
-            // Last box (to the left of payouts)
+            // Last box (center-ish)
             int? lastCalled = game.last_called;
             if ((!lastCalled.HasValue || lastCalled.Value == 0) && game.called is { Length: > 0 })
                 lastCalled = game.called[^1];
@@ -1893,29 +1888,28 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
             lastW = Math.Max(120f, lastW);
             float lastH = lineH * 2f + boxPadY * 2f;
 
-            float minLastX = leftX + stageW + spacing;
-            float lastX = payoutsX - spacing - lastW;
-            if (lastX < minLastX)
+            float midX = leftX + stageW + spacing;
             {
-                lastX = minLastX;
-                float maxLastW = Math.Max(80f, payoutsX - spacing - lastX);
-                if (lastW > maxLastW)
-                    lastW = maxLastW;
-            }
-
-            {
-                ImGui.SetCursorPos(new Vector2(lastX, rowY));
+                ImGui.SetCursorPos(new Vector2(midX, rowY));
                 var p0 = ImGui.GetCursorScreenPos();
                 var p1 = p0 + new Vector2(lastW, lastH);
                 var dl = ImGui.GetWindowDrawList();
                 dl.AddRectFilled(p0, p1, bg, rounding);
                 dl.AddRect(p0, p1, border, rounding, 0, 1.0f);
-                ImGui.SetCursorPos(new Vector2(lastX + boxPadX, rowY + boxPadY));
+                ImGui.SetCursorPos(new Vector2(midX + boxPadX, rowY + boxPadY));
                 ImGui.TextUnformatted(last1);
                 ImGui.TextUnformatted(last2);
             }
 
-                        // (layout) payouts are anchored right; last box is anchored to payouts.
+            // Payouts box (right)
+            float payoutsH = lineH * 3f + boxPadY * 2f;
+            float payoutsW = Math.Max(200f, ImGui.CalcTextSize("Full: 999,999,999").X + boxPadX * 2f);
+            float right = ImGui.GetWindowContentRegionMax().X;
+            float payoutsX = right - payoutsW;
+
+            // Ensure the middle box doesn't overlap with the right box on small widths.
+            if (payoutsX < midX + lastW + spacing)
+                payoutsX = midX + lastW + spacing;
 
             {
                 ImGui.SetCursorPos(new Vector2(payoutsX, rowY));
@@ -2033,30 +2027,33 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
         ImGui.TextUnformatted("Last Action");
         ImGui.TextDisabled(string.IsNullOrWhiteSpace(_bingoLastAction) ? "-" : _bingoLastAction);
 
-                // Advanced (always visible)
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Advanced");
-        ImGui.Separator();
-        ImGui.Spacing();
-                    ImGui.TextUnformatted("Seed Pot");
-                    ImGui.SetNextItemWidth(140);
-                    if (ImGui.SliderInt("Amount", ref _bingoSeedPotAmount, 0, 10000000))
-                    {
-                        if (_bingoSeedPotAmount < 0)
-                            _bingoSeedPotAmount = 0;
-                    }
-                    using (var dis = ImRaii.Disabled(_bingoSeedPotAmount <= 0 || _bingoLoading))
-                    {
-                        if (ImGui.Button("Seed"))
-                            _ = Bingo_SeedPot(_bingoSeedPotAmount);
-                    }
-
-
-        if (!_bingoCompactMode)
+        if (!_bingoCompactMode && ImGui.CollapsingHeader("Advanced"))
         {
+            ImGui.SetNextItemWidth(260);
+            ImGui.InputText("Game Id", ref _bingoGameId, 128);
+            using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(_bingoGameId)))
+            {
+                if (ImGui.Button("Load Game"))
+                    _ = Bingo_LoadGame(_bingoGameId);
+            }
+
             ImGui.Spacing();
-            ImGui.TextUnformatted("Admin Tools");
-            ImGui.Separator();
+            ImGui.TextUnformatted("Seed Pot");
+            ImGui.SetNextItemWidth(140);
+            if (ImGui.SliderInt("Amount", ref _bingoSeedPotAmount, 0, 10000000))
+            {
+                if (_bingoSeedPotAmount < 0)
+                    _bingoSeedPotAmount = 0;
+            }
+            using (var dis = ImRaii.Disabled(_bingoSeedPotAmount <= 0 || _bingoLoading))
+            {
+                if (ImGui.Button("Seed"))
+                    _ = Bingo_SeedPot(_bingoSeedPotAmount);
+            }
+        }
+
+        if (!_bingoCompactMode && ImGui.CollapsingHeader("Admin Tools"))
+        {
             DrawBingoAllowList(game);
         }
     }
@@ -2318,7 +2315,7 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
             "full" => 2,
             _ => -1,
         };
-    }/
+    }
 
     private static string FormatBingoStageLabel(string? stage)
     {
@@ -2364,7 +2361,7 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
     {
         try
         {
-            var baseUrl = (Plugin.Config.BingoApiBaseUrl ?? "https://rites.thebigtree.life").Trim();
+            var baseUrl = (Plugin.Config.BingoAdmin?.BaseUrl ?? "").Trim();
             if (string.IsNullOrWhiteSpace(baseUrl))
                 return string.Empty;
             baseUrl = baseUrl.TrimEnd('/');
@@ -3771,18 +3768,22 @@ private void DrawPermissionsStatusFooter()
             ImGui.Spacing();
         }
 
-        if (_view != View.Bingo && !(_view == View.Cardgames
+        if (!(_view == View.Cardgames
             && _cardgamesSelectedSession is not null
             && _cardgamesSelectedSession.game_id == "blackjack"))
         {
             DrawSessionHeader();
             ImGui.Spacing();
 
-            DrawPlayerFunnelBlock();
-            ImGui.Spacing();
-            DrawLiveReassuranceBlock();
+            if (_view != View.Bingo)
+            {
+                DrawPlayerFunnelBlock();
+                ImGui.Spacing();
+                DrawLiveReassuranceBlock();
+            }
 
             ImGui.Separator();
+
         }
         switch (_view)
         {
@@ -5190,7 +5191,7 @@ private void DrawPermissionsStatusFooter()
             }
             if (_cardgamesTextureTasks.ContainsKey(url))
                 return false;
-            _cardgamesTextureTasks[url] = Task.Run(() =>
+            _cardgamesTextureTasks[url] = Task.Run(async () =>
         {
             try
             {
@@ -5203,8 +5204,8 @@ private void DrawPermissionsStatusFooter()
                 var filePath = Path.Combine(cacheDir, $"{hash}{ext}");
                 if (!File.Exists(filePath))
                 {
-                    var bytes = _cardgamesHttp.GetByteArrayAsync(url).GetAwaiter().GetResult();
-                    File.WriteAllBytes(filePath, bytes);
+                    var bytes = await _cardgamesHttp.GetByteArrayAsync(url).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(filePath, bytes).ConfigureAwait(false);
                 }
                 var tex = Forest.Plugin.TextureProvider.GetFromFile(filePath);
                 lock (_cardgamesTextureLock)

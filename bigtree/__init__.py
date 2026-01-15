@@ -25,6 +25,7 @@ import bigtree.inc.core as core
 import bigtree.modules.partake as partake
 import bigtree.modules.contest as contesta
 import bigtree.modules.event as event
+from bigtree.inc.database import ensure_database
 
 # predefine boolean
 __initialized__ = False
@@ -75,6 +76,7 @@ def initialize():
         settings = load_settings()  # env overlays applied automatically
         import bigtree as _bt
         _bt.settings = settings
+        ensure_database()
         # Bot basics
         bot_sec = settings["BOT"]
         default_contest_dir = str(workingdir.parent / "contest")

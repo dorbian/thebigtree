@@ -60,6 +60,16 @@ spec:
           value: "8443"
         - name: BIGTREE_CARDGAMES_DB_DIR
           value: "/opt/bigtree/database"
+        - name: BIGTREE__DATABASE__host
+          value: "127.0.0.1"
+        - name: BIGTREE__DATABASE__port
+          value: "5432"
+        - name: BIGTREE__DATABASE__user
+          value: "bigtree"
+        - name: BIGTREE__DATABASE__password
+          value: "treehouse"
+        - name: BIGTREE__DATABASE__name
+          value: "bigtree"
       ports:
         - containerPort: 8443
           hostPort: 8443   # change this if it conflicts on the host
@@ -72,14 +82,29 @@ spec:
           subPath: bigtree.ini
         - name: thebigtree-local-db
           mountPath: /opt/bigtree/database
+        - name: thebigtree-postgres
+          mountPath: /var/lib/postgresql/data
     - name: thebigtree-web
       # Web gateway container (reverse proxy + cache)
       image: ghcr.io/YOURORG/YOURREPO/thebigtree-web:latest
       imagePullPolicy: Always
       ports:
         - containerPort: 8080
-          hostPort: 8080   # change if it conflicts on the host
+          hostPort: 8080   # change this if it conflicts on the host
           protocol: TCP
+    - name: postgres
+      image: postgres:15-alpine
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: POSTGRES_USER
+          value: "bigtree"
+        - name: POSTGRES_PASSWORD
+          value: "treehouse"
+        - name: POSTGRES_DB
+          value: "bigtree"
+      volumeMounts:
+        - name: thebigtree-postgres
+          mountPath: /var/lib/postgresql/data
   volumes:
     - name: thebigtree-data
       hostPath:
@@ -91,4 +116,8 @@ spec:
     - name: thebigtree-local-db
       hostPath:
         path: /opt/bigtree/database
+        type: DirectoryOrCreate
+    - name: thebigtree-postgres
+      hostPath:
+        path: /opt/bigtree/postgres
         type: DirectoryOrCreate

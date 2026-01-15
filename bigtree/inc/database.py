@@ -1,0 +1,637 @@
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import sqlite3
+import threading
+from datetime import datetime, timedelta
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import psycopg2
+from psycopg2 import extras
+from psycopg2.extras import Json, RealDictCursor
+from tinydb import TinyDB
+
+import bigtree
+from bigtree.inc.logging import logger
+
+_DB_INSTANCE: Optional["Database"] = None
+
+
+def ensure_database() -> "Database":
+    global _DB_INSTANCE
+    if _DB_INSTANCE is None:
+        _DB_INSTANCE = Database()
+        _DB_INSTANCE.initialize()
+    return _DB_INSTANCE
+
+
+def get_database() -> "Database":
+    return ensure_database()
+
+
+class Database:
+    def __init__(self):
+        self._settings = getattr(bigtree, "settings", None)
+        self._conn_info = self._build_connection_info()
+        self._lock = threading.RLock()
+        self._initialized = False
+        self._json_imported = False
+        self._decks_synced = False
+
+    def initialize(self):
+        with self._lock:
+            if self._initialized:
+                return
+            self._ensure_tables()
+            self._sync_tarot_decks()
+            self._migrate_json_backups()
+            self._initialized = True
+
+    # ---------------- connection helpers ----------------
+    def _build_connection_info(self) -> Dict[str, Any]:
+        defaults = {
+            "host": "127.0.0.1",
+            "port": 5432,
+            "user": "bigtree",
+            "password": "",
+            "dbname": "bigtree",
+            "sslmode": "prefer",
+            "connect_timeout": 5,
+        }
+        data = {}
+        for key, default in defaults.items():
+            dotted = f"DATABASE.{key}"
+            if self._settings:
+                val = self._settings.get(dotted, default, cast=int if isinstance(default, int) else None)
+            else:
+                val = default
+            if val is None:
+                val = default
+            if key == "port" or key == "connect_timeout":
+                try:
+                    val = int(val)
+                except Exception:
+                    val = default
+            data[key] = val
+        return data
+
+    def _connect(self):
+        return psycopg2.connect(**self._conn_info)
+
+    def _execute(self, sql: str, params: Optional[Sequence] = None, fetch: bool = False):
+        with self._connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(sql, params or ())
+                if fetch:
+                    return cur.fetchall()
+        return []
+
+    def _fetchone(self, sql: str, params: Optional[Sequence] = None) -> Optional[Dict[str, Any]]:
+        rows = self._execute(sql, params, fetch=True)
+        return rows[0] if rows else None
+
+    # ---------------- schema ----------------
+    def _ensure_tables(self):
+        logger.debug("[database] ensuring schema exists")
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                xiv_username TEXT UNIQUE NOT NULL,
+                xiv_id TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS games (
+                id SERIAL PRIMARY KEY,
+                game_id TEXT UNIQUE NOT NULL,
+                module TEXT NOT NULL,
+                title TEXT,
+                channel_id BIGINT,
+                created_by BIGINT,
+                created_at TIMESTAMPTZ,
+                ended_at TIMESTAMPTZ,
+                status TEXT,
+                active BOOLEAN NOT NULL DEFAULT FALSE,
+                payload JSONB NOT NULL,
+                metadata JSONB DEFAULT '{}'::jsonb
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS game_players (
+                id SERIAL PRIMARY KEY,
+                game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                role TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(game_id, name, role)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS user_games (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                role TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, game_id, role)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS deck_files (
+                id SERIAL PRIMARY KEY,
+                deck_id TEXT UNIQUE NOT NULL,
+                name TEXT,
+                module TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                payload JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ]
+        for stmt in statements:
+            self._execute(stmt)
+
+    # ---------------- public helpers ----------------
+    def upsert_user(self, xiv_username: str, xiv_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        metadata = metadata or {}
+        metadata.setdefault("last_seen", datetime.utcnow().isoformat())
+        sql = """
+        INSERT INTO users (xiv_username, xiv_id, metadata)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (xiv_username) DO UPDATE
+          SET xiv_id = COALESCE(EXCLUDED.xiv_id, users.xiv_id),
+              metadata = users.metadata || EXCLUDED.metadata,
+              updated_at = CURRENT_TIMESTAMP
+        RETURNING id, xiv_username, xiv_id, metadata, created_at, updated_at
+        """
+        row = self._fetchone(sql, (xiv_username, xiv_id, Json(metadata)))
+        return row or {}
+
+    def create_user_session(self, user_id: int, expires_in: int = 86400) -> str:
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        self._execute(
+            "INSERT INTO user_sessions (token, user_id, expires_at) VALUES (%s, %s, %s)",
+            (token, user_id, expires_at),
+        )
+        return token
+
+    def get_user_by_session(self, token: str) -> Optional[Dict[str, Any]]:
+        sql = """
+        SELECT u.id, u.xiv_username, u.xiv_id, u.metadata, s.expires_at
+        FROM user_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.token = %s AND s.expires_at > CURRENT_TIMESTAMP
+        """
+        return self._fetchone(sql, (token,))
+
+    def link_user_to_matches(self, user_id: int, name: str):
+        if not name:
+            return
+        normalized = name.strip().lower()
+        if not normalized:
+            return
+        rows = self._execute(
+            """
+            SELECT game_id, name, role
+            FROM game_players
+            WHERE lower(name) = %s OR lower(name) LIKE %s
+            """,
+            (normalized, f"%{normalized}%"),
+            fetch=True,
+        )
+        if not rows:
+            return
+        for row in rows:
+            self._execute(
+                """
+                INSERT INTO user_games (user_id, game_id, role)
+                VALUES (%s, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (user_id, row["game_id"], row.get("role")),
+            )
+
+    def list_user_games(self, user_id: int, only_active: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT g.game_id, g.module, g.title, g.status, g.active,
+               g.created_at, g.ended_at, g.channel_id, g.created_by, g.metadata
+        FROM games g
+        JOIN user_games ug ON ug.game_id = g.game_id
+        WHERE ug.user_id = %s
+        """
+        params: List[Any] = [user_id]
+        if only_active:
+            sql += " AND g.active = TRUE"
+        sql += " ORDER BY g.created_at DESC LIMIT %s"
+        params.append(limit)
+        games = self._execute(sql, tuple(params), fetch=True)
+        if not games:
+            return []
+        game_ids = [row["game_id"] for row in games]
+        players = self._fetch_game_players(game_ids)
+        indexed: Dict[str, List[Dict[str, Any]]] = {}
+        for player in players:
+            indexed.setdefault(player["game_id"], []).append(
+                {"name": player["name"], "role": player.get("role"), "metadata": player.get("metadata")}
+            )
+        for row in games:
+            row["created_at"] = self._format_dt(row.get("created_at"))
+            row["ended_at"] = self._format_dt(row.get("ended_at"))
+            row["players"] = indexed.get(row["game_id"], [])
+        return games
+
+    def _fetch_game_players(self, game_ids: Iterable[str]) -> List[Dict[str, Any]]:
+        if not game_ids:
+            return []
+        sql = """
+        SELECT game_id, name, role, metadata
+        FROM game_players
+        WHERE game_id = ANY(%s)
+        """
+        return self._execute(sql, (list(game_ids),), fetch=True)
+
+    def _format_dt(self, value: Optional[datetime]) -> Optional[str]:
+        if not value:
+            return None
+        if isinstance(value, str):
+            return value
+        return value.isoformat()
+
+    def upsert_deck(self, deck_id: str, payload: Dict[str, Any], module: str = "tarot", metadata: Optional[Dict[str, Any]] = None):
+        metadata = metadata or {}
+        metadata.setdefault("source", "filesystem")
+        metadata.setdefault("deck_id", deck_id)
+        sql = """
+        INSERT INTO deck_files (deck_id, name, module, metadata, payload)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (deck_id) DO UPDATE
+          SET name = COALESCE(EXCLUDED.name, deck_files.name),
+              module = EXCLUDED.module,
+              metadata = deck_files.metadata || EXCLUDED.metadata,
+              payload = EXCLUDED.payload,
+              updated_at = CURRENT_TIMESTAMP
+        """
+        self._execute(
+            sql,
+            (deck_id, payload.get("name") or deck_id, module, Json(metadata), Json(payload)),
+        )
+
+    # ---------------- migrations ----------------
+    def _migrate_json_backups(self):
+        if self._json_imported:
+            return
+        self._json_imported = True
+        try:
+            self._migrate_bingo_games()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("[database] bingo migration failed: %s", exc)
+        try:
+            self._migrate_tarot_sessions()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("[database] tarot migration failed: %s", exc)
+        try:
+            self._migrate_cardgames()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("[database] cardgames migration failed: %s", exc)
+
+    def _sync_tarot_decks(self):
+        if self._decks_synced:
+            return
+        self._decks_synced = True
+        decks_dir = self._resolve_tarot_dir()
+        decks_dir = os.path.join(decks_dir, "decks")
+        if not os.path.isdir(decks_dir):
+            return
+        for name in sorted(os.listdir(decks_dir)):
+            if not name.lower().endswith(".json"):
+                continue
+            path = os.path.join(decks_dir, name)
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    payload = json.load(fh)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("[database] failed to load deck %s: %s", path, exc)
+                continue
+            deck_id = str(payload.get("deck_id") or payload.get("id") or os.path.splitext(name)[0]).strip()
+            if not deck_id:
+                deck_id = os.path.splitext(name)[0]
+            self.upsert_deck(deck_id, payload, module="tarot", metadata={"filename": name})
+
+    def _migrate_bingo_games(self):
+        bingo_dir = self._resolve_bingo_dir()
+        db_dir = os.path.join(bingo_dir, "db")
+        if not os.path.isdir(db_dir):
+            return
+        for name in sorted(os.listdir(db_dir)):
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(db_dir, name)
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except Exception:
+                continue
+            default = data.get("_default") or {}
+            game_doc = next((entry for entry in default.values() if entry.get("_type") == "game"), None)
+            if not game_doc:
+                continue
+            game_id = game_doc.get("game_id") or name[:-5]
+            active = bool(game_doc.get("active"))
+            created_at = self._as_datetime(game_doc.get("created_at"))
+            ended_at = self._as_datetime(game_doc.get("ended_at"))
+            metadata = {
+                "currency": game_doc.get("currency"),
+                "stage": game_doc.get("stage"),
+                "price": game_doc.get("price"),
+                "pot": game_doc.get("pot"),
+            }
+            self._store_game(
+                game_id=game_id,
+                module="bingo",
+                payload=data,
+                title=game_doc.get("title"),
+                channel_id=self._force_int(game_doc.get("channel_id")),
+                created_by=self._force_int(game_doc.get("created_by")),
+                created_at=created_at,
+                ended_at=ended_at,
+                status="active" if active else "ended",
+                active=active,
+                metadata=metadata,
+            )
+            owners: Dict[str, Tuple[str, Optional[int]]] = {}
+            for entry in default.values():
+                if entry.get("_type") != "card":
+                    continue
+                owner = str(entry.get("owner_name") or "").strip()
+                if not owner:
+                    continue
+                owners.setdefault(owner, (owner, self._force_int(entry.get("owner_user_id"))))
+            for owner_name, (name_val, owner_id) in owners.items():
+                self._store_game_player(game_id, owner_name, metadata={"owner_user_id": owner_id}, role="player")
+
+    def _migrate_tarot_sessions(self):
+        tarot_dir = self._resolve_tarot_dir()
+        path = os.path.join(tarot_dir, "tarot_sessions.json")
+        if not os.path.exists(path):
+            return
+        db = TinyDB(path)
+        for entry in db.all():
+            if entry.get("_type") != "session":
+                continue
+            session_id = entry.get("session_id") or entry.get("id") or entry.get("sessionId")
+            active = bool(entry.get("active")) or entry.get("status") in ("active", "running")
+            status = entry.get("status") or ("active" if active else "ended")
+            created_at = self._as_datetime(entry.get("created_at") or entry.get("started_at"))
+            ended_at = self._as_datetime(entry.get("ended_at"))
+            metadata = {
+                "deck_id": entry.get("deck_id"),
+                "stage": entry.get("stage"),
+                "status": status,
+            }
+            if not session_id:
+                continue
+            self._store_game(
+                game_id=session_id,
+                module="tarot",
+                payload=entry,
+                title=entry.get("title") or entry.get("name") or "Tarot",
+                channel_id=self._force_int(entry.get("channel_id")),
+                created_by=self._force_int(entry.get("created_by")),
+                created_at=created_at,
+                ended_at=ended_at,
+                status=status,
+                active=active,
+                metadata=metadata,
+            )
+            for player in self._extract_tarot_players(entry):
+                self._store_game_player(session_id, player, role="player")
+
+    def _migrate_cardgames(self):
+        card_dir = self._resolve_cardgames_dir()
+        db_path = os.path.join(card_dir, "cardgames.db")
+        if not os.path.exists(db_path):
+            return
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            for row in conn.execute("SELECT * FROM sessions"):
+                data = dict(row)
+                session_id = data.get("session_id") or data.get("game_id")
+                if not session_id:
+                    continue
+                status = data.get("status") or data.get("stage") or "unknown"
+                active = status.lower() not in ("finished", "ended", "complete", "closed")
+                created_at = self._as_datetime(data.get("created_at"))
+                ended_at = self._as_datetime(data.get("updated_at"))
+                payload = dict(row)
+                state_json = payload.get("state_json")
+                if isinstance(state_json, str):
+                    try:
+                        payload["state_json_parsed"] = json.loads(state_json)
+                    except Exception:
+                        pass
+                metadata = {
+                    "currency": data.get("currency"),
+                    "pot": data.get("pot"),
+                    "status": status,
+                }
+                self._store_game(
+                    game_id=session_id,
+                    module="cardgames",
+                    payload=payload,
+                    title=payload.get("game_id"),
+                    created_at=created_at,
+                    ended_at=ended_at,
+                    status=status,
+                    active=active,
+                    metadata=metadata,
+                )
+                for player in self._extract_cardgame_players(payload):
+                    self._store_game_player(session_id, player, role="player")
+        finally:
+            conn.close()
+
+    # ---------------- helpers ----------------
+    def _store_game(
+        self,
+        *,
+        game_id: str,
+        module: str,
+        payload: Any,
+        title: Optional[str] = None,
+        channel_id: Optional[int] = None,
+        created_by: Optional[int] = None,
+        created_at: Optional[datetime] = None,
+        ended_at: Optional[datetime] = None,
+        status: Optional[str] = None,
+        active: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        metadata = metadata or {}
+        sql = """
+        INSERT INTO games (game_id, module, title, channel_id, created_by, created_at, ended_at, status, active, payload, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (game_id) DO UPDATE
+          SET module = EXCLUDED.module,
+              title = COALESCE(EXCLUDED.title, games.title),
+              channel_id = COALESCE(EXCLUDED.channel_id, games.channel_id),
+              created_by = COALESCE(EXCLUDED.created_by, games.created_by),
+              created_at = COALESCE(EXCLUDED.created_at, games.created_at),
+              ended_at = COALESCE(EXCLUDED.ended_at, games.ended_at),
+              status = COALESCE(EXCLUDED.status, games.status),
+              active = EXCLUDED.active,
+              payload = EXCLUDED.payload,
+              metadata = games.metadata || EXCLUDED.metadata
+        """
+        self._execute(
+            sql,
+            (
+                game_id,
+                module,
+                title,
+                channel_id,
+                created_by,
+                created_at,
+                ended_at,
+                status,
+                active,
+                Json(payload),
+                Json(metadata),
+            ),
+        )
+
+    def _store_game_player(self, game_id: str, name: str, role: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
+        if not name:
+            return
+        metadata = metadata or {}
+        self._execute(
+            """
+            INSERT INTO game_players (game_id, name, role, metadata)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (game_id, name, role) DO UPDATE
+              SET metadata = game_players.metadata || EXCLUDED.metadata
+            """,
+            (game_id, name, role, Json(metadata)),
+        )
+
+    def _resolve_bot_base(self) -> str:
+        base = None
+        if self._settings:
+            base = self._settings.get("BOT.DATA_DIR")
+        if not base:
+            base = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
+        if not base:
+            base = os.getenv("BIGTREE_WORKDIR")
+        if not base:
+            base = os.path.join(os.getcwd(), ".bigtree")
+        return base
+
+    def _resolve_tarot_dir(self) -> str:
+        cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+        tarot_db = cfg.get("BOT", {}).get("tarot_db")
+        if tarot_db:
+            return os.path.dirname(tarot_db)
+        base = self._resolve_bot_base()
+        path = os.path.join(base, "tarot")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _resolve_bingo_dir(self) -> str:
+        base = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
+        if base:
+            path = os.path.join(base, "bingo")
+        else:
+            env = os.getenv("BIGTREE_WORKDIR")
+            if env:
+                path = os.path.join(env, "bingo")
+            else:
+                path = os.path.join(os.getcwd(), ".bigtree", "bingo")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _resolve_cardgames_dir(self) -> str:
+        base = os.getenv("BIGTREE_CARDGAMES_DB_DIR")
+        if base:
+            path = base
+        else:
+            base = self._resolve_bot_base()
+            path = os.path.join(base, "cardgames")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _as_datetime(self, value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.utcfromtimestamp(float(value))
+        except Exception:
+            return None
+
+    def _force_int(self, value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    def _extract_tarot_players(self, session: Dict[str, Any]) -> List[str]:
+        players: List[str] = []
+        candidates = session.get("players") or session.get("roster") or session.get("participants") or []
+        if isinstance(candidates, dict):
+            candidates = list(candidates.values())
+        if isinstance(candidates, list):
+            for entry in candidates:
+                name = None
+                if isinstance(entry, str):
+                    name = entry
+                elif isinstance(entry, dict):
+                    name = entry.get("name") or entry.get("player_name")
+                if name:
+                    players.append(str(name).strip())
+        primary = session.get("player_name") or session.get("priestess_name")
+        if primary:
+            players.append(str(primary).strip())
+        return [p for p in dict.fromkeys(players) if p]
+
+    def _extract_cardgame_players(self, payload: Dict[str, Any]) -> List[str]:
+        candidates = []
+        parsed = payload.get("state_json_parsed") or {}
+        if isinstance(parsed, dict):
+            for key in ("players", "seats", "roster"):
+                raw = parsed.get(key)
+                if isinstance(raw, dict):
+                    candidates.extend(raw.values())
+                elif isinstance(raw, list):
+                    candidates.extend(raw)
+        names = []
+        for entry in candidates:
+            if isinstance(entry, str):
+                names.append(entry)
+            elif isinstance(entry, dict):
+                name = entry.get("name") or entry.get("player_name")
+                if name:
+                    names.append(name)
+        fallback = payload.get("player_name")
+        if fallback:
+            names.append(fallback)
+        return [str(n).strip() for n in dict.fromkeys(names) if str(n).strip()]

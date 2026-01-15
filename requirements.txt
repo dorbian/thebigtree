@@ -2,6 +2,7 @@ aiohttp
 configobj
 discord.py
 tinydb
+psycopg2-binary
 Pillow
 requests
 gql[all]
