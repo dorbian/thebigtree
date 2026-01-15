@@ -173,3 +173,10 @@ chanel_scrape.py
 overlay-client/dist/
 .ignore_help
 AGENTS.md
+forest-client/Forest/obj/x64/Debug/Forest.AssemblyInfo.cs
+forest-client/Forest/obj/x64/Debug/Forest.AssemblyInfoInputs.cache
+forest-client/Forest/obj/x64/Debug/Forest.csproj.AssemblyReference.cache
+forest-client/Forest/obj/x64/Debug/Forest.csproj.CoreCompileInputs.cache
+forest-client/Forest/obj/x64/Debug/Forest.csproj.FileListAbsolute.txt
+forest-client/Forest/obj/x64/Debug/Forest.dll
+forest-client/Forest/obj/x64/Debug/Forest.sourcelink.json
