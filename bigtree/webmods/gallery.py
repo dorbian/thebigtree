@@ -7,6 +7,7 @@ import asyncio
 import os
 import discord
 import bigtree
+from bigtree.inc.plogon import get_with_leaf_path
 from bigtree.inc.webserver import route
 from bigtree.modules import media as media_mod
 from bigtree.modules import artists as artist_mod
@@ -696,8 +697,9 @@ async def gallery_calendar_set(req: web.Request):
 
 @route("GET", "/gallery/with.leaf", allow_public=True)
 async def get_with_leaf(_req: web.Request):
+    path = get_with_leaf_path()
     try:
-        with open("bigtree/with.leaf", "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             content = f.read()
         return web.Response(text=content, content_type="application/json")
     except FileNotFoundError:

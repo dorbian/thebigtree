@@ -5,6 +5,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -34,7 +35,10 @@ def get_database() -> "Database":
 class Database:
     def __init__(self):
         self._settings = getattr(bigtree, "settings", None)
-        self._conn_info = self._build_connection_info()
+        conn_info, retries, delay = self._build_connection_info()
+        self._conn_info = conn_info
+        self._connect_retries = retries
+        self._connect_delay = delay
         self._lock = threading.RLock()
         self._initialized = False
         self._json_imported = False
@@ -50,7 +54,7 @@ class Database:
             self._initialized = True
 
     # ---------------- connection helpers ----------------
-    def _build_connection_info(self) -> Dict[str, Any]:
+    def _build_connection_info(self) -> Tuple[Dict[str, Any], int, float]:
         defaults = {
             "host": "127.0.0.1",
             "port": 5432,
@@ -63,22 +67,39 @@ class Database:
         data = {}
         for key, default in defaults.items():
             dotted = f"DATABASE.{key}"
-            if self._settings:
-                val = self._settings.get(dotted, default, cast=int if isinstance(default, int) else None)
-            else:
-                val = default
+            cast = None
+            if isinstance(default, int):
+                cast = int
+            elif isinstance(default, float):
+                cast = float
+            val = self._settings.get(dotted, default, cast=cast) if self._settings else default
             if val is None:
                 val = default
-            if key == "port" or key == "connect_timeout":
-                try:
-                    val = int(val)
-                except Exception:
-                    val = default
             data[key] = val
+        retries = (
+            self._settings.get("DATABASE.connect_retries", 10, cast=int)
+            if self._settings
+            else 10
+        )
+        delay = (
+            self._settings.get("DATABASE.connect_delay", 1.0, cast=float)
+            if self._settings
+            else 1.0
+        )
+        return data, int(retries), float(delay)
         return data
 
     def _connect(self):
-        return psycopg2.connect(**self._conn_info)
+        attempts = getattr(self, "_connect_retries", 5)
+        delay = getattr(self, "_connect_delay", 1.0)
+        for attempt in range(1, attempts + 1):
+            try:
+                return psycopg2.connect(**self._conn_info)
+            except psycopg2.OperationalError as exc:
+                if attempt >= attempts:
+                    raise
+                logger.warning("[database] Postgres unavailable (%s), retrying (%s/%s)", exc, attempt, attempts)
+                time.sleep(delay)
 
     def _execute(self, sql: str, params: Optional[Sequence] = None, fetch: bool = False):
         with self._connect() as conn:

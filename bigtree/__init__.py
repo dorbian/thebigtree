@@ -26,6 +26,7 @@ import bigtree.modules.partake as partake
 import bigtree.modules.contest as contesta
 import bigtree.modules.event as event
 from bigtree.inc.database import ensure_database
+from bigtree.inc.plogon import ensure_plogon_file
 
 # predefine boolean
 __initialized__ = False
@@ -77,6 +78,7 @@ def initialize():
         import bigtree as _bt
         _bt.settings = settings
         ensure_database()
+        ensure_plogon_file()
         # Bot basics
         bot_sec = settings["BOT"]
         default_contest_dir = str(workingdir.parent / "contest")

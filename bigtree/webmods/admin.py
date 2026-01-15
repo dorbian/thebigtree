@@ -8,6 +8,7 @@ import time
 import os
 from tinydb import TinyDB, Query
 import bigtree
+from bigtree.inc.plogon import get_with_leaf_path
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
 from bigtree.inc.settings import load_settings
@@ -434,7 +435,9 @@ async def update_with_leaf(req: web.Request):
                 if resp.status != 200:
                     return web.json_response({"ok": False, "error": f"Failed to fetch: {resp.status}"}, status=400)
                 content = await resp.text()
-        with open("bigtree/with.leaf", "w", encoding="utf-8") as f:
+        path = get_with_leaf_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         return web.json_response({"ok": True, "message": "Updated with.leaf"})
     except Exception as ex:
