@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       git \
       build-essential \
+      libpq-dev \
       zlib1g-dev \
       libjpeg62-turbo-dev \
       libpng-dev \
