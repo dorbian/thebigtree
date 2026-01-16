@@ -1881,8 +1881,6 @@ const $ = (id) => document.getElementById(id);
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
-        }
-      });
       bindElement("menuMedia", (el) => {
         on("menuMedia", "click", () => {
           showPanel("media");
