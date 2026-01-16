@@ -139,6 +139,45 @@
         setStatusText("mediaLibraryStatus", msg, kind);
       }
 
+      let dashboardStatsLoaded = false;
+      let dashboardStatsLoading = false;
+
+      function setStatValue(id, value){
+        const el = $(id);
+        if (!el) return;
+        el.textContent = value === undefined || value === null ? "--" : String(value);
+      }
+
+      function renderDashboardStats(stats){
+        if (!stats) return;
+        setStatValue("dashStatDiscord", stats.discord_members ?? "--");
+        setStatValue("dashStatPlayers", stats.players_engaged ?? "--");
+        setStatValue("dashStatRegistered", stats.registered_users ?? "--");
+        setStatValue("dashStatGames", stats.api_games ?? "--");
+        dashboardStatsLoaded = true;
+      }
+
+      async function loadDashboardStats(force = false){
+        if (dashboardStatsLoading) return;
+        if (dashboardStatsLoaded && !force){
+          return;
+        }
+        dashboardStatsLoading = true;
+        try{
+          const resp = await jsonFetch("/admin/overlay/stats", {method: "GET"});
+          if (resp.ok){
+            renderDashboardStats(resp.stats || {});
+          }
+        }catch(err){
+          setStatValue("dashStatDiscord", "--");
+          setStatValue("dashStatPlayers", "--");
+          setStatValue("dashStatRegistered", "--");
+          setStatValue("dashStatGames", "--");
+        }finally{
+          dashboardStatsLoading = false;
+        }
+      }
+
       function showToast(msg, kind){
         const stack = $("toastStack");
         if (!stack) return;
@@ -1103,6 +1142,8 @@
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canTarot);
         const systemConfigBtn = $("menuSystemConfig");
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
+        const dashboardAuthLink = $("dashboardXivAuthLink");
+        if (dashboardAuthLink) dashboardAuthLink.classList.toggle("hidden", !canAdmin);
 
         const saved = getSavedPanel();
         const blocked =
@@ -2295,6 +2336,7 @@
         toggleClass("mediaPanel", "hidden", which !== "media");
         if (which === "dashboard"){
           renderDashboardChangelog();
+          loadDashboardStats();
         } else if (which === "media"){
           setMediaTab("upload");
           loadMediaLibrary();
@@ -2597,6 +2639,10 @@
       const systemOpenAISave = $("systemOpenAISave");
       if (systemOpenAISave){
         systemOpenAISave.addEventListener("click", () => saveSystemConfig("openai"));
+      }
+      const statsRefresh = $("dashboardStatsRefresh");
+      if (statsRefresh){
+        statsRefresh.addEventListener("click", () => loadDashboardStats(true));
       }
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
       $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());

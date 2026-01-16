@@ -408,6 +408,26 @@ async def admin_system_config_update(req: web.Request):
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     return web.json_response({"ok": True, "config": db.get_system_config(name)})
 
+
+@route("GET", "/admin/overlay/stats", scopes=["admin:web"])
+async def admin_overlay_stats(_req: web.Request):
+    db = get_database()
+    def _count(sql):
+        row = db._fetchone(sql)
+        return int(row.get("value") if row and row.get("value") is not None else 0)
+    try:
+        guilds = (getattr(bigtree.bot, "guilds") or []) if hasattr(bigtree, "bot") else []
+    except Exception:
+        guilds = []
+    discord_members = sum((getattr(g, "member_count", 0) or 0) for g in guilds)
+    stats = {
+        "discord_members": discord_members,
+        "players_engaged": _count("SELECT COUNT(DISTINCT user_id) AS value FROM user_games"),
+        "registered_users": _count("SELECT COUNT(*) AS value FROM users"),
+        "api_games": _count("SELECT COUNT(*) AS value FROM games"),
+    }
+    return web.json_response({"ok": True, "stats": stats})
+
 # ---------- FFXIV client announce ----------
 @route("POST", "/admin/announce", scopes=["admin:announce"])
 async def admin_announce(req: web.Request):
