@@ -2611,7 +2611,7 @@
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
-      $("bAnnounceToggle").addEventListener("change", async (ev) => {
+      on("bAnnounceToggle", "change", async (ev) => {
         const gid = getGameId();
         if (!gid){
           setBingoStatus("Select a game first.", "err");
@@ -3528,44 +3528,44 @@
 
       // owner list loads automatically when selecting a game
 
-      $("bCloseCreate").addEventListener("click", () => {
+      on("bCloseCreate", "click", () => {
         $("bCreateModal").classList.remove("show");
       });
-      $("deckCreateClose").addEventListener("click", () => {
+      on("deckCreateClose", "click", () => {
         $("deckCreateModal").classList.remove("show");
       });
-      $("mediaClose").addEventListener("click", () => {
+      on("mediaClose", "click", () => {
         $("mediaModal").classList.remove("show");
       });
-      $("artistClose").addEventListener("click", () => {
+      on("artistClose", "click", () => {
         $("artistModal").classList.remove("show");
       });
-      $("calendarClose").addEventListener("click", () => {
+      on("calendarClose", "click", () => {
         $("calendarModal").classList.remove("show");
       });
-      $("galleryClose").addEventListener("click", () => {
+      on("galleryClose", "click", () => {
         $("galleryModal").classList.remove("show");
       });
-      $("galleryModal").addEventListener("click", (event) => {
+      on("galleryModal", "click", (event) => {
         if (event.target === $("galleryModal")){
           $("galleryModal").classList.remove("show");
         }
       });
-      $("galleryImportOpen").addEventListener("click", () => {
+      on("galleryImportOpen", "click", () => {
         $("galleryImportModal").classList.add("show");
         setGalleryImportStatus("Pick a channel to import.", "");
         loadGalleryChannels();
       });
-      $("galleryImportClose").addEventListener("click", () => {
+      on("galleryImportClose", "click", () => {
         $("galleryImportModal").classList.remove("show");
       });
-      $("galleryImportModal").addEventListener("click", (event) => {
+      on("galleryImportModal", "click", (event) => {
         if (event.target === $("galleryImportModal")){
           $("galleryImportModal").classList.remove("show");
         }
       });
-      $("galleryImportRefresh").addEventListener("click", () => loadGalleryChannels());
-      $("galleryImportRun").addEventListener("click", async () => {
+      on("galleryImportRefresh", "click", () => loadGalleryChannels());
+      on("galleryImportRun", "click", async () => {
         const channelId = $("galleryImportChannel").value || "";
         if (!channelId){
           setGalleryImportStatus("Pick a channel first.", "err");
@@ -3591,7 +3591,7 @@
           setGalleryImportStatus(err.message, "err");
         }
       });
-      $("bOwnerFilterCalled").addEventListener("click", () => {
+      on("bOwnerFilterCalled", "click", () => {
         ownerFilter = ownerFilter === "called" ? "all" : "called";
         renderOwnerCards(
           ownerFilterData.owner,
@@ -3600,7 +3600,7 @@
           ownerFilterData.header
         );
       });
-      $("bOwnerFilterUncalled").addEventListener("click", () => {
+      on("bOwnerFilterUncalled", "click", () => {
         ownerFilter = ownerFilter === "uncalled" ? "all" : "uncalled";
         renderOwnerCards(
           ownerFilterData.owner,
@@ -3609,8 +3609,8 @@
           ownerFilterData.header
         );
       });
-      $("galleryChannelRefresh").addEventListener("click", () => loadGalleryChannels());
-      $("galleryChannelSave").addEventListener("click", async () => {
+      on("galleryChannelRefresh", "click", () => loadGalleryChannels());
+      on("galleryChannelSave", "click", async () => {
         const channelId = $("galleryUploadChannel").value || "";
         try{
           await jsonFetch("/api/gallery/settings", {
@@ -3623,7 +3623,7 @@
           setGalleryChannelStatus(err.message, "err");
         }
       });
-      $("galleryChannelCreate").addEventListener("click", async () => {
+      on("galleryChannelCreate", "click", async () => {
         const name = $("galleryChannelName").value.trim();
         const categoryId = $("galleryChannelCategory").value.trim();
         const templateId = $("galleryChannelTemplate").value || "";
@@ -3653,15 +3653,15 @@
           setGalleryChannelStatus(err.message, "err");
         }
       });
-      $("calendarRefresh").addEventListener("click", () => loadCalendarAdmin());
-      $("calendarMonth").addEventListener("change", (ev) => {
+      on("calendarRefresh", "click", () => loadCalendarAdmin());
+      on("calendarMonth", "change", (ev) => {
         const month = parseInt(ev.target.value || "1", 10);
         const entry = calendarData.find(e => e.month === month) || calendarData[0];
         if (entry){
           applyCalendarSelection(entry);
         }
       });
-      $("calendarPick").addEventListener("click", () => {
+      on("calendarPick", "click", () => {
         librarySelectHandler = (item) => {
           calendarSelected.image = item.url || "";
           calendarSelected.title = item.title || item.name || "";
@@ -3674,7 +3674,7 @@
         showLibraryModal(true);
         loadLibrary("media");
       });
-      $("calendarSave").addEventListener("click", async () => {
+      on("calendarSave", "click", async () => {
         const month = parseInt($("calendarMonth").value || "1", 10);
         const title = $("calendarTitle").value.trim();
         const payload = {
@@ -3699,7 +3699,7 @@
           setCalendarStatus(err.message, "err");
         }
       });
-      $("calendarClear").addEventListener("click", async () => {
+      on("calendarClear", "click", async () => {
         const month = parseInt($("calendarMonth").value || "1", 10);
         try{
           await jsonFetch("/api/gallery/calendar", {
@@ -3720,14 +3720,14 @@
           setCalendarStatus(err.message, "err");
         }
       });
-      $("authRolesClose").addEventListener("click", () => {
+      on("authRolesClose", "click", () => {
         $("authRolesModal").classList.remove("show");
       });
-      $("authRolesRefresh").addEventListener("click", () => loadAuthRoles());
-      $("authTokensClose").addEventListener("click", () => {
+      on("authRolesRefresh", "click", () => loadAuthRoles());
+      on("authTokensClose", "click", () => {
         $("authTokensModal").classList.remove("show");
       });
-      $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
+      on("authTokensRefresh", "click", () => loadAuthTokens());
       const authTempClose = $("authTempClose");
       if (authTempClose){
         authTempClose.addEventListener("click", () => {
@@ -3801,7 +3801,7 @@
         }
         });
       }
-      $("authRolesList").addEventListener("change", (ev) => {
+      on("authRolesList", "change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;
         const roleId = input.getAttribute("data-role");
@@ -3827,7 +3827,7 @@
         updateAuthRoleIdsField();
         renderAuthRolesList(authRolesCache || []);
       });
-      $("authRolesSave").addEventListener("click", async () => {
+      on("authRolesSave", "click", async () => {
         try{
           await jsonFetch("/api/auth/roles", {
             method:"POST",
@@ -3839,13 +3839,13 @@
           setAuthRolesStatus(err.message, "err");
         }
       });
-      $("bOwnerClose").addEventListener("click", () => {
+      on("bOwnerClose", "click", () => {
         $("bOwnerModal").classList.remove("show");
       });
-      $("bPurchaseClose").addEventListener("click", () => {
+      on("bPurchaseClose", "click", () => {
         $("bPurchaseModal").classList.remove("show");
       });
-      $("bPurchaseCopy").addEventListener("click", () => {
+      on("bPurchaseCopy", "click", () => {
         const link = $("bPurchaseLink").value || "";
         if (!link){
           return;
@@ -3858,7 +3858,7 @@
         }
       });
 
-      $("loginBtn").addEventListener("click", () => {
+      on("loginBtn", "click", () => {
         if (!apiKeyEl.value.trim()){
           loginStatusEl.textContent = "Enter your API key.";
           loginStatusEl.className = "status err";
@@ -3879,15 +3879,15 @@
         overlayToggle.checked = !overlayToggle.checked;
         overlayToggle.dispatchEvent(new Event("change"));
       });
-      $("overlayExit").addEventListener("click", () => {
+      on("overlayExit", "click", () => {
         overlayToggle.checked = false;
         document.body.classList.remove("overlay");
         saveSettings();
       });
-      $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
-      $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
+      on("uploadLibraryClose", "click", () => showLibraryModal(false));
+      on("uploadLibraryRefresh", "click", () => loadLibrary(libraryKind));
 
-      $("deckCreateBackPick").addEventListener("click", () => {
+      on("deckCreateBackPick", "click", () => {
         librarySelectHandler = (item) => {
           $("deckCreateBackPick").dataset.backUrl = item.url || "";
           $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
@@ -3906,32 +3906,32 @@
         loadLibrary("media");
       });
 
-      $("deckCreateSuitPreset").addEventListener("change", (ev) => {
+      on("deckCreateSuitPreset", "change", (ev) => {
         const value = ev.target.value || "custom";
         if (value === "custom"){
           return;
         }
         $("deckCreateSuitJson").value = formatSuitPresetJson(value);
       });
-      $("deckCreateSuitJson").addEventListener("input", () => {
+      on("deckCreateSuitJson", "input", () => {
         if ($("deckCreateSuitPreset").value !== "custom"){
           $("deckCreateSuitPreset").value = "custom";
         }
       });
-      $("deckEditSuitPreset").addEventListener("change", (ev) => {
+      on("deckEditSuitPreset", "change", (ev) => {
         const value = ev.target.value || "custom";
         if (value === "custom"){
           return;
         }
         $("deckEditSuitJson").value = formatSuitPresetJson(value);
       });
-      $("deckEditSuitJson").addEventListener("input", () => {
+      on("deckEditSuitJson", "input", () => {
         if ($("deckEditSuitPreset").value !== "custom"){
           $("deckEditSuitPreset").value = "custom";
         }
       });
 
-      $("deckCreateSubmit").addEventListener("click", async () => {
+      on("deckCreateSubmit", "click", async () => {
         const id = $("deckCreateId").value.trim();
         if (!id){
           setTarotStatus("Deck id is required.", "err");
@@ -3992,7 +3992,7 @@
         }
       });
 
-      $("taCardLibrary").addEventListener("click", () => {
+      on("taCardLibrary", "click", () => {
         librarySelectHandler = (item) => {
           window.taUploadedImageUrl = item.url || "";
           $("taCardArtist").value = item.artist_id || "";
@@ -4010,7 +4010,7 @@
         loadLibrary("media");
       });
 
-      $("bCreateBgLibrary").addEventListener("click", () => {
+      on("bCreateBgLibrary", "click", () => {
         librarySelectHandler = async (item) => {
           const gid = getGameId();
           if (!gid){
@@ -4036,7 +4036,7 @@
         loadLibrary("media");
       });
 
-      $("bCreate").addEventListener("click", async () => {
+      on("bCreate", "click", async () => {
         try{
           updateBingoCreatePayload();
             const body = {
@@ -4096,10 +4096,10 @@
         }
       }
 
-      $("bRefresh").addEventListener("click", refreshBingo);
-      $("bOwnersRefresh").addEventListener("click", () => loadOwnersForGame());
+      on("bRefresh", "click", refreshBingo);
+      on("bOwnersRefresh", "click", () => loadOwnersForGame());
 
-      $("bAdvanceStage").addEventListener("click", async () => {
+      on("bAdvanceStage", "click", async () => {
         try{
           const btn = $("bAdvanceStage");
           if (btn) btn.disabled = true;
@@ -4120,7 +4120,7 @@
         }
       });
 
-      $("bStart").addEventListener("click", async () => {
+      on("bStart", "click", async () => {
         try{
           const btn = $("bStart");
           if (btn) btn.disabled = true;
@@ -4151,7 +4151,7 @@
       });
 
 
-      $("bRoll").addEventListener("click", async () => {
+      on("bRoll", "click", async () => {
         try{
           const btn = $("bRoll");
           if (btn) btn.disabled = true;
@@ -4184,7 +4184,7 @@
         btn.click();
       });
 
-      $("bCloseGame").addEventListener("click", async () => {
+      on("bCloseGame", "click", async () => {
         const gid = getGameId();
         if (!gid){
           setBingoStatus("Select a game first.", "err");
@@ -4268,7 +4268,7 @@
         });
       }
 
-      $("bBuy").addEventListener("click", async () => {
+      on("bBuy", "click", async () => {
         try{
           const buyBtn = $("bBuy");
           if (buyBtn) buyBtn.disabled = true;
@@ -4316,7 +4316,7 @@
         }
       });
 
-      $("bViewOwner").addEventListener("click", () => {
+      on("bViewOwner", "click", () => {
         const gid = getGameId();
         const owner = $("bOwner").value.trim();
         if (!gid || !owner){
@@ -4380,13 +4380,13 @@
         }
       }
 
-      $("tCreateSession").addEventListener("click", () => {
+      on("tCreateSession", "click", () => {
         $("sessionCreateModal").classList.add("show");
       });
-      $("sessionCreateClose").addEventListener("click", () => {
+      on("sessionCreateClose", "click", () => {
         $("sessionCreateModal").classList.remove("show");
       });
-      $("sessionCreateSubmit").addEventListener("click", async () => {
+      on("sessionCreateSubmit", "click", async () => {
         try{
           const deck = $("sessionCreateDeck").value.trim() || "elf-classic";
           const spread = $("sessionCreateSpread").value.trim() || "single";
@@ -4432,8 +4432,8 @@
         }
       }
 
-      $("tSessionRefresh").addEventListener("click", () => loadTarotSessions());
-      $("tSessionSelect").addEventListener("change", (ev) => {
+      on("tSessionRefresh", "click", () => loadTarotSessions());
+      on("tSessionSelect", "change", (ev) => {
         const join = ev.target.value || "";
         const token = ev.target.selectedOptions.length ? (ev.target.selectedOptions[0].dataset.token || "") : "";
         $("tJoinCode").value = join;
@@ -4441,7 +4441,7 @@
         renderLinks(join, token);
       });
 
-      $("tOpenOverlay").addEventListener("click", () => {
+      on("tOpenOverlay", "click", () => {
         const code = $("tJoinCode").value.trim();
         if (!code){
           setStatus("Enter a join code.", "err");
@@ -4452,7 +4452,7 @@
         window.open(url, "_blank");
       });
 
-      $("tOpenPlayer").addEventListener("click", () => {
+      on("tOpenPlayer", "click", () => {
         const code = $("tJoinCode").value.trim();
         if (!code){
           setStatus("Enter a join code.", "err");
@@ -4463,7 +4463,7 @@
         window.open(url, "_blank");
       });
 
-      $("tOpenPriestess").addEventListener("click", () => {
+      on("tOpenPriestess", "click", () => {
         const code = $("tJoinCode").value.trim();
         if (!code){
           setStatus("Enter a join code.", "err");
@@ -4475,7 +4475,7 @@
         window.open(url, "_blank");
       });
 
-      $("tCloseSession").addEventListener("click", async () => {
+      on("tCloseSession", "click", async () => {
         const join = $("tJoinCode").value.trim();
         const token = $("tPriestessToken").value.trim();
         if (!join || !token){
@@ -4721,7 +4721,7 @@
       }
 
         if ($("cgCreateSession")){
-          $("cgCreateSession").addEventListener("click", () => {
+          on("cgCreateSession", "click", () => {
             const payload = {
               game_id: $("cgGameSelect").value,
               deck_id: $("cgDeckSelect").value,
@@ -4739,7 +4739,7 @@
           el.addEventListener("change", () => persistCardgameDefaults());
           el.addEventListener("blur", () => persistCardgameDefaults());
         });
-          $("cgCreateFromSelected").addEventListener("click", () => {
+          on("cgCreateFromSelected", "click", () => {
             const sel = $("cgSessionSelect");
             const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
             if (!opt){
@@ -4761,10 +4761,10 @@
             });
           });
           if ($("cgDeckRefresh")){
-            $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
+            on("cgDeckRefresh", "click", () => loadCardgameDecks());
           }
-        $("cgSessionRefresh").addEventListener("click", () => loadCardgameSessions());
-        $("cgSessionSelect").addEventListener("change", (ev) => {
+        on("cgSessionRefresh", "click", () => loadCardgameSessions());
+        on("cgSessionSelect", "change", (ev) => {
           const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
           const join = opt ? (opt.value || "") : "";
           const token = opt ? (opt.dataset.token || "") : "";
@@ -4798,12 +4798,12 @@
           }
           renderCardgameLinks(gameId, join, token);
         });
-        $("cgBackgroundUrl").addEventListener("input", (ev) => {
+        on("cgBackgroundUrl", "input", (ev) => {
           ev.target.dataset.artistId = "";
           ev.target.dataset.artistName = "";
           setCardgameBackgroundStatus(ev.target.value.trim());
         });
-        $("cgOpenPlayer").addEventListener("click", () => {
+        on("cgOpenPlayer", "click", () => {
           const join = $("cgJoinCode").value.trim();
           const gameId = $("cgGameSelect").value;
           if (!join){
@@ -4813,7 +4813,7 @@
           renderCardgameLinks(gameId, join, $("cgPriestessToken").value.trim());
           window.open(getCardgamePlayerUrl(gameId, join), "_blank");
         });
-        $("cgOpenPriestess").addEventListener("click", () => {
+        on("cgOpenPriestess", "click", () => {
           const join = $("cgJoinCode").value.trim();
           const gameId = $("cgGameSelect").value;
           if (!join){
@@ -4824,8 +4824,8 @@
           renderCardgameLinks(gameId, join, token);
           window.open(getCardgameHostUrl(gameId, join, token), "_blank");
         });
-        $("cgFinishSession").addEventListener("click", () => finishCardgameSession());
-        $("cgDeleteSession").addEventListener("click", async () => {
+        on("cgFinishSession", "click", () => finishCardgameSession());
+        on("cgDeleteSession", "click", async () => {
           const join = $("cgJoinCode").value.trim();
           const token = $("cgPriestessToken").value.trim();
           const sessionId = $("cgJoinCode").dataset.sessionId || "";
@@ -4853,7 +4853,7 @@
             setCardgameStatus(err.message, "err");
           }
         });
-        $("cgUseSelectedMedia").addEventListener("click", () => {
+        on("cgUseSelectedMedia", "click", () => {
           const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
           if (!pick){
             setCardgameStatus("Select a media item first.", "err");
@@ -4862,7 +4862,7 @@
           $("cgBackgroundUrl").value = pick;
           setCardgameBackgroundStatus(pick);
         });
-        $("cgOpenMedia").addEventListener("click", () => {
+        on("cgOpenMedia", "click", () => {
           librarySelectHandler = (item) => {
             const pick = item && (item.url || item.fallback_url || "");
             if (!pick){
@@ -5337,8 +5337,8 @@
         }
       }
 
-      $("artistIndexRefresh").addEventListener("click", () => loadTarotArtists());
-      $("artistIndexSelect").addEventListener("change", (ev) => {
+      on("artistIndexRefresh", "click", () => loadTarotArtists());
+      on("artistIndexSelect", "change", (ev) => {
         const pick = (window.taArtists || []).find(a => a.artist_id === ev.target.value);
         if (!pick){
           $("artistIndexId").value = "";
@@ -5361,7 +5361,7 @@
         $("artistIndexWebsite").value = links.website || "";
         $("artistIndexLinktree").value = links.linktree || "";
       });
-      $("artistIndexSave").addEventListener("click", async () => {
+      on("artistIndexSave", "click", async () => {
         try{
           const body = {
             artist_id: $("artistIndexId").value.trim() || undefined,
@@ -5391,7 +5391,7 @@
           setStatus(err.message, "err");
         }
       });
-      $("artistIndexDelete").addEventListener("click", async () => {
+      on("artistIndexDelete", "click", async () => {
         const artistId = $("artistIndexId").value.trim();
         if (!artistId){
           setStatus("Select an artist to delete.", "err");
@@ -5962,15 +5962,15 @@
         }
       });
 
-      $("deckEditClose").addEventListener("click", () => {
+      on("deckEditClose", "click", () => {
         $("deckEditModal").classList.remove("show");
       });
-      $("deckEditModal").addEventListener("click", (event) => {
+      on("deckEditModal", "click", (event) => {
         if (event.target === $("deckEditModal")){
           $("deckEditModal").classList.remove("show");
         }
       });
-      $("deckEditBackPick").addEventListener("click", () => {
+      on("deckEditBackPick", "click", () => {
         librarySelectHandler = (item) => {
           $("deckEditBackPick").dataset.backUrl = item.url || "";
           $("deckEditBackPick").dataset.artistId = item.artist_id || "";
@@ -5989,7 +5989,7 @@
         loadLibrary("media");
       });
 
-      $("deckEditTheme").addEventListener("change", (ev) => {
+      on("deckEditTheme", "change", (ev) => {
         const theme = ev.target.value || "classic";
         if (!window.taDeckData) window.taDeckData = {};
         window.taDeckData.deck = window.taDeckData.deck || {};
@@ -6001,7 +6001,7 @@
         });
       });
 
-      $("deckEditSubmit").addEventListener("click", async () => {
+      on("deckEditSubmit", "click", async () => {
         const deck = $("taDeck").value.trim();
         if (!deck){
           setTarotStatus("Pick a deck to edit.", "err");
@@ -6063,7 +6063,7 @@
         }
       });
 
-      $("taDeleteDeck").addEventListener("click", async () => {
+      on("taDeleteDeck", "click", async () => {
         if (!authUserIsElfmin){
           setTarotStatus("Only elfministrators can delete decks.", "err");
           return;
@@ -6088,7 +6088,7 @@
         }
       });
 
-      $("taSaveCard").addEventListener("click", async () => {
+      on("taSaveCard", "click", async () => {
         try{
           const deck = $("taDeck").value.trim() || "elf-classic";
           const tags = $("taCardTags").value.split(",").map(t => t.trim()).filter(Boolean);
@@ -6163,6 +6163,7 @@
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
+
 
 
 
