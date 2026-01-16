@@ -129,6 +129,14 @@ def _load_auth_roles_file() -> dict | None:
     return None
 
 
+def _build_overlay_url(token: str) -> str:
+    if not token:
+        return ""
+    base = _settings_get("WEB", "base_url", "http://localhost:8443") or "http://localhost:8443"
+    base = base.rstrip("/")
+    return f"{base}/overlay?token={token}"
+
+
 def _get_scopes_for_member(member: discord.Member) -> list[str]:
     role_map, configured = _get_role_scope_map()
     roles = {r.id for r in getattr(member, "roles", [])}
@@ -151,9 +159,11 @@ class AuthCog(commands.Cog):
         self.bot = bot
 
     class _TokenView(discord.ui.View):
-        def __init__(self, token: str):
+        def __init__(self, token: str, overlay_url: str):
             super().__init__(timeout=300)
             self.token = token
+            if overlay_url:
+                self.add_item(discord.ui.Button(label="Open overlay", style=discord.ButtonStyle.link, url=overlay_url))
 
         @discord.ui.button(label="Copy token", style=discord.ButtonStyle.secondary)
         async def copy_token(self, interaction: discord.Interaction, _button: discord.ui.Button):
@@ -190,10 +200,12 @@ class AuthCog(commands.Cog):
                 ",".join(doc.get("scopes") or []),
             )
             expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
+            overlay_url = _build_overlay_url(doc["token"])
+            view = self._TokenView(doc["token"], overlay_url)
             await interaction.followup.send(
-                f"Here is your 24h web token (keep it private):\n`{doc['token']}`\n"
-                f"Expires: {expires_at.isoformat()}",
-                view=self._TokenView(doc["token"]),
+                f"Here is your 24h web token (keep it private). Copy the password below or click the overlay link to auto-login.\n"
+                f"`{doc['token']}`\nExpires: {expires_at.isoformat()}",
+                view=view,
                 ephemeral=True,
             )
         except Exception as exc:

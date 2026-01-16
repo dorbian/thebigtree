@@ -139,6 +139,35 @@
         setStatusText("mediaLibraryStatus", msg, kind);
       }
 
+      function getQueryParam(name){
+        try{
+          const params = new URLSearchParams(window.location.search);
+          return params.get(name);
+        }catch(err){
+          return null;
+        }
+      }
+
+      function removeTokenQueryParams(){
+        if (!window.history || !window.history.replaceState) return;
+        try{
+          const url = new URL(window.location.href);
+          ["token", "auth_token", "api_key"].forEach((key) => url.searchParams.delete(key));
+          const clean = url.pathname + (url.search ? url.search : "");
+          window.history.replaceState(null, "", clean);
+        }catch(err){}
+      }
+
+      function applyTokenFromUrl(){
+        const candidate = getQueryParam("token") || getQueryParam("auth_token") || getQueryParam("api_key");
+        if (!candidate) return;
+        storage.setItem("bt_api_key", candidate);
+        if (apiKeyEl){
+          apiKeyEl.value = candidate;
+        }
+        removeTokenQueryParams();
+      }
+
       let dashboardStatsLoaded = false;
       let dashboardStatsLoading = false;
 
@@ -6043,6 +6072,7 @@
         }
       }
 
+      applyTokenFromUrl();
       applyTempTokenFromUrl();
       loadSettings();
       if (apiKeyEl.value.trim()){
