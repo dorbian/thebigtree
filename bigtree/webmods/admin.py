@@ -84,14 +84,17 @@ def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
 @route("GET", "/api/auth/me")
 async def auth_me(req: web.Request):
     token = _extract_token(req)
+    valid, scopes, token_type = _resolve_token_scopes(token)
+    if not valid:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
     doc = _find_web_token(token)
     return web.json_response({
         "ok": True,
         "user_name": doc.get("user_name") if doc else None,
         "user_id": doc.get("user_id") if doc else None,
         "user_icon": doc.get("user_icon") if doc else None,
-        "scopes": doc.get("scopes") if doc else [],
-        "source": "web_token" if doc else "api_key",
+        "scopes": scopes,
+        "source": token_type,
     })
 
 @route("GET", "/api/auth/permissions", allow_public=True)
