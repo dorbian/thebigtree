@@ -214,172 +214,17 @@
               </svg>
               <span>XivAuth management</span>
             </a>
+            <button type="button" id="dashboardChangelogToggle">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 3H5a2 2 0 0 0-2 2v14l4-3h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-3 8H8v-2h8v2zm0-4H8V5h8v2zm-4 8H8v-2h4v2z"/>
+              </svg>
+              <span>Changelog</span>
+            </button>
           </div>
-          <div class="dashboard-readme" style="margin-top:12px">
-            <div class="dash-toc">
-              <strong>Table of contents</strong>
-              <ul>
-                <li><a href="#dash-changelog">Recent changes</a></li>
-                <li><a href="#dash-overview">Overview</a></li>
-                <li><a href="#dash-quickstart">Quick start</a></li>
-                <li><a href="#dash-cardgames">Cardgame sessions</a></li>
-                <li><a href="#dash-tarot">Tarot sessions</a></li>
-                <li><a href="#dash-gallery">Gallery & media</a></li>
-                <li><a href="#dash-decks">Deck editor</a></li>
-                <li><a href="#dash-starting">Rites starting page</a></li>
-                <li><a href="#dash-troubleshoot">Troubleshooting</a></li>
-                <li><a href="#dash-thanks">Thank you</a></li>
-              </ul>
+          <div class="dashboard-readme hidden" id="dashboardChangelogWrap" style="margin-top:12px">
+            <div class="dash-section-body">
+              <div class="dash-changelog" id="dashChangelog">Loading changelog...</div>
             </div>
-
-            <details class="dash-section" id="dash-changelog" open>
-              <summary>Recent changes</summary>
-              <div class="dash-section-body">
-                <div class="dash-changelog" id="dashChangelog">Loading changelog...</div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-overview" open>
-              <summary>Overview</summary>
-              <div class="dash-section-body">
-                <div class="dash-blocks">
-                  <div class="dash-block">
-                    <div class="dash-label">Core tools</div>
-                    <ul class="dash-list">
-                      <li>Discord bot for commands and permissions.</li>
-                      <li>Overlay dashboard for operations.</li>
-                      <li>Rites gallery and media library.</li>
-                      <li>Tarot + cardgames session pages.</li>
-                    </ul>
-                  </div>
-                  <div class="dash-block">
-                    <div class="dash-label">Key links</div>
-                    <div class="dash-links">
-                      <a href="/overlay">Overlay dashboard</a>
-                      <a href="/tarot/gallery" target="_blank" rel="noreferrer">Forest gallery</a>
-                      <a href="/tarot/overlay" target="_blank" rel="noreferrer">Tarot overlay</a>
-                      <button id="updatePlogonmasterBtn" class="btn btn-sm btn-secondary">Update Plugin Master</button>
-                    </div>
-                  </div>
-                  <div class="dash-block">
-                    <div class="dash-label">Auth</div>
-                    <p>Run <span class="cmd">/auth</span> in Discord and paste the token into the login prompt.</p>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-quickstart" open>
-              <summary>Quick start (daily ops)</summary>
-              <div class="dash-section-body">
-                <ol class="dash-list">
-                  <li>Run <span class="cmd">/auth</span> in Discord and log in here.</li>
-                  <li>Open the panel you need: Bingo, Tarot Sessions, or Cardgame Sessions.</li>
-                  <li>Create the session, open host view in a new tab, and share the player link.</li>
-                  <li>Finish or delete sessions once the ritual is complete.</li>
-                </ol>
-                <div class="dash-note">Tip: host views open in a new tab by default so you can keep the dashboard open.</div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-cardgames" open>
-              <summary>Cardgame sessions (Blackjack / Poker / High-Low)</summary>
-              <div class="dash-section-body">
-                <div class="dash-blocks">
-                  <div class="dash-block">
-                    <div class="dash-label">Create</div>
-                    <ul class="dash-list">
-                      <li>Select game, deck, pot.</li>
-                      <li>Optional: pick a background from Media.</li>
-                      <li>Click Create session.</li>
-                    </ul>
-                  </div>
-                  <div class="dash-block">
-                    <div class="dash-label">Host flow</div>
-                    <ul class="dash-list">
-                      <li>Open host view (new tab).</li>
-                      <li>Click Start when ready.</li>
-                      <li>Finish or Delete when done.</li>
-                    </ul>
-                  </div>
-                  <div class="dash-block">
-                    <div class="dash-label">Player sharing</div>
-                    <p>Use the Player link shown under Links, or the copy button in the host view.</p>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-tarot" open>
-              <summary>Tarot sessions</summary>
-              <div class="dash-section-body">
-                <ul class="dash-list">
-                  <li>Open Tarot Sessions and create a session.</li>
-                  <li>Use the Priestess/Player links for control vs view.</li>
-                  <li>Close the session when the reading ends to archive results.</li>
-                </ul>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-gallery">
-              <summary>Gallery & media</summary>
-              <div class="dash-section-body">
-                <div class="dash-blocks">
-                  <div class="dash-block">
-                    <div class="dash-label">Media library</div>
-                    <p>Upload, tag, and hide items. Use the Media panel to manage visibility.</p>
-                  </div>
-                  <div class="dash-block">
-                    <div class="dash-label">Gallery</div>
-                    <p>Gallery is a shrine. Hide finished decks or items via the Media panel.</p>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-decks">
-              <summary>Deck editor</summary>
-              <div class="dash-section-body">
-                <ul class="dash-list">
-                  <li>Use Deck Editor to edit cards, suits, and images.</li>
-                  <li>Cardgames read standard playing cards by suit + rank or card_id patterns.</li>
-                  <li>For playing decks, fill suit and number and keep card images set.</li>
-                </ul>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-starting">
-              <summary>Rites starting page</summary>
-              <div class="dash-section-body">
-                <ul class="dash-list">
-                  <li>Used when rites is booting or a 502/503 occurs.</li>
-                  <li>Shows the heart splash and forwards once rites is up.</li>
-                  <li>Container config lives in the middleware folder.</li>
-                </ul>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-troubleshoot">
-              <summary>Troubleshooting</summary>
-              <div class="dash-section-body">
-                <div class="dash-issue">
-                  <p><strong>Tools locked:</strong> run <span class="cmd">/auth</span> and re-login.</p>
-                </div>
-                <div class="dash-issue">
-                  <p><strong>Player view not updating:</strong> refresh the page or reopen the session link.</p>
-                </div>
-                <div class="dash-issue">
-                  <p><strong>Media not loading:</strong> confirm the URL in Media library and reselect.</p>
-                </div>
-              </div>
-            </details>
-
-            <details class="dash-section" id="dash-thanks">
-              <summary>Thank you</summary>
-              <div class="dash-section-body">
-                <p class="muted">Thank you for tending the Forest. Every ritual and repair keeps the canopy strong.</p>
-              </div>
-            </details>
           </div>
         </section>
           <section class="panel" style="animation-delay:.05s" id="bingoPanel">
@@ -1860,7 +1705,7 @@
       </div>
     </div>
     <div class="toast-stack" id="toastStack"></div>
-    <script src="/static/overlay/overlay.js?v=20260116d" defer></script>
+    <script src="/static/overlay/overlay.js?v=20260116e" defer></script>
     <script>
     document.addEventListener("DOMContentLoaded", function() {
       const btn = document.getElementById("updatePlogonmasterBtn");
@@ -1901,8 +1746,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 

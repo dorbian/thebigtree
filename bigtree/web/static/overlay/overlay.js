@@ -1567,7 +1567,14 @@ const $ = (id) => document.getElementById(id);
           const name = data.user_name || data.user_id || "";
           const icon = data.user_icon || "";
           const userId = data.user_id || "";
-          authUserScopes = new Set((data.scopes || []).map(String));
+          const rawScopes = data.scopes || data.scope || data.permissions || [];
+          let scopes = [];
+          if (Array.isArray(rawScopes)){
+            scopes = rawScopes.map(String);
+          } else if (typeof rawScopes === "string"){
+            scopes = rawScopes.split(/[ ,]+/).map(s => s.trim()).filter(Boolean);
+          }
+          authUserScopes = new Set(scopes);
           authUserIsElfmin = computeElfminAccess(authUserScopes, data.source);
           applyElfminVisibility();
           applyScopeVisibility();
@@ -1980,6 +1987,13 @@ const $ = (id) => document.getElementById(id);
       });
       bindElement("dashboardStatsRefresh", (el) => {
         el.addEventListener("click", () => loadDashboardStats(true));
+      });
+      bindElement("dashboardChangelogToggle", (el) => {
+        el.addEventListener("click", () => {
+          const wrap = $("dashboardChangelogWrap");
+          if (!wrap) return;
+          wrap.classList.toggle("hidden");
+        });
       });
       bindElement("contestRefresh", (el) => {
         el.addEventListener("click", () => loadContestManagement());

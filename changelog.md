@@ -118,3 +118,5 @@
 - Fix syntax error in overlay menu bindings.
 - Fix stray brace in contest status block.
 - Fix extra brace in gallery import handler.
+- Trim dashboard content and add a changelog toggle button.
+- Accept scope data from string or array to restore menu visibility.
