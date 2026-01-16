@@ -9,7 +9,7 @@ from aiohttp import web
 import bigtree
 from bigtree.inc.database import get_database
 from bigtree.inc.logging import logger
-from bigtree.inc.webserver import route
+from bigtree.inc.webserver import DynamicWebServer, route
 
 USER_TOKEN_HEADER = "X-Bigtree-User-Token"
 
@@ -119,4 +119,45 @@ async def user_games(request: web.Request) -> web.Response:
         return user
     db = get_database()
     games = db.list_user_games(user["id"])
+    return web.json_response({"ok": True, "games": games})
+
+
+@route("POST", "/user-area/claim", allow_public=True)
+async def claim_game(request: web.Request) -> web.Response:
+    user = await _resolve_user(request)
+    if isinstance(user, web.Response):
+        return user
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+    game_id = (payload.get("game_id") or "").strip()
+    if not game_id:
+        return web.json_response({"ok": False, "error": "game_id is required"}, status=400)
+    db = get_database()
+    if not db.claim_game_for_user(game_id, user["id"]):
+        return web.json_response({"ok": False, "error": "game not found or not claimable"}, status=404)
+    return web.json_response({"ok": True, "game_id": game_id})
+
+
+@route("GET", "/user-area", allow_public=True)
+async def user_area_page(_req: web.Request) -> web.Response:
+    settings = getattr(bigtree, "settings", None)
+    base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
+    html = DynamicWebServer.render_template("user_area.html", {"base_url": base_url})
+    return web.Response(text=html, content_type="text/html")
+
+
+@route("GET", "/user-area/manage", allow_public=True)
+async def user_area_manage_page(_req: web.Request) -> web.Response:
+    settings = getattr(bigtree, "settings", None)
+    base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
+    html = DynamicWebServer.render_template("user_area_manage.html", {"base_url": base_url})
+    return web.Response(text=html, content_type="text/html")
+
+
+@route("GET", "/user-area/manage/games", scopes=["admin:message"])
+async def manage_games(request: web.Request) -> web.Response:
+    db = get_database()
+    games = db.list_api_games(include_inactive=True, limit=500)
     return web.json_response({"ok": True, "games": games})

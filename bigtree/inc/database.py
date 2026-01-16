@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import psycopg2
-from psycopg2 import extras
 from psycopg2.extras import Json, RealDictCursor
 from tinydb import TinyDB
 
@@ -87,7 +86,6 @@ class Database:
             else 1.0
         )
         return data, int(retries), float(delay)
-        return data
 
     def _connect(self):
         attempts = getattr(self, "_connect_retries", 5)
@@ -107,11 +105,26 @@ class Database:
                 cur.execute(sql, params or ())
                 if fetch:
                     return cur.fetchall()
-        return []
+                return cur.rowcount
 
     def _fetchone(self, sql: str, params: Optional[Sequence] = None) -> Optional[Dict[str, Any]]:
         rows = self._execute(sql, params, fetch=True)
         return rows[0] if rows else None
+
+    def _ensure_column(self, conn: psycopg2.extensions.connection, table: str, column: str, definition: str) -> bool:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                """,
+                (table, column),
+            )
+            if cur.fetchone():
+                return False
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        return True
 
     # ---------------- schema ----------------
     def _ensure_tables(self):
@@ -140,7 +153,10 @@ class Database:
                 status TEXT,
                 active BOOLEAN NOT NULL DEFAULT FALSE,
                 payload JSONB NOT NULL,
-                metadata JSONB DEFAULT '{}'::jsonb
+                metadata JSONB DEFAULT '{}'::jsonb,
+                run_source TEXT NOT NULL DEFAULT 'api',
+                claimed_by INTEGER REFERENCES users(id),
+                claimed_at TIMESTAMPTZ
             )
             """,
             """
@@ -187,6 +203,10 @@ class Database:
         ]
         for stmt in statements:
             self._execute(stmt)
+        with self._connect() as conn:
+            self._ensure_column(conn, "games", "run_source", "TEXT DEFAULT 'api'")
+            self._ensure_column(conn, "games", "claimed_by", "INTEGER")
+            self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
 
     # ---------------- public helpers ----------------
     def upsert_user(self, xiv_username: str, xiv_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -251,10 +271,10 @@ class Database:
 
     def list_user_games(self, user_id: int, only_active: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
         sql = """
-        SELECT g.game_id, g.module, g.title, g.status, g.active,
-               g.created_at, g.ended_at, g.channel_id, g.created_by, g.metadata
+        SELECT g.*, claimant.xiv_username AS claimed_username
         FROM games g
         JOIN user_games ug ON ug.game_id = g.game_id
+        LEFT JOIN users claimant ON claimant.id = g.claimed_by
         WHERE ug.user_id = %s
         """
         params: List[Any] = [user_id]
@@ -262,10 +282,11 @@ class Database:
             sql += " AND g.active = TRUE"
         sql += " ORDER BY g.created_at DESC LIMIT %s"
         params.append(limit)
-        games = self._execute(sql, tuple(params), fetch=True)
+        rows = self._execute(sql, tuple(params), fetch=True)
+        games = [self._format_game_row(row) for row in rows] if rows else []
         if not games:
             return []
-        game_ids = [row["game_id"] for row in games]
+        game_ids = [game.get("game_id") for game in games if game.get("game_id")]
         players = self._fetch_game_players(game_ids)
         indexed: Dict[str, List[Dict[str, Any]]] = {}
         for player in players:
@@ -273,10 +294,36 @@ class Database:
                 {"name": player["name"], "role": player.get("role"), "metadata": player.get("metadata")}
             )
         for row in games:
-            row["created_at"] = self._format_dt(row.get("created_at"))
-            row["ended_at"] = self._format_dt(row.get("ended_at"))
-            row["players"] = indexed.get(row["game_id"], [])
+            row["players"] = indexed.get(row.get("game_id"), [])
         return games
+
+    def list_api_games(self, include_inactive: bool = True, limit: int = 200) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT g.*, claimant.xiv_username AS claimed_username
+        FROM games g
+        LEFT JOIN users claimant ON claimant.id = g.claimed_by
+        WHERE g.run_source = %s
+        """
+        params: List[Any] = ["api"]
+        if not include_inactive:
+            sql += " AND g.active = TRUE"
+        sql += " ORDER BY g.created_at DESC LIMIT %s"
+        params.append(limit)
+        rows = self._execute(sql, tuple(params), fetch=True)
+        return [self._format_game_row(row) for row in rows] if rows else []
+
+    def claim_game_for_user(self, game_id: str, user_id: int) -> bool:
+        if not game_id or not user_id:
+            return False
+        count = self._execute(
+            """
+            UPDATE games
+            SET claimed_by = %s, claimed_at = CURRENT_TIMESTAMP
+            WHERE game_id = %s AND run_source = %s
+            """,
+            (user_id, game_id, "api"),
+        )
+        return bool(count)
 
     def _fetch_game_players(self, game_ids: Iterable[str]) -> List[Dict[str, Any]]:
         if not game_ids:
@@ -287,6 +334,17 @@ class Database:
         WHERE game_id = ANY(%s)
         """
         return self._execute(sql, (list(game_ids),), fetch=True)
+
+    def _format_game_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        if not row:
+            return {}
+        data = dict(row)
+        data["metadata"] = data.get("metadata") or {}
+        data["created_at"] = self._format_dt(data.get("created_at"))
+        data["ended_at"] = self._format_dt(data.get("ended_at"))
+        data["claimed_at"] = self._format_dt(data.get("claimed_at"))
+        data["claimed_username"] = data.get("claimed_username")
+        return data
 
     def _format_dt(self, value: Optional[datetime]) -> Optional[str]:
         if not value:
@@ -395,6 +453,7 @@ class Database:
                 status="active" if active else "ended",
                 active=active,
                 metadata=metadata,
+                run_source="import",
             )
             owners: Dict[str, Tuple[str, Optional[int]]] = {}
             for entry in default.values():
@@ -440,6 +499,7 @@ class Database:
                 status=status,
                 active=active,
                 metadata=metadata,
+                run_source="import",
             )
             for player in self._extract_tarot_players(entry):
                 self._store_game_player(session_id, player, role="player")
@@ -483,6 +543,7 @@ class Database:
                     status=status,
                     active=active,
                     metadata=metadata,
+                    run_source="import",
                 )
                 for player in self._extract_cardgame_players(payload):
                     self._store_game_player(session_id, player, role="player")
@@ -504,11 +565,13 @@ class Database:
         status: Optional[str] = None,
         active: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        run_source: str = "api",
     ):
         metadata = metadata or {}
+        metadata.setdefault("run_source", run_source)
         sql = """
-        INSERT INTO games (game_id, module, title, channel_id, created_by, created_at, ended_at, status, active, payload, metadata)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO games (game_id, module, title, channel_id, created_by, created_at, ended_at, status, active, payload, metadata, run_source)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (game_id) DO UPDATE
           SET module = EXCLUDED.module,
               title = COALESCE(EXCLUDED.title, games.title),
@@ -519,7 +582,8 @@ class Database:
               status = COALESCE(EXCLUDED.status, games.status),
               active = EXCLUDED.active,
               payload = EXCLUDED.payload,
-              metadata = games.metadata || EXCLUDED.metadata
+              metadata = games.metadata || EXCLUDED.metadata,
+              run_source = COALESCE(EXCLUDED.run_source, games.run_source)
         """
         self._execute(
             sql,
@@ -535,6 +599,7 @@ class Database:
                 active,
                 Json(payload),
                 Json(metadata),
+                run_source,
             ),
         )
 

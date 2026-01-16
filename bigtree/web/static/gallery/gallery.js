@@ -205,7 +205,7 @@
       }).join("");
     }
     if (detailTags){
-      detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join("");
+      detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
     }
     if (detailWatermark){
       detailWatermark.textContent = data.artist || "";
@@ -572,6 +572,16 @@
     return [];
   }
 
+  function escapeHtml(value){
+    if (!value) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#x27;");
+  }
+
   function applyArtistFilter(name){
     activeArtistFilter = name;
     if (filterRow){
@@ -654,7 +664,7 @@
             <div class="work-title">${title}</div>
             <div class="origin">${origin}</div>
             ${contextRow ? `<div class="context-row">${contextRow}</div>` : ""}
-            ${tags.length ? `<div class="pill-row">${tags.map(t => `<span class="tag-pill">${t}</span>`).join("")}</div>` : ""}
+            ${tags.length ? `<div class="pill-row">${tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
             <a class="artist-link" href="#" data-artist="${artistPayload}">Offered by ${artistName}</a>
             <div class="reaction-row">${reactionRow}</div>
             <div class="card-actions">

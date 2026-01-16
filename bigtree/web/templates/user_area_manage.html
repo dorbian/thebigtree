@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Forest Game Management</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/gallery/gallery.css">
+  <style>
+    body{
+      margin:0;
+      font-family:"Spectral","Georgia",serif;
+      background:#030906;
+      color:#e7f2ea;
+    }
+    header{
+      padding:32px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:16px;
+    }
+    header h1{
+      margin:0;
+      font-size:32px;
+    }
+    .panel{
+      margin:0 auto 32px;
+      padding:24px;
+      max-width:1100px;
+      background:rgba(12,18,15,.95);
+      border:1px solid rgba(214,178,110,.2);
+      border-radius:18px;
+    }
+    .control-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .control-row input{
+      flex:1;
+      min-width:220px;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+    th,td{
+      padding:8px 10px;
+      border-bottom:1px solid rgba(231,242,234,.1);
+    }
+    th{
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:11px;
+      color:#9fb4a6;
+    }
+    .muted{
+      color:rgba(231,242,234,.65);
+    }
+    .status-chip{
+      padding:3px 10px;
+      border-radius:999px;
+      border:1px solid rgba(214,178,110,.4);
+      font-size:12px;
+    }
+    button{
+      border:none;
+      border-radius:8px;
+      padding:8px 14px;
+      font-family:inherit;
+      letter-spacing:.04em;
+      cursor:pointer;
+      background:#6bd4a2;
+      color:#06100b;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Game Management</h1>
+      <p class="muted">Tracks API-run games and claim ownership for auditing.</p>
+    </div>
+    <button id="refreshBtn">Refresh</button>
+  </header>
+  <section class="panel">
+    <div class="control-row">
+      <label>
+        Admin API key
+        <input id="adminKey" type="password" placeholder="X-Bigtree-Key">
+      </label>
+      <button id="saveKey">Save for session</button>
+      <button id="clearKey">Clear</button>
+    </div>
+    <div id="errorMessage" class="muted"></div>
+    <div id="gamesContainer"></div>
+  </section>
+  <script>
+    const STORAGE_KEY = "bigtree_admin_key";
+    const adminField = document.getElementById("adminKey");
+    const saveBtn = document.getElementById("saveKey");
+    const clearBtn = document.getElementById("clearKey");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const gamesContainer = document.getElementById("gamesContainer");
+    const errorMessage = document.getElementById("errorMessage");
+
+    function getAdminKey(){
+      return window.localStorage.getItem(STORAGE_KEY) || "";
+    }
+
+    function setAdminKey(value){
+      if(value){
+        window.localStorage.setItem(STORAGE_KEY, value);
+      }else{
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+
+    function headers(){
+      const key = getAdminKey();
+      return key ? {"X-Bigtree-Key": key} : {};
+    }
+
+    async function loadGames(){
+      const key = getAdminKey();
+      if(!key){
+        errorMessage.textContent = "Enter an admin API key first.";
+        gamesContainer.innerHTML = "";
+        return;
+      }
+      errorMessage.textContent = "Loading...";
+      try{
+        const res = await fetch("/user-area/manage/games", {headers: headers()});
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Unable to load games");
+        }
+        renderGames(data.games || []);
+        errorMessage.textContent = "";
+      }catch(err){
+        errorMessage.textContent = err.message;
+        gamesContainer.innerHTML = "";
+      }
+    }
+
+    function renderGames(games){
+      if(!games.length){
+        gamesContainer.innerHTML = "<div class='muted'>No API games to show.</div>";
+        return;
+      }
+      gamesContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Game ID</th>
+              <th>Module</th>
+              <th>Status</th>
+              <th>Active</th>
+              <th>Claimed by</th>
+              <th>Claimed at</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${games.map((game, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${game.game_id}</td>
+                <td>${game.module}</td>
+                <td><span class="status-chip">${game.status || "unknown"}</span></td>
+                <td>${game.active ? "Yes" : "No"}</td>
+                <td>${game.claimed_username || "-"}</td>
+                <td>${game.claimed_at || "-"}</td>
+                <td>${game.created_at || "-"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    saveBtn?.addEventListener("click", () => {
+      setAdminKey(adminField.value.trim());
+      loadGames();
+    });
+    clearBtn?.addEventListener("click", () => {
+      setAdminKey("");
+      adminField.value = "";
+      errorMessage.textContent = "Admin key cleared.";
+      gamesContainer.innerHTML = "";
+    });
+    refreshBtn?.addEventListener("click", () => loadGames());
+
+    const storedKey = getAdminKey();
+    if(storedKey){
+      adminField.value = storedKey;
+      loadGames();
+    }
+  </script>
+</body>
+</html>

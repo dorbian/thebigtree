@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
+- Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.
 - Backend: download `plogon.json` into the data directory (`with.leaf`) and serve it from there.
 - Cardgames: finish now archives sessions instead of deleting them.
 - FFXIV client: unify cardgame host panel layout and padding across blackjack/poker/highlow.

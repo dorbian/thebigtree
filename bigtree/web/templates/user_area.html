@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Forest Wallet</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/gallery/gallery.css">
+  <style>
+    :root{
+      --panel-bg:rgba(12,18,15,.9);
+      --panel-border:rgba(214,178,110,.2);
+      --text:var(--text);
+      --muted:var(--muted);
+    }
+    body{
+      margin:0;
+      font-family:"Spectral","Georgia",serif;
+      background:linear-gradient(180deg,#07100c,#030906);
+      color:#e7f2ea;
+    }
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:32px;
+      gap:16px;
+    }
+    header h1{
+      margin:0;
+      font-size:32px;
+    }
+    .panel{
+      margin:0 auto 32px;
+      padding:24px;
+      max-width:900px;
+      border:1px solid var(--panel-border);
+      border-radius:18px;
+      background:var(--panel-bg);
+      box-shadow:0 10px 40px rgba(0,0,0,.4);
+    }
+    .panel h2{
+      margin-top:0;
+      letter-spacing:.04em;
+    }
+    label{
+      display:flex;
+      flex-direction:column;
+      font-size:13px;
+      margin-bottom:12px;
+      gap:4px;
+    }
+    input{
+      border-radius:8px;
+      padding:10px 12px;
+      border:1px solid rgba(214,178,110,.4);
+      background:rgba(255,255,255,.04);
+      color:#fff;
+    }
+    .actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    button{
+      border:none;
+      border-radius:8px;
+      padding:10px 18px;
+      font-size:14px;
+      cursor:pointer;
+      font-family:inherit;
+      letter-spacing:.04em;
+    }
+    .primary{
+      background:#6bd4a2;
+      color:#07100c;
+    }
+    .muted{
+      color:rgba(231,242,234,.8);
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+    }
+    th,td{
+      padding:10px 12px;
+      text-align:left;
+      border-bottom:1px solid rgba(231,242,234,.12);
+      font-size:14px;
+    }
+    th{
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:12px;
+      color:#9fb4a6;
+    }
+    .tag{
+      font-size:12px;
+      border-radius:10px;
+      padding:4px 8px;
+      border:1px solid rgba(107,212,162,.4);
+      display:inline-flex;
+      margin-right:4px;
+    }
+    .status-chip{
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:12px;
+      border:1px solid rgba(214,178,110,.4);
+    }
+    .claim-btn{
+      background:#0f6a4f;
+      color:#f0fff7;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Forest Wallet</h1>
+      <p class="header-context">Login with XivAuth to view and claim games tied to your character.</p>
+    </div>
+    <div>
+      <button class="primary" id="logoutBtn" type="button">Logout</button>
+    </div>
+  </header>
+  <section class="panel">
+    <h2>Sign in with XivAuth</h2>
+    <p class="muted">You only need to provide your token once per session; we store the token client-side and refresh when needed.</p>
+    <label>
+      XivAuth token
+      <input id="xivToken" type="text" autocomplete="off" placeholder="Enter your XivAuth token">
+    </label>
+    <label>
+      Character name (optional)
+      <input id="xivName" type="text" placeholder="e.g., dorbian tenom">
+    </label>
+    <label>
+      World (optional)
+      <input id="xivWorld" type="text" placeholder="e.g., Balmung">
+    </label>
+    <div class="actions">
+      <button class="primary" id="loginBtn" type="button">Login</button>
+    </div>
+    <div id="loginMessage" class="muted"></div>
+  </section>
+  <section class="panel">
+    <h2>Your active games</h2>
+    <div id="gamesContainer" class="muted">Please login to see your games.</div>
+  </section>
+  <script>
+    const TOKEN_KEY = "bigtree_user_token";
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const gamesContainer = document.getElementById("gamesContainer");
+    const loginMessage = document.getElementById("loginMessage");
+
+    function setMessage(text, tone="muted"){
+      loginMessage.textContent = text;
+      loginMessage.className = tone;
+    }
+
+    function getToken(){
+      return window.localStorage.getItem(TOKEN_KEY);
+    }
+
+    function setToken(token){
+      if(token){
+        window.localStorage.setItem(TOKEN_KEY, token);
+      }else{
+        window.localStorage.removeItem(TOKEN_KEY);
+      }
+    }
+
+    async function login(){
+      const tokenInput = document.getElementById("xivToken");
+      const payload = {
+        xiv_auth_token: tokenInput.value.trim(),
+        xiv_username: document.getElementById("xivName").value.trim(),
+        xiv_world: document.getElementById("xivWorld").value.trim()
+      };
+      if(!payload.xiv_auth_token){
+        setMessage("Token is required.","muted");
+        return;
+      }
+      setMessage("Verifying...", "muted");
+      try{
+        const res = await fetch("/user-area/login", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Login failed");
+        }
+        setToken(data.token);
+        setMessage(`Signed in as ${data.user.xiv_username}.`, "muted");
+        tokenInput.value="";
+        fetchGames();
+      }catch(err){
+        setMessage(err.message || "Login failed", "muted");
+      }
+    }
+
+    function authHeaders(){
+      const token = getToken();
+      if(!token) return {};
+      return {"Authorization": `Bearer ${token}`};
+    }
+
+    async function fetchGames(){
+      const token = getToken();
+      if(!token){
+        gamesContainer.textContent = "Please login above.";
+        return;
+      }
+      setMessage("Loading games...", "muted");
+      try{
+        const res = await fetch("/user-area/games", {headers:authHeaders()});
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Failed to load games");
+        }
+        renderGames(data.games || []);
+        setMessage("Active games loaded.", "muted");
+      }catch(err){
+        gamesContainer.textContent = err.message || "Unable to load games.";
+        setMessage("Try logging in again.", "muted");
+      }
+    }
+
+    function renderGames(games){
+      if(!games || !games.length){
+        gamesContainer.innerHTML = "<div class='muted'>No active games found.</div>";
+        return;
+      }
+      gamesContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Game</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Players</th>
+              <th>Claim</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${games.map(renderGameRow).join("")}
+          </tbody>
+        </table>
+      `;
+      gamesContainer.classList.remove("muted");
+    }
+
+    function renderGameRow(game){
+      const players = (game.players || []).map(player => player.name).join(", ");
+      const claimStatus = game.claimed_username ? `<span class="status-chip">Claimed by ${game.claimed_username}</span>` :
+        `<button class="claim-btn" data-game="${game.game_id}">Claim</button>`;
+      return `
+        <tr>
+          <td>${game.game_id}</td>
+          <td>${game.module || "game"}</td>
+          <td><span class="status-chip">${game.status || "active"}</span></td>
+          <td>${players || "You"}</td>
+          <td>${claimStatus}</td>
+          <td>${game.created_at || "-"}</td>
+        </tr>
+      `;
+    }
+
+    async function claimGame(gameId){
+      try{
+        const res = await fetch("/user-area/claim", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            ...authHeaders(),
+          },
+          body:JSON.stringify({game_id:gameId})
+        });
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Could not claim game");
+        }
+        fetchGames();
+      }catch(err){
+        setMessage(err.message || "Claim failed","muted");
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if(target && target.matches(".claim-btn")){
+        const gameId = target.dataset.game;
+        if(gameId) claimGame(gameId);
+      }
+    });
+
+    loginBtn?.addEventListener("click", login);
+    logoutBtn?.addEventListener("click", () => {
+      setToken("");
+      setMessage("Logged out.","muted");
+      gamesContainer.textContent = "Please login above.";
+    });
+
+    fetchGames();
+  </script>
+</body>
+</html>

@@ -704,3 +704,14 @@ async def get_with_leaf(_req: web.Request):
         return web.Response(text=content, content_type="application/json")
     except FileNotFoundError:
         return web.Response(text="[]", content_type="application/json", status=404)
+
+
+@route("GET", "/with.leaf", allow_public=True)
+async def get_with_leaf_root(_req: web.Request):
+    path = get_with_leaf_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return web.Response(text=content, content_type="application/json")
+    except FileNotFoundError:
+        return web.Response(text="[]", content_type="application/json", status=404)
