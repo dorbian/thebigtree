@@ -1851,6 +1851,36 @@ const $ = (id) => document.getElementById(id);
       }
 
       bindElement("menuDashboard", (el) => el.addEventListener("click", () => showPanel("dashboard")));
+      bindElement("menuBingo", (el) => el.addEventListener("click", () => showPanel("bingo")));
+      bindElement("menuBingoRefresh", (el) => {
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          loadGamesMenu();
+        });
+      });
+      bindElement("bChannelRefresh", (el) => el.addEventListener("click", () => loadDiscordChannels()));
+      bindElement("bChannelSelect", (el) => el.addEventListener("change", (ev) => {
+        const pick = ev.target.value || "";
+        if (pick){
+          $("bChannel").value = pick;
+        }
+        updateBingoCreatePayload();
+      }));
+      bindElement("menuCreateGame", (el) => {
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          $("bCreateModal").classList.add("show");
+          $("bTitle").focus();
+          $("bChannel").value = "";
+          $("bChannelSelect").value = "";
+          $("bAnnounceCalls").checked = false;
+          $("bSeedPot").value = "0";
+          bingoCreateBgUrl = "";
+          $("bCreateBgStatus").textContent = "No background selected.";
+          loadDiscordChannels();
+          updateBingoCreatePayload();
+        });
+      });
       bindElement("menuTarotLinks", (el) => {
         el.addEventListener("click", () => {
           if (!ensureScope("tarot:admin", "Tarot access required.")) return;
@@ -1894,6 +1924,7 @@ const $ = (id) => document.getElementById(id);
         });
       }
       bindMenuKey("menuDashboard");
+      bindMenuKey("menuBingo");
       bindMenuKey("menuTarotLinks");
       bindMenuKey("menuCardgameSessions");
       bindMenuKey("menuTarotDecks");
@@ -2126,6 +2157,20 @@ const $ = (id) => document.getElementById(id);
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function updateBingoCreatePayload(){
+        const el = $("bCreatePayload");
+        if (!el){
+          return;
+        }
+        const channelId = $("bChannelSelect").value || $("bChannel").value || "?";
+        const createdBy = $("bCreatedBy").value || "?";
+        const channelLabel = $("bChannelSelect").selectedOptions.length
+          ? $("bChannelSelect").selectedOptions[0].textContent
+          : "";
+        const label = channelLabel ? ` (${channelLabel})` : "";
+        el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
       }
 
       async function loadContestChannels(){
@@ -2713,15 +2758,17 @@ const $ = (id) => document.getElementById(id);
         setStatus("Welcome to Bingo Control.", "ok");
         initAuthenticatedSession();
       });
-      overlayToggle.addEventListener("change", () => {
-        document.body.classList.toggle("overlay", overlayToggle.checked);
-        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
-        saveSettings();
-      });
-      overlayToggleBtn.addEventListener("click", () => {
-        overlayToggle.checked = !overlayToggle.checked;
-        overlayToggle.dispatchEvent(new Event("change"));
-      });
+      if (overlayToggle && overlayToggleBtn){
+        overlayToggle.addEventListener("change", () => {
+          document.body.classList.toggle("overlay", overlayToggle.checked);
+          overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+          saveSettings();
+        });
+        overlayToggleBtn.addEventListener("click", () => {
+          overlayToggle.checked = !overlayToggle.checked;
+          overlayToggle.dispatchEvent(new Event("change"));
+        });
+      }
       on("overlayExit", "click", () => {
         overlayToggle.checked = false;
         document.body.classList.remove("overlay");

@@ -121,5 +121,7 @@
 - Trim dashboard content and add a changelog toggle button.
 - Accept scope data from string or array to restore menu visibility.
 - Persist overlay API key in session storage as a fallback for refreshes.
+- Restore bingo menu bindings and payload preview logic.
+- Guard overlay toggle bindings when controls are missing.
 ### Auth
 - Return resolved scopes from `/api/auth/me` for API keys and deny invalid tokens.
