@@ -6,6 +6,11 @@
       const overlayToggleBtn = $("menuOverlayToggle");
       const storage = window.localStorage;
       const CONTEST_CATEGORY_ID = "1239558949351460904";
+      const overlayLog = (...args) => {
+        if (window.console && console.debug){
+          console.debug("[overlay]", ...args);
+        }
+      };
       let currentCard = null;
       let currentGame = null;
       let taSelectedCardId = "";
@@ -105,6 +110,7 @@
       let galleryHiddenDecks = [];
 
       function setStatusText(id, msg, kind){
+        overlayLog("setStatusText", {id, msg, kind});
         const el = $(id);
         if (!el) return;
         el.textContent = msg;
@@ -161,6 +167,7 @@
       function applyTokenFromUrl(){
         const candidate = getQueryParam("token") || getQueryParam("auth_token") || getQueryParam("api_key");
         if (!candidate) return;
+        overlayLog("applyTokenFromUrl", candidate);
         storage.setItem("bt_api_key", candidate);
         if (apiKeyEl){
           apiKeyEl.value = candidate;
@@ -178,6 +185,7 @@
       }
 
       function renderDashboardStats(stats){
+        overlayLog("renderDashboardStats", stats);
         if (!stats) return;
         setStatValue("dashStatDiscord", stats.discord_members ?? "--");
         setStatValue("dashStatPlayers", stats.players_engaged ?? "--");
@@ -187,6 +195,7 @@
       }
 
       async function loadDashboardStats(force = false){
+        overlayLog("loadDashboardStats", {force, loading: dashboardStatsLoading, loaded: dashboardStatsLoaded});
         if (dashboardStatsLoading) return;
         if (dashboardStatsLoaded && !force){
           return;
@@ -194,10 +203,12 @@
         dashboardStatsLoading = true;
         try{
           const resp = await jsonFetch("/admin/overlay/stats", {method: "GET"});
+          overlayLog("loadDashboardStats response", resp);
           if (resp.ok){
             renderDashboardStats(resp.stats || {});
           }
         }catch(err){
+          overlayLog("loadDashboardStats error", err);
           setStatValue("dashStatDiscord", "--");
           setStatValue("dashStatPlayers", "--");
           setStatValue("dashStatRegistered", "--");
@@ -1499,6 +1510,7 @@
       }
 
       function setStatus(msg, kind){
+        overlayLog("setStatus", {msg, kind});
         const textEl = $("statusText");
         const timeEl = $("statusTime");
         if (textEl){
@@ -1602,6 +1614,7 @@
       }
 
       function loadSettings(){
+        overlayLog("loadSettings");
         if (apiKeyEl){
           apiKeyEl.value = storage.getItem("bt_api_key") || "";
         }
@@ -1611,6 +1624,7 @@
       }
 
       function applyTempTokenFromUrl(){
+        overlayLog("applyTempTokenFromUrl", window.location.search);
         try{
           const params = new URLSearchParams(window.location.search || "");
           const token = params.get("temp_token");
@@ -1702,6 +1716,7 @@
       }
 
       async function loadAuthUser(){
+        overlayLog("loadAuthUser");
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
@@ -1758,6 +1773,7 @@
       }
 
       async function initAuthenticatedSession(){
+        overlayLog("initAuthenticatedSession");
         await loadAuthUser();
         applyScopeVisibility();
         const contestCategoryStatus = $("contestCategoryStatus");
@@ -2247,6 +2263,7 @@
       }
 
       function loadGamesMenu(){
+        overlayLog("loadGamesMenu");
         jsonFetch("/bingo/games", {method:"GET"})
           .then(data => {
             const list = (data.games || []).filter(g => g.active !== false);
@@ -2291,7 +2308,9 @@
             }
             // Selected game is indicated by menu highlight.
           })
-          .catch(() => {});
+          .catch(err => {
+            overlayLog("loadGamesMenu error", err);
+          });
       }
 
       async function loadDiscordChannels(){
@@ -2339,6 +2358,7 @@
       }
 
       function showPanel(which){
+        overlayLog("showPanel", which);
         if (!suppressPanelSave){
           try{
             localStorage.setItem("overlay_panel", which);
@@ -2487,7 +2507,11 @@
 
       function bindElement(id, callback){
         const el = $(id);
-        if (!el) return null;
+        if (!el){
+          overlayLog("bindElement missing", id);
+          return null;
+        }
+        overlayLog("bindElement", id);
         callback(el);
         return el;
       }
