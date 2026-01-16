@@ -116,3 +116,4 @@
 ### Overlay
 - Guarded DOM event bindings to avoid crashes when nodes are missing.
 - Fix syntax error in overlay menu bindings.
+- Fix stray brace in contest status block.

@@ -2103,9 +2103,6 @@ const $ = (id) => document.getElementById(id);
         el.className = "status" + (kind ? " " + kind : "");
       }
 
-        }
-      }
-
       async function loadContestChannels(){
         const select = $("contestChannel");
         const templateSelect = $("contestTemplateChannel");
