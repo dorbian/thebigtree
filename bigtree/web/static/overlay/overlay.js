@@ -2635,12 +2635,12 @@
         }
       });
       bindElement("menuMedia", (el) => {
-        el.addEventListener("click", () => {
+        on("menuMedia", "click", () => {
           showPanel("media");
         });
       });
       bindElement("menuArtists", (el) => {
-        el.addEventListener("click", () => {
+        on("menuArtists", "click", () => {
           if (!ensureScope("tarot:admin", "Tarot access required.")) return;
           $("artistModal").classList.add("show");
           loadTarotArtists();
