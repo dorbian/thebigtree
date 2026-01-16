@@ -2485,42 +2485,55 @@
 
       let suppressPanelSave = false;
 
+      function bindElement(id, callback){
+        const el = $(id);
+        if (!el) return null;
+        callback(el);
+        return el;
+      }
+
       function showPanelOnce(which){
         suppressPanelSave = true;
         showPanel(which);
         suppressPanelSave = false;
       }
 
-      $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
-      $("menuBingo").addEventListener("click", () => showPanel("bingo"));
-      $("menuBingoRefresh").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        loadGamesMenu();
+      bindElement("menuDashboard", (el) => el.addEventListener("click", () => showPanel("dashboard")));
+      bindElement("menuBingo", (el) => el.addEventListener("click", () => showPanel("bingo")));
+      bindElement("menuBingoRefresh", (el) => {
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          loadGamesMenu();
+        });
       });
-      $("bChannelRefresh").addEventListener("click", () => loadDiscordChannels());
-      $("bChannelSelect").addEventListener("change", (ev) => {
+      bindElement("bChannelRefresh", (el) => el.addEventListener("click", () => loadDiscordChannels()));
+      bindElement("bChannelSelect", (el) => el.addEventListener("change", (ev) => {
         const pick = ev.target.value || "";
         if (pick){
           $("bChannel").value = pick;
         }
         updateBingoCreatePayload();
+      }));
+      bindElement("menuCreateGame", (el) => {
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          $("bCreateModal").classList.add("show");
+          $("bTitle").focus();
+          $("bChannel").value = "";
+          $("bChannelSelect").value = "";
+          $("bAnnounceCalls").checked = false;
+          $("bSeedPot").value = "0";
+          bingoCreateBgUrl = "";
+          $("bCreateBgStatus").textContent = "No background selected.";
+          loadDiscordChannels();
+          updateBingoCreatePayload();
+        });
       });
-      $("menuCreateGame").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        $("bCreateModal").classList.add("show");
-        $("bTitle").focus();
-        $("bChannel").value = "";
-        $("bChannelSelect").value = "";
-        $("bAnnounceCalls").checked = false;
-        $("bSeedPot").value = "0";
-        bingoCreateBgUrl = "";
-        $("bCreateBgStatus").textContent = "No background selected.";
-        loadDiscordChannels();
-        updateBingoCreatePayload();
-      });
-      $("menuTarotLinks").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-        showPanel("tarotLinks");
+      bindElement("menuTarotLinks", (el) => {
+        el.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          showPanel("tarotLinks");
+        });
       });
       const cardgameMenu = $("menuCardgameSessions");
       if (cardgameMenu){
@@ -2533,16 +2546,20 @@
           loadCardgameSessions();
         });
       }
-      $("menuTarotDecks").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-        showPanel("tarotDecks");
+      bindElement("menuTarotDecks", (el) => {
+        el.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          showPanel("tarotDecks");
+        });
       });
-      $("menuContests").addEventListener("click", () => {
-        showPanel("contests");
-        loadContestManagement();
-        loadContestChannels();
-        loadTarotClaimsDecks();
-        loadTarotClaimsChannels();
+      bindElement("menuContests", (el) => {
+        el.addEventListener("click", () => {
+          showPanel("contests");
+          loadContestManagement();
+          loadContestChannels();
+          loadTarotClaimsDecks();
+          loadTarotClaimsChannels();
+        });
       });
       function bindMenuKey(id){
         const el = $(id);
@@ -2584,60 +2601,73 @@
           setBingoStatus(err.message, "err");
         }
       });
-      $("menuMedia").addEventListener("click", () => {
-        showPanel("media");
+      bindElement("menuMedia", (el) => {
+        el.addEventListener("click", () => {
+          showPanel("media");
+        });
       });
-      $("menuArtists").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-        $("artistModal").classList.add("show");
-        loadTarotArtists();
+      bindElement("menuArtists", (el) => {
+        el.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          $("artistModal").classList.add("show");
+          loadTarotArtists();
+        });
       });
-      $("menuCalendar").addEventListener("click", () => {
-        $("calendarModal").classList.add("show");
-        loadCalendarAdmin();
+      bindElement("menuCalendar", (el) => {
+        el.addEventListener("click", () => {
+          $("calendarModal").classList.add("show");
+          loadCalendarAdmin();
+        });
       });
-      $("menuGallery").addEventListener("click", () => {
-        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-        $("galleryModal").classList.add("show");
-        loadGalleryChannels();
-        loadGallerySettings();
-        // Gallery items are managed from Media Library.
-        loadTarotArtists();
+      bindElement("menuGallery", (el) => {
+        el.addEventListener("click", () => {
+          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          $("galleryModal").classList.add("show");
+          loadGalleryChannels();
+          loadGallerySettings();
+          // Gallery items are managed from Media Library.
+          loadTarotArtists();
+        });
       });
-      $("menuAuthRoles").addEventListener("click", () => {
-        if (!authUserIsElfmin){
-          setStatus("Only elfministrators can manage auth roles.", "err");
-          return;
-        }
-        $("authRolesModal").classList.add("show");
-        loadAuthRoles();
+      bindElement("menuAuthRoles", (el) => {
+        el.addEventListener("click", () => {
+          if (!authUserIsElfmin){
+            setStatus("Only elfministrators can manage auth roles.", "err");
+            return;
+          }
+          $("authRolesModal").classList.add("show");
+          loadAuthRoles();
+        });
       });
-      $("menuAuthKeys").addEventListener("click", () => {
-        if (!authUserIsElfmin){
-          setStatus("Only elfministrators can manage auth keys.", "err");
-          return;
-        }
-        $("authTokensModal").classList.add("show");
-        loadAuthTokens();
+      bindElement("menuAuthKeys", (el) => {
+        el.addEventListener("click", () => {
+          if (!authUserIsElfmin){
+            setStatus("Only elfministrators can manage auth keys.", "err");
+            return;
+          }
+          $("authTokensModal").classList.add("show");
+          loadAuthTokens();
+        });
       });
-      $("menuAuthTemp").addEventListener("click", () => {
-        if (!authUserIsElfmin){
-          setStatus("Only elfministrators can generate temporary links.", "err");
-          return;
-        }
-        const modal = $("authTempModal");
-        if (!modal){
-          setStatus("Temporary access UI not loaded.", "err");
-          return;
-        }
-        modal.classList.add("show");
-        loadAuthRoles();
-        renderAuthTempRoles();
-        setAuthTempStatus("Ready.", "");
+      bindElement("menuAuthTemp", (el) => {
+        el.addEventListener("click", () => {
+          if (!authUserIsElfmin){
+            setStatus("Only elfministrators can generate temporary links.", "err");
+            return;
+          }
+          const modal = $("authTempModal");
+          if (!modal){
+            setStatus("Temporary access UI not loaded.", "err");
+            return;
+          }
+          modal.classList.add("show");
+          loadAuthRoles();
+          renderAuthTempRoles();
+          setAuthTempStatus("Ready.", "");
+        });
       });
-      const menuSystemConfigBtn = $("menuSystemConfig");
-      if (menuSystemConfigBtn){
-        menuSystemConfigBtn.addEventListener("click", () => {
+      bindElement("menuSystemConfig", (el) => {
+        el.addEventListener("click", () => {
           const modal = $("systemConfigModal");
           if (!modal){
             setSystemConfigStatus("System configuration UI not available.", "err");
@@ -2646,78 +2676,97 @@
           modal.classList.add("show");
           loadSystemConfig();
         });
-      }
-      const systemConfigClose = $("systemConfigClose");
-      if (systemConfigClose){
-        systemConfigClose.addEventListener("click", () => {
+      });
+      bindElement("systemConfigClose", (el) => {
+        el.addEventListener("click", () => {
           const modal = $("systemConfigModal");
           if (modal){
             modal.classList.remove("show");
           }
         });
-      }
-      const systemConfigModalEl = $("systemConfigModal");
-      if (systemConfigModalEl){
-        systemConfigModalEl.addEventListener("click", (event) => {
-          if (event.target === systemConfigModalEl){
-            systemConfigModalEl.classList.remove("show");
+      });
+      bindElement("systemConfigModal", (el) => {
+        el.addEventListener("click", (event) => {
+          if (event.target === el){
+            el.classList.remove("show");
           }
         });
-      }
-      const systemXivSave = $("systemXivSave");
-      if (systemXivSave){
-        systemXivSave.addEventListener("click", () => saveSystemConfig("xivauth"));
-      }
-      const systemOpenAISave = $("systemOpenAISave");
-      if (systemOpenAISave){
-        systemOpenAISave.addEventListener("click", () => saveSystemConfig("openai"));
-      }
-      const statsRefresh = $("dashboardStatsRefresh");
-      if (statsRefresh){
-        statsRefresh.addEventListener("click", () => loadDashboardStats(true));
-      }
-      $("contestRefresh").addEventListener("click", () => loadContestManagement());
-      $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
-      $("contestCreate").addEventListener("click", () => createContest());
-      $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
-      $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
-      $("contestCreateChannelOpen").addEventListener("click", () => {
-        $("contestChannelModal").classList.add("show");
-        loadContestChannels();
       });
-      $("contestChannelClose").addEventListener("click", () => {
-        $("contestChannelModal").classList.remove("show");
+      bindElement("systemXivSave", (el) => {
+        el.addEventListener("click", () => saveSystemConfig("xivauth"));
       });
-      $("contestChannelModal").addEventListener("click", (event) => {
-        if (event.target === $("contestChannelModal")){
+      bindElement("systemOpenAISave", (el) => {
+        el.addEventListener("click", () => saveSystemConfig("openai"));
+      });
+      bindElement("dashboardStatsRefresh", (el) => {
+        el.addEventListener("click", () => loadDashboardStats(true));
+      });
+      bindElement("contestRefresh", (el) => {
+        el.addEventListener("click", () => loadContestManagement());
+      });
+      bindElement("contestChannelRefresh", (el) => {
+        el.addEventListener("click", () => loadContestChannels());
+      });
+      bindElement("contestCreate", (el) => {
+        el.addEventListener("click", () => createContest());
+      });
+      bindElement("contestEmojiSelect", (el) => {
+        el.addEventListener("change", () => updateContestChannelPreview());
+      });
+      bindElement("contestChannelName", (el) => {
+        el.addEventListener("input", () => updateContestChannelPreview());
+      });
+      bindElement("contestCreateChannelOpen", (el) => {
+        el.addEventListener("click", () => {
+          $("contestChannelModal").classList.add("show");
+          loadContestChannels();
+        });
+      });
+      bindElement("contestChannelClose", (el) => {
+        el.addEventListener("click", () => {
           $("contestChannelModal").classList.remove("show");
-        }
+        });
       });
-      $("contestPanel").addEventListener("click", (event) => {
-        const btn = event.target.closest(".contest-init");
-        if (!btn) return;
-        const channelId = btn.dataset.channel || "";
-        if (channelId){
-          $("contestChannel").value = channelId;
-          setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
-        }
+      bindElement("contestChannelModal", (el) => {
+        el.addEventListener("click", (event) => {
+          if (event.target === el){
+            $("contestChannelModal").classList.remove("show");
+          }
+        });
       });
-      $("tarotClaimsRefresh").addEventListener("click", () => {
-        loadTarotClaimsDecks();
-        loadTarotClaimsChannels();
-      });
-      $("tarotClaimsPost").addEventListener("click", () => postTarotClaims());
-      $("contestChannelCreate").addEventListener("click", async () => {
-        try{
-          const channelId = await createContestChannel();
+      bindElement("contestPanel", (el) => {
+        el.addEventListener("click", (event) => {
+          const btn = event.target.closest(".contest-init");
+          if (!btn) return;
+          const channelId = btn.dataset.channel || "";
           if (channelId){
             $("contestChannel").value = channelId;
+            setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
           }
-          $("contestChannelModal").classList.remove("show");
-          await loadContestManagement();
-        }catch(err){
-          // status already handled
-        }
+        });
+      });
+      bindElement("tarotClaimsRefresh", (el) => {
+        el.addEventListener("click", () => {
+          loadTarotClaimsDecks();
+          loadTarotClaimsChannels();
+        });
+      });
+      bindElement("tarotClaimsPost", (el) => {
+        el.addEventListener("click", () => postTarotClaims());
+      });
+      bindElement("contestChannelCreate", (el) => {
+        el.addEventListener("click", async () => {
+          try{
+            const channelId = await createContestChannel();
+            if (channelId){
+              $("contestChannel").value = channelId;
+            }
+            $("contestChannelModal").classList.remove("show");
+            await loadContestManagement();
+          }catch(err){
+            // status already handled
+          }
+        });
       });
 
       let bingoRefreshTimer = null;
