@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from typing import Optional
 
 import bigtree
@@ -8,6 +10,8 @@ import requests
 from bigtree.inc.logging import logger
 
 DEFAULT_PLOGON_URL = "https://raw.githubusercontent.com/dorbian/forest_repo/main/plogonmaster.json"
+_LAST_FETCH = 0.0
+_REFRESH_THREAD_STARTED = False
 
 
 def _resolve_data_dir() -> str:
@@ -45,22 +49,56 @@ def _get_plogon_url() -> str:
     return DEFAULT_PLOGON_URL
 
 
-def ensure_plogon_file() -> None:
+def _get_refresh_interval() -> float:
+    settings = getattr(bigtree, "settings", None)
+    if settings:
+        interval = settings.get("PLOGON.refresh_seconds", 3600, cast=float)
+        try:
+            return float(interval)
+        except Exception:
+            return 3600.0
+    return 3600.0
+
+
+def ensure_plogon_file(force: bool = False) -> Optional[str]:
+    global _LAST_FETCH
     url = _get_plogon_url()
     if not url:
-        return
+        return None
+    refresh_interval = _get_refresh_interval()
+    target_path = get_with_leaf_path()
+    if not force and os.path.exists(target_path):
+        modified = os.path.getmtime(target_path)
+        if (time.time() - modified) < refresh_interval:
+            return target_path
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
     except Exception as exc:
         logger.warning("[plogon] download failed (%s): %s", url, exc)
-        return
-    json_path = get_plogon_json_path()
-    leaf_path = get_with_leaf_path()
+        return target_path if os.path.exists(target_path) else None
     try:
-        with open(json_path, "w", encoding="utf-8") as fh:
+        tmp_path = f"{target_path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
             fh.write(resp.text)
-        os.replace(json_path, leaf_path)
-        logger.info("[plogon] refreshed %s", leaf_path)
+        os.replace(tmp_path, target_path)
+        _LAST_FETCH = time.time()
+        logger.info("[plogon] refreshed %s", target_path)
     except Exception as exc:
-        logger.warning("[plogon] failed to write %s: %s", leaf_path, exc)
+        logger.warning("[plogon] failed to write %s: %s", target_path, exc)
+    return target_path
+
+
+def start_plogon_refresh_loop() -> None:
+    global _REFRESH_THREAD_STARTED
+    if _REFRESH_THREAD_STARTED:
+        return
+
+    def _loop():
+        while True:
+            ensure_plogon_file(force=True)
+            time.sleep(_get_refresh_interval())
+
+    thread = threading.Thread(target=_loop, daemon=True, name="plogon-refresh")
+    thread.start()
+    _REFRESH_THREAD_STARTED = True

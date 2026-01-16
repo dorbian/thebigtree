@@ -126,7 +126,7 @@
   </header>
   <section class="panel">
     <h2>Sign in with XivAuth</h2>
-    <p class="muted">You only need to provide your token once per session; we store the token client-side and refresh when needed.</p>
+      <p class="muted">You only need to provide your token once per session; we store the token client-side and refresh when needed.</p>
     <label>
       XivAuth token
       <input id="xivToken" type="text" autocomplete="off" placeholder="Enter your XivAuth token">
@@ -148,7 +148,21 @@
     <h2>Your active games</h2>
     <div id="gamesContainer" class="muted">Please login to see your games.</div>
   </section>
-  <script>
+  <section class="panel">
+    <h2>XivAuth setup</h2>
+    <p class="muted">Configure the following settings so that the wallet can validate your Final Fantasy XIV identity:</p>
+    <ul>
+      <li>Set <code>XIVAUTH.verify_url</code> (or <code>BIGTREE__XIVAUTH__VERIFY_URL</code>) to the endpoint that accepts <code>token</code>, <code>username</code>, and <code>world</code> and returns JSON with <code>xiv_username</code>.</li>
+      <li>Provide <code>XIVAUTH.api_key</code> for that service (e.g., via <code>BIGTREE__XIVAUTH__API_KEY</code>). The wallet adds the bearer token automatically.</li>
+      <li>Ensure the verify endpoint is reachable from the BigTree backend and that it tolerates repeated requests, since the wallet refreshes the session token periodically.</li>
+      <li>The service may also return <code>xiv_id</code> and optional metadata; the wallet stores it for reference.</li>
+      <li>For local/testing runs, define <code>XIVAUTH.default_username</code> to avoid hitting a real service.</li>
+    </ul>
+    <p class="muted">
+      Internally you will need to keep an XivAuth credential store and issue tokens to players during login; the BigTree server simply forwards the supplied token, so the trust boundary stays within your XivAuth auth provider.
+    </p>
+  </section>
+    <script>
     const TOKEN_KEY = "bigtree_user_token";
     const loginBtn = document.getElementById("loginBtn");
     const logoutBtn = document.getElementById("logoutBtn");
@@ -308,5 +322,5 @@
 
     fetchGames();
   </script>
-</body>
+  </body>
 </html>
