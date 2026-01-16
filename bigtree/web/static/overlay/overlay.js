@@ -119,6 +119,9 @@ const $ = (id) => document.getElementById(id);
         if (!candidate) return;
         overlayLog("applyTokenFromUrl", candidate);
         storage.setItem("bt_api_key", candidate);
+        if (window.sessionStorage){
+          window.sessionStorage.setItem("bt_api_key", candidate);
+        }
         if (apiKeyEl){
           apiKeyEl.value = candidate;
         }
@@ -1454,7 +1457,9 @@ const $ = (id) => document.getElementById(id);
       function loadSettings(){
         overlayLog("loadSettings");
         if (apiKeyEl){
-          apiKeyEl.value = storage.getItem("bt_api_key") || "";
+          const saved = storage.getItem("bt_api_key") || "";
+          const session = window.sessionStorage ? (window.sessionStorage.getItem("bt_api_key") || "") : "";
+          apiKeyEl.value = saved || session;
         }
         overlayToggle.checked = storage.getItem("bt_overlay") === "1";
         if (overlayToggle.checked) document.body.classList.add("overlay");
@@ -1468,6 +1473,9 @@ const $ = (id) => document.getElementById(id);
           const token = params.get("temp_token");
           if (!token) return;
           storage.setItem("bt_api_key", token);
+          if (window.sessionStorage){
+            window.sessionStorage.setItem("bt_api_key", token);
+          }
           if (apiKeyEl){
             apiKeyEl.value = token;
           }
@@ -1481,6 +1489,9 @@ const $ = (id) => document.getElementById(id);
       function saveSettings(){
         if (apiKeyEl){
           storage.setItem("bt_api_key", apiKeyEl.value.trim());
+          if (window.sessionStorage){
+            window.sessionStorage.setItem("bt_api_key", apiKeyEl.value.trim());
+          }
         }
         storage.setItem("bt_overlay", overlayToggle.checked ? "1" : "0");
       }
