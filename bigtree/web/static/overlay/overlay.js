@@ -2606,15 +2606,18 @@
         renderAuthTempRoles();
         setAuthTempStatus("Ready.", "");
       });
-      $("menuSystemConfig").addEventListener("click", () => {
-        const modal = $("systemConfigModal");
-        if (!modal){
-          setSystemConfigStatus("System configuration UI not available.", "err");
-          return;
-        }
-        modal.classList.add("show");
-        loadSystemConfig();
-      });
+      const menuSystemConfigBtn = $("menuSystemConfig");
+      if (menuSystemConfigBtn){
+        menuSystemConfigBtn.addEventListener("click", () => {
+          const modal = $("systemConfigModal");
+          if (!modal){
+            setSystemConfigStatus("System configuration UI not available.", "err");
+            return;
+          }
+          modal.classList.add("show");
+          loadSystemConfig();
+        });
+      }
       const systemConfigClose = $("systemConfigClose");
       if (systemConfigClose){
         systemConfigClose.addEventListener("click", () => {
