@@ -2445,7 +2445,6 @@ const $ = (id) => document.getElementById(id);
           setGalleryImportStatus(err.message, "err");
         }
       });
-      });
       on("galleryChannelRefresh", "click", () => loadGalleryChannels());
       on("galleryChannelSave", "click", async () => {
         const channelId = $("galleryUploadChannel").value || "";
