@@ -11,6 +11,15 @@
           console.debug("[overlay]", ...args);
         }
       };
+      function on(id, event, handler){
+        const el = $(id);
+        if (!el){
+          overlayLog("missing listener target", id, event);
+          return false;
+        }
+        el.addEventListener(event, handler);
+        return true;
+      }
       let currentCard = null;
       let currentGame = null;
       let taSelectedCardId = "";
@@ -5413,16 +5422,16 @@
         }
       });
 
-      $("mediaLibraryOpen").addEventListener("click", () => {
+      on("mediaLibraryOpen", "click", () => {
         librarySelectHandler = null;
         showLibraryModal(true);
         loadLibrary("media");
         loadTarotArtists();
       });
 
-      $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
-      $("mediaTabUploadBtn").addEventListener("click", () => setMediaTab("upload"));
-      $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
+      on("mediaLibraryRefresh", "click", () => loadMediaLibrary());
+      on("mediaTabUploadBtn", "click", () => setMediaTab("upload"));
+      on("mediaTabEditBtn", "click", () => setMediaTab("edit"));
       const mediaToolbarSearch = $("mediaToolbarSearch");
       if (mediaToolbarSearch){
         mediaToolbarSearch.addEventListener("input", () => applyMediaFilters());
@@ -5455,7 +5464,7 @@
           applyMediaFilters();
         });
       }
-      $("mediaBulkDelete").addEventListener("click", async () => {
+      on("mediaBulkDelete", "click", async () => {
         if (!hasScope("admin:web")){
           setMediaLibraryStatus("Delete requires admin access.", "err");
           showToast("Delete requires admin access.", "err");
@@ -5481,7 +5490,7 @@
           showToast(err.message, "err");
         }
       });
-      $("mediaBulkHide").addEventListener("click", async () => {
+      on("mediaBulkHide", "click", async () => {
         const items = getSelectedMediaItems();
         if (!items.length) return;
         try{
@@ -5496,7 +5505,7 @@
           showToast(err.message, "err");
         }
       });
-      $("mediaBulkShow").addEventListener("click", async () => {
+      on("mediaBulkShow", "click", async () => {
         const items = getSelectedMediaItems();
         if (!items.length) return;
         try{
@@ -5511,7 +5520,7 @@
           showToast(err.message, "err");
         }
       });
-      $("mediaBulkSetArtist").addEventListener("click", async () => {
+      on("mediaBulkSetArtist", "click", async () => {
         const artistId = $("mediaBulkArtist").value.trim();
         const artistName = $("mediaBulkArtist").selectedOptions.length
           ? $("mediaBulkArtist").selectedOptions[0].textContent.trim()
@@ -5529,7 +5538,7 @@
           setMediaLibraryStatus(err.message, "err");
         }
       });
-      $("mediaBulkSetOrigin").addEventListener("click", async () => {
+      on("mediaBulkSetOrigin", "click", async () => {
         const originType = $("mediaBulkOriginType").value.trim();
         if (!originType){
           showToast("Pick an origin type.", "err");
@@ -5544,7 +5553,7 @@
           setMediaLibraryStatus(err.message, "err");
         }
       });
-      $("mediaBulkApplyLabel").addEventListener("click", async () => {
+      on("mediaBulkApplyLabel", "click", async () => {
         const label = $("mediaBulkLabel").value.trim();
         if (!label){
           showToast("Enter a label.", "err");
@@ -5559,7 +5568,7 @@
           setMediaLibraryStatus(err.message, "err");
         }
       });
-      $("mediaBulkClearLabel").addEventListener("click", async () => {
+      on("mediaBulkClearLabel", "click", async () => {
         try{
           setMediaLibraryStatus("Clearing labels...", "");
           await bulkUpdateMedia({origin_label: ""});
@@ -5570,13 +5579,13 @@
           setMediaLibraryStatus(err.message, "err");
         }
       });
-      $("mediaUploadFile").addEventListener("change", (ev) => {
+      on("mediaUploadFile", "change", (ev) => {
         const file = ev.target.files[0] || null;
         mediaUploadFile = file;
         updateMediaUploadDropDisplay(file);
         updateMediaUploadState();
       });
-      $("mediaUploadTitleInput").addEventListener("input", () => updateMediaUploadState());
+      on("mediaUploadTitleInput", "input", () => updateMediaUploadState());
 
       const mediaDrop = $("mediaUploadDrop");
       if (mediaDrop){
@@ -5604,7 +5613,7 @@
         });
       }
 
-      $("mediaUploadUpload").addEventListener("click", async () => {
+      on("mediaUploadUpload", "click", async () => {
         const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
         if (!file){
           setMediaUploadStatus("Select an image to upload.", "err");
@@ -5648,11 +5657,11 @@
         }
       });
 
-      $("mediaEditClear").addEventListener("click", () => {
+      on("mediaEditClear", "click", () => {
         clearMediaSelection();
       });
 
-      $("mediaEditSave").addEventListener("click", async () => {
+      on("mediaEditSave", "click", async () => {
         if (!currentMediaEdit){
           setMediaEditStatus("Select an image first.", "err");
           return;
@@ -5701,7 +5710,7 @@
         }
       });
 
-      $("mediaEditCopy").addEventListener("click", async () => {
+      on("mediaEditCopy", "click", async () => {
         if (!currentMediaEdit) return;
         try{
           await navigator.clipboard.writeText(currentMediaEdit.url || "");
@@ -5711,13 +5720,13 @@
         }
       });
 
-      $("mediaEditOpen").addEventListener("click", () => {
+      on("mediaEditOpen", "click", () => {
         if (!currentMediaEdit) return;
         const url = currentMediaEdit.url || "";
         if (url) window.open(url, "_blank");
       });
 
-      $("mediaEditDelete").addEventListener("click", async () => {
+      on("mediaEditDelete", "click", async () => {
         if (!currentMediaEdit || !currentMediaEdit.delete_url) return;
         if (!hasScope("admin:web")){
           setMediaEditStatus("Delete requires admin access.", "err");
@@ -5738,7 +5747,7 @@
         }
       });
 
-      $("mediaEditHide").addEventListener("click", async () => {
+      on("mediaEditHide", "click", async () => {
         if (!currentMediaEdit) return;
         try{
           await setMediaHidden(currentMediaEdit, !currentMediaEdit.hidden);
@@ -5749,13 +5758,13 @@
         }
       });
 
-      $("uploadLibraryFile").addEventListener("change", (ev) => {
+      on("uploadLibraryFile", "change", (ev) => {
         const file = ev.target.files[0] || null;
         libraryUploadFile = file;
         updateUploadDropDisplay(file);
         updateUploadState();
       });
-      $("uploadLibraryTitleInput").addEventListener("input", () => updateUploadState());
+      on("uploadLibraryTitleInput", "input", () => updateUploadState());
 
       const uploadDrop = $("uploadLibraryDrop");
       if (uploadDrop){
@@ -5783,7 +5792,7 @@
         });
       }
 
-      $("uploadLibraryUpload").addEventListener("click", async () => {
+      on("uploadLibraryUpload", "click", async () => {
         const file = libraryUploadFile || $("uploadLibraryFile").files[0];
         if (!file){
           setLibraryStatus("Select an image to upload.", "err");
@@ -5822,14 +5831,14 @@
         }
       });
 
-      $("taCardSuit").addEventListener("input", () => {
+      on("taCardSuit", "input", () => {
         const suitValue = $("taCardSuit").value.trim();
         taRenderSuitInfo(suitValue);
         taRenderThemeWeights({}, suitValue);
         taApplySuitThemeDefaults(suitValue);
         taSetDirty(true);
       });
-      $("taCardNumber").addEventListener("input", (ev) => {
+      on("taCardNumber", "input", (ev) => {
         taRenderNumberInfo(ev.target.value);
         taRenderPreviews({
           name: $("taCardName").value.trim(),
@@ -5852,7 +5861,7 @@
           }
         });
       });
-      $("taDeckList").addEventListener("click", (ev) => {
+      on("taDeckList", "click", (ev) => {
         const target = ev.target.closest(".list-card");
         if (!target || !target.dataset.cardId || !window.taDeckData) return;
         const card = (window.taDeckData.cards || []).find(c => c.card_id === target.dataset.cardId);
@@ -5888,11 +5897,11 @@
         }
       }
 
-      $("taDeck").addEventListener("change", async () => {
+      on("taDeck", "change", async () => {
         await loadTarotDeck();
       });
 
-      $("taAddDeck").addEventListener("click", () => {
+      on("taAddDeck", "click", () => {
         $("deckCreateId").value = "";
         $("deckCreateName").value = "";
         $("deckCreateTheme").value = "classic";
@@ -5907,7 +5916,7 @@
         $("deckCreateModal").classList.add("show");
       });
 
-      $("taEditDeck").addEventListener("click", async () => {
+      on("taEditDeck", "click", async () => {
         const deck = $("taDeck").value.trim();
         if (!deck){
           setTarotStatus("Pick a deck to edit.", "err");
