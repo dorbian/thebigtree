@@ -25,7 +25,7 @@ import bigtree.inc.core as core
 import bigtree.modules.partake as partake
 import bigtree.modules.contest as contesta
 import bigtree.modules.event as event
-from bigtree.inc.database import ensure_database
+from bigtree.inc.database import ensure_database, get_database
 from bigtree.inc.plogon import ensure_plogon_file, start_plogon_refresh_loop
 
 # predefine boolean
@@ -78,6 +78,7 @@ def initialize():
         import bigtree as _bt
         _bt.settings = settings
         ensure_database()
+        db = get_database()
         ensure_plogon_file()
         start_plogon_refresh_loop()
         # Bot basics
@@ -97,10 +98,49 @@ def initialize():
 
 
         # OpenAI (modules can require these when they actually need them)
-        openai_api_key        = settings.get("openai.openai_api_key", "", str) or os.getenv("OPENAI_API_KEY") or "none"
-        openai_model          = settings.get("openai.openai_model", "gpt-4o-mini")
-        openai_temperature    = settings.get("openai.openai_temperature", 0.7, float)
-        openai_max_output     = settings.get("openai.openai_max_output_tokens", 400, int)
+        openai_cfg = db.get_system_config("openai") or {}
+
+        def _cfg_lookup(keys):
+            for key in keys:
+                if key in openai_cfg:
+                    return openai_cfg[key]
+            return None
+
+        env_openai = os.getenv("OPENAI_API_KEY")
+        fallback_key = settings.get("openai.openai_api_key", "", str) or env_openai or "none"
+        api_key_val = _cfg_lookup(["api_key"])
+        openai_api_key = str(api_key_val) if api_key_val is not None else fallback_key
+
+        def _pref(keys, fallback):
+            val = _cfg_lookup(keys)
+            return fallback if val is None else val
+
+        openai_model = str(_pref(["openai_model", "model"], settings.get("openai.openai_model", "gpt-4o-mini")))
+
+        def _as_float(value, default):
+            try:
+                if value is None:
+                    return default
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value, default):
+            try:
+                if value is None:
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        openai_temperature = _as_float(
+            _pref(["openai_temperature", "temperature"], settings.get("openai.openai_temperature", 0.7, float)),
+            settings.get("openai.openai_temperature", 0.7, float),
+        )
+        openai_max_output = _as_int(
+            _pref(["openai_max_output_tokens", "max_tokens"], settings.get("openai.openai_max_output_tokens", 400, int)),
+            settings.get("openai.openai_max_output_tokens", 400, int),
+        )
 
         # New web (no schema required)
         web_host   = settings.get("WEB.listen_host", "0.0.0.0")

@@ -42,12 +42,14 @@ class Database:
         self._initialized = False
         self._json_imported = False
         self._decks_synced = False
+        self._configs_seeded = False
 
     def initialize(self):
         with self._lock:
             if self._initialized:
                 return
             self._ensure_tables()
+            self._import_ini_configs()
             self._sync_tarot_decks()
             self._migrate_json_backups()
             self._initialized = True
@@ -200,6 +202,14 @@ class Database:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS system_configs (
+                name TEXT PRIMARY KEY,
+                data JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
         ]
         for stmt in statements:
             self._execute(stmt)
@@ -208,7 +218,68 @@ class Database:
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
 
-    # ---------------- public helpers ----------------
+    def _read_ini_section(self, section: str) -> Dict[str, Any]:
+        if not section:
+            return {}
+        settings = getattr(bigtree, "settings", None)
+        if settings:
+            try:
+                sec = settings.section(section)
+                if isinstance(sec, dict):
+                    return dict(sec)
+            except Exception:
+                pass
+        cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+        sec = cfg.get(section) or {}
+        if isinstance(sec, dict):
+            return dict(sec)
+        return {}
+
+    def _import_ini_configs(self) -> None:
+        if self._configs_seeded:
+            return
+        self._configs_seeded = True
+        rows = []
+        try:
+            rows = self._execute("SELECT name FROM system_configs", fetch=True) or []
+        except Exception:
+            rows = []
+        existing = {row.get("name") for row in rows if row and row.get("name")}
+        for key, section in (("xivauth", "XIVAUTH"), ("openai", "OPENAI")):
+            if key in existing:
+                continue
+            data = self._read_ini_section(section)
+            if not data:
+                continue
+            self.update_system_config(key, data)
+
+# ---------------- public helpers ----------------
+    def get_system_config(self, name: str) -> Dict[str, Any]:
+        if not name:
+            return {}
+        row = self._fetchone("SELECT data FROM system_configs WHERE name = %s", (name.lower(),))
+        data = row.get("data") if row else None
+        return data or {}
+
+    def update_system_config(self, name: str, data: Optional[Dict[str, Any]]) -> bool:
+        if not name:
+            return False
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            return False
+        cleaned = {str(k): v for k, v in data.items()}
+        self._execute(
+            """
+            INSERT INTO system_configs (name, data)
+            VALUES (%s, %s)
+            ON CONFLICT (name) DO UPDATE
+              SET data = EXCLUDED.data,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (name.lower(), Json(cleaned)),
+        )
+        return True
     def upsert_user(self, xiv_username: str, xiv_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         metadata = metadata or {}
         metadata.setdefault("last_seen", datetime.utcnow().isoformat())

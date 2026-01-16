@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
+- Backend: persist XIVAuth/OpenAI config in Postgres, import the INI defaults on first run, and expose a management API plus overlay UI to edit those settings.
 - Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.
 - Frontend: overlay now links to the XivAuth management page and the wallet includes setup guidance; plogonmaster.json refreshes hourly when available.
 - Backend: download `plogon.json` into the data directory (`with.leaf`) and serve it from there.

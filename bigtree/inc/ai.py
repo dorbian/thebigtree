@@ -21,14 +21,64 @@ log = bigtree.loch.logger
 # -----------------------------
 def _get_ai_cfg() -> Dict[str, object]:
     s = getattr(bigtree, "settings", None)
+
+    def _settings_value(key: str, default: Any, cast: Optional[Any] = None) -> Any:
+        if not s:
+            return default
+        try:
+            if cast:
+                return s.get(key, default, cast=cast)
+            return s.get(key, default)
+        except Exception:
+            return default
+
+    try:
+        from bigtree.inc.database import get_database
+
+        db_cfg = get_database().get_system_config("openai") or {}
+        if db_cfg:
+            env_openai = os.getenv("OPENAI_API_KEY")
+            fallback_key = _settings_value("openai.openai_api_key", "", str) or env_openai or "none"
+
+            def _pref(keys, fallback):
+                for key in keys:
+                    if key in db_cfg:
+                        val = db_cfg[key]
+                        return fallback if val is None else val
+                return fallback
+
+            def _to_float(val, default):
+                try:
+                    return float(val)
+                except Exception:
+                    return default
+
+            def _to_int(val, default):
+                try:
+                    return int(val)
+                except Exception:
+                    return default
+
+            model_fallback = _settings_value("openai.openai_model", "gpt-4o-mini")
+            temp_fallback = _settings_value("openai.openai_temperature", 0.7, float)
+            max_fallback = _settings_value("openai.openai_max_output_tokens", 400, int)
+
+            return {
+                "api_key": str(_pref(["api_key"], fallback_key)),
+                "model": str(_pref(["openai_model", "model"], model_fallback)),
+                "temperature": _to_float(_pref(["openai_temperature", "temperature"], temp_fallback), temp_fallback),
+                "max_tokens": _to_int(_pref(["openai_max_output_tokens", "max_tokens"], max_fallback), max_fallback),
+            }
+    except Exception:
+        pass
+
     if s is not None:
         return {
-            "api_key": s.get("openai.openai_api_key", "none"),
-            "model": s.get("openai.openai_model", "gpt-4o-mini"),
-            "temperature": s.get("openai.openai_temperature", 0.7, float),
-            "max_tokens": s.get("openai.openai_max_output_tokens", 400, int),
+            "api_key": _settings_value("openai.openai_api_key", "none", str),
+            "model": _settings_value("openai.openai_model", "gpt-4o-mini"),
+            "temperature": _settings_value("openai.openai_temperature", 0.7, float),
+            "max_tokens": _settings_value("openai.openai_max_output_tokens", 400, int),
         }
-    # legacy globals fallback
     return {
         "api_key": getattr(bigtree, "openai_api_key", "none"),
         "model": getattr(bigtree, "openai_model", "gpt-4o-mini"),

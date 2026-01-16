@@ -12,12 +12,36 @@ from bigtree.inc.logging import logger
 from bigtree.inc.webserver import DynamicWebServer, route
 
 USER_TOKEN_HEADER = "X-Bigtree-User-Token"
+OAUTH_STATES: Dict[str, float] = {}
+OAUTH_STATE_TTL = 300
+
+
+def _load_xivauth_config() -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    settings = getattr(bigtree, "settings", None)
+    if settings:
+        try:
+            section = settings.section("XIVAUTH")
+            if isinstance(section, dict):
+                for key, value in section.items():
+                    if isinstance(key, str):
+                        merged[key.lower()] = value
+        except Exception:
+            pass
+    try:
+        db = get_database()
+        db_config = db.get_system_config("xivauth") or {}
+        for key, value in db_config.items():
+            if isinstance(key, str) and value is not None:
+                merged[key.lower()] = value
+    except Exception:
+        pass
+    return merged
 
 
 async def _call_xivauth(token: str, username: Optional[str], world: Optional[str]) -> Dict[str, Any]:
-    settings = getattr(bigtree, "settings", None)
-    section = settings.section("XIVAUTH") if settings else {}
-    verify_url = (section.get("verify_url") or "").strip()
+    section = _load_xivauth_config()
+    verify_url = str(section.get("verify_url") or "").strip()
     if not verify_url:
         return {"xiv_username": username or section.get("default_username") or "xivplayer"}
     params: Dict[str, Any] = {"token": token}
@@ -29,7 +53,11 @@ async def _call_xivauth(token: str, username: Optional[str], world: Optional[str
     api_key = section.get("api_key")
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    timeout = section.get("timeout_seconds", 6)
+    timeout = section.get("timeout_seconds") or section.get("timeout") or 6
+    try:
+        timeout = float(timeout)
+    except Exception:
+        timeout = 6
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(verify_url, params=params, headers=headers, timeout=timeout) as resp:

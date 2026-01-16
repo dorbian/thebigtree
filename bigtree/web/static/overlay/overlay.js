@@ -948,6 +948,107 @@
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      function setSystemConfigStatus(msg, kind){
+        const el = $("systemConfigStatus");
+        if (!el) return;
+        el.textContent = msg || "Ready.";
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function setInputValue(id, value){
+        const el = $(id);
+        if (!el) return;
+        el.value = value === undefined || value === null ? "" : String(value);
+      }
+
+      function setNumberValue(id, value){
+        const el = $(id);
+        if (!el) return;
+        el.value = value === undefined || value === null ? "" : String(value);
+      }
+
+      function parseBoolean(value){
+        if (typeof value === "boolean") return value;
+        if (value === null || value === undefined) return false;
+        return String(value).toLowerCase() === "true";
+      }
+
+      function normalizeNumber(value){
+        if (value === null || value === undefined) return null;
+        const trimmed = String(value).trim();
+        if (!trimmed) return null;
+        const num = Number(trimmed);
+        return Number.isFinite(num) ? num : null;
+      }
+
+      async function loadSystemConfig(){
+        setSystemConfigStatus("Loading configuration...", "");
+        try{
+          const data = await jsonFetch("/admin/system-config", {method:"GET"});
+          const configs = data.configs || {};
+          const xiv = configs.xivauth || {};
+          const openai = configs.openai || {};
+          setInputValue("systemXivVerifyUrl", xiv.verify_url || xiv.verifyUrl || "");
+          setInputValue("systemXivApiKey", xiv.api_key || "");
+          setInputValue("systemXivDefaultUsername", xiv.default_username || "");
+          setNumberValue("systemXivTimeout", normalizeNumber(xiv.timeout_seconds ?? xiv.timeout));
+          setInputValue("systemOpenAIKey", openai.api_key || "");
+          setInputValue("systemOpenAIModel", openai.openai_model || openai.model || "");
+          setNumberValue("systemOpenAITemperature", normalizeNumber(openai.openai_temperature ?? openai.temperature));
+          setNumberValue("systemOpenAITokens", normalizeNumber(openai.openai_max_output_tokens ?? openai.max_tokens));
+          const priestToggle = $("systemOpenAIEnablePriest");
+          if (priestToggle){
+            priestToggle.checked = parseBoolean(openai.enable_priest_chat);
+          }
+          setSystemConfigStatus("Configuration loaded.", "ok");
+        }catch(err){
+          setSystemConfigStatus(err.message || "Unable to load configuration.", "err");
+        }
+      }
+
+      async function saveSystemConfig(section){
+        setSystemConfigStatus("Saving...", "");
+        const payload = {name: section, data: {}};
+        if (section === "xivauth"){
+          const data = {
+            verify_url: ($("systemXivVerifyUrl")?.value || "").trim(),
+            api_key: ($("systemXivApiKey")?.value || "").trim(),
+            default_username: ($("systemXivDefaultUsername")?.value || "").trim(),
+          };
+          const timeout = normalizeNumber($("systemXivTimeout")?.value);
+          if (timeout !== null){
+            data.timeout_seconds = timeout;
+          }
+          payload.data = data;
+        }else{
+          const data = {
+            api_key: ($("systemOpenAIKey")?.value || "").trim(),
+            openai_model: ($("systemOpenAIModel")?.value || "").trim(),
+            enable_priest_chat: $("systemOpenAIEnablePriest")?.checked || false,
+          };
+          const temperature = normalizeNumber($("systemOpenAITemperature")?.value);
+          if (temperature !== null){
+            data.openai_temperature = temperature;
+          }
+          const tokens = normalizeNumber($("systemOpenAITokens")?.value);
+          if (tokens !== null){
+            data.openai_max_output_tokens = tokens;
+          }
+          payload.data = data;
+        }
+        try{
+          await jsonFetch("/admin/system-config", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload),
+          });
+          setSystemConfigStatus("Saved.", "ok");
+          await loadSystemConfig();
+        }catch(err){
+          setSystemConfigStatus(err.message || "Save failed.", "err");
+        }
+      }
+
       function computeElfminAccess(scopes, source){
         if (source === "api_key"){
           return true;
@@ -1000,6 +1101,8 @@
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canTarot);
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canTarot);
+        const systemConfigBtn = $("menuSystemConfig");
+        if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
 
         const saved = getSavedPanel();
         const blocked =
@@ -2461,6 +2564,40 @@
         renderAuthTempRoles();
         setAuthTempStatus("Ready.", "");
       });
+      $("menuSystemConfig").addEventListener("click", () => {
+        const modal = $("systemConfigModal");
+        if (!modal){
+          setSystemConfigStatus("System configuration UI not available.", "err");
+          return;
+        }
+        modal.classList.add("show");
+        loadSystemConfig();
+      });
+      const systemConfigClose = $("systemConfigClose");
+      if (systemConfigClose){
+        systemConfigClose.addEventListener("click", () => {
+          const modal = $("systemConfigModal");
+          if (modal){
+            modal.classList.remove("show");
+          }
+        });
+      }
+      const systemConfigModalEl = $("systemConfigModal");
+      if (systemConfigModalEl){
+        systemConfigModalEl.addEventListener("click", (event) => {
+          if (event.target === systemConfigModalEl){
+            systemConfigModalEl.classList.remove("show");
+          }
+        });
+      }
+      const systemXivSave = $("systemXivSave");
+      if (systemXivSave){
+        systemXivSave.addEventListener("click", () => saveSystemConfig("xivauth"));
+      }
+      const systemOpenAISave = $("systemOpenAISave");
+      if (systemOpenAISave){
+        systemOpenAISave.addEventListener("click", () => saveSystemConfig("openai"));
+      }
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
       $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
       $("contestCreate").addEventListener("click", () => createContest());

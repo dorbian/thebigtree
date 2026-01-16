@@ -12,6 +12,7 @@ from bigtree.inc.plogon import get_with_leaf_path
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
 from bigtree.inc.settings import load_settings
+from bigtree.inc.database import get_database
 from pathlib import Path
 from bigtree.inc.logging import logger, auth_logger
 import discord
@@ -379,6 +380,33 @@ async def send_message(req: web.Request):
     await chan.send(content)
     bigtree.logger.info(f"Message sent to channel {channel_id} via API")
     return web.json_response({"ok": True})
+
+@route("GET", "/admin/system-config", scopes=["admin:web"])
+async def admin_system_config(_req: web.Request):
+    db = get_database()
+    configs = {
+        "xivauth": db.get_system_config("xivauth"),
+        "openai": db.get_system_config("openai"),
+    }
+    return web.json_response({"ok": True, "configs": configs})
+
+
+@route("POST", "/admin/system-config", scopes=["admin:web"])
+async def admin_system_config_update(req: web.Request):
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    name = (body.get("name") or "").strip().lower()
+    if name not in {"xivauth", "openai"}:
+        return web.json_response({"ok": False, "error": "invalid config name"}, status=400)
+    data = body.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    db = get_database()
+    if not db.update_system_config(name, data):
+        return web.json_response({"ok": False, "error": "save failed"}, status=500)
+    return web.json_response({"ok": True, "config": db.get_system_config(name)})
 
 # ---------- FFXIV client announce ----------
 @route("POST", "/admin/announce", scopes=["admin:announce"])
