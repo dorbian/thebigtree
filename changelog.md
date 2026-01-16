@@ -114,5 +114,4 @@
 - Cardgames parser and lock handling adjustments to reduce contention.
 ## 2026-01-16
 ### Overlay
-- Split overlay logic into shared, bingo, and tarot/cardgames scripts with a boot loader.
 - Guarded DOM event bindings to avoid crashes when nodes are missing.
