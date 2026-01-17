@@ -217,6 +217,16 @@ class Database:
             self._ensure_column(conn, "games", "run_source", "TEXT DEFAULT 'api'")
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
+        logger.debug("[database] schema ready")
+
+    def _count_rows(self, table: str) -> int:
+        if not table:
+            return 0
+        row = self._fetchone(f"SELECT COUNT(*) AS value FROM {table}")
+        try:
+            return int(row.get("value") if row else 0)
+        except Exception:
+            return 0
 
     def _read_ini_section(self, section: str) -> Dict[str, Any]:
         if not section:
@@ -445,7 +455,7 @@ class Database:
 
     # ---------------- migrations ----------------
     def _migrate_json_backups(self):
-        if self._json_imported:
+        if self._json_imported and self._count_rows("games") > 0:
             return
         self._json_imported = True
         try:
@@ -460,35 +470,57 @@ class Database:
             self._migrate_cardgames()
         except Exception as exc:  # pragma: no cover
             logger.warning("[database] cardgames migration failed: %s", exc)
+        logger.info("[database] json migration complete (games=%s)", self._count_rows("games"))
 
     def _sync_tarot_decks(self):
-        if self._decks_synced:
+        if self._decks_synced and self._count_rows("deck_files") > 0:
             return
         self._decks_synced = True
         decks_dir = self._resolve_tarot_dir()
         decks_dir = os.path.join(decks_dir, "decks")
+        imported = 0
         if not os.path.isdir(decks_dir):
-            return
-        for name in sorted(os.listdir(decks_dir)):
-            if not name.lower().endswith(".json"):
-                continue
-            path = os.path.join(decks_dir, name)
+            logger.info("[database] tarot decks directory missing: %s", decks_dir)
+        else:
+            logger.info("[database] syncing tarot decks from %s", decks_dir)
+            for name in sorted(os.listdir(decks_dir)):
+                if not name.lower().endswith(".json"):
+                    continue
+                path = os.path.join(decks_dir, name)
+                try:
+                    with open(path, "r", encoding="utf-8") as fh:
+                        payload = json.load(fh)
+                except Exception as exc:  # pragma: no cover
+                    logger.warning("[database] failed to load deck %s: %s", path, exc)
+                    continue
+                deck_id = str(payload.get("deck_id") or payload.get("id") or os.path.splitext(name)[0]).strip()
+                if not deck_id:
+                    deck_id = os.path.splitext(name)[0]
+                self.upsert_deck(deck_id, payload, module="tarot", metadata={"filename": name})
+                imported += 1
+        if imported == 0:
             try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    payload = json.load(fh)
+                from bigtree.modules import tarot as tarot_mod
+                decks = tarot_mod.list_decks()
+                if decks:
+                    logger.info("[database] syncing tarot decks from tarot module (%s)", len(decks))
+                for deck in decks or []:
+                    deck_id = str(deck.get("deck_id") or deck.get("id") or deck.get("name") or "").strip()
+                    if not deck_id:
+                        continue
+                    self.upsert_deck(deck_id, deck, module="tarot", metadata={"source": "module"})
+                    imported += 1
             except Exception as exc:  # pragma: no cover
-                logger.warning("[database] failed to load deck %s: %s", path, exc)
-                continue
-            deck_id = str(payload.get("deck_id") or payload.get("id") or os.path.splitext(name)[0]).strip()
-            if not deck_id:
-                deck_id = os.path.splitext(name)[0]
-            self.upsert_deck(deck_id, payload, module="tarot", metadata={"filename": name})
+                logger.warning("[database] tarot module deck sync failed: %s", exc)
+        logger.info("[database] tarot deck sync complete (imported=%s)", imported)
 
     def _migrate_bingo_games(self):
         bingo_dir = self._resolve_bingo_dir()
         db_dir = os.path.join(bingo_dir, "db")
         if not os.path.isdir(db_dir):
+            logger.info("[database] bingo db dir missing: %s", db_dir)
             return
+        logger.info("[database] importing bingo games from %s", db_dir)
         for name in sorted(os.listdir(db_dir)):
             if not name.endswith(".json"):
                 continue
@@ -541,7 +573,9 @@ class Database:
         tarot_dir = self._resolve_tarot_dir()
         path = os.path.join(tarot_dir, "tarot_sessions.json")
         if not os.path.exists(path):
+            logger.info("[database] tarot sessions file missing: %s", path)
             return
+        logger.info("[database] importing tarot sessions from %s", path)
         db = TinyDB(path)
         for entry in db.all():
             if entry.get("_type") != "session":
@@ -579,7 +613,9 @@ class Database:
         card_dir = self._resolve_cardgames_dir()
         db_path = os.path.join(card_dir, "cardgames.db")
         if not os.path.exists(db_path):
+            logger.info("[database] cardgames db missing: %s", db_path)
             return
+        logger.info("[database] importing cardgames sessions from %s", db_path)
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         try:

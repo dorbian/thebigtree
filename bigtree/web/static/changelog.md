@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Database: retry JSON/deck imports when empty and log migration paths.
 - Dashboard: grouped admin actions into user/media/config/access sections and restored gallery/media controls.
 - Gallery: wallet icon now starts XivAuth login and returns to user-area.
 - User area: added XivAuth OAuth login button and callback flow for user-area sessions.
