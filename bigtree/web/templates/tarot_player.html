@@ -596,12 +596,36 @@
       });
       const data = await res.json();
       if(!res.ok || !data.ok){
+        if(res.status === 409 && data.game && data.game.claimed_username){
+          setAssignClaimed();
+          throw new Error(`Already claimed by ${data.game.claimed_username}.`);
+        }
         throw new Error(data.error || "Assign failed");
       }
-      assignBtn.textContent = "Assigned";
-      assignBtn.disabled = true;
+      setAssignClaimed();
     }catch(err){
-      assignBtn.textContent = "Assign failed";
+      // Keep the button state if it was already claimed.
+      if (!assignBtn.disabled){
+        assignBtn.textContent = "Assign failed";
+      }
+    }
+  }
+
+  function setAssignClaimed(){
+    if(!assignBtn) return;
+    assignBtn.textContent = "Claimed";
+    assignBtn.disabled = true;
+  }
+
+  async function refreshAssignStatus(){
+    try{
+      const res = await fetch(`/user-area/join-status?join_code=${encodeURIComponent(joinCode)}`);
+      const data = await res.json();
+      if(res.ok && data.ok && data.game && data.game.claimed_username){
+        setAssignClaimed();
+      }
+    }catch(err){
+      // non-fatal
     }
   }
 
@@ -1040,5 +1064,7 @@
   }
 
   assignBtn?.addEventListener("click", assignSession);
+  // If the session is already assigned, reflect that immediately.
+  refreshAssignStatus();
   loadUser();
 </script>

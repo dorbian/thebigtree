@@ -162,6 +162,30 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS venues (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                currency_name TEXT,
+                minimal_spend BIGINT,
+                background_image TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS venue_members (
+                id SERIAL PRIMARY KEY,
+                venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role TEXT NOT NULL DEFAULT 'member',
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id)
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS game_players (
                 id SERIAL PRIMARY KEY,
                 game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
@@ -217,6 +241,7 @@ class Database:
             self._ensure_column(conn, "games", "run_source", "TEXT DEFAULT 'api'")
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
+            self._ensure_column(conn, "games", "venue_id", "INTEGER")
         logger.debug("[database] schema ready")
 
     def _count_rows(self, table: str) -> int:
@@ -352,10 +377,12 @@ class Database:
 
     def list_user_games(self, user_id: int, only_active: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
         sql = """
-        SELECT g.*, claimant.xiv_username AS claimed_username
+        SELECT g.*, claimant.xiv_username AS claimed_username,
+               v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
         FROM games g
         JOIN user_games ug ON ug.game_id = g.game_id
         LEFT JOIN users claimant ON claimant.id = g.claimed_by
+        LEFT JOIN venues v ON v.id = g.venue_id
         WHERE ug.user_id = %s
         """
         params: List[Any] = [user_id]
@@ -381,9 +408,11 @@ class Database:
 
     def list_api_games(self, include_inactive: bool = True, limit: int = 200) -> List[Dict[str, Any]]:
         sql = """
-        SELECT g.*, claimant.xiv_username AS claimed_username
+        SELECT g.*, claimant.xiv_username AS claimed_username,
+               v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
         FROM games g
         LEFT JOIN users claimant ON claimant.id = g.claimed_by
+        LEFT JOIN venues v ON v.id = g.venue_id
         WHERE g.run_source = %s
         """
         params: List[Any] = ["api"]
@@ -395,6 +424,182 @@ class Database:
         games = [self._format_game_row(row) for row in rows] if rows else []
         for row in games:
             self._attach_game_summary(row)
+        return games
+
+    def get_game_by_join_code(self, join_code: str) -> Optional[Dict[str, Any]]:
+        code = (join_code or "").strip()
+        if not code:
+            return None
+        row = self._fetchone(
+            """
+            SELECT g.*, claimant.xiv_username AS claimed_username,
+                   v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
+            FROM games g
+            LEFT JOIN users claimant ON claimant.id = g.claimed_by
+            LEFT JOIN venues v ON v.id = g.venue_id
+            WHERE lower(g.game_id) = lower(%s)
+               OR lower(g.payload->>'join_code') = lower(%s)
+               OR lower(g.payload->>'joinCode') = lower(%s)
+               OR lower(g.payload->>'join') = lower(%s)
+            LIMIT 1
+            """,
+            (code, code, code, code),
+        )
+        if not row:
+            return None
+        game = self._format_game_row(row)
+        self._attach_game_summary(game)
+        return game
+
+    # ---------------- venues ----------------
+    def list_venues(self) -> List[Dict[str, Any]]:
+        rows = self._execute(
+            """
+            SELECT id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            FROM venues
+            ORDER BY name ASC
+            """,
+            fetch=True,
+        )
+        return [dict(r) for r in (rows or [])]
+
+    def upsert_venue(
+        self,
+        name: str,
+        currency_name: Optional[str] = None,
+        minimal_spend: Optional[int] = None,
+        background_image: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if not name:
+            return None
+        metadata = metadata or {}
+        row = self._fetchone(
+            """
+            INSERT INTO venues (name, currency_name, minimal_spend, background_image, metadata)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (name) DO UPDATE
+              SET currency_name = COALESCE(EXCLUDED.currency_name, venues.currency_name),
+                  minimal_spend = COALESCE(EXCLUDED.minimal_spend, venues.minimal_spend),
+                  background_image = COALESCE(EXCLUDED.background_image, venues.background_image),
+                  metadata = venues.metadata || EXCLUDED.metadata,
+                  updated_at = CURRENT_TIMESTAMP
+            RETURNING id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            """,
+            (name.strip(), currency_name, minimal_spend, background_image, Json(metadata)),
+        )
+        return dict(row) if row else None
+
+    def get_venue(self, venue_id: int) -> Optional[Dict[str, Any]]:
+        row = self._fetchone(
+            """
+            SELECT id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            FROM venues
+            WHERE id = %s
+            """,
+            (venue_id,),
+        )
+        return dict(row) if row else None
+
+    def update_venue(self, venue_id: int, *, currency_name: Optional[str] = None, minimal_spend: Optional[int] = None, background_image: Optional[str] = None) -> bool:
+        if not venue_id:
+            return False
+        count = self._execute(
+            """
+            UPDATE venues
+            SET currency_name = COALESCE(%s, currency_name),
+                minimal_spend = COALESCE(%s, minimal_spend),
+                background_image = COALESCE(%s, background_image),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (currency_name, minimal_spend, background_image, venue_id),
+        )
+        return bool(count)
+
+    def get_user_venue(self, user_id: int) -> Optional[Dict[str, Any]]:
+        if not user_id:
+            return None
+        row = self._fetchone(
+            """
+            SELECT vm.venue_id, vm.role, vm.metadata AS membership_metadata,
+                   v.id AS id, v.name, v.currency_name, v.minimal_spend, v.background_image, v.metadata,
+                   v.created_at, v.updated_at
+            FROM venue_members vm
+            JOIN venues v ON v.id = vm.venue_id
+            WHERE vm.user_id = %s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return dict(row) if row else None
+
+    def set_user_venue(self, user_id: int, venue_id: int, role: str = "member") -> bool:
+        if not user_id or not venue_id:
+            return False
+        role = (role or "member").strip() or "member"
+        self._execute(
+            """
+            INSERT INTO venue_members (venue_id, user_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+              SET venue_id = EXCLUDED.venue_id,
+                  role = COALESCE(venue_members.role, EXCLUDED.role),
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (venue_id, user_id, role),
+        )
+        return True
+
+    def set_user_venue_role(self, user_id: int, venue_id: int, role: str) -> bool:
+        if not user_id or not venue_id:
+            return False
+        role = (role or "member").strip() or "member"
+        self._execute(
+            """
+            INSERT INTO venue_members (venue_id, user_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+              SET venue_id = EXCLUDED.venue_id,
+                  role = EXCLUDED.role,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (venue_id, user_id, role),
+        )
+        return True
+
+    def find_user_id_by_xiv_username(self, xiv_username: str) -> Optional[int]:
+        name = (xiv_username or "").strip()
+        if not name:
+            return None
+        row = self._fetchone("SELECT id FROM users WHERE lower(xiv_username) = lower(%s) LIMIT 1", (name,))
+        if not row:
+            return None
+        try:
+            return int(row.get("id"))
+        except Exception:
+            return None
+
+    def list_venue_games(self, venue_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        if not venue_id:
+            return []
+        rows = self._execute(
+            """
+            SELECT g.*, claimant.xiv_username AS claimed_username,
+                   v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
+            FROM games g
+            LEFT JOIN users claimant ON claimant.id = g.claimed_by
+            LEFT JOIN venues v ON v.id = g.venue_id
+            WHERE g.venue_id = %s
+            ORDER BY g.created_at DESC
+            LIMIT %s
+            """,
+            (venue_id, limit),
+            fetch=True,
+        )
+        games = [self._format_game_row(r) for r in (rows or [])]
+        for g in games:
+            self._attach_game_summary(g)
         return games
 
     def claim_game_for_user(self, game_id: str, user_id: int) -> bool:
@@ -431,19 +636,34 @@ class Database:
             return False, None, "join code not found"
         game = self._format_game_row(row)
         self._attach_game_summary(game)
+        # If the claimant belongs to a venue, tag the game with that venue
+        venue_id = None
+        try:
+            venue_row = self.get_user_venue(int(user_id))
+            venue_id = int(venue_row.get("venue_id")) if venue_row and venue_row.get("venue_id") else None
+        except Exception:
+            venue_id = None
+
         claimed_by = row.get("claimed_by")
         if claimed_by and int(claimed_by) != int(user_id):
             return False, game, "already claimed"
         if claimed_by and int(claimed_by) == int(user_id):
             self._link_user_game(user_id, game.get("game_id"))
+            if venue_id:
+                self._execute(
+                    "UPDATE games SET venue_id = COALESCE(venue_id, %s) WHERE game_id = %s",
+                    (venue_id, row.get("game_id")),
+                )
             return True, game, "already claimed"
         updated = self._execute(
             """
             UPDATE games
-            SET claimed_by = %s, claimed_at = CURRENT_TIMESTAMP
+            SET claimed_by = %s,
+                claimed_at = CURRENT_TIMESTAMP,
+                venue_id = COALESCE(venue_id, %s)
             WHERE game_id = %s
             """,
-            (user_id, row.get("game_id")),
+            (user_id, venue_id, row.get("game_id")),
         )
         if updated:
             self._link_user_game(user_id, row.get("game_id"))
@@ -513,6 +733,10 @@ class Database:
             return {}
         data = dict(row)
         data["metadata"] = data.get("metadata") or {}
+        # venue fields (joined when available)
+        data["venue_id"] = data.get("venue_id")
+        data["venue_name"] = data.get("venue_name")
+        data["venue_currency_name"] = data.get("venue_currency_name")
         data["created_at"] = self._format_dt(data.get("created_at"))
         data["ended_at"] = self._format_dt(data.get("ended_at"))
         data["claimed_at"] = self._format_dt(data.get("claimed_at"))

@@ -145,11 +145,35 @@
       });
       const data = await res.json();
       if(!res.ok || !data.ok){
+        // 409 means the session is already claimed (either by you or someone else)
+        if(res.status === 409 && data.game && data.game.claimed_username){
+          setAssignClaimed();
+          throw new Error(`Already claimed by ${data.game.claimed_username}.`);
+        }
         throw new Error(data.error || "Assign failed");
       }
+      setAssignClaimed();
       statusLine.textContent = "Assigned to your wallet.";
     }catch(err){
       statusLine.textContent = err.message || "Assign failed.";
+    }
+  }
+
+  function setAssignClaimed(){
+    if(!assignBtn) return;
+    assignBtn.textContent = "Claimed";
+    assignBtn.disabled = true;
+  }
+
+  async function refreshAssignStatus(){
+    try{
+      const res = await fetch(`/user-area/join-status?join_code=${encodeURIComponent(joinCode)}`);
+      const data = await res.json();
+      if(res.ok && data.ok && data.game && data.game.claimed_username){
+        setAssignClaimed();
+      }
+    }catch(err){
+      // non-fatal
     }
   }
 
@@ -326,6 +350,9 @@
   doubleBtn.addEventListener("click", () => postAction("double"));
   splitBtn.addEventListener("click", () => postAction("split"));
   assignBtn?.addEventListener("click", assignSession);
+
+  // If the session is already assigned, reflect that immediately.
+  refreshAssignStatus();
   loadUser();
   if (bgCredit){
     bgCredit.addEventListener("click", openBackgroundModal);

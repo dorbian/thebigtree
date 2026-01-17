@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Venue management</title>
+  <style>
+    :root{
+      --bg:#060a07;
+      --panel:rgba(12,18,14,.9);
+      --border:rgba(214,178,110,.22);
+      --muted:#9fb4a6;
+    }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial;
+      background: radial-gradient(circle at 25% 15%, rgba(107,212,162,.14), transparent 55%),
+                  radial-gradient(circle at 85% 25%, rgba(214,178,110,.12), transparent 50%),
+                  var(--bg);
+      color:#e7f2ea;
+      min-height:100vh;
+    }
+    header{
+      padding:28px 28px 0;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+    }
+    h1{margin:0;font-size:22px;letter-spacing:.06em;}
+    .muted{color:var(--muted);}
+    .tag{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(107,212,162,.35);border-radius:999px;padding:8px 12px;background:rgba(255,255,255,.04);}
+    .actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+    .icon-btn{
+      width:38px;height:38px;border-radius:10px;padding:0;border:1px solid rgba(214,178,110,.35);
+      background:rgba(255,255,255,.04);color:#e7f2ea;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+    }
+    .icon-btn svg{width:18px;height:18px;fill:currentColor;}
+    .link-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit}
+    main{padding:18px 28px 28px;}
+    .panel{max-width:980px;margin:0 auto 18px;padding:22px;border:1px solid var(--border);border-radius:18px;background:var(--panel);box-shadow:0 10px 40px rgba(0,0,0,.4);}
+    .panel h2{margin:0 0 12px;font-size:16px;letter-spacing:.05em;}
+    label{display:flex;flex-direction:column;gap:6px;font-size:13px;margin:0;}
+    input, select{border-radius:10px;padding:10px 12px;border:1px solid rgba(214,178,110,.35);background:rgba(255,255,255,.04);color:#fff;}
+    button.primary{border:none;border-radius:10px;padding:10px 14px;background:#6bd4a2;color:#07100c;font-weight:700;cursor:pointer;}
+    button.secondary{border:1px solid rgba(214,178,110,.35);border-radius:10px;padding:10px 14px;background:rgba(255,255,255,.04);color:#e7f2ea;cursor:pointer;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+    .row > *{flex:1;min-width:240px;}
+    .status{margin-top:10px;font-size:13px;color:var(--muted)}
+    .games{display:grid;gap:10px;margin-top:12px;}
+    .game{border:1px solid rgba(214,178,110,.18);border-radius:14px;padding:12px;background:rgba(255,255,255,.03);}
+    .game-top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+    .pill{font-size:12px;border:1px solid rgba(107,212,162,.35);border-radius:999px;padding:3px 9px;background:rgba(107,212,162,.1)}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Venue management</h1>
+      <p class="muted" style="margin:8px 0 0;max-width:64ch;">Assign yourself to a venue, and (if you are a venue admin) configure your venue and view the games played under it.</p>
+      <div class="muted" id="pageMessage" style="margin-top:10px;"></div>
+    </div>
+    <div class="actions">
+      <div class="tag" id="userTag" style="display:none;"><span id="userName">Player</span></div>
+      <a class="link-btn" id="loginLink" href="/user-area/oauth/start" title="Login with XivAuth" aria-label="Login with XivAuth">
+        <button class="secondary" type="button">Login</button>
+      </a>
+      <button class="icon-btn" id="logoutBtn" type="button" style="display:none;" title="Logout" aria-label="Logout">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17a1 1 0 0 1 0-2h7.59l-2.3-2.3a1 1 0 1 1 1.42-1.4l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 1 1-1.42-1.4l2.3-2.3H10zM5 4h7a2 2 0 0 1 2 2v3a1 1 0 1 1-2 0V6H5v12h7v-3a1 1 0 1 1 2 0v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Your venue</h2>
+      <div class="row">
+        <label>
+          Venue
+          <select id="venueSelect"></select>
+        </label>
+        <div style="flex:0;min-width:180px;">
+          <button class="primary" id="assignVenueBtn" type="button">Assign me</button>
+        </div>
+      </div>
+      <div class="status" id="venueStatus">Login to assign yourself to a venue.</div>
+    </section>
+
+    <section class="panel" id="venueConfigPanel" style="display:none;">
+      <h2>Venue settings</h2>
+      <p class="muted" style="margin-top:0;">These settings are stored on the venue record (admins only).</p>
+      <div class="row">
+        <label>
+          Currency name
+          <input id="currencyName" placeholder="e.g. Leafs" />
+        </label>
+        <label>
+          Minimal spend
+          <input id="minimalSpend" type="number" min="0" step="1" placeholder="e.g. 50" />
+        </label>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <label>
+          Background image URL
+          <input id="backgroundImage" placeholder="https://..." />
+        </label>
+        <div style="flex:0;min-width:180px;">
+          <button class="primary" id="saveVenueBtn" type="button">Save</button>
+        </div>
+      </div>
+      <div class="status" id="venueConfigStatus">Ready.</div>
+    </section>
+
+    <section class="panel" id="venueGamesPanel" style="display:none;">
+      <h2>Games played under this venue</h2>
+      <p class="muted" style="margin-top:0;">This list is based on the venue tag stored on games when players claim them.</p>
+      <div class="games" id="venueGames"></div>
+      <div class="status" id="venueGamesStatus"></div>
+    </section>
+  </main>
+
+<script>
+  const TOKEN_KEY = "bigtree_user_token";
+  const userTag = document.getElementById("userTag");
+  const userName = document.getElementById("userName");
+  const loginLink = document.getElementById("loginLink");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const pageMessage = document.getElementById("pageMessage");
+
+  const venueSelect = document.getElementById("venueSelect");
+  const assignVenueBtn = document.getElementById("assignVenueBtn");
+  const venueStatus = document.getElementById("venueStatus");
+
+  const venueConfigPanel = document.getElementById("venueConfigPanel");
+  const currencyName = document.getElementById("currencyName");
+  const minimalSpend = document.getElementById("minimalSpend");
+  const backgroundImage = document.getElementById("backgroundImage");
+  const saveVenueBtn = document.getElementById("saveVenueBtn");
+  const venueConfigStatus = document.getElementById("venueConfigStatus");
+
+  const venueGamesPanel = document.getElementById("venueGamesPanel");
+  const venueGames = document.getElementById("venueGames");
+  const venueGamesStatus = document.getElementById("venueGamesStatus");
+
+  function getToken(){ return window.localStorage.getItem(TOKEN_KEY); }
+  function setToken(v){ v ? window.localStorage.setItem(TOKEN_KEY, v) : window.localStorage.removeItem(TOKEN_KEY); }
+  function authHeaders(){ const t = getToken(); return t ? {Authorization:`Bearer ${t}`} : {}; }
+
+  function applyTokenFromUrl(){
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("user_token");
+    if(!token) return false;
+    setToken(token);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("user_token");
+    window.history.replaceState({}, "", url.toString());
+    return true;
+  }
+
+  function setMessage(el, msg){ if(el) el.textContent = msg || ""; }
+
+  async function loadUser(){
+    const t = getToken();
+    if(!t){
+      userTag.style.display = "none";
+      loginLink.style.display = "inline-flex";
+      logoutBtn.style.display = "none";
+      return null;
+    }
+    try{
+      const res = await fetch("/user-area/me", {headers: authHeaders()});
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "not logged in");
+      userName.textContent = data.user?.xiv_username || "Player";
+      userTag.style.display = "inline-flex";
+      loginLink.style.display = "none";
+      logoutBtn.style.display = "inline-flex";
+      return data.user;
+    }catch(err){
+      setToken("");
+      userTag.style.display = "none";
+      loginLink.style.display = "inline-flex";
+      logoutBtn.style.display = "none";
+      return null;
+    }
+  }
+
+  async function loadVenues(){
+    const res = await fetch("/venues/list");
+    const data = await res.json();
+    const list = (data && data.ok && data.venues) ? data.venues : [];
+    venueSelect.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = list.length ? "Choose a venue..." : "No venues configured yet";
+    venueSelect.appendChild(placeholder);
+    list.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = String(v.id);
+      opt.textContent = v.name;
+      venueSelect.appendChild(opt);
+    });
+    return list;
+  }
+
+  async function loadMyVenue(){
+    const t = getToken();
+    if(!t){
+      venueStatus.textContent = "Login to assign yourself to a venue.";
+      venueConfigPanel.style.display = "none";
+      venueGamesPanel.style.display = "none";
+      return null;
+    }
+    try{
+      const res = await fetch("/venues/me", {headers: authHeaders()});
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || "Failed to load venue");
+      }
+      const m = data.membership;
+      if(!m){
+        venueStatus.textContent = "No venue assigned yet.";
+        venueConfigPanel.style.display = "none";
+        venueGamesPanel.style.display = "none";
+        return null;
+      }
+      if(m.venue_id){
+        venueSelect.value = String(m.venue_id);
+      }
+      venueStatus.textContent = `Assigned to: ${m.name} (${m.role || "member"})`;
+
+      const isAdmin = String(m.role || "").toLowerCase() === "admin";
+      venueConfigPanel.style.display = isAdmin ? "block" : "none";
+      venueGamesPanel.style.display = isAdmin ? "block" : "none";
+
+      if(isAdmin){
+        currencyName.value = m.currency_name || "";
+        minimalSpend.value = (m.minimal_spend ?? "");
+        backgroundImage.value = m.background_image || "";
+        await loadVenueGames();
+      }
+      return m;
+    }catch(err){
+      venueStatus.textContent = err.message || "Failed to load venue.";
+      venueConfigPanel.style.display = "none";
+      venueGamesPanel.style.display = "none";
+      return null;
+    }
+  }
+
+  async function assignVenue(){
+    const t = getToken();
+    if(!t){
+      setMessage(pageMessage, "Login first to assign yourself to a venue.");
+      return;
+    }
+    const vid = parseInt(venueSelect.value || "0", 10);
+    if(!vid){
+      setMessage(venueStatus, "Pick a venue first.");
+      return;
+    }
+    assignVenueBtn.disabled = true;
+    try{
+      const res = await fetch("/venues/assign", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", ...authHeaders()},
+        body: JSON.stringify({venue_id: vid})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "Assign failed");
+      setMessage(venueStatus, `Assigned to: ${data.membership?.name || "venue"} (${data.membership?.role || "member"})`);
+      await loadMyVenue();
+    }catch(err){
+      setMessage(venueStatus, err.message || "Assign failed.");
+    }
+    assignVenueBtn.disabled = false;
+  }
+
+  async function saveVenue(){
+    saveVenueBtn.disabled = true;
+    setMessage(venueConfigStatus, "Saving...");
+    try{
+      const payload = {
+        currency_name: currencyName.value || null,
+        minimal_spend: minimalSpend.value === "" ? null : parseInt(minimalSpend.value, 10),
+        background_image: backgroundImage.value || null
+      };
+      const res = await fetch("/venues/update", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", ...authHeaders()},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "Save failed");
+      setMessage(venueConfigStatus, "Saved.");
+      await loadMyVenue();
+    }catch(err){
+      setMessage(venueConfigStatus, err.message || "Save failed.");
+    }
+    saveVenueBtn.disabled = false;
+  }
+
+  function renderGames(list){
+    venueGames.innerHTML = "";
+    (list || []).slice(0, 200).forEach(g => {
+      const el = document.createElement("div");
+      el.className = "game";
+      const title = g.title || g.game_id;
+      const when = g.created_at || "";
+      const who = g.claimed_username ? `Claimed by ${g.claimed_username}` : "Unclaimed";
+      const module = g.module || "";
+      const join = g.join_code ? `Join: ${g.join_code}` : "";
+      el.innerHTML = `
+        <div class="game-top">
+          <div>
+            <div style="font-weight:700;">${title}</div>
+            <div class="muted" style="margin-top:6px;">${module} · ${who}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${g.active ? `<span class="pill">active</span>` : `<span class="pill" style="opacity:.7;">ended</span>`}
+            ${when ? `<span class="muted" style="font-size:12px;">${when}</span>` : ""}
+          </div>
+        </div>
+        ${join ? `<div class="muted" style="margin-top:10px;">${join}</div>` : ""}
+      `;
+      venueGames.appendChild(el);
+    });
+  }
+
+  async function loadVenueGames(){
+    setMessage(venueGamesStatus, "Loading games...");
+    try{
+      const res = await fetch("/venues/games?limit=200", {headers: authHeaders()});
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "Failed to load games");
+      renderGames(data.games || []);
+      setMessage(venueGamesStatus, data.games && data.games.length ? "" : "No games tagged to this venue yet.");
+    }catch(err){
+      renderGames([]);
+      setMessage(venueGamesStatus, err.message || "Failed to load games.");
+    }
+  }
+
+  logoutBtn.addEventListener("click", () => {
+    setToken("");
+    window.location.assign("/venues");
+  });
+  assignVenueBtn.addEventListener("click", assignVenue);
+  saveVenueBtn.addEventListener("click", saveVenue);
+
+  (async () => {
+    applyTokenFromUrl();
+    await loadVenues();
+    await loadUser();
+    await loadMyVenue();
+  })();
+</script>
+</body>
+</html>

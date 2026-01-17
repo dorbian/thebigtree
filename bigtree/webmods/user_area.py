@@ -522,6 +522,16 @@ async def claim_game_by_join(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "status": status, "game": game})
 
 
+@route("GET", "/user-area/join-status", allow_public=True)
+async def user_join_status(request: web.Request) -> web.Response:
+    join_code = (request.query.get("join_code") or request.query.get("code") or "").strip()
+    if not join_code:
+        return web.json_response({"ok": False, "error": "join_code is required"}, status=400)
+    db = get_database()
+    game = db.get_game_by_join_code(join_code)
+    return web.json_response({"ok": True, "game": game})
+
+
 @route("GET", "/user-area", allow_public=True)
 async def user_area_page(_req: web.Request) -> web.Response:
     settings = getattr(bigtree, "settings", None)

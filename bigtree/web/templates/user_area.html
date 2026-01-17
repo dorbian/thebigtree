@@ -41,6 +41,38 @@
       gap:12px;
       flex-wrap:wrap;
     }
+    .header-claim{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .icon-btn{
+      width:38px;
+      height:38px;
+      border-radius:10px;
+      padding:0;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid rgba(214,178,110,.35);
+      background:rgba(255,255,255,.04);
+      color:#e7f2ea;
+    }
+    .icon-btn.primary{
+      background:#6bd4a2;
+      color:#07100c;
+      border-color:rgba(107,212,162,.6);
+    }
+    .icon-btn svg{
+      width:18px;
+      height:18px;
+      display:block;
+      fill:currentColor;
+    }
+    .header-claim input{
+      width:200px;
+    }
     .panel{
       margin:0 auto 32px;
       padding:24px;
@@ -194,25 +226,25 @@
     <div>
       <h1>Forest Wallet</h1>
       <p class="header-context">Claim your game history and review results tied to your character.</p>
+      <div id="claimMessage" class="muted" style="margin-top:10px;"></div>
     </div>
     <div class="header-actions">
+      <div class="header-claim" id="headerClaim" style="display:none;">
+        <label style="margin:0;">
+          <span class="muted" style="font-size:12px;">Join key</span>
+          <input id="claimJoinCode" type="text" autocomplete="off" placeholder="Enter join key">
+        </label>
+        <button class="icon-btn primary" id="claimJoinBtn" type="button" title="Claim" aria-label="Claim game">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1z"/></svg>
+        </button>
+      </div>
       <span class="tag" id="userName" style="display:none;"></span>
       <a class="primary link-button" id="loginLink" href="/user-area/oauth/start">Login with XivAuth</a>
-      <button class="primary" id="logoutBtn" type="button" style="display:none;">Logout</button>
+      <button class="icon-btn" id="logoutBtn" type="button" style="display:none;" title="Logout" aria-label="Logout">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17a1 1 0 0 1 0-2h7.59l-2.3-2.3a1 1 0 1 1 1.42-1.4l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 1 1-1.42-1.4l2.3-2.3H10zM5 4h7a2 2 0 0 1 2 2v3a1 1 0 1 1-2 0V6H5v12h7v-3a1 1 0 1 1 2 0v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+      </button>
     </div>
   </header>
-  <section class="panel">
-    <h2>Claim a game</h2>
-    <p class="muted">Enter the join key from your game to link it with your character.</p>
-    <div class="actions">
-      <label style="flex:1;min-width:220px;">
-        Join key
-        <input id="claimJoinCode" type="text" autocomplete="off" placeholder="Enter join key">
-      </label>
-      <button class="claim-btn" id="claimJoinBtn" type="button">Claim</button>
-    </div>
-    <div id="claimMessage" class="muted"></div>
-  </section>
   <section class="panel">
     <h2>Your games</h2>
     <div id="gamesContainer" class="muted">Login to view your game history.</div>
@@ -232,6 +264,7 @@
     const logoutBtn = document.getElementById("logoutBtn");
     const userName = document.getElementById("userName");
     const gamesContainer = document.getElementById("gamesContainer");
+    const headerClaim = document.getElementById("headerClaim");
     const claimJoinCode = document.getElementById("claimJoinCode");
     const claimJoinBtn = document.getElementById("claimJoinBtn");
     const claimMessage = document.getElementById("claimMessage");
@@ -282,11 +315,13 @@
         userName.style.display = "inline-flex";
         loginLink.style.display = "none";
         logoutBtn.style.display = "inline-flex";
+        headerClaim.style.display = "flex";
       }else{
         userName.textContent = "";
         userName.style.display = "none";
         loginLink.style.display = "inline-flex";
         logoutBtn.style.display = "none";
+        headerClaim.style.display = "none";
       }
     }
 
