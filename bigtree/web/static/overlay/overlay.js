@@ -1,4 +1,4 @@
-const $ = (id) => document.getElementById(id);
+﻿const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
       const loginStatusEl = $("loginStatus");
       const apiKeyEl = $("apiKeyLogin");
@@ -20,10 +20,22 @@ const $ = (id) => document.getElementById(id);
         el.addEventListener(event, handler);
         return true;
       }
+      let currentCard = null;
+      let currentGame = null;
+      let taSelectedCardId = "";
+      let lastCalledCount = 0;
+      let lastCalloutNumber = null;
+      let activeGameId = "";
+      let currentOwner = "";
+      window.taArtists = [];
       let calendarData = [];
       let authUserScopes = new Set();
       let authUserIsElfmin = false;
       let authTokensCache = [];
+      let dashboardStatsLoaded = false;
+      let dashboardStatsLoading = false;
+      let dashboardLogsKind = "boot";
+      let dashboardLogsLoading = false;
       let calendarSelected = {
         month: 1,
         image: "",
@@ -31,6 +43,7 @@ const $ = (id) => document.getElementById(id);
         artist_id: null,
         artist_name: "Forest"
       };
+      let bingoCreateBgUrl = "";
       let authRoleIds = new Set();
       let authRoleScopes = {};
       let authRolesCache = [];
@@ -45,6 +58,53 @@ const $ = (id) => document.getElementById(id);
         {id: "admin:web", label: "Admin web"},
         {id: "hunt:admin", label: "Hunt admin"}
       ];
+      const SUIT_PRESETS = {
+        forest: [
+          {
+            id: "Roots",
+            name: "Roots",
+            themes: {foundation: 3, memory: 2, stability: 3},
+            keywords: ["home", "tradition", "endurance", "belonging"]
+          },
+          {
+            id: "Canopy",
+            name: "Canopy",
+            themes: {growth: 3, connection: 3, hope: 2},
+            keywords: ["healing", "community", "relationships", "renewal"]
+          },
+          {
+            id: "Ember",
+            name: "Ember",
+            themes: {will: 3, conflict: 2, passion: 3},
+            keywords: ["drive", "courage", "ambition", "trial"]
+          },
+          {
+            id: "Whisper",
+            name: "Whisper",
+            themes: {secrets: 2, change: 3, curiosity: 3},
+            keywords: ["insight", "illusion", "trickery", "exploration"]
+          },
+          {
+            id: "Crown",
+            name: "Crown of the Tree",
+            themes: {fate: 3, cycles: 3, balance: 2},
+            keywords: ["destiny", "turning point", "world forces"]
+          }
+        ],
+        tarot: [
+          {id: "Major", name: "Major", themes: {}, keywords: []},
+          {id: "Wands", name: "Wands", themes: {}, keywords: []},
+          {id: "Cups", name: "Cups", themes: {}, keywords: []},
+          {id: "Swords", name: "Swords", themes: {}, keywords: []},
+          {id: "Pentacles", name: "Pentacles", themes: {}, keywords: []}
+        ],
+        playing: [
+          {id: "Hearts", name: "Hearts", themes: {}, keywords: []},
+          {id: "Spades", name: "Spades", themes: {}, keywords: []},
+          {id: "Clubs", name: "Clubs", themes: {}, keywords: []},
+          {id: "Diamonds", name: "Diamonds", themes: {}, keywords: []}
+        ]
+      };
 
       function getBase(){
         return window.location.origin;
@@ -58,80 +118,16 @@ const $ = (id) => document.getElementById(id);
       let mediaVisibleItems = [];
       let mediaSelected = new Set();
       let mediaLastIndex = null;
+      let deckEditHadSuits = false;
+      let gallerySettingsCache = null;
+      let galleryHiddenDecks = [];
 
       function setStatusText(id, msg, kind){
-        overlayLog("setStatusText", {id, msg, kind});
         const el = $(id);
         if (!el) return;
         el.textContent = msg;
         el.className = "status" + (kind ? " " + kind : "");
       }
-
-      function hasScope(scope){
-        return authUserScopes.has("*") || authUserScopes.has(scope);
-      }
-
-      function ensureScope(scope, msg){
-        if (hasScope(scope)) return true;
-        setStatus(msg || "Unauthorized.", "err");
-        return false;
-      }
-
-      function ensureCardgamesScope(msg){
-        if (hasScope("cardgames:admin") || hasScope("tarot:admin")) return true;
-        setStatus(msg || "Cardgames access required.", "err");
-        return false;
-      }
-
-      function setLibraryStatus(msg, kind){
-        setStatusText("uploadLibraryStatus", msg, kind);
-      }
-
-      function setMediaUploadStatus(msg, kind){
-        setStatusText("mediaUploadStatus", msg, kind);
-      }
-
-      function setMediaLibraryStatus(msg, kind){
-        setStatusText("mediaLibraryStatus", msg, kind);
-      }
-
-      function getQueryParam(name){
-        try{
-          const params = new URLSearchParams(window.location.search);
-          return params.get(name);
-        }catch(err){
-          return null;
-        }
-      }
-
-      function removeTokenQueryParams(){
-        if (!window.history || !window.history.replaceState) return;
-        try{
-          const url = new URL(window.location.href);
-          ["token", "auth_token", "api_key"].forEach((key) => url.searchParams.delete(key));
-          const clean = url.pathname + (url.search ? url.search : "");
-          window.history.replaceState(null, "", clean);
-        }catch(err){}
-      }
-
-      function applyTokenFromUrl(){
-        const candidate = getQueryParam("token") || getQueryParam("auth_token") || getQueryParam("api_key");
-        if (!candidate) return;
-        overlayLog("applyTokenFromUrl", candidate);
-        storage.setItem("bt_api_key", candidate);
-        if (window.sessionStorage){
-          window.sessionStorage.setItem("bt_api_key", candidate);
-        }
-        if (apiKeyEl){
-          apiKeyEl.value = candidate;
-        }
-        removeTokenQueryParams();
-      }
-
-      let dashboardStatsLoaded = false;
-      let dashboardStatsLoading = false;
-      let dashboardLogsKind = "boot";
-      let dashboardLogsLoading = false;
 
       function setStatValue(id, value){
         const el = $(id);
@@ -147,6 +143,30 @@ const $ = (id) => document.getElementById(id);
         setStatValue("dashStatRegistered", stats.registered_users ?? "--");
         setStatValue("dashStatGames", stats.api_games ?? "--");
         dashboardStatsLoaded = true;
+      }
+
+      async function loadDashboardStats(force = false){
+        overlayLog("loadDashboardStats", {force, loading: dashboardStatsLoading, loaded: dashboardStatsLoaded});
+        if (dashboardStatsLoading) return;
+        if (dashboardStatsLoaded && !force){
+          return;
+        }
+        dashboardStatsLoading = true;
+        try{
+          const resp = await jsonFetch("/admin/overlay/stats", {method: "GET"});
+          overlayLog("loadDashboardStats response", resp);
+          if (resp.ok){
+            renderDashboardStats(resp.stats || {});
+          }
+        }catch(err){
+          overlayLog("loadDashboardStats error", err);
+          setStatValue("dashStatDiscord", "--");
+          setStatValue("dashStatPlayers", "--");
+          setStatValue("dashStatRegistered", "--");
+          setStatValue("dashStatGames", "--");
+        }finally{
+          dashboardStatsLoading = false;
+        }
       }
 
       function setDashboardLogsActive(kind){
@@ -195,28 +215,32 @@ const $ = (id) => document.getElementById(id);
         }
       }
 
-      async function loadDashboardStats(force = false){
-        overlayLog("loadDashboardStats", {force, loading: dashboardStatsLoading, loaded: dashboardStatsLoaded});
-        if (dashboardStatsLoading) return;
-        if (dashboardStatsLoaded && !force){
-          return;
-        }
-        dashboardStatsLoading = true;
-        try{
-          const resp = await jsonFetch("/admin/overlay/stats", {method: "GET"});
-          overlayLog("loadDashboardStats response", resp);
-          if (resp.ok){
-            renderDashboardStats(resp.stats || {});
-          }
-        }catch(err){
-          overlayLog("loadDashboardStats error", err);
-          setStatValue("dashStatDiscord", "--");
-          setStatValue("dashStatPlayers", "--");
-          setStatValue("dashStatRegistered", "--");
-          setStatValue("dashStatGames", "--");
-        }finally{
-          dashboardStatsLoading = false;
-        }
+      function hasScope(scope){
+        return authUserScopes.has("*") || authUserScopes.has(scope);
+      }
+
+      function ensureScope(scope, msg){
+        if (hasScope(scope)) return true;
+        setStatus(msg || "Unauthorized.", "err");
+        return false;
+      }
+
+      function ensureCardgamesScope(msg){
+        if (hasScope("cardgames:admin") || hasScope("tarot:admin")) return true;
+        setStatus(msg || "Cardgames access required.", "err");
+        return false;
+      }
+
+      function setLibraryStatus(msg, kind){
+        setStatusText("uploadLibraryStatus", msg, kind);
+      }
+
+      function setMediaUploadStatus(msg, kind){
+        setStatusText("mediaUploadStatus", msg, kind);
+      }
+
+      function setMediaLibraryStatus(msg, kind){
+        setStatusText("mediaLibraryStatus", msg, kind);
       }
 
       function showToast(msg, kind){
@@ -268,6 +292,22 @@ const $ = (id) => document.getElementById(id);
         }
       }
 
+      function formatSuitPresetJson(key){
+        const preset = SUIT_PRESETS[key] || [];
+        return JSON.stringify(preset, null, 2);
+      }
+
+      function parseSuitJson(raw){
+        const text = (raw || "").trim();
+        if (!text){
+          return [];
+        }
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)){
+          throw new Error("Suit definitions must be a JSON array.");
+        }
+        return parsed;
+      }
 
       function updateMediaUploadDropDisplay(file){
         const title = $("mediaUploadDropTitle");
@@ -1500,9 +1540,17 @@ const $ = (id) => document.getElementById(id);
         }
       }
 
+      function getGameId(){
+        return ($("bGameId").dataset.gameId || "").trim();
+      }
+
+      function setGameId(id){
+        const gid = (id || "").trim();
+        $("bGameId").dataset.gameId = gid;
+        $("bGameId").textContent = gid ? gid : "No game selected.";
+      }
 
       function setStatus(msg, kind){
-        overlayLog("setStatus", {msg, kind});
         const textEl = $("statusText");
         const timeEl = $("statusTime");
         if (textEl){
@@ -1517,6 +1565,112 @@ const $ = (id) => document.getElementById(id);
         statusEl.className = "status-bar status" + (kind ? " " + kind : "");
       }
 
+      function getQueryParam(name){
+        try{
+          const params = new URLSearchParams(window.location.search);
+          return params.get(name);
+        }catch(err){
+          return null;
+        }
+      }
+
+      function removeTokenQueryParams(){
+        if (!window.history || !window.history.replaceState) return;
+        try{
+          const url = new URL(window.location.href);
+          ["token", "auth_token", "api_key"].forEach((key) => url.searchParams.delete(key));
+          const clean = url.pathname + (url.search ? url.search : "");
+          window.history.replaceState(null, "", clean);
+        }catch(err){}
+      }
+
+      function setBingoStatus(msg, kind){
+        const el = $("bingoStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      let bingoHistory = [];
+      function setBingoLastAction(msg){
+        const el = $("bLastAction");
+        if (!el) return;
+        el.textContent = msg ? `Last action: ${msg}` : "Last action: -";
+      }
+
+      function addBingoHistory(msg){
+        if (!msg) return;
+        const time = new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+        bingoHistory.unshift(`${time} - ${msg}`);
+        bingoHistory = bingoHistory.slice(0, 5);
+        const el = $("bHistory");
+        if (!el) return;
+        if (!bingoHistory.length){
+          el.innerHTML = "<div class=\"muted\">No history yet.</div>";
+          return;
+        }
+        el.innerHTML = bingoHistory.map(entry => `<div class="bingo-history-item">${entry}</div>`).join("");
+      }
+
+      function setBingoPrimaryAction(targetId){
+        const ids = ["bStart", "bRoll", "bAdvanceStage"];
+        ids.forEach(id => {
+          const btn = $(id);
+          if (!btn) return;
+          const isPrimary = id === targetId;
+          btn.classList.toggle("btn-primary", isPrimary);
+          btn.classList.toggle("btn-ghost", !isPrimary);
+        });
+      }
+
+      function updateBingoBuyState(game, called){
+        const btn = $("bBuy");
+        if (!btn) return;
+        const ownerEl = $("bOwner");
+        const qtyEl = $("bQty");
+        const ownerOk = !!(ownerEl && ownerEl.value.trim());
+        const qty = Number(qtyEl ? qtyEl.value : 1);
+        const qtyOk = Number.isFinite(qty) && qty >= 1;
+        const canBuy = !!(game && game.game_id && game.active !== false && !game.started && (!called || called.length === 0));
+        btn.disabled = !(ownerOk && qtyOk && canBuy);
+      }
+
+      function updateSeedPotState(game){
+        const btn = $("bSeedPotApply");
+        if (!btn) return;
+        const amtEl = $("bSeedPotAmount");
+        const amount = Number(amtEl ? amtEl.value : 0);
+        const ok = Number.isFinite(amount) && amount > 0 && game && game.game_id && game.active !== false;
+        btn.disabled = !ok;
+      }
+
+      function applyTheme(color){
+        const panel = $("bingoPanel");
+        if (!panel){
+          return;
+        }
+        if (!color){
+          panel.style.removeProperty("--accent");
+          panel.style.removeProperty("--accent-2");
+          panel.style.removeProperty("--line");
+          panel.style.removeProperty("--panel");
+          return;
+        }
+        const hex = color.startsWith("#") ? color.slice(1) : color;
+        if (hex.length !== 6) return;
+        const r = parseInt(hex.slice(0,2), 16);
+        const g = parseInt(hex.slice(2,4), 16);
+        const b = parseInt(hex.slice(4,6), 16);
+        const mix = (c, t, p) => Math.round(c + (t - c) * p);
+        const toHex = (v) => v.toString(16).padStart(2, "0");
+        const dark = `#${toHex(mix(r, 0, 0.6))}${toHex(mix(g, 0, 0.6))}${toHex(mix(b, 0, 0.6))}`;
+        const darker = `#${toHex(mix(r, 0, 0.8))}${toHex(mix(g, 0, 0.8))}${toHex(mix(b, 0, 0.8))}`;
+        const light = `#${toHex(mix(r, 255, 0.35))}${toHex(mix(g, 255, 0.35))}${toHex(mix(b, 255, 0.35))}`;
+        panel.style.setProperty("--accent", light);
+        panel.style.setProperty("--accent-2", `#${hex}`);
+        panel.style.setProperty("--line", dark);
+        panel.style.setProperty("--panel", darker);
+      }
 
       function loadSettings(){
         overlayLog("loadSettings");
@@ -1528,6 +1682,20 @@ const $ = (id) => document.getElementById(id);
         overlayToggle.checked = storage.getItem("bt_overlay") === "1";
         if (overlayToggle.checked) document.body.classList.add("overlay");
         overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+      }
+
+      function applyTokenFromUrl(){
+        const candidate = getQueryParam("token") || getQueryParam("auth_token") || getQueryParam("api_key");
+        if (!candidate) return;
+        overlayLog("applyTokenFromUrl", candidate);
+        storage.setItem("bt_api_key", candidate);
+        if (window.sessionStorage){
+          window.sessionStorage.setItem("bt_api_key", candidate);
+        }
+        if (apiKeyEl){
+          apiKeyEl.value = candidate;
+        }
+        removeTokenQueryParams();
       }
 
       function applyTempTokenFromUrl(){
@@ -1629,7 +1797,6 @@ const $ = (id) => document.getElementById(id);
       }
 
       async function loadAuthUser(){
-        overlayLog("loadAuthUser");
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
@@ -1643,13 +1810,10 @@ const $ = (id) => document.getElementById(id);
           const icon = data.user_icon || "";
           const userId = data.user_id || "";
           const rawScopes = data.scopes || data.scope || data.permissions || [];
-          let scopes = [];
-          if (Array.isArray(rawScopes)){
-            scopes = rawScopes.map(String);
-          } else if (typeof rawScopes === "string"){
-            scopes = rawScopes.split(/[ ,]+/).map(s => s.trim()).filter(Boolean);
-          }
-          authUserScopes = new Set(scopes);
+          const scopeList = Array.isArray(rawScopes)
+            ? rawScopes.map(String)
+            : String(rawScopes || "").split(",").map(s => s.trim()).filter(Boolean);
+          authUserScopes = new Set(scopeList);
           authUserIsElfmin = computeElfminAccess(authUserScopes, data.source);
           applyElfminVisibility();
           applyScopeVisibility();
@@ -1693,7 +1857,6 @@ const $ = (id) => document.getElementById(id);
       }
 
       async function initAuthenticatedSession(){
-        overlayLog("initAuthenticatedSession");
         await loadAuthUser();
         applyScopeVisibility();
         const contestCategoryStatus = $("contestCategoryStatus");
@@ -1747,10 +1910,534 @@ const $ = (id) => document.getElementById(id);
         }
       }
 
+      function showList(el, data){
+        if (data && Array.isArray(data.cards)){
+          if (!data.cards.length){
+            el.textContent = "No cards loaded.";
+            if (el.id === "taDeckList"){
+              window.taDeckData = data;
+              const deckLabel = (data.deck && (data.deck.name || data.deck.deck_id)) || "Deck";
+              setTarotStatus(`Deck loaded: ${deckLabel} (0 cards)`, "ok");
+              taUpdateContext(null);
+              taDirty = false;
+            }
+            return;
+          }
+          const deckLabel = (data.deck && (data.deck.name || data.deck.deck_id)) || "";
+          const header = deckLabel ? `<div class="list-header">Deck: ${deckLabel}</div>` : "";
+          const items = data.cards.map(c => {
+            const name = c.name || c.card_id || "Untitled";
+            const id = c.card_id ? ` (${c.card_id})` : "";
+            const suit = c.suit || "";
+            const suitLower = suit.toLowerCase();
+            const suitMap = {
+              wands: "Clubs",
+              cups: "Hearts",
+              swords: "Spades",
+              pentacles: "Diamonds",
+              clubs: "Clubs",
+              hearts: "Hearts",
+              spades: "Spades",
+              diamonds: "Diamonds"
+            };
+            const playingSuit = suitLower === "major" ? "" : (suitMap[suitLower] || "");
+            const playingLabel = playingSuit && playingSuit.toLowerCase() !== suitLower ? playingSuit : "";
+            const suitMeta = suit || playingLabel
+              ? `<div class="muted">${suit || "-"}${playingLabel ? ` - ${playingLabel}` : ""}</div>`
+              : "";
+            return `<div class="list-card clickable" data-card-id="${c.card_id || ""}"><strong>${name}</strong><span class="muted">${id}</span>${suitMeta}</div>`;
+          }).join("");
+          el.innerHTML = header + items;
+          if (el.id === "taDeckList"){
+            window.taDeckData = data;
+            taSyncCardSelection();
+            const deckName = deckLabel || (data.deck && data.deck.deck_id) || "Deck";
+            setTarotStatus(`Deck loaded: ${deckName} (${data.cards.length} cards)`, "ok");
+            taUpdateContext(null);
+            taDirty = false;
+          }
+          return;
+        }
+        el.textContent = JSON.stringify(data, null, 2);
+      }
 
+        function renderBingoState(data){
+          const game = (data && data.game) || {};
+          currentGame = game;
+          applyTheme(game.theme_color || null);
+          const gid = getGameId();
+          if (gid !== activeGameId){
+            activeGameId = gid;
+            lastCalledCount = 0;
+            lastCalloutNumber = null;
+            bingoHistory = [];
+            const historyEl = $("bHistory");
+            if (historyEl){
+              historyEl.innerHTML = "<div class=\"muted\">No history yet.</div>";
+            }
+            setBingoLastAction("");
+          }
+        $("bTitleVal").textContent = game.title || "No title";
+        $("bHeaderVal").textContent = game.header_text || game.header || "No header";
+        $("bStageVal").textContent = game.stage || "No stage";
+        $("bPotVal").textContent = (game.pot != null ? `${formatGil(game.pot)} ${game.currency || ""}` : "No pot");
+        const announceToggle = $("bAnnounceToggle");
+        if (announceToggle){
+          announceToggle.checked = !!game.announce_calls;
+        }
+        const announceBadge = $("bAnnounceBadge");
+        if (announceBadge){
+          announceBadge.textContent = announceToggle && announceToggle.checked ? "On" : "Off";
+          announceBadge.className = "status-badge" + (announceToggle && announceToggle.checked ? " good" : "");
+        }
+        const statusBadge = $("bGameStatus");
+          if (statusBadge){
+            let label = "No game";
+            let cls = "status-badge";
+            if (game && game.game_id){
+              if (game.active === false){
+                label = "Finished";
+                cls += " bad";
+              } else if (game.started){
+                label = "Running";
+                cls += " good";
+              } else {
+                label = "Waiting to start";
+                cls += " warn";
+              }
+            }
+            statusBadge.textContent = label;
+            statusBadge.className = cls;
+          }
+          const hasPendingClaims = Array.isArray(game.claims)
+            && game.claims.some(c => c && c.pending);
+          const statusText = $("bGameStatusText");
+          const statusMeta = $("bGameStatusMeta");
+          let stateKey = "waiting";
+          let stateLabel = "Waiting to Start";
+          if (!game || !game.game_id){
+            stateKey = "waiting";
+            stateLabel = "Waiting to Start";
+          } else if (game.active === false){
+            stateKey = "finished";
+            stateLabel = "Finished";
+          } else if (hasPendingClaims){
+            stateKey = "stage";
+            stateLabel = "Stage Complete";
+          } else if (game.started){
+            stateKey = "running";
+            stateLabel = "Running";
+          }
+          if (statusText){
+            statusText.textContent = stateLabel;
+            statusText.className = `bingo-status-label status-${stateKey}`;
+          }
+          if (statusMeta){
+            if (game && game.game_id){
+              statusMeta.textContent = `${game.title || "Untitled"} - Stage: ${game.stage || "single"}`;
+            } else {
+              statusMeta.textContent = "No game selected.";
+            }
+          }
+          if (stateKey === "waiting"){
+            setBingoPrimaryAction("bStart");
+          } else if (stateKey === "running"){
+            setBingoPrimaryAction("bRoll");
+          } else if (stateKey === "stage"){
+            setBingoPrimaryAction("bAdvanceStage");
+          } else {
+            setBingoPrimaryAction("");
+          }
+        const contextPath = $("bContextPath");
+        const contextMeta = $("bContextMeta");
+        const contextTitle = $("bContextTitle");
+        if (contextPath){
+          const label = game.title || "No game selected";
+          contextPath.textContent = `Bingo / Manager / ${label}`;
+        }
+        if (contextMeta){
+          contextMeta.textContent = game.game_id ? `Managing ${game.game_id}` : "Pick a game to manage.";
+        }
+        if (contextTitle){
+          contextTitle.textContent = game.game_id ? `${game.title || "Untitled"} (${game.game_id})` : "";
+        }
+          const called = Array.isArray(game.called) ? game.called : [];
+          $("bCalled").textContent = called.length ? ("Called numbers: " + called.join(", ")) : "No numbers called yet.";
+          updateBingoBuyState(game, called);
+          updateSeedPotState(game);
+          const startBtn = $("bStart");
+          if (startBtn){
+            startBtn.disabled = !(game.game_id && game.active !== false && !game.started);
+          }
+        const rollBtn = $("bRoll");
+        if (rollBtn){
+          rollBtn.disabled = !(game.active !== false && game.started);
+        }
+        const refreshBtn = $("bRefresh");
+        if (refreshBtn){
+          refreshBtn.disabled = !game.game_id;
+        }
+          const closeBtn = $("bCloseGame");
+          if (closeBtn){
+            closeBtn.disabled = !game.game_id;
+          }
+          const advanceBtn = $("bAdvanceStage");
+          if (advanceBtn){
+            advanceBtn.disabled = !game.game_id || game.active === false;
+          }
+          const viewBtn = $("bViewOwner");
+          if (viewBtn){
+            viewBtn.disabled = !game.game_id;
+          }
+        renderCalledGrid(called);
+        const bgPath = game.background ? new URL(game.background, getBase()).toString() : "";
+        const cardWrap = $("bCard");
+        cardWrap.style.backgroundImage = bgPath ? `url('${bgPath}')` : "";
+          const last = game.last_called != null ? game.last_called : (called.length ? called[called.length - 1] : null);
+          if (last != null && last !== lastCalloutNumber){
+            showCallout(`Called ${last}`);
+            lastCalloutNumber = last;
+            setBingoStatus(`Number called: ${last}`, "ok");
+            setBingoLastAction(`Called ${last}`);
+            addBingoHistory(`Called ${last}`);
+          }
+          if (!game.game_id){
+            setBingoStatus("No game selected.", "alert");
+          }
+          lastCalledCount = called.length;
+          renderClaims(game);
+        }
+
+      function renderClaims(game){
+        const el = $("bClaims");
+        const claims = (game && Array.isArray(game.claims)) ? game.claims : [];
+        if (!claims.length){
+          el.innerHTML = "<div class=\"muted\">No claims yet.</div>";
+          return;
+        }
+        el.innerHTML = "";
+        claims.slice().reverse().forEach(c => {
+          const row = document.createElement("div");
+          row.style.padding = "8px 6px";
+          row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          const status = c.pending ? "pending" : (c.denied ? "denied" : "approved");
+          const label = `${c.owner_name || "Unknown"} - ${c.card_id || ""} - ${c.stage || ""} - ${status}`;
+          const wrap = document.createElement("div");
+          wrap.style.display = "flex";
+          wrap.style.alignItems = "center";
+          wrap.style.justifyContent = "space-between";
+          wrap.style.gap = "10px";
+          const text = document.createElement("div");
+          text.textContent = label;
+          wrap.appendChild(text);
+          if (c.pending){
+            const btnWrap = document.createElement("div");
+            btnWrap.style.display = "flex";
+            btnWrap.style.gap = "8px";
+            const btn = document.createElement("button");
+            btn.textContent = "Confirm + Advance";
+            btn.className = "btn-primary";
+            btn.style.maxWidth = "160px";
+              btn.onclick = async () => {
+                try{
+                  await jsonFetch("/bingo/claim-approve", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                  });
+                  const adv = await jsonFetch("/bingo/advance-stage", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id})
+                  });
+                  setBingoStatus(adv.ended ? "Claim approved. Game ended." : "Claim approved. Stage advanced.", "ok");
+                  addBingoHistory(adv.ended ? "Claim approved - game ended" : "Claim approved - stage advanced");
+                  setBingoLastAction("Claim approved");
+                  await refreshBingo();
+                }catch(err){
+                  setBingoStatus(err.message, "err");
+                }
+              };
+            const deny = document.createElement("button");
+            deny.textContent = "Deny";
+            deny.className = "btn-ghost";
+            deny.style.maxWidth = "90px";
+              deny.onclick = async () => {
+                try{
+                  await jsonFetch("/bingo/claim-deny", {
+                    method:"POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({game_id: game.game_id, card_id: c.card_id})
+                  });
+                  setBingoStatus("Claim denied.", "ok");
+                  addBingoHistory("Claim denied");
+                  setBingoLastAction("Claim denied");
+                  await refreshBingo();
+                }catch(err){
+                  setBingoStatus(err.message, "err");
+                }
+              };
+            btnWrap.appendChild(btn);
+            btnWrap.appendChild(deny);
+            wrap.appendChild(btnWrap);
+          }
+          row.appendChild(wrap);
+          el.appendChild(row);
+        });
+      }
+
+      function formatGil(value){
+        const raw = Number(value);
+        if (!Number.isFinite(raw)) return String(value ?? "");
+        return raw.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      }
+
+      function renderCard(card, called, header){
+        currentCard = card;
+        const headerEl = $("bCardHeader");
+        const gridEl = $("bCardGrid");
+        headerEl.innerHTML = "";
+        gridEl.innerHTML = "";
+        const letters = (header || "BING").slice(0,4).split("");
+        while (letters.length < 4) letters.push(" ");
+        letters.forEach(l => {
+          const h = document.createElement("div");
+          h.textContent = l;
+          headerEl.appendChild(h);
+        });
+        if (!card || !Array.isArray(card.numbers)){
+          gridEl.innerHTML = "<div style='grid-column:1/-1;color:var(--muted)'>No card loaded.</div>";
+          return;
+        }
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        const nums = card.numbers || [];
+        const marks = card.marks || [];
+        for (let r = 0; r < nums.length; r++){
+          for (let c = 0; c < nums[r].length; c++){
+            const cell = document.createElement("div");
+            cell.className = "bingo-cell";
+            const value = nums[r][c];
+            const marked = (marks[r] && marks[r][c]) || calledSet.has(value);
+            if (marked) cell.classList.add("marked");
+            cell.textContent = value;
+            gridEl.appendChild(cell);
+          }
+        }
+      }
+
+      function renderCalledGrid(called){
+        const grid = $("bCalledGrid");
+        grid.innerHTML = "";
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        if (!calledSet.size){
+          const empty = document.createElement("div");
+          empty.className = "bingo-called-empty";
+          empty.textContent = "No numbers have been called.";
+          grid.appendChild(empty);
+          return;
+        }
+        const last = called && called.length ? called[called.length - 1] : null;
+        for (let i = 1; i <= 40; i++){
+          const btn = document.createElement("button");
+          btn.className = "bingo-call-btn" + (calledSet.has(i) ? " active" : "");
+          if (calledSet.has(i) && last === i){
+            btn.classList.add("recent");
+          }
+          btn.textContent = i;
+          btn.disabled = !calledSet.has(i);
+          btn.onclick = () => markNumber(i);
+          grid.appendChild(btn);
+        }
+      }
+
+      function showCallout(text){
+        let el = document.getElementById("bCallout");
+        if (!el){
+          el = document.createElement("div");
+          el.id = "bCallout";
+          el.className = "bingo-callout";
+          document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.classList.add("show");
+        setTimeout(() => el.classList.remove("show"), 2200);
+      }
+
+      async function markNumber(num){
+        const gid = getGameId();
+        if (!gid || !currentCard || !Array.isArray(currentCard.numbers)){
+          setBingoStatus("Load a card first.", "err");
+          return;
+        }
+        const marks = [];
+        for (let r = 0; r < currentCard.numbers.length; r++){
+          for (let c = 0; c < currentCard.numbers[r].length; c++){
+            if (currentCard.numbers[r][c] === num){
+              marks.push({row: r, col: c});
+            }
+          }
+        }
+        if (marks.length === 0){
+          setBingoStatus("Number not on this card.", "err");
+          return;
+        }
+        try{
+          for (const m of marks){
+            await jsonFetch("/bingo/mark", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({game_id: gid, card_id: currentCard.card_id, row: m.row, col: m.col})
+            });
+            if (currentCard.marks && currentCard.marks[m.row]){
+              currentCard.marks[m.row][m.col] = true;
+            }
+          }
+          renderCard(currentCard, currentGame && currentGame.called, currentGame && currentGame.header);
+          setBingoStatus("Marked card.", "ok");
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }
+      }
+
+      function renderGamesList(games){
+        const el = $("bGames");
+        if (!el){
+          return;
+        }
+        if (!Array.isArray(games) || games.length === 0){
+          el.textContent = "No active games. Create one in Discord.";
+          return;
+        }
+        el.innerHTML = "";
+        games.forEach(g => {
+          const item = document.createElement("div");
+          item.style.padding = "8px 6px";
+          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+          const title = g.title || "Bingo";
+          const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
+          const status = g.active ? "active" : "ended";
+          const deleteBtn = !g.active ? `<button data-delete="${g.game_id}" class="btn-ghost" style="max-width:90px">Delete</button>` : "";
+          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${title}</strong> - ${created} <span class="muted">(${status})</span></div>\n              ${deleteBtn}\n            </div>`;
+          item.style.cursor = "pointer";
+          item.onclick = () => {
+            setGameId(g.game_id || "");
+            refreshBingo();
+            loadOwnersForGame();
+            loadGamesMenu();
+          };
+          const del = item.querySelector("button[data-delete]");
+          if (del){
+            del.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              if (!confirm("Delete this game? This cannot be undone.")){
+                return;
+              }
+              try{
+                await jsonFetch("/bingo/" + encodeURIComponent(g.game_id), {method:"DELETE"});
+                setStatus("Game deleted.", "ok");
+                await loadGamesMenu();
+              }catch(err){
+                setStatus(err.message, "err");
+              }
+            });
+          }
+          el.appendChild(item);
+        });
+      }
+
+      function loadGamesMenu(){
+        jsonFetch("/bingo/games", {method:"GET"})
+          .then(data => {
+            const list = (data.games || []).filter(g => g.active !== false);
+            renderGamesList(data.games || []);
+            const menu = $("menuGames");
+            const menuParent = $("menuBingo");
+            menu.innerHTML = "";
+            let hasActive = false;
+            list.forEach(g => {
+              const row = document.createElement("div");
+              row.className = "menu-game";
+              row.tabIndex = 0;
+              const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
+              row.innerHTML = `
+                <span class="menu-game-title">${g.title ? g.title : "Untitled"}</span>
+                <span class="menu-game-meta">${created}</span>
+              `;
+              row.onclick = () => {
+                setGameId(g.game_id || "");
+                showPanel("bingo");
+                refreshBingo();
+                loadOwnersForGame();
+              // Selected game is indicated by menu highlight.
+              };
+              row.addEventListener("keydown", (ev) => {
+                if (ev.key === "Enter" || ev.key === " "){
+                  ev.preventDefault();
+                  row.click();
+                }
+              });
+              menu.appendChild(row);
+              if (g.game_id && g.game_id === getGameId()){
+                row.classList.add("active");
+                hasActive = true;
+              }
+            });
+            if (!list.length){
+              menu.textContent = "No active games.";
+            }
+            if (menuParent){
+              menuParent.classList.toggle("has-active", hasActive);
+            }
+            // Selected game is indicated by menu highlight.
+          })
+          .catch(() => {});
+      }
+
+      async function loadDiscordChannels(){
+        const select = $("bChannelSelect");
+        if (!select){
+          return;
+        }
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          if (!channels.length){
+            select.innerHTML = `<option value="">No channels available</option>`;
+            return;
+          }
+          let botlogsId = "";
+          channels.forEach(ch => {
+            const opt = document.createElement("option");
+            opt.value = String(ch.id || "");
+            const guild = ch.guild_name || ch.guild_id || "Guild";
+            const category = ch.category ? ` / ${ch.category}` : "";
+            const name = ch.name ? `#${ch.name}` : String(ch.id || "");
+            opt.textContent = `${guild}${category} - ${name}`;
+            select.appendChild(opt);
+            if (!botlogsId && String(ch.name || "").toLowerCase() === "bot-logs"){
+              botlogsId = opt.value;
+            }
+          });
+          const current = $("bChannel").value.trim();
+          if (current){
+            select.value = current;
+          }
+          if (!select.value && select.options.length){
+            select.value = botlogsId || select.options[0].value;
+          }
+          if (select.value){
+            $("bChannel").value = select.value;
+          }
+          updateBingoCreatePayload();
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load</option>`;
+          setStatus(err.message, "err");
+        }
+      }
 
       function showPanel(which){
-        overlayLog("showPanel", which);
         if (!suppressPanelSave){
           try{
             localStorage.setItem("overlay_panel", which);
@@ -1898,59 +2585,42 @@ const $ = (id) => document.getElementById(id);
 
       let suppressPanelSave = false;
 
-      function bindElement(id, callback){
-        const el = $(id);
-        if (!el){
-          overlayLog("bindElement missing", id);
-          return null;
-        }
-        overlayLog("bindElement", id);
-        callback(el);
-        return el;
-      }
-
       function showPanelOnce(which){
         suppressPanelSave = true;
         showPanel(which);
         suppressPanelSave = false;
       }
 
-      bindElement("menuDashboard", (el) => el.addEventListener("click", () => showPanel("dashboard")));
-      bindElement("menuBingo", (el) => el.addEventListener("click", () => showPanel("bingo")));
-      bindElement("menuBingoRefresh", (el) => {
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          loadGamesMenu();
-        });
+      $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
+      $("menuBingo").addEventListener("click", () => showPanel("bingo"));
+      $("menuBingoRefresh").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        loadGamesMenu();
       });
-      bindElement("bChannelRefresh", (el) => el.addEventListener("click", () => loadDiscordChannels()));
-      bindElement("bChannelSelect", (el) => el.addEventListener("change", (ev) => {
+      $("bChannelRefresh").addEventListener("click", () => loadDiscordChannels());
+      $("bChannelSelect").addEventListener("change", (ev) => {
         const pick = ev.target.value || "";
         if (pick){
           $("bChannel").value = pick;
         }
         updateBingoCreatePayload();
-      }));
-      bindElement("menuCreateGame", (el) => {
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          $("bCreateModal").classList.add("show");
-          $("bTitle").focus();
-          $("bChannel").value = "";
-          $("bChannelSelect").value = "";
-          $("bAnnounceCalls").checked = false;
-          $("bSeedPot").value = "0";
-          bingoCreateBgUrl = "";
-          $("bCreateBgStatus").textContent = "No background selected.";
-          loadDiscordChannels();
-          updateBingoCreatePayload();
-        });
       });
-      bindElement("menuTarotLinks", (el) => {
-        el.addEventListener("click", () => {
-          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-          showPanel("tarotLinks");
-        });
+      $("menuCreateGame").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        $("bCreateModal").classList.add("show");
+        $("bTitle").focus();
+        $("bChannel").value = "";
+        $("bChannelSelect").value = "";
+        $("bAnnounceCalls").checked = false;
+        $("bSeedPot").value = "0";
+        bingoCreateBgUrl = "";
+        $("bCreateBgStatus").textContent = "No background selected.";
+        loadDiscordChannels();
+        updateBingoCreatePayload();
+      });
+      $("menuTarotLinks").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        showPanel("tarotLinks");
       });
       const cardgameMenu = $("menuCardgameSessions");
       if (cardgameMenu){
@@ -1963,20 +2633,16 @@ const $ = (id) => document.getElementById(id);
           loadCardgameSessions();
         });
       }
-      bindElement("menuTarotDecks", (el) => {
-        el.addEventListener("click", () => {
-          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
-          showPanel("tarotDecks");
-        });
+      $("menuTarotDecks").addEventListener("click", () => {
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        showPanel("tarotDecks");
       });
-      bindElement("menuContests", (el) => {
-        el.addEventListener("click", () => {
-          showPanel("contests");
-          loadContestManagement();
-          loadContestChannels();
-          loadTarotClaimsDecks();
-          loadTarotClaimsChannels();
-        });
+      $("menuContests").addEventListener("click", () => {
+        showPanel("contests");
+        loadContestManagement();
+        loadContestChannels();
+        loadTarotClaimsDecks();
+        loadTarotClaimsChannels();
       });
       function bindMenuKey(id){
         const el = $(id);
@@ -1995,79 +2661,89 @@ const $ = (id) => document.getElementById(id);
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
-      bindElement("menuMedia", (el) => {
-        on("menuMedia", "click", () => {
-          showPanel("media");
-        });
-      });
-      bindElement("menuArtists", (el) => {
-        on("menuArtists", "click", () => {
-          if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
-            setStatus("Artist access requires admin permissions.", "err");
-            return;
+      $("bAnnounceToggle").addEventListener("change", async (ev) => {
+        const gid = getGameId();
+        if (!gid){
+          setBingoStatus("Select a game first.", "err");
+          ev.target.checked = false;
+          return;
+        }
+        try{
+          await jsonFetch("/bingo/" + encodeURIComponent(gid), {
+            method:"PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({announce_calls: ev.target.checked})
+          });
+          const badge = $("bAnnounceBadge");
+          if (badge){
+            badge.textContent = ev.target.checked ? "On" : "Off";
+            badge.className = "status-badge" + (ev.target.checked ? " good" : "");
           }
-          $("artistModal").classList.add("show");
-          loadTarotArtists();
-        });
+          setBingoStatus("Announce calls updated.", "ok");
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }
       });
-      bindElement("menuCalendar", (el) => {
-        el.addEventListener("click", () => {
-          $("calendarModal").classList.add("show");
-          loadCalendarAdmin();
-        });
+      $("menuMedia").addEventListener("click", () => {
+        showPanel("media");
       });
-      bindElement("menuGallery", (el) => {
-        el.addEventListener("click", () => {
-          if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
-            setStatus("Gallery access requires admin permissions.", "err");
-            return;
-          }
-          $("galleryModal").classList.add("show");
-          loadGalleryChannels();
-          loadGallerySettings();
-          // Gallery items are managed from Media Library.
-          loadTarotArtists();
-        });
+      $("menuArtists").addEventListener("click", () => {
+        if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
+          setStatus("Artist access requires admin permissions.", "err");
+          return;
+        }
+        $("artistModal").classList.add("show");
+        loadTarotArtists();
       });
-      bindElement("menuAuthRoles", (el) => {
-        el.addEventListener("click", () => {
-          if (!authUserIsElfmin){
-            setStatus("Only elfministrators can manage auth roles.", "err");
-            return;
-          }
-          $("authRolesModal").classList.add("show");
-          loadAuthRoles();
-        });
+      $("menuCalendar").addEventListener("click", () => {
+        $("calendarModal").classList.add("show");
+        loadCalendarAdmin();
       });
-      bindElement("menuAuthKeys", (el) => {
-        el.addEventListener("click", () => {
-          if (!authUserIsElfmin){
-            setStatus("Only elfministrators can manage auth keys.", "err");
-            return;
-          }
-          $("authTokensModal").classList.add("show");
-          loadAuthTokens();
-        });
+      $("menuGallery").addEventListener("click", () => {
+        if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
+          setStatus("Gallery access requires admin permissions.", "err");
+          return;
+        }
+        $("galleryModal").classList.add("show");
+        loadGalleryChannels();
+        loadGallerySettings();
+        // Gallery items are managed from Media Library.
+        loadTarotArtists();
       });
-      bindElement("menuAuthTemp", (el) => {
-        el.addEventListener("click", () => {
-          if (!authUserIsElfmin){
-            setStatus("Only elfministrators can generate temporary links.", "err");
-            return;
-          }
-          const modal = $("authTempModal");
-          if (!modal){
-            setStatus("Temporary access UI not loaded.", "err");
-            return;
-          }
-          modal.classList.add("show");
-          loadAuthRoles();
-          renderAuthTempRoles();
-          setAuthTempStatus("Ready.", "");
-        });
+      $("menuAuthRoles").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can manage auth roles.", "err");
+          return;
+        }
+        $("authRolesModal").classList.add("show");
+        loadAuthRoles();
       });
-      bindElement("menuSystemConfig", (el) => {
-        el.addEventListener("click", () => {
+      $("menuAuthKeys").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can manage auth keys.", "err");
+          return;
+        }
+        $("authTokensModal").classList.add("show");
+        loadAuthTokens();
+      });
+      $("menuAuthTemp").addEventListener("click", () => {
+        if (!authUserIsElfmin){
+          setStatus("Only elfministrators can generate temporary links.", "err");
+          return;
+        }
+        const modal = $("authTempModal");
+        if (!modal){
+          setStatus("Temporary access UI not loaded.", "err");
+          return;
+        }
+        modal.classList.add("show");
+        loadAuthRoles();
+        renderAuthTempRoles();
+        setAuthTempStatus("Ready.", "");
+      });
+      const systemConfigBtn = $("menuSystemConfig");
+      if (systemConfigBtn){
+        systemConfigBtn.addEventListener("click", () => {
           const modal = $("systemConfigModal");
           if (!modal){
             setSystemConfigStatus("System configuration UI not available.", "err");
@@ -2076,118 +2752,91 @@ const $ = (id) => document.getElementById(id);
           modal.classList.add("show");
           loadSystemConfig();
         });
+      }
+      on("systemConfigClose", "click", () => {
+        const modal = $("systemConfigModal");
+        if (modal){
+          modal.classList.remove("show");
+        }
       });
-      bindElement("systemConfigClose", (el) => {
-        el.addEventListener("click", () => {
-          const modal = $("systemConfigModal");
-          if (modal){
-            modal.classList.remove("show");
-          }
-        });
+      on("systemConfigModal", "click", (event) => {
+        const modal = $("systemConfigModal");
+        if (event.target === modal){
+          modal.classList.remove("show");
+        }
       });
-      bindElement("systemConfigModal", (el) => {
-        el.addEventListener("click", (event) => {
-          if (event.target === el){
-            el.classList.remove("show");
-          }
-        });
+      on("systemXivSave", "click", () => saveSystemConfig("xivauth"));
+      on("systemOpenAISave", "click", () => saveSystemConfig("openai"));
+      on("dashboardStatsRefresh", "click", () => loadDashboardStats(true));
+      on("dashboardLogsBoot", "click", () => loadDashboardLogs("boot", true));
+      on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
+      on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
+      on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
+      on("dashboardChangelogToggle", "click", () => {
+        const wrap = $("dashboardChangelogWrap");
+        if (!wrap) return;
+        wrap.classList.toggle("hidden");
       });
-      bindElement("systemXivSave", (el) => {
-        el.addEventListener("click", () => saveSystemConfig("xivauth"));
+      $("contestRefresh").addEventListener("click", () => loadContestManagement());
+      $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
+      $("contestCreate").addEventListener("click", () => createContest());
+      $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
+      $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
+      $("contestCreateChannelOpen").addEventListener("click", () => {
+        $("contestChannelModal").classList.add("show");
+        loadContestChannels();
       });
-      bindElement("systemOpenAISave", (el) => {
-        el.addEventListener("click", () => saveSystemConfig("openai"));
+      $("contestChannelClose").addEventListener("click", () => {
+        $("contestChannelModal").classList.remove("show");
       });
-      bindElement("dashboardStatsRefresh", (el) => {
-        el.addEventListener("click", () => loadDashboardStats(true));
-      });
-      bindElement("dashboardLogsBoot", (el) => {
-        el.addEventListener("click", () => loadDashboardLogs("boot", true));
-      });
-      bindElement("dashboardLogsAuth", (el) => {
-        el.addEventListener("click", () => loadDashboardLogs("auth", true));
-      });
-      bindElement("dashboardLogsUpload", (el) => {
-        el.addEventListener("click", () => loadDashboardLogs("upload", true));
-      });
-      bindElement("dashboardLogsRefresh", (el) => {
-        el.addEventListener("click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
-      });
-      bindElement("dashboardChangelogToggle", (el) => {
-        el.addEventListener("click", () => {
-          const wrap = $("dashboardChangelogWrap");
-          if (!wrap) return;
-          wrap.classList.toggle("hidden");
-        });
-      });
-      bindElement("contestRefresh", (el) => {
-        el.addEventListener("click", () => loadContestManagement());
-      });
-      bindElement("contestChannelRefresh", (el) => {
-        el.addEventListener("click", () => loadContestChannels());
-      });
-      bindElement("contestCreate", (el) => {
-        el.addEventListener("click", () => createContest());
-      });
-      bindElement("contestEmojiSelect", (el) => {
-        el.addEventListener("change", () => updateContestChannelPreview());
-      });
-      bindElement("contestChannelName", (el) => {
-        el.addEventListener("input", () => updateContestChannelPreview());
-      });
-      bindElement("contestCreateChannelOpen", (el) => {
-        el.addEventListener("click", () => {
-          $("contestChannelModal").classList.add("show");
-          loadContestChannels();
-        });
-      });
-      bindElement("contestChannelClose", (el) => {
-        el.addEventListener("click", () => {
+      $("contestChannelModal").addEventListener("click", (event) => {
+        if (event.target === $("contestChannelModal")){
           $("contestChannelModal").classList.remove("show");
-        });
+        }
       });
-      bindElement("contestChannelModal", (el) => {
-        el.addEventListener("click", (event) => {
-          if (event.target === el){
-            $("contestChannelModal").classList.remove("show");
-          }
-        });
+      $("contestPanel").addEventListener("click", (event) => {
+        const btn = event.target.closest(".contest-init");
+        if (!btn) return;
+        const channelId = btn.dataset.channel || "";
+        if (channelId){
+          $("contestChannel").value = channelId;
+          setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
+        }
       });
-      bindElement("contestPanel", (el) => {
-        el.addEventListener("click", (event) => {
-          const btn = event.target.closest(".contest-init");
-          if (!btn) return;
-          const channelId = btn.dataset.channel || "";
+      $("tarotClaimsRefresh").addEventListener("click", () => {
+        loadTarotClaimsDecks();
+        loadTarotClaimsChannels();
+      });
+      $("tarotClaimsPost").addEventListener("click", () => postTarotClaims());
+      $("contestChannelCreate").addEventListener("click", async () => {
+        try{
+          const channelId = await createContestChannel();
           if (channelId){
             $("contestChannel").value = channelId;
-            setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
           }
-        });
-      });
-      bindElement("tarotClaimsRefresh", (el) => {
-        el.addEventListener("click", () => {
-          loadTarotClaimsDecks();
-          loadTarotClaimsChannels();
-        });
-      });
-      bindElement("tarotClaimsPost", (el) => {
-        el.addEventListener("click", () => postTarotClaims());
-      });
-      bindElement("contestChannelCreate", (el) => {
-        el.addEventListener("click", async () => {
-          try{
-            const channelId = await createContestChannel();
-            if (channelId){
-              $("contestChannel").value = channelId;
-            }
-            $("contestChannelModal").classList.remove("show");
-            await loadContestManagement();
-          }catch(err){
-            // status already handled
-          }
-        });
+          $("contestChannelModal").classList.remove("show");
+          await loadContestManagement();
+        }catch(err){
+          // status already handled
+        }
       });
 
+      let bingoRefreshTimer = null;
+      function ensureBingoPolling(){
+        if (bingoRefreshTimer){
+          return;
+        }
+        bingoRefreshTimer = setInterval(() => {
+          const gid = getGameId();
+          if (!gid){
+            return;
+          }
+          if ($("bingoPanel").classList.contains("hidden")){
+            return;
+          }
+          refreshBingo();
+        }, 3000);
+      }
 
       function contestStatus(meta){
         if (!meta){
@@ -2242,18 +2891,92 @@ const $ = (id) => document.getElementById(id);
         el.className = "status" + (kind ? " " + kind : "");
       }
 
-      function updateBingoCreatePayload(){
-        const el = $("bCreatePayload");
-        if (!el){
+      function setTarotClaimsStatus(msg, kind){
+        const el = $("tarotClaimsStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      async function loadTarotClaimsDecks(){
+        const select = $("tarotClaimsDeck");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          if (!decks.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No decks found.";
+            select.appendChild(opt);
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load decks</option>`;
+          setTarotClaimsStatus(err.message, "err");
+        }
+      }
+
+      async function loadTarotClaimsChannels(){
+        const select = $("tarotClaimsChannel");
+        if (!select) return;
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const data = await jsonFetch("/discord/channels", {method:"GET"}, true);
+          const channels = data.channels || [];
+          select.innerHTML = "";
+          channels.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            const parts = [];
+            if (c.guild_name) parts.push(c.guild_name);
+            if (c.category) parts.push(c.category);
+            const label = parts.length ? `${parts.join(" / ")} / #${c.name}` : `#${c.name}`;
+            opt.textContent = label;
+            select.appendChild(opt);
+          });
+          if (!channels.length){
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No channels found.";
+            select.appendChild(opt);
+          }
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load channels</option>`;
+          setTarotClaimsStatus(err.message, "err");
+        }
+      }
+
+      async function postTarotClaims(){
+        const deckId = $("tarotClaimsDeck").value || "";
+        const channelId = $("tarotClaimsChannel").value || "";
+        const claimLimit = Number($("tarotClaimsLimit").value || 2);
+        if (!deckId){
+          setTarotClaimsStatus("Pick a deck first.", "err");
           return;
         }
-        const channelId = $("bChannelSelect").value || $("bChannel").value || "?";
-        const createdBy = $("bCreatedBy").value || "?";
-        const channelLabel = $("bChannelSelect").selectedOptions.length
-          ? $("bChannelSelect").selectedOptions[0].textContent
-          : "";
-        const label = channelLabel ? ` (${channelLabel})` : "";
-        el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
+        if (!channelId){
+          setTarotClaimsStatus("Pick a channel first.", "err");
+          return;
+        }
+        setTarotClaimsStatus("Posting TarotCards board...", "");
+        try{
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deckId) + "/claims/post", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({channel_id: channelId, claim_limit: claimLimit})
+          }, true);
+          setTarotClaimsStatus("TarotCards board posted.", "ok");
+        }catch(err){
+          setTarotClaimsStatus(err.message, "err");
+        }
       }
 
       async function loadContestChannels(){
@@ -2535,44 +3258,333 @@ const $ = (id) => document.getElementById(id);
         }
       }
 
+      function updateBingoCreatePayload(){
+        const el = $("bCreatePayload");
+        if (!el){
+          return;
+        }
+        const channelId = $("bChannelSelect").value || $("bChannel").value || "?";
+        const createdBy = $("bCreatedBy").value || "?";
+        const channelLabel = $("bChannelSelect").selectedOptions.length
+          ? $("bChannelSelect").selectedOptions[0].textContent
+          : "";
+        const label = channelLabel ? ` (${channelLabel})` : "";
+        el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
+      }
+
+      function getOwnerClaimStatus(ownerName){
+        const claims = (currentGame && Array.isArray(currentGame.claims)) ? currentGame.claims : [];
+        const pending = claims.some(c => c && c.owner_name === ownerName && c.pending);
+        const denied = claims.some(c => c && c.owner_name === ownerName && c.denied);
+        const approved = claims.some(c => c && c.owner_name === ownerName && !c.pending && !c.denied);
+        if (pending) return {label: "Claim pending", cls: "warn"};
+        if (approved) return {label: "Claim approved", cls: "good"};
+        if (denied) return {label: "Claim denied", cls: "bad"};
+        return {label: "No claim", cls: ""};
+      }
+
+      function renderOwnersList(owners){
+        const el = $("bOwners");
+        const empty = $("bOwnersEmpty");
+        if (!Array.isArray(owners) || owners.length === 0){
+          el.textContent = "";
+          if (empty) empty.style.display = "flex";
+          return;
+        }
+        if (empty) empty.style.display = "none";
+        el.innerHTML = "";
+        owners.forEach(o => {
+          const item = document.createElement("div");
+          item.className = "owner-row";
+          const claim = getOwnerClaimStatus(o.owner_name || "");
+          const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
+          item.innerHTML = `
+            <div class="owner-row-main">
+              <div class="owner-row-name">
+                <strong>${o.owner_name}</strong>
+                <span class="${badgeClass}">${claim.label}</span>
+              </div>
+              <button class="btn-ghost owner-view-btn" data-owner="${o.owner_name}">View Cards (${o.cards})</button>
+            </div>
+          `;
+          const viewBtn = item.querySelector(".owner-view-btn");
+          if (viewBtn){
+            viewBtn.addEventListener("click", () => {
+              const name = viewBtn.getAttribute("data-owner") || "";
+              if (!name) return;
+              const ownerInput = $("bOwner");
+              if (ownerInput) ownerInput.value = name;
+              updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
+              loadOwnerCards(name);
+              $("bOwnerModal").classList.add("show");
+            });
+          }
+          el.appendChild(item);
+        });
+      }
+
+      async function loadOwnersForGame(){
+        const gid = getGameId();
+        $("bOwnerCards").textContent = "No tickets loaded.";
+        if (!gid){
+          $("bOwners").textContent = "";
+          const empty = $("bOwnersEmpty");
+          if (empty) empty.style.display = "flex";
+          return;
+        }
+        try{
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners", {method:"GET"});
+          renderOwnersList(data.owners || []);
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }
+      }
+
+      function renderOwnerCards(owner, cards, called, header){
+        const el = $("bOwnerCards");
+        const summary = $("bOwnerSummary");
+        ownerFilterData = {owner, cards, called, header};
+        if (summary){
+          const path = summary.querySelector(".context-path");
+          const meta = summary.querySelector(".context-meta");
+          if (path) path.textContent = `Viewing cards for: ${owner || "-"}`;
+          if (meta) meta.textContent = `Total cards: ${Array.isArray(cards) ? cards.length : 0}`;
+        }
+        let totalCalledCells = 0;
+        let totalCells = 0;
+        if (!Array.isArray(cards) || cards.length === 0){
+          el.textContent = "No tickets for this player.";
+          return;
+        }
+        el.innerHTML = "";
+        const calledSet = new Set(Array.isArray(called) ? called : []);
+        const headerText = (header || "BING").slice(0, 4).split("");
+        while (headerText.length < 4) headerText.push(" ");
+        cards.forEach((card, index) => {
+          const wrap = document.createElement("div");
+          wrap.className = "owner-card";
+          wrap.classList.add("collapsed");
+          const headerRow = document.createElement("div");
+          headerRow.className = "owner-card-header";
+          const titleWrap = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "owner-card-title";
+          title.textContent = `Card ${index + 1}`;
+          const id = document.createElement("div");
+          id.className = "owner-card-id";
+          const cardId = String(card.card_id || "");
+          const suffix = cardId.length > 4 ? cardId.slice(-4) : cardId;
+          id.textContent = suffix ? `...${suffix}` : "-";
+          if (cardId){
+            id.title = cardId;
+          }
+          titleWrap.appendChild(title);
+          titleWrap.appendChild(id);
+          const summaryWrap = document.createElement("div");
+          summaryWrap.className = "owner-card-summary";
+          const countEl = document.createElement("div");
+          countEl.className = "owner-card-count";
+          let numbers = card.numbers;
+          if (typeof numbers === "string"){
+            try{
+              numbers = JSON.parse(numbers);
+            }catch(err){
+              numbers = null;
+            }
+          }
+          if (!Array.isArray(numbers)){
+            numbers = Array.isArray(card.grid)
+              ? card.grid
+              : (Array.isArray(card.card) ? card.card : []);
+          }
+          let cardCalled = 0;
+          let cardTotal = 0;
+          numbers.forEach((row) => {
+            (row || []).forEach((value) => {
+              cardTotal += 1;
+              if (calledSet.has(value)){
+                cardCalled += 1;
+              }
+            });
+          });
+          totalCells += cardTotal;
+          totalCalledCells += cardCalled;
+          countEl.textContent = `${cardCalled} / ${cardTotal || 0} called`;
+          const progress = document.createElement("div");
+          progress.className = "owner-card-progress";
+          const fill = document.createElement("div");
+          fill.className = "owner-card-progress-fill";
+          const ratio = cardTotal ? (cardCalled / cardTotal) : 0;
+          fill.style.width = `${Math.round(ratio * 100)}%`;
+          progress.appendChild(fill);
+          summaryWrap.appendChild(countEl);
+          summaryWrap.appendChild(progress);
+          if (cardTotal && cardCalled === cardTotal){
+            const flag = document.createElement("span");
+            flag.className = "owner-card-flag complete";
+            flag.textContent = "Complete";
+            summaryWrap.appendChild(flag);
+          }else if (cardTotal && ratio >= 0.75){
+            const flag = document.createElement("span");
+            flag.className = "owner-card-flag near";
+            flag.textContent = "Near-win";
+            summaryWrap.appendChild(flag);
+          }
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "owner-card-toggle";
+          toggle.setAttribute("aria-label", "Collapse card");
+          toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>';
+          headerRow.appendChild(titleWrap);
+          headerRow.appendChild(summaryWrap);
+          headerRow.appendChild(toggle);
+          const body = document.createElement("div");
+          body.className = "owner-card-body";
+          const cardHeader = document.createElement("div");
+          cardHeader.className = "bingo-header";
+          headerText.forEach((h, idx) => {
+            const label = document.createElement("div");
+            label.textContent = h;
+            if (idx > 0){
+              label.style.borderLeft = "1px solid rgba(255,255,255,.08)";
+            }
+            cardHeader.appendChild(label);
+          });
+          body.appendChild(cardHeader);
+          const grid = document.createElement("div");
+          grid.className = "bingo-grid";
+          if (!numbers.length){
+            const empty = document.createElement("div");
+            empty.className = "status";
+            empty.textContent = "No numbers available for this card.";
+            body.appendChild(empty);
+          }
+          numbers.forEach((row, r) => {
+            (row || []).forEach((value, c) => {
+              const cell = document.createElement("div");
+              cell.className = "bingo-cell";
+              const isCalled = calledSet.has(value);
+              const marked = (card.marks && card.marks[r] && card.marks[r][c]) || isCalled;
+              if (marked) cell.classList.add("marked");
+              if (isCalled) cell.classList.add("called");
+              if (ownerFilter === "called" && !isCalled){
+                cell.classList.add("filtered-out");
+              }
+              if (ownerFilter === "uncalled" && isCalled){
+                cell.classList.add("filtered-out");
+              }
+              if (c > 0){
+                cell.style.borderLeft = "1px solid rgba(255,255,255,.08)";
+              }
+              cell.textContent = value;
+              if (isCalled){
+                const mark = document.createElement("span");
+                mark.className = "cell-mark";
+                mark.textContent = "x";
+                cell.appendChild(mark);
+              }
+              cell.onclick = () => {
+                renderCard(card, called, header);
+              };
+              grid.appendChild(cell);
+            });
+          });
+          if (numbers.length){
+            body.appendChild(grid);
+          }
+          headerRow.addEventListener("click", () => {
+            const isCollapsed = wrap.classList.contains("collapsed");
+            const cardsEls = el.querySelectorAll(".owner-card");
+            cardsEls.forEach((cardEl) => {
+              cardEl.classList.add("collapsed");
+            });
+            if (isCollapsed){
+              wrap.classList.remove("collapsed");
+            }
+          });
+          toggle.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const isCollapsed = wrap.classList.contains("collapsed");
+            const cardsEls = el.querySelectorAll(".owner-card");
+            cardsEls.forEach((cardEl) => {
+              cardEl.classList.add("collapsed");
+            });
+            if (isCollapsed){
+              wrap.classList.remove("collapsed");
+            }
+          });
+          wrap.appendChild(headerRow);
+          wrap.appendChild(body);
+          el.appendChild(wrap);
+        });
+        const calledBtn = $("bOwnerFilterCalled");
+        const uncalledBtn = $("bOwnerFilterUncalled");
+        if (calledBtn && uncalledBtn){
+          calledBtn.textContent = `Called (${totalCalledCells})`;
+          uncalledBtn.textContent = `Uncalled (${Math.max(0, totalCells - totalCalledCells)})`;
+          calledBtn.classList.toggle("active", ownerFilter === "called");
+          uncalledBtn.classList.toggle("active", ownerFilter === "uncalled");
+        }
+        el.dataset.filter = ownerFilter;
+      }
+      async function loadOwnerCards(ownerName){
+        const gid = getGameId();
+        if (!gid || !ownerName){
+          setBingoStatus("Enter game id and owner name.", "err");
+          return;
+        }
+        ownerFilter = "all";
+        try{
+          const state = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/cards", {method:"GET"}, false);
+          renderBingoState(state);
+          renderOwnerCards(ownerName, data.cards || [], state.game && state.game.called, state.game && state.game.header);
+          setBingoStatus("Tickets loaded.", "ok");
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }
+      }
 
       // owner list loads automatically when selecting a game
 
-      on("deckCreateClose", "click", () => {
+      $("bCloseCreate").addEventListener("click", () => {
+        $("bCreateModal").classList.remove("show");
+      });
+      $("deckCreateClose").addEventListener("click", () => {
         $("deckCreateModal").classList.remove("show");
       });
-      on("mediaClose", "click", () => {
+      $("mediaClose").addEventListener("click", () => {
         $("mediaModal").classList.remove("show");
       });
-      on("artistClose", "click", () => {
+      $("artistClose").addEventListener("click", () => {
         $("artistModal").classList.remove("show");
       });
-      on("calendarClose", "click", () => {
+      $("calendarClose").addEventListener("click", () => {
         $("calendarModal").classList.remove("show");
       });
-      on("galleryClose", "click", () => {
+      $("galleryClose").addEventListener("click", () => {
         $("galleryModal").classList.remove("show");
       });
-      on("galleryModal", "click", (event) => {
+      $("galleryModal").addEventListener("click", (event) => {
         if (event.target === $("galleryModal")){
           $("galleryModal").classList.remove("show");
         }
       });
-      on("galleryImportOpen", "click", () => {
+      $("galleryImportOpen").addEventListener("click", () => {
         $("galleryImportModal").classList.add("show");
         setGalleryImportStatus("Pick a channel to import.", "");
         loadGalleryChannels();
       });
-      on("galleryImportClose", "click", () => {
+      $("galleryImportClose").addEventListener("click", () => {
         $("galleryImportModal").classList.remove("show");
       });
-      on("galleryImportModal", "click", (event) => {
+      $("galleryImportModal").addEventListener("click", (event) => {
         if (event.target === $("galleryImportModal")){
           $("galleryImportModal").classList.remove("show");
         }
       });
-      on("galleryImportRefresh", "click", () => loadGalleryChannels());
-      on("galleryImportRun", "click", async () => {
+      $("galleryImportRefresh").addEventListener("click", () => loadGalleryChannels());
+      $("galleryImportRun").addEventListener("click", async () => {
         const channelId = $("galleryImportChannel").value || "";
         if (!channelId){
           setGalleryImportStatus("Pick a channel first.", "err");
@@ -2598,8 +3610,26 @@ const $ = (id) => document.getElementById(id);
           setGalleryImportStatus(err.message, "err");
         }
       });
-      on("galleryChannelRefresh", "click", () => loadGalleryChannels());
-      on("galleryChannelSave", "click", async () => {
+      $("bOwnerFilterCalled").addEventListener("click", () => {
+        ownerFilter = ownerFilter === "called" ? "all" : "called";
+        renderOwnerCards(
+          ownerFilterData.owner,
+          ownerFilterData.cards,
+          ownerFilterData.called,
+          ownerFilterData.header
+        );
+      });
+      $("bOwnerFilterUncalled").addEventListener("click", () => {
+        ownerFilter = ownerFilter === "uncalled" ? "all" : "uncalled";
+        renderOwnerCards(
+          ownerFilterData.owner,
+          ownerFilterData.cards,
+          ownerFilterData.called,
+          ownerFilterData.header
+        );
+      });
+      $("galleryChannelRefresh").addEventListener("click", () => loadGalleryChannels());
+      $("galleryChannelSave").addEventListener("click", async () => {
         const channelId = $("galleryUploadChannel").value || "";
         try{
           await jsonFetch("/api/gallery/settings", {
@@ -2612,7 +3642,7 @@ const $ = (id) => document.getElementById(id);
           setGalleryChannelStatus(err.message, "err");
         }
       });
-      on("galleryChannelCreate", "click", async () => {
+      $("galleryChannelCreate").addEventListener("click", async () => {
         const name = $("galleryChannelName").value.trim();
         const categoryId = $("galleryChannelCategory").value.trim();
         const templateId = $("galleryChannelTemplate").value || "";
@@ -2642,15 +3672,15 @@ const $ = (id) => document.getElementById(id);
           setGalleryChannelStatus(err.message, "err");
         }
       });
-      on("calendarRefresh", "click", () => loadCalendarAdmin());
-      on("calendarMonth", "change", (ev) => {
+      $("calendarRefresh").addEventListener("click", () => loadCalendarAdmin());
+      $("calendarMonth").addEventListener("change", (ev) => {
         const month = parseInt(ev.target.value || "1", 10);
         const entry = calendarData.find(e => e.month === month) || calendarData[0];
         if (entry){
           applyCalendarSelection(entry);
         }
       });
-      on("calendarPick", "click", () => {
+      $("calendarPick").addEventListener("click", () => {
         librarySelectHandler = (item) => {
           calendarSelected.image = item.url || "";
           calendarSelected.title = item.title || item.name || "";
@@ -2663,7 +3693,7 @@ const $ = (id) => document.getElementById(id);
         showLibraryModal(true);
         loadLibrary("media");
       });
-      on("calendarSave", "click", async () => {
+      $("calendarSave").addEventListener("click", async () => {
         const month = parseInt($("calendarMonth").value || "1", 10);
         const title = $("calendarTitle").value.trim();
         const payload = {
@@ -2688,7 +3718,7 @@ const $ = (id) => document.getElementById(id);
           setCalendarStatus(err.message, "err");
         }
       });
-      on("calendarClear", "click", async () => {
+      $("calendarClear").addEventListener("click", async () => {
         const month = parseInt($("calendarMonth").value || "1", 10);
         try{
           await jsonFetch("/api/gallery/calendar", {
@@ -2709,14 +3739,14 @@ const $ = (id) => document.getElementById(id);
           setCalendarStatus(err.message, "err");
         }
       });
-      on("authRolesClose", "click", () => {
+      $("authRolesClose").addEventListener("click", () => {
         $("authRolesModal").classList.remove("show");
       });
-      on("authRolesRefresh", "click", () => loadAuthRoles());
-      on("authTokensClose", "click", () => {
+      $("authRolesRefresh").addEventListener("click", () => loadAuthRoles());
+      $("authTokensClose").addEventListener("click", () => {
         $("authTokensModal").classList.remove("show");
       });
-      on("authTokensRefresh", "click", () => loadAuthTokens());
+      $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
       const authTempClose = $("authTempClose");
       if (authTempClose){
         authTempClose.addEventListener("click", () => {
@@ -2790,7 +3820,7 @@ const $ = (id) => document.getElementById(id);
         }
         });
       }
-      on("authRolesList", "change", (ev) => {
+      $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;
         const roleId = input.getAttribute("data-role");
@@ -2816,7 +3846,7 @@ const $ = (id) => document.getElementById(id);
         updateAuthRoleIdsField();
         renderAuthRolesList(authRolesCache || []);
       });
-      on("authRolesSave", "click", async () => {
+      $("authRolesSave").addEventListener("click", async () => {
         try{
           await jsonFetch("/api/auth/roles", {
             method:"POST",
@@ -2828,8 +3858,26 @@ const $ = (id) => document.getElementById(id);
           setAuthRolesStatus(err.message, "err");
         }
       });
+      $("bOwnerClose").addEventListener("click", () => {
+        $("bOwnerModal").classList.remove("show");
+      });
+      $("bPurchaseClose").addEventListener("click", () => {
+        $("bPurchaseModal").classList.remove("show");
+      });
+      $("bPurchaseCopy").addEventListener("click", () => {
+        const link = $("bPurchaseLink").value || "";
+        if (!link){
+          return;
+        }
+        try{
+          navigator.clipboard.writeText(link);
+          $("bPurchaseStatus").textContent = "Link copied.";
+        }catch(err){
+          $("bPurchaseStatus").textContent = "Copy failed.";
+        }
+      });
 
-      on("loginBtn", "click", () => {
+      $("loginBtn").addEventListener("click", () => {
         if (!apiKeyEl.value.trim()){
           loginStatusEl.textContent = "Enter your API key.";
           loginStatusEl.className = "status err";
@@ -2841,32 +3889,2299 @@ const $ = (id) => document.getElementById(id);
         setStatus("Welcome to Bingo Control.", "ok");
         initAuthenticatedSession();
       });
-      if (overlayToggle && overlayToggleBtn){
-        overlayToggle.addEventListener("change", () => {
-          document.body.classList.toggle("overlay", overlayToggle.checked);
-          overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
-          saveSettings();
-        });
-        overlayToggleBtn.addEventListener("click", () => {
-          overlayToggle.checked = !overlayToggle.checked;
-          overlayToggle.dispatchEvent(new Event("change"));
-        });
-      }
-      on("overlayExit", "click", () => {
+      overlayToggle.addEventListener("change", () => {
+        document.body.classList.toggle("overlay", overlayToggle.checked);
+        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+        saveSettings();
+      });
+      overlayToggleBtn.addEventListener("click", () => {
+        overlayToggle.checked = !overlayToggle.checked;
+        overlayToggle.dispatchEvent(new Event("change"));
+      });
+      $("overlayExit").addEventListener("click", () => {
         overlayToggle.checked = false;
         document.body.classList.remove("overlay");
         saveSettings();
       });
-      on("uploadLibraryClose", "click", () => showLibraryModal(false));
-      on("uploadLibraryRefresh", "click", () => loadLibrary(libraryKind));
+      $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
+      $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
+
+      $("deckCreateBackPick").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          $("deckCreateBackPick").dataset.backUrl = item.url || "";
+          $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
+          const preview = $("deckCreateBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (item.url){
+              const img = document.createElement("img");
+              img.src = item.url;
+              preview.appendChild(img);
+            }
+          }
+          setTarotStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("deckCreateSuitPreset").addEventListener("change", (ev) => {
+        const value = ev.target.value || "custom";
+        if (value === "custom"){
+          return;
+        }
+        $("deckCreateSuitJson").value = formatSuitPresetJson(value);
+      });
+      $("deckCreateSuitJson").addEventListener("input", () => {
+        if ($("deckCreateSuitPreset").value !== "custom"){
+          $("deckCreateSuitPreset").value = "custom";
+        }
+      });
+      $("deckEditSuitPreset").addEventListener("change", (ev) => {
+        const value = ev.target.value || "custom";
+        if (value === "custom"){
+          return;
+        }
+        $("deckEditSuitJson").value = formatSuitPresetJson(value);
+      });
+      $("deckEditSuitJson").addEventListener("input", () => {
+        if ($("deckEditSuitPreset").value !== "custom"){
+          $("deckEditSuitPreset").value = "custom";
+        }
+      });
+
+      $("deckCreateSubmit").addEventListener("click", async () => {
+        const id = $("deckCreateId").value.trim();
+        if (!id){
+          setTarotStatus("Deck id is required.", "err");
+          return;
+        }
+        const backUrl = $("deckCreateBackPick").dataset.backUrl || "";
+        if (!backUrl){
+          setTarotStatus("Pick a deck back before creating the deck.", "err");
+          return;
+        }
+        const name = $("deckCreateName").value.trim();
+        const theme = $("deckCreateTheme").value || "classic";
+        const seedChoice = $("deckCreateSeed").value || "none";
+        const perHouse = Number($("deckCreatePerHouse").value || 0);
+        const crownCount = Number($("deckCreateCrown").value || 0);
+        const artistId = $("deckCreateBackPick").dataset.artistId || "";
+        let suits = null;
+        try{
+          suits = parseSuitJson($("deckCreateSuitJson").value);
+        }catch(err){
+          setTarotStatus(err.message, "err");
+          return;
+        }
+        try{
+          await jsonFetch("/api/tarot/decks", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              deck_id: id,
+              name: name || undefined,
+              theme,
+              suits: suits && suits.length ? suits : []
+            })
+          }, true);
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/back", {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
+          }, true);
+          if (seedChoice === "dummy"){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/seed", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({per_house: perHouse, crown_count: crownCount})
+            }, true);
+          } else if (seedChoice === "default"){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(id) + "/seed-template", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"}
+            }, true);
+          }
+          await loadTarotDeckList(id);
+          $("deckCreateModal").classList.remove("show");
+          setTarotStatus("Deck created.", "ok");
+          await loadTarotDeck();
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      });
+
+      $("taCardLibrary").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          window.taUploadedImageUrl = item.url || "";
+          $("taCardArtist").value = item.artist_id || "";
+          if (window.taDeckData && window.taDeckData.cards){
+            const card = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
+            if (card){
+              card.image = window.taUploadedImageUrl;
+              taRenderPreviews(card);
+            }
+          }
+          taSetDirty(true);
+          setTarotStatus("Card image selected from library.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("bCreateBgLibrary").addEventListener("click", () => {
+        librarySelectHandler = async (item) => {
+          const gid = getGameId();
+          if (!gid){
+            bingoCreateBgUrl = item.url || "";
+            $("bCreateBgStatus").textContent = bingoCreateBgUrl
+              ? "Background selected for new game."
+              : "No background selected.";
+            return;
+          }
+          try{
+            await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/background-from-media", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({url: item.url})
+            }, true);
+            setStatus("Background applied from library.", "ok");
+            await refreshBingo();
+          }catch(err){
+            setStatus(err.message, "err");
+          }
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("bCreate").addEventListener("click", async () => {
+        try{
+          updateBingoCreatePayload();
+            const body = {
+              title: $("bTitle").value,
+              header_text: $("bHeader").value,
+              price: Number($("bPrice").value || 0),
+              currency: $("bCurrency").value || "gil",
+              max_cards_per_player: Number($("bMaxCards").value || 10),
+              seed_pot: Number($("bSeedPot").value || 0),
+              channel_id: $("bChannelSelect").value || $("bChannel").value || "",
+              created_by: $("bCreatedBy").value || "",
+              announce_calls: $("bAnnounceCalls").checked,
+              theme_color: $("bTheme").value || ""
+            };
+          const data = await jsonFetch("/bingo/create", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          setGameId(data.game.game_id || "");
+          if (bingoCreateBgUrl){
+            try{
+              await jsonFetch("/bingo/" + encodeURIComponent(data.game.game_id || "") + "/background-from-media", {
+                method:"POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({url: bingoCreateBgUrl})
+              }, true);
+              setStatus("Background applied from library.", "ok");
+            }catch(err){
+              setStatus(err.message, "err");
+            }
+            bingoCreateBgUrl = "";
+            $("bCreateBgStatus").textContent = "No background selected.";
+          }
+          $("bCreateModal").classList.remove("show");
+          setStatus("Bingo game created.", "ok");
+          renderBingoState({game: data.game});
+          loadGamesMenu();
+          loadOwnersForGame();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      async function refreshBingo(){
+        const gid = getGameId();
+        if (!gid){
+          setBingoStatus("Select a game first.", "err");
+          return;
+        }
+        try{
+          const data = await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"GET"}, false);
+          renderBingoState(data);
+          setBingoStatus("Game refreshed.", "ok");
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }
+      }
+
+      $("bRefresh").addEventListener("click", refreshBingo);
+      $("bOwnersRefresh").addEventListener("click", () => loadOwnersForGame());
+
+      $("bAdvanceStage").addEventListener("click", async () => {
+        try{
+          const btn = $("bAdvanceStage");
+          if (btn) btn.disabled = true;
+          const data = await jsonFetch("/bingo/advance-stage", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: getGameId()})
+          });
+          setBingoStatus(data.ended ? "Game closed." : "Stage advanced.", "ok");
+          addBingoHistory(data.ended ? "Stage advanced and game ended" : "Stage advanced");
+          setBingoLastAction(data.ended ? "Stage advanced and game ended" : "Stage advanced");
+          await refreshBingo();
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bAdvanceStage");
+          if (btn) btn.disabled = false;
+        }
+      });
+
+      $("bStart").addEventListener("click", async () => {
+        try{
+          const btn = $("bStart");
+          if (btn) btn.disabled = true;
+          const gid = getGameId();
+          if (!gid){
+            setBingoStatus("Select a game first.", "err");
+            return;
+          }
+          await jsonFetch("/bingo/start", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: gid})
+          });
+          setBingoStatus("Game started.", "ok");
+          addBingoHistory("Game started");
+          setBingoLastAction("Game started");
+          if (currentGame && currentGame.game_id === gid){
+            currentGame.started = true;
+            renderBingoState({game: currentGame});
+          }
+          await refreshBingo();
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bStart");
+          if (btn) btn.disabled = false;
+        }
+      });
 
 
+      $("bRoll").addEventListener("click", async () => {
+        try{
+          const btn = $("bRoll");
+          if (btn) btn.disabled = true;
+          await jsonFetch("/bingo/roll", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({game_id: getGameId()})
+          });
+          setBingoStatus("Pulled random number.", "ok");
+          await refreshBingo();
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bRoll");
+          if (btn) btn.disabled = false;
+        }
+      });
+
+      document.addEventListener("keydown", (ev) => {
+        if (ev.repeat) return;
+        if (ev.key.toLowerCase() !== "n") return;
+        const target = ev.target;
+        const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
+        if (tag === "input" || tag === "textarea" || target.isContentEditable) return;
+        const panel = $("bingoPanel");
+        if (!panel || panel.classList.contains("hidden")) return;
+        const btn = $("bRoll");
+        if (!btn || btn.disabled) return;
+        ev.preventDefault();
+        btn.click();
+      });
+
+      $("bCloseGame").addEventListener("click", async () => {
+        const gid = getGameId();
+        if (!gid){
+          setBingoStatus("Select a game first.", "err");
+          return;
+        }
+        if (!confirm("This will end the game and lock all cards. Continue?")){
+          return;
+        }
+        try{
+          const btn = $("bCloseGame");
+          if (btn) btn.disabled = true;
+          await jsonFetch("/bingo/" + encodeURIComponent(gid), {method:"DELETE"});
+          setGameId("");
+          currentGame = null;
+          $("bOwners").textContent = "";
+          const ownersEmpty = $("bOwnersEmpty");
+          if (ownersEmpty) ownersEmpty.style.display = "flex";
+          $("bClaims").textContent = "No claims yet.";
+          $("bTitleVal").textContent = "No title";
+          $("bHeaderVal").textContent = "No header";
+          $("bStageVal").textContent = "No stage";
+          $("bPotVal").textContent = "No pot";
+          $("bCalled").textContent = "No numbers called yet.";
+          $("bCalledGrid").innerHTML = "";
+          $("bCardHeader").innerHTML = "";
+          $("bCardGrid").innerHTML = "";
+          setBingoStatus("Game closed.", "ok");
+          addBingoHistory("Game closed");
+          setBingoLastAction("Game closed");
+          await loadGamesMenu();
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }finally{
+          const btn = $("bCloseGame");
+          if (btn) btn.disabled = false;
+        }
+      });
 
 
+      const bOwnerInput = $("bOwner");
+      if (bOwnerInput){
+        bOwnerInput.addEventListener("input", () => updateBingoBuyState(currentGame, currentGame ? currentGame.called : []));
+      }
+      const bQtyInput = $("bQty");
+      if (bQtyInput){
+        bQtyInput.addEventListener("input", () => updateBingoBuyState(currentGame, currentGame ? currentGame.called : []));
+      }
+      const bSeedPotInput = $("bSeedPotAmount");
+      if (bSeedPotInput){
+        bSeedPotInput.addEventListener("input", () => updateSeedPotState(currentGame));
+      }
+      const bSeedPotApply = $("bSeedPotApply");
+      if (bSeedPotApply){
+        bSeedPotApply.addEventListener("click", async () => {
+          try{
+            bSeedPotApply.disabled = true;
+            const gid = getGameId();
+            if (!gid){
+              setBingoStatus("Select a game first.", "err");
+              return;
+            }
+            const amount = Number($("bSeedPotAmount").value || 0);
+            if (!Number.isFinite(amount) || amount <= 0){
+              setBingoStatus("Seed amount must be positive.", "err");
+              return;
+            }
+            await jsonFetch("/bingo/seed", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({game_id: gid, amount})
+            });
+            setBingoStatus("Pot seeded.", "ok");
+            addBingoHistory(`Seeded pot +${amount}`);
+            setBingoLastAction(`Seeded pot +${amount}`);
+            await refreshBingo();
+          }catch(err){
+            setBingoStatus(err.message, "err");
+          }finally{
+            updateSeedPotState(currentGame);
+          }
+        });
+      }
 
+      $("bBuy").addEventListener("click", async () => {
+        try{
+          const buyBtn = $("bBuy");
+          if (buyBtn) buyBtn.disabled = true;
+          const gid = getGameId();
+          const ownerName = $("bOwner").value.trim();
+          const qty = Number($("bQty").value || 1);
+          const countsPot = $("bCountsPot");
+          const gift = countsPot ? !countsPot.checked : false;
+          if (!ownerName){
+            setBingoStatus("Owner name is required.", "err");
+            return;
+          }
+          if (!Number.isFinite(qty) || qty < 1){
+            setBingoStatus("Quantity must be at least 1.", "err");
+            return;
+          }
+            const body = {
+              game_id: gid,
+              owner_name: ownerName,
+              owner_user_id: $("bOwnerId").value.trim() || null,
+              quantity: qty,
+              gift: gift
+            };
+          await jsonFetch("/bingo/buy", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          setBingoStatus(gift ? "Tickets gifted." : "Cards bought.", "ok");
+          addBingoHistory(gift ? `Gifted ${qty} for ${ownerName}` : `Bought ${qty} for ${ownerName}`);
+          setBingoLastAction(gift ? `Gifted ${qty} for ${ownerName}` : `Bought ${qty} for ${ownerName}`);
+          await loadOwnersForGame();
+          if (gid && ownerName){
+            const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(ownerName) + "/token", {method:"GET"});
+            const base = getBase();
+            const url = new URL("/bingo/owner?token=" + encodeURIComponent(data.token || ""), base).toString();
+            $("bPurchaseLink").value = url;
+            $("bPurchaseStatus").textContent = "Share this link with the player.";
+            $("bPurchaseModal").classList.add("show");
+          }
+        }catch(err){
+          setBingoStatus(err.message, "err");
+        }finally{
+          updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
+        }
+      });
 
+      $("bViewOwner").addEventListener("click", () => {
+        const gid = getGameId();
+        const owner = $("bOwner").value.trim();
+        if (!gid || !owner){
+          setBingoStatus("Enter game id and owner name.", "err");
+          return;
+        }
+        currentOwner = owner;
+        jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(owner) + "/token", {method:"GET"})
+          .then(data => {
+            const base = getBase();
+            const url = new URL("/bingo/owner?token=" + encodeURIComponent(data.token || ""), base).toString();
+            window.open(url, "_blank");
+          })
+          .catch(err => setStatus(err.message, "err"));
+      });
 
+      function getOverlayUrl(code){
+        const base = getBase();
+        return new URL("/overlay/session/" + encodeURIComponent(code), base).toString();
+      }
 
+      function getPlayerUrl(code){
+        const base = getBase();
+        return new URL("/tarot/session/" + encodeURIComponent(code) + "?view=player", base).toString();
+      }
+
+      function getPriestessUrl(code, token){
+        const base = getBase();
+        const url = new URL("/tarot/session/" + encodeURIComponent(code), base);
+        url.searchParams.set("view", "priestess");
+        if (token) url.searchParams.set("token", token);
+        return url.toString();
+      }
+
+      function renderLinks(code, token){
+        const links = [];
+        if (code){
+          links.push(`<a href="${getPlayerUrl(code)}" target="_blank" rel="noreferrer">Player</a>`);
+          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Priestess</a>`);
+          links.push(`<a href="${getOverlayUrl(code)}" target="_blank" rel="noreferrer">Overlay</a>`);
+        }
+        $("tLink").innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
+      async function loadTarotSessionDecks(selectValue){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const modalSelect = $("sessionCreateDeck");
+          modalSelect.innerHTML = "";
+          decks.forEach(d => {
+            const opt2 = document.createElement("option");
+            opt2.value = d.deck_id;
+            opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            modalSelect.appendChild(opt2);
+          });
+          modalSelect.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("tCreateSession").addEventListener("click", () => {
+        $("sessionCreateModal").classList.add("show");
+      });
+      $("sessionCreateClose").addEventListener("click", () => {
+        $("sessionCreateModal").classList.remove("show");
+      });
+      $("sessionCreateSubmit").addEventListener("click", async () => {
+        try{
+          const deck = $("sessionCreateDeck").value.trim() || "elf-classic";
+          const spread = $("sessionCreateSpread").value.trim() || "single";
+          const data = await jsonFetch("/api/tarot/sessions", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({deck_id: deck, spread_id: spread})
+          }, true);
+          $("tJoinCode").value = data.joinCode || "";
+          $("tPriestessToken").value = data.priestessToken || "";
+          renderLinks(data.joinCode || "", data.priestessToken || "");
+          setStatus("Session created.", "ok");
+          await loadTarotSessions(data.joinCode || "");
+          $("sessionCreateModal").classList.remove("show");
+          if (data.joinCode){
+            window.open(getPriestessUrl(data.joinCode, data.priestessToken || ""), "_blank");
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      async function loadTarotSessions(selectJoin){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        try{
+          const data = await jsonFetch("/api/tarot/sessions", {method:"GET"}, true);
+          const select = $("tSessionSelect");
+          select.innerHTML = "";
+          const sessions = data.sessions || [];
+          sessions.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.join_code || "";
+            const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
+            opt.textContent = `${s.join_code || "-"} | ${s.deck_id || "-"} | ${s.spread_id || "-"} | ${s.status || "-"} | ${created}`;
+            opt.dataset.token = s.priestess_token || "";
+            select.appendChild(opt);
+          });
+          if (selectJoin){
+            select.value = selectJoin;
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      $("tSessionRefresh").addEventListener("click", () => loadTarotSessions());
+      $("tSessionSelect").addEventListener("change", (ev) => {
+        const join = ev.target.value || "";
+        const token = ev.target.selectedOptions.length ? (ev.target.selectedOptions[0].dataset.token || "") : "";
+        $("tJoinCode").value = join;
+        $("tPriestessToken").value = token;
+        renderLinks(join, token);
+      });
+
+      $("tOpenOverlay").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
+        }
+        const url = getOverlayUrl(code);
+        renderLinks(code, $("tPriestessToken").value.trim());
+        window.open(url, "_blank");
+      });
+
+      $("tOpenPlayer").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
+        }
+        const url = getPlayerUrl(code);
+        renderLinks(code, $("tPriestessToken").value.trim());
+        window.open(url, "_blank");
+      });
+
+      $("tOpenPriestess").addEventListener("click", () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code.", "err");
+          return;
+        }
+        const token = $("tPriestessToken").value.trim();
+        const url = getPriestessUrl(code, token);
+        renderLinks(code, token);
+        window.open(url, "_blank");
+      });
+
+      $("tCloseSession").addEventListener("click", async () => {
+        const join = $("tJoinCode").value.trim();
+        const token = $("tPriestessToken").value.trim();
+        if (!join || !token){
+          setStatus("Join code and priestess token required.", "err");
+          return;
+        }
+        if (!confirm("Close this session? It will be removed from the list.")){
+          return;
+        }
+        try{
+          const state = await jsonFetch("/api/tarot/sessions/" + encodeURIComponent(join) + "/state?view=priestess", {method:"GET"}, true);
+          const sessionId = state.state && state.state.session ? state.state.session.session_id : "";
+          if (!sessionId){
+            throw new Error("Session not found.");
+          }
+          await jsonFetch("/api/tarot/sessions/" + encodeURIComponent(sessionId), {
+            method: "DELETE",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({token})
+          });
+          setStatus("Session closed.", "ok");
+          await loadTarotSessions();
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      const CARDGAME_DEFAULTS_KEY = "cardgame_defaults";
+
+      function getCardgamePlayerUrl(gameId, joinCode){
+        const base = getBase();
+        return new URL(`/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(joinCode)}`, base).toString();
+      }
+
+      function getCardgameHostUrl(gameId, joinCode, token){
+        const base = getBase();
+        const url = new URL(`/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(joinCode)}`, base);
+        url.searchParams.set("view", "priestess");
+        if (token){
+          url.searchParams.set("token", token);
+        }
+        return url.toString();
+      }
+
+      function setCardgameStatus(msg, kind){
+        setStatusText("cgStatus", msg, kind);
+      }
+
+      function renderCardgameLinks(gameId, joinCode, token){
+        const target = $("cgLink");
+        if (!target) return;
+        const links = [];
+        if (joinCode && gameId){
+          links.push(`<a href="${getCardgamePlayerUrl(gameId, joinCode)}" target="_blank" rel="noreferrer">Player</a>`);
+          links.push(`<a href="${getCardgameHostUrl(gameId, joinCode, token)}" target="_blank" rel="noreferrer">Host</a>`);
+        }
+        target.innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
+      function getCardgameDefaults(){
+        try{
+          const raw = localStorage.getItem(CARDGAME_DEFAULTS_KEY);
+          return raw ? JSON.parse(raw) : null;
+        }catch(err){
+          return null;
+        }
+      }
+
+      function saveCardgameDefaults(payload){
+        try{
+          localStorage.setItem(CARDGAME_DEFAULTS_KEY, JSON.stringify(payload || {}));
+        }catch(err){}
+      }
+
+      function setCardgameDefaults(payload){
+        if (!payload) return;
+        if ($("cgGameSelect")) $("cgGameSelect").value = payload.game_id || "blackjack";
+        if ($("cgDeckSelect") && payload.deck_id){
+          $("cgDeckSelect").value = payload.deck_id;
+        }
+        if ($("cgPot")) $("cgPot").value = payload.pot || 0;
+        if ($("cgCurrency")) $("cgCurrency").value = payload.currency || "gil";
+        if ($("cgBackgroundUrl")){
+          $("cgBackgroundUrl").value = payload.background_url || "";
+          setCardgameBackgroundStatus($("cgBackgroundUrl").value);
+        }
+      }
+
+      function persistCardgameDefaults(){
+        const payload = {
+          game_id: $("cgGameSelect") ? $("cgGameSelect").value : "blackjack",
+          deck_id: $("cgDeckSelect") ? $("cgDeckSelect").value : "",
+          pot: $("cgPot") ? parseInt(($("cgPot").value || "0").trim(), 10) || 0 : 0,
+          currency: $("cgCurrency") ? $("cgCurrency").value.trim() : "",
+          background_url: $("cgBackgroundUrl") ? $("cgBackgroundUrl").value.trim() : "",
+          background_artist_id: $("cgBackgroundUrl") ? ($("cgBackgroundUrl").dataset.artistId || "") : "",
+          background_artist_name: $("cgBackgroundUrl") ? ($("cgBackgroundUrl").dataset.artistName || "") : ""
+        };
+        saveCardgameDefaults(payload);
+      }
+
+      async function loadCardgameDecks(selectValue){
+        if (!ensureCardgamesScope()) return;
+        const select = $("cgDeckSelect");
+        if (!select) return;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          const defaults = getCardgameDefaults();
+          const pick = selectValue || (defaults && defaults.deck_id) || (decks[0] ? decks[0].deck_id : "");
+          if (pick) select.value = pick;
+        }catch(err){
+          select.innerHTML = `<option value="">Failed to load</option>`;
+          setCardgameStatus(err.message, "err");
+        }
+      }
+
+      async function loadCardgameSessions(selectJoin){
+        if (!ensureCardgamesScope()) return;
+        const select = $("cgSessionSelect");
+        if (!select) return;
+        if ($("cgCreateFromSelected")){
+          $("cgCreateFromSelected").disabled = true;
+        }
+        try{
+          const data = await jsonFetch("/api/cardgames/sessions", {method:"GET"}, true);
+          const sessions = data.sessions || [];
+          select.innerHTML = "";
+          sessions.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.join_code || "";
+            const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
+            const currency = s.currency || "gil";
+            opt.textContent = `${s.join_code || "-"} | ${s.game_id || "-"} | ${s.deck_id || "-"} | ${s.status || "-"} | pot ${s.pot || 0} ${currency} | ${created}`;
+            opt.dataset.token = s.priestess_token || "";
+            opt.dataset.sessionId = s.session_id || "";
+            opt.dataset.pot = s.pot || 0;
+            opt.dataset.currency = s.currency || "";
+            opt.dataset.gameId = s.game_id || "";
+            opt.dataset.deckId = s.deck_id || "";
+            opt.dataset.background = s.background_url || "";
+            opt.dataset.backgroundArtistId = s.background_artist_id || "";
+            opt.dataset.backgroundArtistName = s.background_artist_name || "";
+            opt.dataset.status = s.status || "";
+            select.appendChild(opt);
+          });
+          if (selectJoin){
+            select.value = selectJoin;
+          }
+          const picked = select.selectedOptions.length ? select.selectedOptions[0] : null;
+          if (picked && $("cgCreateFromSelected")){
+            $("cgCreateFromSelected").disabled = (picked.dataset.status || "").toLowerCase() !== "live";
+          }
+        }catch(err){
+          setCardgameStatus(err.message, "err");
+        }
+      }
+
+      function setCardgameBackgroundStatus(url){
+        const el = $("cgBackgroundStatus");
+        if (!el) return;
+        const artistName = $("cgBackgroundUrl").dataset.artistName || "";
+        if (!url){
+          el.textContent = "No background selected.";
+          return;
+        }
+        el.textContent = artistName ? `Background selected - ${artistName}.` : "Background selected.";
+      }
+
+        async function createCardgameSession(payload){
+          if (!ensureCardgamesScope()) return;
+          try{
+            const data = await jsonFetch(`/api/cardgames/${payload.game_id}/sessions`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                pot: payload.pot || 0,
+                deck_id: payload.deck_id || "",
+                currency: payload.currency || "",
+                background_url: payload.background_url || "",
+                background_artist_id: payload.background_artist_id || "",
+                background_artist_name: payload.background_artist_name || "",
+                draft: true
+              })
+            }, true);
+          const session = data.session || {};
+          $("cgJoinCode").value = session.join_code || "";
+          $("cgPriestessToken").value = session.priestess_token || "";
+          $("cgJoinCode").dataset.sessionId = session.session_id || "";
+          $("cgJoinCode").dataset.gameId = session.game_id || payload.game_id || "";
+          $("cgJoinCode").dataset.deckId = session.deck_id || payload.deck_id || "";
+          saveCardgameDefaults({
+            game_id: payload.game_id,
+            deck_id: payload.deck_id,
+            pot: payload.pot || 0,
+            currency: payload.currency || "",
+            background_url: payload.background_url || "",
+            background_artist_id: payload.background_artist_id || "",
+            background_artist_name: payload.background_artist_name || ""
+          });
+          renderCardgameLinks(payload.game_id, session.join_code || "", session.priestess_token || "");
+          setCardgameStatus("Session created.", "ok");
+          await loadCardgameSessions(session.join_code || "");
+        }catch(err){
+          setCardgameStatus(err.message, "err");
+        }
+      }
+
+      function getCardgameSessionGameId(){
+        return $("cgJoinCode").dataset.gameId || $("cgGameSelect").value || "blackjack";
+      }
+
+      async function finishCardgameSession(){
+        const join = $("cgJoinCode").value.trim();
+        const token = $("cgPriestessToken").value.trim();
+        const sessionId = $("cgJoinCode").dataset.sessionId || "";
+        const gameId = getCardgameSessionGameId();
+        if (!join || !token || !sessionId){
+          setCardgameStatus("Select a session and host token.", "err");
+          return;
+        }
+        if (!confirm("Finish this session?")){
+          return;
+        }
+        try{
+          await jsonFetch(`/api/cardgames/${gameId}/sessions/${encodeURIComponent(sessionId)}/finish`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({token})
+          }, true);
+          setCardgameStatus("Session finished.", "ok");
+          await loadCardgameSessions();
+        }catch(err){
+          setCardgameStatus(err.message, "err");
+        }
+      }
+
+        if ($("cgCreateSession")){
+          $("cgCreateSession").addEventListener("click", () => {
+            const payload = {
+              game_id: $("cgGameSelect").value,
+              deck_id: $("cgDeckSelect").value,
+              pot: parseInt(($("cgPot").value || "0").trim(), 10) || 0,
+              currency: ($("cgCurrency").value || "").trim(),
+              background_url: ($("cgBackgroundUrl").value || "").trim(),
+              background_artist_id: $("cgBackgroundUrl").dataset.artistId || "",
+              background_artist_name: $("cgBackgroundUrl").dataset.artistName || ""
+            };
+            createCardgameSession(payload);
+          });
+        ["cgPot", "cgCurrency", "cgDeckSelect", "cgGameSelect", "cgBackgroundUrl"].forEach(id => {
+          const el = $(id);
+          if (!el) return;
+          el.addEventListener("change", () => persistCardgameDefaults());
+          el.addEventListener("blur", () => persistCardgameDefaults());
+        });
+          $("cgCreateFromSelected").addEventListener("click", () => {
+            const sel = $("cgSessionSelect");
+            const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
+            if (!opt){
+              setCardgameStatus("Select a session to clone.", "err");
+              return;
+            }
+            if ((opt.dataset.status || "").toLowerCase() !== "live"){
+              setCardgameStatus("Create next requires a live session.", "err");
+              return;
+            }
+            createCardgameSession({
+              game_id: opt.dataset.gameId || "blackjack",
+              deck_id: opt.dataset.deckId || "",
+              pot: parseInt(opt.dataset.pot || "0", 10) || 0,
+              currency: opt.dataset.currency || "",
+              background_url: opt.dataset.background || "",
+              background_artist_id: opt.dataset.backgroundArtistId || "",
+              background_artist_name: opt.dataset.backgroundArtistName || ""
+            });
+          });
+          if ($("cgDeckRefresh")){
+            $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
+          }
+        $("cgSessionRefresh").addEventListener("click", () => loadCardgameSessions());
+        $("cgSessionSelect").addEventListener("change", (ev) => {
+          const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
+          const join = opt ? (opt.value || "") : "";
+          const token = opt ? (opt.dataset.token || "") : "";
+          const pot = opt ? (opt.dataset.pot || "") : "";
+          const currency = opt ? (opt.dataset.currency || "") : "";
+          const gameId = opt ? (opt.dataset.gameId || "blackjack") : "blackjack";
+          const deckId = opt ? (opt.dataset.deckId || "") : "";
+          const background = opt ? (opt.dataset.background || "") : "";
+          const backgroundArtistId = opt ? (opt.dataset.backgroundArtistId || "") : "";
+          const backgroundArtistName = opt ? (opt.dataset.backgroundArtistName || "") : "";
+          const status = opt ? (opt.dataset.status || "") : "";
+          $("cgJoinCode").value = join;
+          $("cgJoinCode").dataset.sessionId = opt ? (opt.dataset.sessionId || "") : "";
+          $("cgJoinCode").dataset.gameId = gameId;
+          $("cgJoinCode").dataset.deckId = deckId;
+          $("cgPriestessToken").value = token;
+          $("cgPot").value = pot;
+          $("cgCurrency").value = currency || "gil";
+          $("cgGameSelect").value = gameId;
+          if (deckId){
+            $("cgDeckSelect").value = deckId;
+          }
+          if ($("cgBackgroundUrl")){
+            $("cgBackgroundUrl").value = background;
+            $("cgBackgroundUrl").dataset.artistId = backgroundArtistId;
+            $("cgBackgroundUrl").dataset.artistName = backgroundArtistName;
+            setCardgameBackgroundStatus(background);
+          }
+          if ($("cgCreateFromSelected")){
+            $("cgCreateFromSelected").disabled = status.toLowerCase() !== "live";
+          }
+          renderCardgameLinks(gameId, join, token);
+        });
+        $("cgBackgroundUrl").addEventListener("input", (ev) => {
+          ev.target.dataset.artistId = "";
+          ev.target.dataset.artistName = "";
+          setCardgameBackgroundStatus(ev.target.value.trim());
+        });
+        $("cgOpenPlayer").addEventListener("click", () => {
+          const join = $("cgJoinCode").value.trim();
+          const gameId = $("cgGameSelect").value;
+          if (!join){
+            setCardgameStatus("Enter a join code.", "err");
+            return;
+          }
+          renderCardgameLinks(gameId, join, $("cgPriestessToken").value.trim());
+          window.open(getCardgamePlayerUrl(gameId, join), "_blank");
+        });
+        $("cgOpenPriestess").addEventListener("click", () => {
+          const join = $("cgJoinCode").value.trim();
+          const gameId = $("cgGameSelect").value;
+          if (!join){
+            setCardgameStatus("Enter a join code.", "err");
+            return;
+          }
+          const token = $("cgPriestessToken").value.trim();
+          renderCardgameLinks(gameId, join, token);
+          window.open(getCardgameHostUrl(gameId, join, token), "_blank");
+        });
+        $("cgFinishSession").addEventListener("click", () => finishCardgameSession());
+        $("cgDeleteSession").addEventListener("click", async () => {
+          const join = $("cgJoinCode").value.trim();
+          const token = $("cgPriestessToken").value.trim();
+          const sessionId = $("cgJoinCode").dataset.sessionId || "";
+          const gameId = getCardgameSessionGameId();
+          if (!join || !token || !sessionId){
+            setCardgameStatus("Select a session and host token.", "err");
+            return;
+          }
+          if (!confirm("Delete this session now?")){
+            return;
+          }
+          try{
+            await jsonFetch(`/api/cardgames/${gameId}/sessions/${encodeURIComponent(sessionId)}/delete`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({token})
+            }, true);
+            $("cgJoinCode").value = "";
+            $("cgJoinCode").dataset.sessionId = "";
+            $("cgPriestessToken").value = "";
+            renderCardgameLinks("", "", "");
+            setCardgameStatus("Session deleted.", "ok");
+            await loadCardgameSessions();
+          }catch(err){
+            setCardgameStatus(err.message, "err");
+          }
+        });
+        $("cgUseSelectedMedia").addEventListener("click", () => {
+          const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
+          if (!pick){
+            setCardgameStatus("Select a media item first.", "err");
+            return;
+          }
+          $("cgBackgroundUrl").value = pick;
+          setCardgameBackgroundStatus(pick);
+        });
+        $("cgOpenMedia").addEventListener("click", () => {
+          librarySelectHandler = (item) => {
+            const pick = item && (item.url || item.fallback_url || "");
+            if (!pick){
+              setCardgameStatus("Select a media item first.", "err");
+              return;
+            }
+            $("cgBackgroundUrl").value = pick;
+            $("cgBackgroundUrl").dataset.artistId = item.artist_id || "";
+            $("cgBackgroundUrl").dataset.artistName = item.artist_name || item.artist_id || "";
+            setCardgameBackgroundStatus(pick);
+            setCardgameStatus("Background selected.", "ok");
+            showLibraryModal(false);
+          };
+          showLibraryModal(true);
+          loadLibrary("media");
+        });
+        const defaults = getCardgameDefaults();
+        if (defaults){
+          setCardgameDefaults(defaults);
+        }
+      }
+
+      let taNumbers = [];
+      let taSuitDefs = [];
+      let taSuitLookup = {};
+
+      function taThemeLabel(theme){
+        return (theme || "").replace(/_/g, " ");
+      }
+
+      function taNormalizeSuitKey(value){
+        return String(value || "").trim().toLowerCase();
+      }
+
+      function taSetSuitDefinitions(defs){
+        taSuitDefs = Array.isArray(defs) ? defs : [];
+        taSuitLookup = {};
+        taSuitDefs.forEach(def => {
+          if (!def) return;
+          const id = taNormalizeSuitKey(def.id);
+          const name = taNormalizeSuitKey(def.name);
+          if (id) taSuitLookup[id] = def;
+          if (name) taSuitLookup[name] = def;
+        });
+        taUpdateSuitList();
+      }
+
+      function taUpdateSuitList(){
+        const list = $("taSuitList");
+        if (!list) return;
+        const defaults = ["Major", "Wands", "Cups", "Swords", "Pentacles", "Hearts", "Spades", "Clubs", "Diamonds"];
+        const extra = taSuitDefs.map(def => def && (def.name || def.id)).filter(Boolean);
+        const combined = Array.from(new Set(defaults.concat(extra)));
+        list.innerHTML = combined.map(value => `<option value="${value}"></option>`).join("");
+      }
+
+      function taFindSuitDef(value){
+        const key = taNormalizeSuitKey(value);
+        if (!key) return null;
+        return taSuitLookup[key] || null;
+      }
+
+      function taParseRoman(value){
+        const roman = String(value || "").trim().toUpperCase();
+        if (!roman) return NaN;
+        const map = {I:1, V:5, X:10, L:50, C:100, D:500, M:1000};
+        let total = 0;
+        let prev = 0;
+        for (let i = roman.length - 1; i >= 0; i -= 1){
+          const num = map[roman[i]];
+          if (!num) return NaN;
+          if (num < prev){
+            total -= num;
+          } else {
+            total += num;
+            prev = num;
+          }
+        }
+        return total;
+      }
+
+      function taParseCardNumber(value){
+        const text = String(value).trim();
+        if (!text) return NaN;
+        if (/^\d+$/.test(text)) return parseInt(text, 10);
+        return taParseRoman(text);
+      }
+
+      function taToRoman(num){
+        const n = Number(num);
+        if (!Number.isFinite(n) || n <= 0) return "";
+        const map = [
+          [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+          [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+          [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+        ];
+        let out = "";
+        let remaining = Math.floor(n);
+        map.forEach(([val, sym]) => {
+          while (remaining >= val){
+            out += sym;
+            remaining -= val;
+          }
+        });
+        return out;
+      }
+
+      function taFormatCardNumber(value){
+        if (String(value || "").trim() === "0") return "0";
+        const num = taParseCardNumber(value);
+        if (num === 0) return "0";
+        return num ? taToRoman(num) || String(value || "") : "";
+      }
+
+      let taDirty = false;
+      let taSuppressDirty = false;
+
+      function setTarotStatus(msg, kind){
+        const el = $("taDeckStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function taSetDirty(state){
+        if (taSuppressDirty) return;
+        taDirty = !!state;
+        if (taDirty){
+          setTarotStatus("Unsaved changes", "alert");
+        }
+      }
+
+      function taUpdateThemeRow(row, value){
+        const fill = row.querySelector(".theme-fill");
+        const valueEl = row.querySelector(".theme-value");
+        const weight = Math.max(0, Math.min(5, parseInt(value, 10) || 0));
+        if (fill){
+          fill.style.width = `${(weight / 5) * 100}%`;
+        }
+        if (valueEl){
+          valueEl.textContent = `${weight} / 5`;
+        }
+      }
+
+      function taSnippet(text, limit = 120){
+        const clean = String(text || "").trim();
+        if (!clean) return "";
+        if (clean.length <= limit) return clean;
+        return clean.slice(0, limit - 3) + "...";
+      }
+
+      function taUpdateContext(card){
+        const deckName = window.taDeckData && window.taDeckData.deck
+          ? (window.taDeckData.deck.name || window.taDeckData.deck.deck_id || "")
+          : "";
+        const deckId = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.deck_id : "";
+        const cardLabel = card && (card.name || card.card_id) ? (card.name || card.card_id) : "No card selected";
+        const path = $("taContextPath");
+        const meta = $("taContextMeta");
+        const deckMeta = $("taContextDeck");
+        if (path){
+          path.textContent = `Deck Editor / Forest / ${cardLabel}`;
+        }
+        if (meta){
+          meta.textContent = card ? `Editing ${cardLabel}` : "Pick a card to edit.";
+        }
+        if (deckMeta){
+          deckMeta.textContent = deckId ? `${deckName} (${deckId})` : "";
+        }
+      }
+
+      function taRenderThemeWeights(weights, suitValue){
+        const grid = $("taCardThemes");
+        const hint = $("taCardThemesHint");
+        if (!grid) return;
+        grid.innerHTML = "";
+        const suitDef = taFindSuitDef(suitValue);
+        const themes = suitDef && suitDef.themes ? Object.keys(suitDef.themes) : [];
+        if (!suitValue){
+          if (hint) hint.textContent = "Select a suit to see theme weights.";
+          return;
+        }
+        if (!suitDef){
+          if (hint) hint.textContent = "Suit not defined for this deck.";
+          return;
+        }
+        if (!themes.length){
+          if (hint) hint.textContent = "No theme weights available for this suit.";
+          return;
+        }
+        if (hint) hint.textContent = "Adjust theme weights for this card.";
+        themes.forEach(theme => {
+          const row = document.createElement("div");
+          row.className = "theme-weight";
+          row.dataset.theme = theme;
+          const label = document.createElement("label");
+          label.textContent = taThemeLabel(theme);
+          const bar = document.createElement("div");
+          bar.className = "theme-bar";
+          const fill = document.createElement("div");
+          fill.className = "theme-fill";
+          bar.appendChild(fill);
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = "0";
+          input.max = "5";
+          input.step = "1";
+          input.value = weights && weights[theme] ? weights[theme] : 0;
+          const value = document.createElement("div");
+          value.className = "theme-value";
+          row.appendChild(label);
+          row.appendChild(bar);
+          row.appendChild(input);
+          row.appendChild(value);
+          taUpdateThemeRow(row, input.value);
+          input.addEventListener("input", () => {
+            taUpdateThemeRow(row, input.value);
+            taSetDirty(true);
+          });
+          grid.appendChild(row);
+        });
+      }
+
+      function taSetCardThemeWeights(weights){
+        const grid = $("taCardThemes");
+        if (!grid){
+          return;
+        }
+        if (!grid.children.length){
+          taRenderThemeWeights(weights || {}, $("taCardSuit").value.trim());
+          return;
+        }
+        grid.querySelectorAll(".theme-weight").forEach(row => {
+          const theme = row.dataset.theme;
+          const input = row.querySelector("input");
+          if (!input) return;
+          input.value = weights && weights[theme] ? weights[theme] : 0;
+          taUpdateThemeRow(row, input.value);
+        });
+      }
+
+      function taGetCardThemeWeights(){
+        const grid = $("taCardThemes");
+        const out = {};
+        if (!grid) return out;
+        grid.querySelectorAll(".theme-weight").forEach(row => {
+          const theme = row.dataset.theme;
+          const input = row.querySelector("input");
+          if (!input) return;
+          const value = parseInt(input.value, 10);
+          if (Number.isFinite(value) && value > 0){
+            out[theme] = value;
+          }
+        });
+        return out;
+      }
+
+      function taApplySuitThemeDefaults(suitValue){
+        if (!suitValue) return;
+        const current = taGetCardThemeWeights();
+        if (Object.keys(current).length){
+          return;
+        }
+        const suitDef = taFindSuitDef(suitValue);
+        if (!suitDef || !suitDef.themes) return;
+        taSetCardThemeWeights(suitDef.themes);
+      }
+
+      function taRenderSuitInfo(value){
+        const box = $("taSuitInfo");
+        if (!box) return;
+        const suitDef = taFindSuitDef(value);
+        if (!suitDef){
+          box.textContent = value ? "Suit not defined for this deck." : "Pick a suit to see details.";
+          return;
+        }
+        const themes = Object.entries(suitDef.themes || {}).map(([k, v]) => `${k} (${v})`).join(", ");
+        const keywords = (suitDef.keywords || []).join(", ");
+        const upright = keywords ? `Upright: ${keywords}.` : "Upright: -";
+        const reversed = keywords ? `Reversed: blocked or twisted ${keywords}.` : "Reversed: -";
+        const title = suitDef.name || suitDef.id || "Suit";
+        box.innerHTML = `<strong>${title}</strong><br><span class="muted">${themes || "No themes set."}</span><br><span class="muted">${keywords || "No keywords set."}</span><br>${upright}<br>${reversed}`;
+      }
+
+      function taRenderNumberInfo(value){
+        const box = $("taNumberInfo");
+        if (!box) return;
+        const num = taParseCardNumber(value);
+        if (!Number.isFinite(num)){
+          box.textContent = "Pick a number to see details.";
+          return;
+        }
+        const digits = String(num).split("").map(d => parseInt(d, 10));
+        let sum = digits.reduce((acc, d) => acc + d, 0);
+        while (sum > 10){
+          sum = String(sum).split("").reduce((acc, d) => acc + parseInt(d, 10), 0);
+        }
+        const picks = [];
+        digits.forEach(d => { if (!picks.includes(d)) picks.push(d); });
+        if (sum > 0 && !picks.includes(sum)) picks.push(sum);
+        if (num === 0 && !picks.includes(0)) picks.push(0);
+        const rows = picks.map(pick => {
+          const entry = taNumbers.find(n => Number(n.number) === pick);
+          const label = entry && entry.label ? ` - ${entry.label}` : "";
+          const meaning = entry && entry.meaning ? entry.meaning : "";
+          return `<div><strong>${pick}${label}</strong><br>${meaning}</div>`;
+        }).join("<div style=\"height:6px\"></div>");
+        box.innerHTML = rows || "No number details found.";
+      }
+
+      function taRenderPreviews(card){
+        const front = $("taFrontPreview");
+        const back = $("taBackPreview");
+        const backUrl = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck.back_image : "";
+        const theme = (window.taDeckData && window.taDeckData.deck && window.taDeckData.deck.theme) || "classic";
+        front.dataset.cardTheme = theme;
+        front.classList.add("card-object", "hover-flip");
+        back.classList.add("card-object");
+        front.innerHTML = '<span class="preview-label">Front</span>';
+        back.innerHTML = '<span class="preview-label">Back</span>';
+        if (card && card.image){
+          const img = document.createElement("img");
+          img.src = card.image;
+          front.appendChild(img);
+        }
+        if (card && card.number !== undefined && card.number !== null){
+          const number = document.createElement("div");
+          number.className = "card-number";
+          number.textContent = taFormatCardNumber(card.number);
+          front.appendChild(number);
+        }
+        if (card && card.name){
+          const title = document.createElement("div");
+          title.className = "card-title";
+          title.textContent = card.name;
+          front.appendChild(title);
+        }
+        if (card && (card.upright || card.reversed)){
+          const meaning = document.createElement("div");
+          meaning.className = "card-meaning";
+          const up = document.createElement("div");
+          up.className = "meaning-line upright";
+          up.textContent = "Upright: " + taSnippet(card.upright || "", 120);
+          const rev = document.createElement("div");
+          rev.className = "meaning-line reversed";
+          rev.textContent = "Reversed: " + taSnippet(card.reversed || "", 120);
+          meaning.appendChild(up);
+          meaning.appendChild(rev);
+          front.appendChild(meaning);
+        }
+        if (backUrl){
+          const img = document.createElement("img");
+          img.src = backUrl;
+          back.appendChild(img);
+        }
+      }
+
+      function taLoadCard(card){
+        if (!card) return;
+        taSuppressDirty = true;
+        taSelectedCardId = card.card_id || "";
+        $("taCardId").value = card.card_id || "";
+        $("taCardName").value = card.name || "";
+        $("taCardSuit").value = card.suit || "";
+        $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
+        $("taCardTags").value = (card.tags || []).join(", ");
+        $("taCardFlavor").value = card.flavor_text || "";
+        $("taCardUpright").value = card.upright || "";
+        $("taCardReversed").value = card.reversed || "";
+        $("taCardArtist").value = card.artist_id || "";
+        window.taUploadedImageUrl = card.image || "";
+        taRenderThemeWeights(card.themes || {}, card.suit || "");
+        taRenderSuitInfo(card.suit || "");
+        taRenderNumberInfo($("taCardNumber").value);
+        taApplySuitThemeDefaults(card.suit || "");
+        taRenderPreviews(card);
+        taSyncCardSelection();
+        taUpdateContext(card);
+        taDirty = false;
+        taSuppressDirty = false;
+      }
+
+      function taSyncCardSelection(){
+        const list = $("taDeckList");
+        if (!list) return;
+        list.querySelectorAll(".list-card").forEach(el => {
+          const active = taSelectedCardId && el.dataset.cardId === taSelectedCardId;
+          el.classList.toggle("active", active);
+        });
+        if (window.taDeckData && window.taDeckData.cards && taSelectedCardId){
+          const match = window.taDeckData.cards.find(c => c.card_id === taSelectedCardId);
+          if (match){
+            taRenderPreviews(match);
+          }
+        } else {
+          taUpdateContext(null);
+        }
+      }
+
+      async function loadTarotNumbers(){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        try{
+          const data = await jsonFetch("/api/tarot/numbers", {method:"GET"}, true);
+          taNumbers = data.numbers || [];
+          const input = $("taCardNumber");
+          const list = $("taNumberList");
+          if (!input || !list){
+            return;
+          }
+          const current = input.value || "";
+          list.innerHTML = "";
+          taNumbers.forEach(n => {
+            const opt = document.createElement("option");
+            opt.value = n.number;
+            opt.textContent = n.label ? `${n.number} - ${n.label}` : String(n.number);
+            list.appendChild(opt);
+          });
+          input.value = current;
+          taRenderNumberInfo(input.value);
+        }catch(err){
+          setTarotStatus(`Failed to load numbers: ${err.message || "unknown error"}`, "err");
+        }
+      }
+
+      async function loadTarotArtists(){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        try{
+          const data = await jsonFetch("/api/tarot/artists", {method:"GET"}, true);
+          const artists = data.artists || [];
+          window.taArtists = artists;
+        const selects = ["uploadLibraryArtist", "mediaUploadArtist", "mediaEditArtist", "mediaBulkArtist", "artistIndexSelect"];
+        selects.forEach(id => {
+          const sel = $(id);
+          if (!sel) return;
+          const current = sel.value;
+          sel.innerHTML = "";
+          const none = document.createElement("option");
+          none.value = "";
+          none.textContent = id === "mediaBulkArtist" ? "Select artist" : "(none)";
+          sel.appendChild(none);
+          artists.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.artist_id || "";
+            opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+            sel.appendChild(opt);
+          });
+          if (current){
+            sel.value = current;
+          }
+        });
+        const filter = $("mediaFilterArtist");
+        if (filter){
+          const current = filter.value;
+          filter.innerHTML = "";
+          const any = document.createElement("option");
+          any.value = "";
+          any.textContent = "All artists";
+          filter.appendChild(any);
+          artists.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.artist_id || "";
+            opt.textContent = a.name ? `${a.name} (${a.artist_id})` : (a.artist_id || "");
+            filter.appendChild(opt);
+          });
+          if (current){
+            filter.value = current;
+          }
+        }
+        }catch(err){
+          window.taArtists = [];
+          setStatus("Failed to load artists.", "err");
+        }
+      }
+
+      $("artistIndexRefresh").addEventListener("click", () => loadTarotArtists());
+      $("artistIndexSelect").addEventListener("change", (ev) => {
+        const pick = (window.taArtists || []).find(a => a.artist_id === ev.target.value);
+        if (!pick){
+          $("artistIndexId").value = "";
+          $("artistIndexName").value = "";
+          $("artistIndexInstagram").value = "";
+          $("artistIndexBluesky").value = "";
+          $("artistIndexX").value = "";
+          $("artistIndexArtstation").value = "";
+          $("artistIndexWebsite").value = "";
+          $("artistIndexLinktree").value = "";
+          return;
+        }
+        $("artistIndexId").value = pick.artist_id || "";
+        $("artistIndexName").value = pick.name || "";
+        const links = pick.links || {};
+        $("artistIndexInstagram").value = links.instagram || "";
+        $("artistIndexBluesky").value = links.bluesky || "";
+        $("artistIndexX").value = links.x || "";
+        $("artistIndexArtstation").value = links.artstation || "";
+        $("artistIndexWebsite").value = links.website || "";
+        $("artistIndexLinktree").value = links.linktree || "";
+      });
+      $("artistIndexSave").addEventListener("click", async () => {
+        try{
+          const body = {
+            artist_id: $("artistIndexId").value.trim() || undefined,
+            name: $("artistIndexName").value.trim(),
+            links: {
+              instagram: $("artistIndexInstagram").value.trim(),
+              bluesky: $("artistIndexBluesky").value.trim(),
+              x: $("artistIndexX").value.trim(),
+              artstation: $("artistIndexArtstation").value.trim(),
+              website: $("artistIndexWebsite").value.trim(),
+              linktree: $("artistIndexLinktree").value.trim()
+            }
+          };
+          const res = await fetch("/api/tarot/artists", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKeyEl.value.trim()
+            },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          await loadTarotArtists();
+          setStatus("Artist saved.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+      $("artistIndexDelete").addEventListener("click", async () => {
+        const artistId = $("artistIndexId").value.trim();
+        if (!artistId){
+          setStatus("Select an artist to delete.", "err");
+          return;
+        }
+        if (!confirm("Delete this artist? Cards will keep the artist_id but links will no longer resolve.")){
+          return;
+        }
+        try{
+          const res = await fetch("/api/tarot/artists/" + encodeURIComponent(artistId), {
+            method: "DELETE",
+            headers: {"X-API-Key": apiKeyEl.value.trim()}
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("artistIndexId").value = "";
+          $("artistIndexName").value = "";
+          $("artistIndexInstagram").value = "";
+          $("artistIndexBluesky").value = "";
+          $("artistIndexX").value = "";
+          $("artistIndexArtstation").value = "";
+          $("artistIndexWebsite").value = "";
+          $("artistIndexLinktree").value = "";
+          await loadTarotArtists();
+          setStatus("Artist deleted.", "ok");
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      });
+
+      $("mediaLibraryOpen").addEventListener("click", () => {
+        librarySelectHandler = null;
+        showLibraryModal(true);
+        loadLibrary("media");
+        loadTarotArtists();
+      });
+
+      $("mediaLibraryRefresh").addEventListener("click", () => loadMediaLibrary());
+      $("mediaTabUploadBtn").addEventListener("click", () => setMediaTab("upload"));
+      $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
+      const mediaToolbarSearch = $("mediaToolbarSearch");
+      if (mediaToolbarSearch){
+        mediaToolbarSearch.addEventListener("input", () => applyMediaFilters());
+      }
+      const mediaFilterArtist = $("mediaFilterArtist");
+      if (mediaFilterArtist){
+        mediaFilterArtist.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterOriginType = $("mediaFilterOriginType");
+      if (mediaFilterOriginType){
+        mediaFilterOriginType.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterLabel = $("mediaFilterLabel");
+      if (mediaFilterLabel){
+        mediaFilterLabel.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaToolbarSort = $("mediaToolbarSort");
+      if (mediaToolbarSort){
+        mediaToolbarSort.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterClear = $("mediaFilterClear");
+      if (mediaFilterClear){
+        mediaFilterClear.addEventListener("click", () => {
+          const artist = $("mediaFilterArtist");
+          const origin = $("mediaFilterOriginType");
+          const label = $("mediaFilterLabel");
+          if (artist) artist.value = "";
+          if (origin) origin.value = "";
+          if (label) label.value = "any";
+          applyMediaFilters();
+        });
+      }
+      $("mediaBulkDelete").addEventListener("click", async () => {
+        if (!hasScope("admin:web")){
+          setMediaLibraryStatus("Delete requires admin access.", "err");
+          showToast("Delete requires admin access.", "err");
+          return;
+        }
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        if (!confirm(`Delete ${items.length} image(s)? This cannot be undone.`)) return;
+        try{
+          setMediaLibraryStatus("Deleting...", "");
+          for (const item of items){
+            if (!item.delete_url) continue;
+            const res = await fetch(item.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false){
+              throw new Error(data.error || "Delete failed");
+            }
+          }
+          showToast("Images deleted.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkHide").addEventListener("click", async () => {
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        try{
+          setMediaLibraryStatus("Hiding...", "");
+          for (const item of items){
+            await setMediaHidden(item, true);
+          }
+          showToast("Images hidden.", "ok");
+          applyMediaFilters();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkShow").addEventListener("click", async () => {
+        const items = getSelectedMediaItems();
+        if (!items.length) return;
+        try{
+          setMediaLibraryStatus("Showing...", "");
+          for (const item of items){
+            await setMediaHidden(item, false);
+          }
+          showToast("Images shown.", "ok");
+          applyMediaFilters();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+          showToast(err.message, "err");
+        }
+      });
+      $("mediaBulkSetArtist").addEventListener("click", async () => {
+        const artistId = $("mediaBulkArtist").value.trim();
+        const artistName = $("mediaBulkArtist").selectedOptions.length
+          ? $("mediaBulkArtist").selectedOptions[0].textContent.trim()
+          : "";
+        if (!artistId){
+          showToast("Pick an artist.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating artists...", "");
+          await bulkUpdateMedia({artist_id: artistId, artist_name: artistName});
+          showToast("Artists updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkSetOrigin").addEventListener("click", async () => {
+        const originType = $("mediaBulkOriginType").value.trim();
+        if (!originType){
+          showToast("Pick an origin type.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating origin type...", "");
+          await bulkUpdateMedia({origin_type: originType});
+          showToast("Origin type updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkApplyLabel").addEventListener("click", async () => {
+        const label = $("mediaBulkLabel").value.trim();
+        if (!label){
+          showToast("Enter a label.", "err");
+          return;
+        }
+        try{
+          setMediaLibraryStatus("Updating labels...", "");
+          await bulkUpdateMedia({origin_label: label});
+          showToast("Labels updated.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaBulkClearLabel").addEventListener("click", async () => {
+        try{
+          setMediaLibraryStatus("Clearing labels...", "");
+          await bulkUpdateMedia({origin_label: ""});
+          showToast("Labels cleared.", "ok");
+          $("mediaBulkLabel").value = "";
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaLibraryStatus(err.message, "err");
+        }
+      });
+      $("mediaUploadFile").addEventListener("change", (ev) => {
+        const file = ev.target.files[0] || null;
+        mediaUploadFile = file;
+        updateMediaUploadDropDisplay(file);
+        updateMediaUploadState();
+      });
+      $("mediaUploadTitleInput").addEventListener("input", () => updateMediaUploadState());
+
+      const mediaDrop = $("mediaUploadDrop");
+      if (mediaDrop){
+        mediaDrop.addEventListener("click", () => $("mediaUploadFile").click());
+        mediaDrop.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " "){
+            ev.preventDefault();
+            $("mediaUploadFile").click();
+          }
+        });
+        mediaDrop.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          mediaDrop.classList.add("dragover");
+        });
+        mediaDrop.addEventListener("dragleave", () => mediaDrop.classList.remove("dragover"));
+        mediaDrop.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          mediaDrop.classList.remove("dragover");
+          const file = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+          if (file){
+            mediaUploadFile = file;
+            updateMediaUploadDropDisplay(file);
+            updateMediaUploadState();
+          }
+        });
+      }
+
+      $("mediaUploadUpload").addEventListener("click", async () => {
+        const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
+        if (!file){
+          setMediaUploadStatus("Select an image to upload.", "err");
+          return;
+        }
+        const title = $("mediaUploadTitleInput").value.trim();
+        if (!title){
+          setMediaUploadStatus("Enter a title before uploading.", "err");
+          return;
+        }
+        try{
+          $("mediaUploadUpload").disabled = true;
+          setMediaUploadStatus("Uploading...", "");
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("title", title);
+          const artistId = $("mediaUploadArtist").value.trim();
+          if (artistId) fd.append("artist_id", artistId);
+          const originType = $("mediaUploadOriginType").value.trim();
+          const originLabel = $("mediaUploadOriginLabel").value.trim();
+          if (originType) fd.append("origin_type", originType);
+          if (originLabel) fd.append("origin_label", originLabel);
+          const res = await fetch("/api/media/upload", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("mediaUploadFile").value = "";
+          $("mediaUploadTitleInput").value = "";
+          $("mediaUploadOriginLabel").value = "";
+          mediaUploadFile = null;
+          updateMediaUploadDropDisplay(null);
+          setMediaUploadStatus("Upload complete.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaUploadStatus(err.message, "err");
+        }finally{
+          updateMediaUploadState();
+        }
+      });
+
+      $("mediaEditClear").addEventListener("click", () => {
+        clearMediaSelection();
+      });
+
+      $("mediaEditSave").addEventListener("click", async () => {
+        if (!currentMediaEdit){
+          setMediaEditStatus("Select an image first.", "err");
+          return;
+        }
+        const filename = $("mediaEditFilename").value.trim();
+        if (!filename){
+          setMediaEditStatus("Missing filename.", "err");
+          return;
+        }
+        const title = $("mediaEditTitle").value.trim();
+        const artistId = $("mediaEditArtist").value.trim();
+        const artistName = $("mediaEditArtist").selectedOptions.length
+          ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
+          : "";
+        const originType = $("mediaEditOriginType").value.trim();
+        const originLabel = $("mediaEditOriginLabel").value.trim();
+        try{
+          $("mediaEditSave").disabled = true;
+          setMediaEditStatus("Saving...", "");
+          const res = await fetch("/api/gallery/media/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKeyEl.value.trim()
+            },
+            body: JSON.stringify({
+              filename,
+              title,
+              artist_id: artistId,
+              artist_name: artistName,
+              origin_type: originType,
+              origin_label: originLabel
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false){
+            throw new Error(data.error || "Save failed");
+          }
+          setMediaEditStatus("Changes saved.", "ok");
+          showToast("Changes saved.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          setMediaEditStatus(err.message, "err");
+        }finally{
+          $("mediaEditSave").disabled = !currentMediaEdit;
+        }
+      });
+
+      $("mediaEditCopy").addEventListener("click", async () => {
+        if (!currentMediaEdit) return;
+        try{
+          await navigator.clipboard.writeText(currentMediaEdit.url || "");
+          showToast("Copied URL.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
+      });
+
+      $("mediaEditOpen").addEventListener("click", () => {
+        if (!currentMediaEdit) return;
+        const url = currentMediaEdit.url || "";
+        if (url) window.open(url, "_blank");
+      });
+
+      $("mediaEditDelete").addEventListener("click", async () => {
+        if (!currentMediaEdit || !currentMediaEdit.delete_url) return;
+        if (!hasScope("admin:web")){
+          setMediaEditStatus("Delete requires admin access.", "err");
+          showToast("Delete requires admin access.", "err");
+          return;
+        }
+        if (!confirm("Delete this image? This cannot be undone.")) return;
+        try{
+          const res = await fetch(currentMediaEdit.delete_url, {method: "DELETE", headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false){
+            throw new Error(data.error || "Delete failed");
+          }
+          showToast("Image deleted.", "ok");
+          await loadMediaLibrary();
+        }catch(err){
+          showToast(err.message, "err");
+        }
+      });
+
+      $("mediaEditHide").addEventListener("click", async () => {
+        if (!currentMediaEdit) return;
+        try{
+          await setMediaHidden(currentMediaEdit, !currentMediaEdit.hidden);
+          showToast(currentMediaEdit.hidden ? "Hidden from gallery." : "Shown in gallery.", "ok");
+          applyMediaFilters();
+        }catch(err){
+          showToast("Hide failed.", "err");
+        }
+      });
+
+      $("uploadLibraryFile").addEventListener("change", (ev) => {
+        const file = ev.target.files[0] || null;
+        libraryUploadFile = file;
+        updateUploadDropDisplay(file);
+        updateUploadState();
+      });
+      $("uploadLibraryTitleInput").addEventListener("input", () => updateUploadState());
+
+      const uploadDrop = $("uploadLibraryDrop");
+      if (uploadDrop){
+        uploadDrop.addEventListener("click", () => $("uploadLibraryFile").click());
+        uploadDrop.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " "){
+            ev.preventDefault();
+            $("uploadLibraryFile").click();
+          }
+        });
+        uploadDrop.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          uploadDrop.classList.add("dragover");
+        });
+        uploadDrop.addEventListener("dragleave", () => uploadDrop.classList.remove("dragover"));
+        uploadDrop.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          uploadDrop.classList.remove("dragover");
+          const file = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+          if (file){
+            libraryUploadFile = file;
+            updateUploadDropDisplay(file);
+            updateUploadState();
+          }
+        });
+      }
+
+      $("uploadLibraryUpload").addEventListener("click", async () => {
+        const file = libraryUploadFile || $("uploadLibraryFile").files[0];
+        if (!file){
+          setLibraryStatus("Select an image to upload.", "err");
+          return;
+        }
+        const title = $("uploadLibraryTitleInput").value.trim();
+        if (!title){
+          setLibraryStatus("Enter a title before uploading.", "err");
+          return;
+        }
+        try{
+          $("uploadLibraryUpload").disabled = true;
+          setLibraryStatus("Uploading...", "");
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("title", title);
+          const artistId = $("uploadLibraryArtist").value.trim();
+          if (artistId) fd.append("artist_id", artistId);
+          const res = await fetch("/api/media/upload", {
+            method: "POST",
+            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          $("uploadLibraryFile").value = "";
+          $("uploadLibraryTitleInput").value = "";
+          libraryUploadFile = null;
+          updateUploadDropDisplay(null);
+          setLibraryStatus("Upload complete.", "ok");
+          await loadLibrary("media");
+        }catch(err){
+          setLibraryStatus(err.message, "err");
+        }finally{
+          updateUploadState();
+        }
+      });
+
+      $("taCardSuit").addEventListener("input", () => {
+        const suitValue = $("taCardSuit").value.trim();
+        taRenderSuitInfo(suitValue);
+        taRenderThemeWeights({}, suitValue);
+        taApplySuitThemeDefaults(suitValue);
+        taSetDirty(true);
+      });
+      $("taCardNumber").addEventListener("input", (ev) => {
+        taRenderNumberInfo(ev.target.value);
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: ev.target.value,
+          image: window.taUploadedImageUrl || ""
+        });
+        taSetDirty(true);
+      });
+      ["taCardId", "taCardName", "taCardTags", "taCardFlavor", "taCardUpright", "taCardReversed"].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("input", () => {
+          taSetDirty(true);
+          if (id === "taCardName"){
+            taRenderPreviews({
+              name: $("taCardName").value.trim(),
+              number: $("taCardNumber").value.trim(),
+              image: window.taUploadedImageUrl || ""
+            });
+          }
+        });
+      });
+      $("taDeckList").addEventListener("click", (ev) => {
+        const target = ev.target.closest(".list-card");
+        if (!target || !target.dataset.cardId || !window.taDeckData) return;
+        const card = (window.taDeckData.cards || []).find(c => c.card_id === target.dataset.cardId);
+        if (card){
+          taLoadCard(card);
+        }
+      });
+      async function loadTarotDeck(){
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
+          showList($("taDeckList"), data);
+          taSetSuitDefinitions(data.deck && Array.isArray(data.deck.suits) ? data.deck.suits : []);
+          taRenderPreviews(null);
+          const deckName = (data.deck && (data.deck.name || data.deck.deck_id)) || deck;
+          const count = Array.isArray(data.cards) ? data.cards.length : 0;
+          setTarotStatus(`Deck loaded: ${deckName} (${count} cards)`, "ok");
+          taUpdateContext(null);
+          taDirty = false;
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      }
+
+      async function loadGallerySettings(){
+        try{
+          const data = await jsonFetch("/api/gallery/settings", {method:"GET"}, true);
+          gallerySettingsCache = data || {};
+          galleryHiddenDecks = Array.isArray(data.hidden_decks) ? data.hidden_decks : [];
+        }catch(err){
+          gallerySettingsCache = null;
+          galleryHiddenDecks = [];
+        }
+      }
+
+      $("taDeck").addEventListener("change", async () => {
+        await loadTarotDeck();
+      });
+
+      $("taAddDeck").addEventListener("click", () => {
+        $("deckCreateId").value = "";
+        $("deckCreateName").value = "";
+        $("deckCreateTheme").value = "classic";
+        $("deckCreateSeed").value = "none";
+        $("deckCreatePerHouse").value = "4";
+        $("deckCreateCrown").value = "1";
+        $("deckCreateSuitPreset").value = "forest";
+        $("deckCreateSuitJson").value = formatSuitPresetJson("forest");
+        $("deckCreateBackPick").dataset.backUrl = "";
+        $("deckCreateBackPick").dataset.artistId = "";
+        $("deckCreateBackPreview").innerHTML = '<span class="preview-label">Back</span>';
+        $("deckCreateModal").classList.add("show");
+      });
+
+      $("taEditDeck").addEventListener("click", async () => {
+        const deck = $("taDeck").value.trim();
+        if (!deck){
+          setTarotStatus("Pick a deck to edit.", "err");
+          return;
+        }
+        try{
+          await loadGallerySettings();
+          if (!window.taDeckData || !window.taDeckData.deck || window.taDeckData.deck.deck_id !== deck){
+            const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
+            showList($("taDeckList"), data);
+          }
+          const deckData = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : {};
+          $("deckEditName").value = deckData.name || "";
+          $("deckEditTheme").value = deckData.theme || "classic";
+          const suits = Array.isArray(deckData.suits) ? deckData.suits : [];
+          deckEditHadSuits = suits.length > 0;
+          if (suits.length){
+            $("deckEditSuitPreset").value = "custom";
+            $("deckEditSuitJson").value = JSON.stringify(suits, null, 2);
+          }else{
+            $("deckEditSuitPreset").value = "forest";
+            $("deckEditSuitJson").value = formatSuitPresetJson("forest");
+          }
+          const backUrl = deckData.back_image || "";
+          const preview = $("deckEditBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (backUrl){
+              const img = document.createElement("img");
+              img.src = backUrl;
+              preview.appendChild(img);
+            }
+          }
+          $("deckEditBackPick").dataset.backUrl = backUrl;
+          $("deckEditBackPick").dataset.artistId = deckData.back_artist_id || "";
+          const hideToggle = $("deckEditHideGallery");
+          if (hideToggle){
+            hideToggle.checked = galleryHiddenDecks.includes(deck);
+          }
+          $("deckEditModal").classList.add("show");
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      });
+
+      $("deckEditClose").addEventListener("click", () => {
+        $("deckEditModal").classList.remove("show");
+      });
+      $("deckEditModal").addEventListener("click", (event) => {
+        if (event.target === $("deckEditModal")){
+          $("deckEditModal").classList.remove("show");
+        }
+      });
+      $("deckEditBackPick").addEventListener("click", () => {
+        librarySelectHandler = (item) => {
+          $("deckEditBackPick").dataset.backUrl = item.url || "";
+          $("deckEditBackPick").dataset.artistId = item.artist_id || "";
+          const preview = $("deckEditBackPreview");
+          if (preview){
+            preview.innerHTML = '<span class="preview-label">Back</span>';
+            if (item.url){
+              const img = document.createElement("img");
+              img.src = item.url;
+              preview.appendChild(img);
+            }
+          }
+          setTarotStatus(item.url ? "Deck back selected." : "Pick a deck back.", "ok");
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      $("deckEditTheme").addEventListener("change", (ev) => {
+        const theme = ev.target.value || "classic";
+        if (!window.taDeckData) window.taDeckData = {};
+        window.taDeckData.deck = window.taDeckData.deck || {};
+        window.taDeckData.deck.theme = theme;
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: $("taCardNumber").value.trim(),
+          image: window.taUploadedImageUrl || ""
+        });
+      });
+
+      $("deckEditSubmit").addEventListener("click", async () => {
+        const deck = $("taDeck").value.trim();
+        if (!deck){
+          setTarotStatus("Pick a deck to edit.", "err");
+          return;
+        }
+        const name = $("deckEditName").value.trim();
+        const theme = $("deckEditTheme").value || "classic";
+        const backUrl = $("deckEditBackPick").dataset.backUrl || "";
+        const artistId = $("deckEditBackPick").dataset.artistId || "";
+        let suits = null;
+        try{
+          suits = parseSuitJson($("deckEditSuitJson").value);
+        }catch(err){
+          setTarotStatus(err.message, "err");
+          return;
+        }
+        if (!deckEditHadSuits && (!suits || !suits.length)){
+          setTarotStatus("Choose a suit preset to migrate this deck.", "err");
+          return;
+        }
+        try{
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              name: name || undefined,
+              theme,
+              suits: suits && suits.length ? suits : []
+            })
+          }, true);
+          if (backUrl){
+            await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/back", {
+              method:"PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({back_image: backUrl, artist_id: artistId || undefined})
+            }, true);
+          }
+          const hideToggle = $("deckEditHideGallery");
+          if (hideToggle){
+            const wantHidden = hideToggle.checked;
+            const nextHidden = new Set(galleryHiddenDecks || []);
+            if (wantHidden){
+              nextHidden.add(deck);
+            }else{
+              nextHidden.delete(deck);
+            }
+            galleryHiddenDecks = Array.from(nextHidden);
+            await jsonFetch("/api/gallery/settings", {
+              method:"POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({hidden_decks: galleryHiddenDecks})
+            }, true);
+          }
+          $("deckEditModal").classList.remove("show");
+          await loadTarotDeck();
+          setTarotStatus("Deck updated.", "ok");
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      });
+
+      $("taDeleteDeck").addEventListener("click", async () => {
+        if (!authUserIsElfmin){
+          setTarotStatus("Only elfministrators can delete decks.", "err");
+          return;
+        }
+        const deck = $("taDeck").value.trim();
+        if (!deck){
+          setTarotStatus("Pick a deck to delete.", "err");
+          return;
+        }
+        if (!confirm("This deck will fall from the forest. Continue?")){
+          return;
+        }
+        try{
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"DELETE"}, true);
+          setTarotStatus("Deck deleted.", "ok");
+          await loadTarotDeckList();
+          $("taDeckList").textContent = "No deck loaded.";
+          taSelectedCardId = "";
+          taRenderPreviews(null);
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      });
+
+      $("taSaveCard").addEventListener("click", async () => {
+        try{
+          const deck = $("taDeck").value.trim() || "elf-classic";
+          const tags = $("taCardTags").value.split(",").map(t => t.trim()).filter(Boolean);
+          const body = {
+            card_id: $("taCardId").value.trim() || undefined,
+            name: $("taCardName").value.trim(),
+            suit: $("taCardSuit").value.trim(),
+            number: $("taCardNumber").value.trim() || undefined,
+            image: window.taUploadedImageUrl || undefined,
+            artist_id: $("taCardArtist").value.trim() || undefined,
+            tags,
+            flavor_text: $("taCardFlavor").value.trim() || undefined,
+            upright: $("taCardUpright").value.trim(),
+            reversed: $("taCardReversed").value.trim(),
+            themes: taGetCardThemeWeights(),
+            artist_links: undefined
+          };
+          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          });
+          $("taCardId").value = "";
+          $("taCardName").value = "";
+          $("taCardSuit").value = "";
+          $("taCardNumber").value = "";
+          window.taUploadedImageUrl = "";
+          $("taCardTags").value = "";
+          $("taCardFlavor").value = "";
+          $("taCardUpright").value = "";
+          $("taCardReversed").value = "";
+          $("taCardArtist").value = "";
+          taRenderNumberInfo("");
+          taSetCardThemeWeights({});
+          taSelectedCardId = body.card_id || "";
+          taDirty = false;
+          await loadTarotDeck();
+          setTarotStatus("Saved", "ok");
+        }catch(err){
+          setTarotStatus(err.message, "err");
+        }
+      });
+
+      async function loadTarotDeckList(selectValue, autoLoad = true){
+        if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const select = $("taDeck");
+          select.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            select.appendChild(opt);
+          });
+          select.value = selectValue || "elf-classic";
+          if (autoLoad && select.value){
+            await loadTarotDeck();
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      applyTokenFromUrl();
+      applyTempTokenFromUrl();
+      loadSettings();
+      if (apiKeyEl.value.trim()){
+        document.getElementById("loginView").classList.add("hidden");
+        document.getElementById("appView").classList.remove("hidden");
+        initAuthenticatedSession();
+      }
+      renderCard(null, [], "BING");
 
 
 
