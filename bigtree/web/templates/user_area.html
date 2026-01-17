@@ -162,7 +162,7 @@
     <h2>XivAuth setup</h2>
     <p class="muted">Configure the following settings so that the wallet can validate your Final Fantasy XIV identity:</p>
     <ul>
-      <li>Set <code>XIVAUTH.verify_url</code> (or <code>BIGTREE__XIVAUTH__VERIFY_URL</code>) to the endpoint that accepts <code>token</code>, <code>username</code>, and <code>world</code> and returns JSON with <code>xiv_username</code>.</li>
+      <li>Set <code>XIVAUTH.verify_url</code> (or <code>BIGTREE__XIVAUTH__VERIFY_URL</code>) to a XIVAuth API endpoint such as <code>https://xivauth.net/api/v1/characters</code>. The wallet will accept a list response and map <code>name</code> → <code>xiv_username</code>.</li>
       <li>If your verify endpoint expects the user token in a header, set <code>XIVAUTH.token_header</code> (e.g. <code>Authorization</code>) and optionally <code>XIVAUTH.token_prefix</code> (default <code>Bearer</code>).</li>
       <li>If your verify endpoint needs a service API key in a custom header, set <code>XIVAUTH.api_key_header</code> (default uses <code>Authorization: Bearer</code>).</li>
       <li>For multi-pod setups, set <code>XIVAUTH.state_secret</code> (or <code>WEB.jwt_secret</code>) so OAuth state validation survives redirects across pods.</li>

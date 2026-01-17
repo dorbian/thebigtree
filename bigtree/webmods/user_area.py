@@ -167,7 +167,22 @@ async def _call_xivauth(token: str, username: Optional[str], world: Optional[str
                 if resp.status != 200:
                     text = await resp.text()
                     raise ValueError(f"xivauth failure: {resp.status} {text}")
-                return await resp.json()
+                data = await resp.json()
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                if isinstance(data, dict) and "name" in data and "xiv_username" not in data:
+                    metadata = {
+                        "home_world": data.get("home_world"),
+                        "data_center": data.get("data_center"),
+                        "avatar_url": data.get("avatar_url"),
+                        "portrait_url": data.get("portrait_url"),
+                    }
+                    return {
+                        "xiv_username": data.get("name"),
+                        "xiv_id": data.get("persistent_key") or data.get("lodestone_id"),
+                        "metadata": {k: v for k, v in metadata.items() if v},
+                    }
+                return data if isinstance(data, dict) else {}
     except asyncio.TimeoutError:
         raise ValueError("xivauth timeout")
     except aiohttp.ClientError as exc:

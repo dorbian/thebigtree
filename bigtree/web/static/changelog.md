@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- User area: map XIVAuth /characters response to xiv_username during login.
 - XivAuth: added OAuth state secret support for multi-pod logins.
 - XivAuth: added token header/prefix config for OAuth verify calls.
 - Overlay: restored missing bingo/cardgames/tarot admin loaders after log viewer update.
