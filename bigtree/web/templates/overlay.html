@@ -1832,6 +1832,10 @@
               <input id="systemXivApiKeyHeader" placeholder="X-Api-Key">
             </label>
             <label>
+              OAuth state secret
+              <input id="systemXivStateSecret" type="password" autocomplete="off" placeholder="Shared secret across pods">
+            </label>
+            <label>
               Default username
               <input id="systemXivDefaultUsername" placeholder="xivplayer">
             </label>
@@ -1871,7 +1875,7 @@
       </div>
     </div>
     <div class="toast-stack" id="toastStack"></div>
-    <script src="/static/overlay/overlay.js?v=20260117a" defer></script>
+    <script src="/static/overlay/overlay.js?v=20260117b" defer></script>
     <script>
     document.addEventListener("DOMContentLoaded", function() {
       const btn = document.getElementById("updatePlogonmasterBtn");
@@ -1912,8 +1916,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 

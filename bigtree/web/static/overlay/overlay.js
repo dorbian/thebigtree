@@ -1104,6 +1104,7 @@
           setInputValue("systemXivTokenHeader", xiv.token_header || "");
           setInputValue("systemXivTokenPrefix", xiv.token_prefix || "");
           setInputValue("systemXivApiKeyHeader", xiv.api_key_header || "");
+          setInputValue("systemXivStateSecret", xiv.state_secret || "");
           setNumberValue("systemXivTimeout", normalizeNumber(xiv.timeout_seconds ?? xiv.timeout));
           setInputValue("systemOpenAIKey", openai.api_key || "");
           setInputValue("systemOpenAIModel", openai.openai_model || openai.model || "");
@@ -1136,6 +1137,7 @@
             token_header: ($("systemXivTokenHeader")?.value || "").trim(),
             token_prefix: ($("systemXivTokenPrefix")?.value || "").trim(),
             api_key_header: ($("systemXivApiKeyHeader")?.value || "").trim(),
+            state_secret: ($("systemXivStateSecret")?.value || "").trim(),
           };
           const timeout = normalizeNumber($("systemXivTimeout")?.value);
           if (timeout !== null){
@@ -3883,7 +3885,7 @@
         }
       });
 
-      $("loginBtn").addEventListener("click", () => {
+      on("loginBtn", "click", () => {
         if (!apiKeyEl.value.trim()){
           loginStatusEl.textContent = "Enter your API key.";
           loginStatusEl.className = "status err";
@@ -3895,24 +3897,31 @@
         setStatus("Welcome to Bingo Control.", "ok");
         initAuthenticatedSession();
       });
-      overlayToggle.addEventListener("change", () => {
-        document.body.classList.toggle("overlay", overlayToggle.checked);
-        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
-        saveSettings();
-      });
-      overlayToggleBtn.addEventListener("click", () => {
-        overlayToggle.checked = !overlayToggle.checked;
-        overlayToggle.dispatchEvent(new Event("change"));
-      });
-      $("overlayExit").addEventListener("click", () => {
-        overlayToggle.checked = false;
+      if (overlayToggle){
+        overlayToggle.addEventListener("change", () => {
+          document.body.classList.toggle("overlay", overlayToggle.checked);
+          overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+          saveSettings();
+        });
+      }
+      if (overlayToggleBtn){
+        overlayToggleBtn.addEventListener("click", () => {
+          if (!overlayToggle) return;
+          overlayToggle.checked = !overlayToggle.checked;
+          overlayToggle.dispatchEvent(new Event("change"));
+        });
+      }
+      on("overlayExit", "click", () => {
+        if (overlayToggle){
+          overlayToggle.checked = false;
+        }
         document.body.classList.remove("overlay");
         saveSettings();
       });
-      $("uploadLibraryClose").addEventListener("click", () => showLibraryModal(false));
-      $("uploadLibraryRefresh").addEventListener("click", () => loadLibrary(libraryKind));
+      on("uploadLibraryClose", "click", () => showLibraryModal(false));
+      on("uploadLibraryRefresh", "click", () => loadLibrary(libraryKind));
 
-      $("deckCreateBackPick").addEventListener("click", () => {
+      on("deckCreateBackPick", "click", () => {
         librarySelectHandler = (item) => {
           $("deckCreateBackPick").dataset.backUrl = item.url || "";
           $("deckCreateBackPick").dataset.artistId = item.artist_id || "";
@@ -3931,7 +3940,7 @@
         loadLibrary("media");
       });
 
-      $("deckCreateSuitPreset").addEventListener("change", (ev) => {
+      on("deckCreateSuitPreset", "change", (ev) => {
         const value = ev.target.value || "custom";
         if (value === "custom"){
           return;

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- XivAuth: added OAuth state secret support for multi-pod logins.
 - XivAuth: added token header/prefix config for OAuth verify calls.
 - Overlay: restored missing bingo/cardgames/tarot admin loaders after log viewer update.
 - Dashboard: added log viewer for boot/auth/upload logs and moved artist index to user management.

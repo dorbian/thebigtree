@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import secrets
 import time
 from typing import Any, Dict, Optional
@@ -48,6 +51,49 @@ def _get_xivauth_value(config: Dict[str, Any], *keys: str, default: Any = None) 
         if value not in (None, ""):
             return value
     return default
+
+
+def _get_state_secret() -> str:
+    config = _load_xivauth_config()
+    secret = str(_get_xivauth_value(config, "state_secret") or "").strip()
+    if secret:
+        return secret
+    settings = getattr(bigtree, "settings", None)
+    if settings:
+        return str(settings.get("WEB.jwt_secret", "") or "").strip()
+    return ""
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _build_state_token(secret: str) -> str:
+    ts = int(time.time())
+    nonce = secrets.token_urlsafe(8)
+    payload = f"{ts}:{nonce}".encode("ascii")
+    sig = hmac.new(secret.encode("ascii"), payload, hashlib.sha256).digest()
+    return f"{_b64url(payload)}.{_b64url(sig)}"
+
+
+def _verify_state_token(token: str, secret: str) -> bool:
+    if not token or "." not in token:
+        return False
+    try:
+        payload_b64, sig_b64 = token.split(".", 1)
+        payload = base64.urlsafe_b64decode(payload_b64 + "==")
+        sig = base64.urlsafe_b64decode(sig_b64 + "==")
+    except Exception:
+        return False
+    expected = hmac.new(secret.encode("ascii"), payload, hashlib.sha256).digest()
+    if not hmac.compare_digest(sig, expected):
+        return False
+    try:
+        ts_raw = payload.decode("ascii").split(":", 1)[0]
+        ts = int(ts_raw)
+    except Exception:
+        return False
+    return time.time() - ts <= OAUTH_STATE_TTL
 
 
 def _prune_oauth_states() -> None:
@@ -192,9 +238,13 @@ async def xivauth_oauth_start(_request: web.Request) -> web.Response:
     if not redirect_url:
         base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
         redirect_url = f"{base_url.rstrip('/')}/user-area/oauth/callback"
-    state = secrets.token_urlsafe(24)
-    _prune_oauth_states()
-    OAUTH_STATES[state] = time.time()
+    secret = _get_state_secret()
+    if secret:
+        state = _build_state_token(secret)
+    else:
+        state = secrets.token_urlsafe(24)
+        _prune_oauth_states()
+        OAUTH_STATES[state] = time.time()
     params = {
         "response_type": "code",
         "client_id": client_id,
@@ -210,11 +260,15 @@ async def xivauth_oauth_start(_request: web.Request) -> web.Response:
 async def xivauth_oauth_callback(request: web.Request) -> web.Response:
     code = request.query.get("code")
     state = request.query.get("state")
-    if not code or not state or state not in OAUTH_STATES:
+    if not code or not state:
         return web.Response(text="Invalid OAuth state.", status=400)
     issued = OAUTH_STATES.pop(state, 0)
-    if issued and time.time() - issued > OAUTH_STATE_TTL:
-        return web.Response(text="OAuth state expired.", status=400)
+    if issued and time.time() - issued <= OAUTH_STATE_TTL:
+        pass
+    else:
+        secret = _get_state_secret()
+        if not secret or not _verify_state_token(state, secret):
+            return web.Response(text="Invalid OAuth state.", status=400)
     config = _load_xivauth_config()
     client_id = str(_get_xivauth_value(config, "client_id", "oauth_client_id") or "").strip()
     client_secret = str(_get_xivauth_value(config, "client_secret", "oauth_client_secret") or "").strip()
