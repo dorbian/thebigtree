@@ -43,7 +43,6 @@
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-bottom: 16px;
       }
       .dashboard-admin-actions button,
       .dashboard-admin-actions a {
@@ -58,6 +57,39 @@
         gap: 6px;
         cursor: pointer;
         text-decoration: none;
+      }
+      .dashboard-admin-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .dashboard-admin-card {
+        border: 1px solid rgba(255, 255, 255, .1);
+        border-radius: 14px;
+        padding: 14px 14px 16px;
+        background: rgba(255, 255, 255, .02);
+      }
+      .dashboard-admin-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .dashboard-admin-header svg {
+        width: 22px;
+        height: 22px;
+        fill: currentColor;
+        opacity: .8;
+      }
+      .dashboard-admin-title {
+        font-weight: 600;
+        letter-spacing: .02em;
+      }
+      .dashboard-admin-note {
+        margin: 6px 0 0;
+        color: rgba(231, 242, 234, .7);
+        font-size: 0.85rem;
       }
       .dashboard-admin-actions button svg {
         width: 20px;
@@ -183,43 +215,81 @@
             </div>
             <button class="dashboard-stats-refresh" id="dashboardStatsRefresh" type="button">Refresh stats</button>
           </div>
-          <div class="dashboard-admin-actions" aria-label="Administration tools">
-            <button type="button" id="menuAuthRoles">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2a5 5 0 0 1 5 5v3h2a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1h2V7a5 5 0 0 1 5-5zm-3 8h6V7a3 3 0 0 0-6 0v3z"/>
-              </svg>
-              <span>Auth roles</span>
-            </button>
-            <button type="button" id="menuAuthKeys">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 1a7 7 0 0 0-4.3 12.5l-2.2 2.2V19h3.3l1.2-1.2h1.4l1.2-1.2h1.5l1.6-1.6A7 7 0 1 0 12 1zm0 4a3 3 0 1 1-3 3 3 3 0 0 1 3-3z"/>
-              </svg>
-              <span>Auth keys</span>
-            </button>
-            <button type="button" id="menuAuthTemp">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2a6 6 0 0 1 6 6v3h2a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a1 1 0 0 1 1-1h2V8a6 6 0 0 1 6-6zm-4 9h8V8a4 4 0 1 0-8 0v3z"/>
-              </svg>
-              <span>Temporary access</span>
-            </button>
-            <button type="button" id="menuSystemConfig">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm6.39 3a6.5 6.5 0 0 0-.32-1l1.92-1.18-1-1.73-2.03.71a6.45 6.45 0 0 0-1.1-.64L15 5h-2l-.85 1.16a6.45 6.45 0 0 0-1.11.64l-2.04-.7-1 1.73 1.92 1.18a6.5 6.5 0 0 0-.32 1L3 12l1.16.85a6.5 6.5 0 0 0 .32 1l-1.92 1.18 1 1.73 2.03-.71a6.45 6.45 0 0 0 1.1.64L11 21h2l.85-1.16a6.45 6.45 0 0 0 1.11-.64l2.04.7 1-1.73-1.92-1.18a6.5 6.5 0 0 0 .32-1L21 12z"/>
-              </svg>
-              <span>System config</span>
-            </button>
-            <a id="dashboardXivAuthLink" class="dashboard-admin-link" href="/user-area/manage" target="_blank" rel="noreferrer">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-              </svg>
-              <span>XivAuth management</span>
-            </a>
-            <button type="button" id="dashboardChangelogToggle">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M19 3H5a2 2 0 0 0-2 2v14l4-3h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-3 8H8v-2h8v2zm0-4H8V5h8v2zm-4 8H8v-2h4v2z"/>
-              </svg>
-              <span>Changelog</span>
-            </button>
+          <div class="dashboard-admin-grid" aria-label="Administration tools">
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <div class="dashboard-admin-title">User management</div>
+              </div>
+              <div class="dashboard-admin-actions">
+                <a id="dashboardXivAuthLink" class="dashboard-admin-link" href="/user-area/manage" target="_blank" rel="noreferrer">
+                  <span>XivAuth claims</span>
+                </a>
+              </div>
+              <p class="dashboard-admin-note">Review player claims and linked game history.</p>
+            </div>
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
+                </svg>
+                <div class="dashboard-admin-title">Media management</div>
+              </div>
+              <div class="dashboard-admin-actions">
+                <button type="button" id="menuMedia">
+                  <span>Media library</span>
+                </button>
+                <button type="button" id="menuGallery">
+                  <span>Gallery channels</span>
+                </button>
+                <button type="button" id="menuArtists">
+                  <span>Artist index</span>
+                </button>
+                <button type="button" id="menuCalendar">
+                  <span>Calendar</span>
+                </button>
+              </div>
+              <p class="dashboard-admin-note">Uploads, artist records, and calendar highlights.</p>
+            </div>
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm6.39 3a6.5 6.5 0 0 0-.32-1l1.92-1.18-1-1.73-2.03.71a6.45 6.45 0 0 0-1.1-.64L15 5h-2l-.85 1.16a6.45 6.45 0 0 0-1.11.64l-2.04-.7-1 1.73 1.92 1.18a6.5 6.5 0 0 0-.32 1L3 12l1.16.85a6.5 6.5 0 0 0 .32 1l-1.92 1.18 1 1.73 2.03-.71a6.45 6.45 0 0 0 1.1.64L11 21h2l.85-1.16a6.45 6.45 0 0 0 1.11-.64l2.04.7 1-1.73-1.92-1.18a6.5 6.5 0 0 0 .32-1L21 12z"/>
+                </svg>
+                <div class="dashboard-admin-title">Configuration</div>
+              </div>
+              <div class="dashboard-admin-actions">
+                <button type="button" id="menuSystemConfig">
+                  <span>System config</span>
+                </button>
+                <button type="button" id="dashboardChangelogToggle">
+                  <span>Changelog</span>
+                </button>
+              </div>
+              <p class="dashboard-admin-note">Service credentials and latest updates.</p>
+            </div>
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 2a5 5 0 0 1 5 5v3h2a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1h2V7a5 5 0 0 1 5-5zm-3 8h6V7a3 3 0 0 0-6 0v3z"/>
+                </svg>
+                <div class="dashboard-admin-title">Access management</div>
+              </div>
+              <div class="dashboard-admin-actions">
+                <button type="button" id="menuAuthRoles">
+                  <span>Auth roles</span>
+                </button>
+                <button type="button" id="menuAuthKeys">
+                  <span>Auth keys</span>
+                </button>
+                <button type="button" id="menuAuthTemp">
+                  <span>Temporary access</span>
+                </button>
+              </div>
+              <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
+            </div>
           </div>
           <div class="dashboard-readme hidden" id="dashboardChangelogWrap" style="margin-top:12px">
             <div class="dash-section-body">
@@ -1666,6 +1736,30 @@
               <input id="systemXivApiKey" type="password" autocomplete="off" placeholder="Bearer token (optional)">
             </label>
             <label>
+              Client ID
+              <input id="systemXivClientId" placeholder="XivAuth client id">
+            </label>
+            <label>
+              Client secret
+              <input id="systemXivClientSecret" type="password" autocomplete="off" placeholder="XivAuth client secret">
+            </label>
+            <label>
+              Authorize URL
+              <input id="systemXivAuthorizeUrl" type="url" placeholder="https://xivauth.net/oauth/authorize">
+            </label>
+            <label>
+              Token URL
+              <input id="systemXivTokenUrl" type="url" placeholder="https://xivauth.net/oauth/token">
+            </label>
+            <label>
+              OAuth scope
+              <input id="systemXivScope" placeholder="user character">
+            </label>
+            <label>
+              Redirect URL
+              <input id="systemXivRedirectUrl" type="url" placeholder="https://rites.thebigtree.life/user-area/oauth/callback">
+            </label>
+            <label>
               Default username
               <input id="systemXivDefaultUsername" placeholder="xivplayer">
             </label>
@@ -1746,8 +1840,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 

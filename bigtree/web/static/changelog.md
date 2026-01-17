@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Dashboard: grouped admin actions into user/media/config/access sections and restored gallery/media controls.
 - Gallery: wallet icon now starts XivAuth login and returns to user-area.
 - User area: added XivAuth OAuth login button and callback flow for user-area sessions.
+- Overlay: added XivAuth OAuth fields to system config UI.
 - User area: added XivAuth OAuth configuration keys (client_id/secret, authorize_url, token_url, scope, redirect_url).
 - FFXIV client: add cardgames host panel for creating sessions and copying join links.
 - FFXIV client: add public cardgames URL setting for generated links.

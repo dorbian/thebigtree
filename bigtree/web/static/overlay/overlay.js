@@ -1007,6 +1007,12 @@ const $ = (id) => document.getElementById(id);
           setInputValue("systemXivVerifyUrl", xiv.verify_url || xiv.verifyUrl || "");
           setInputValue("systemXivApiKey", xiv.api_key || "");
           setInputValue("systemXivDefaultUsername", xiv.default_username || "");
+          setInputValue("systemXivClientId", xiv.client_id || xiv.oauth_client_id || "");
+          setInputValue("systemXivClientSecret", xiv.client_secret || xiv.oauth_client_secret || "");
+          setInputValue("systemXivAuthorizeUrl", xiv.authorize_url || xiv.oauth_authorize_url || "");
+          setInputValue("systemXivTokenUrl", xiv.token_url || xiv.oauth_token_url || "");
+          setInputValue("systemXivScope", xiv.scope || xiv.scopes || "");
+          setInputValue("systemXivRedirectUrl", xiv.redirect_url || xiv.oauth_redirect_url || "");
           setNumberValue("systemXivTimeout", normalizeNumber(xiv.timeout_seconds ?? xiv.timeout));
           setInputValue("systemOpenAIKey", openai.api_key || "");
           setInputValue("systemOpenAIModel", openai.openai_model || openai.model || "");
@@ -1030,6 +1036,12 @@ const $ = (id) => document.getElementById(id);
             verify_url: ($("systemXivVerifyUrl")?.value || "").trim(),
             api_key: ($("systemXivApiKey")?.value || "").trim(),
             default_username: ($("systemXivDefaultUsername")?.value || "").trim(),
+            client_id: ($("systemXivClientId")?.value || "").trim(),
+            client_secret: ($("systemXivClientSecret")?.value || "").trim(),
+            authorize_url: ($("systemXivAuthorizeUrl")?.value || "").trim(),
+            token_url: ($("systemXivTokenUrl")?.value || "").trim(),
+            scope: ($("systemXivScope")?.value || "").trim(),
+            redirect_url: ($("systemXivRedirectUrl")?.value || "").trim(),
           };
           const timeout = normalizeNumber($("systemXivTimeout")?.value);
           if (timeout !== null){
@@ -1099,6 +1111,8 @@ const $ = (id) => document.getElementById(id);
         const canTarot = hasScope("tarot:admin");
         const canCardgames = hasScope("cardgames:admin") || canTarot;
         const canAdmin = hasScope("admin:web");
+        const canMedia = canBingo || canTarot || canAdmin;
+        const canGallery = canTarot || canAdmin;
         const bingoBtn = $("menuBingo");
         const contestsBtn = $("menuContests");
         const mediaBtn = $("menuMedia");
@@ -1110,13 +1124,13 @@ const $ = (id) => document.getElementById(id);
         const galleryBtn = $("menuGallery");
         if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
         if (contestsBtn) contestsBtn.classList.toggle("hidden", !canAdmin);
-        if (mediaBtn) mediaBtn.classList.toggle("hidden", !canBingo);
+        if (mediaBtn) mediaBtn.classList.toggle("hidden", !canMedia);
         if (calendarBtn) calendarBtn.classList.toggle("hidden", !canAdmin);
         if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
         if (cardgameBtn) cardgameBtn.classList.toggle("hidden", !canCardgames);
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
-        if (artistsBtn) artistsBtn.classList.toggle("hidden", !canTarot);
-        if (galleryBtn) galleryBtn.classList.toggle("hidden", !canTarot);
+        if (artistsBtn) artistsBtn.classList.toggle("hidden", !canGallery);
+        if (galleryBtn) galleryBtn.classList.toggle("hidden", !canGallery);
         const systemConfigBtn = $("menuSystemConfig");
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
@@ -1937,7 +1951,10 @@ const $ = (id) => document.getElementById(id);
       });
       bindElement("menuArtists", (el) => {
         on("menuArtists", "click", () => {
-          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
+            setStatus("Artist access requires admin permissions.", "err");
+            return;
+          }
           $("artistModal").classList.add("show");
           loadTarotArtists();
         });
@@ -1950,7 +1967,10 @@ const $ = (id) => document.getElementById(id);
       });
       bindElement("menuGallery", (el) => {
         el.addEventListener("click", () => {
-          if (!ensureScope("tarot:admin", "Tarot access required.")) return;
+          if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
+            setStatus("Gallery access requires admin permissions.", "err");
+            return;
+          }
           $("galleryModal").classList.add("show");
           loadGalleryChannels();
           loadGallerySettings();
