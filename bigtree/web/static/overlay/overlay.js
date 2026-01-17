@@ -3312,10 +3312,16 @@
                 <strong>${o.owner_name}</strong>
                 <span class="${badgeClass}">${claim.label}</span>
               </div>
-              <button class="btn-ghost owner-view-btn" data-owner="${o.owner_name}">View Cards (${o.cards})</button>
+              <div class="owner-row-actions">
+                <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" data-owner="${o.owner_name}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg>
+                </button>
+                <button class="btn-ghost owner-view-btn" data-owner="${o.owner_name}">View Cards (${o.cards})</button>
+              </div>
             </div>
           `;
           const viewBtn = item.querySelector(".owner-view-btn");
+          const copyBtn = item.querySelector(".owner-copy-btn");
           if (viewBtn){
             viewBtn.addEventListener("click", () => {
               const name = viewBtn.getAttribute("data-owner") || "";
@@ -3325,6 +3331,26 @@
               updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
               loadOwnerCards(name);
               $("bOwnerModal").classList.add("show");
+            });
+          }
+          if (copyBtn){
+            copyBtn.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              const name = copyBtn.getAttribute("data-owner") || "";
+              const gid = getGameId();
+              if (!gid || !name){
+                setBingoStatus("Select a game and player first.", "err");
+                return;
+              }
+              try{
+                const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(name) + "/token", {method:"GET"});
+                const base = getBase();
+                const url = new URL("/bingo/owner?token=" + encodeURIComponent(data.token || ""), base).toString();
+                await navigator.clipboard.writeText(url);
+                setBingoStatus("Copied player link.", "ok");
+              }catch(err){
+                setBingoStatus("Copy failed.", "err");
+              }
             });
           }
           el.appendChild(item);

@@ -134,7 +134,10 @@
       if (!res.ok || !data.ok){
         throw new Error("invalid");
       }
-      walletUser.textContent = data.user?.xiv_username || "Wallet";
+      const label = walletUser.querySelector("span");
+      if (label){
+        label.textContent = data.user?.xiv_username || "Wallet";
+      }
       walletUser.style.display = "inline-flex";
       walletLogin.style.display = "none";
     }catch(err){

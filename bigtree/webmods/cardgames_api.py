@@ -5,6 +5,7 @@ import asyncio
 import json
 from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
+from bigtree.inc.database import get_database
 from bigtree.modules import tarot
 
 async def _run_blocking(func, *args):
@@ -89,6 +90,32 @@ async def create_session(req: web.Request):
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    try:
+        db = get_database()
+        payload = dict(s or {})
+        status_val = payload.get("status") or "created"
+        active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
+        metadata = {
+            "currency": payload.get("currency"),
+            "pot": payload.get("pot"),
+            "status": status_val,
+        }
+        players = db._extract_cardgame_players(payload)
+        db.upsert_game(
+            game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
+            module="cardgames",
+            payload=payload,
+            title=payload.get("game_id"),
+            created_at=db._as_datetime(payload.get("created_at")),
+            ended_at=db._as_datetime(payload.get("updated_at")),
+            status=status_val,
+            active=active,
+            metadata=metadata,
+            run_source="api",
+            players=players,
+        )
+    except Exception:
+        pass
     return web.json_response({"ok": True, "session": s})
 
 @route("GET", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin", "cardgames:admin"])

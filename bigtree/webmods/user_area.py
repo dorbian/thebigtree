@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import base64
 import hashlib
 import hmac
@@ -124,6 +125,123 @@ def _create_user_session(auth_data: Dict[str, Any], username: Optional[str], wor
             "metadata": user.get("metadata"),
         },
     }
+
+
+def _seed_game_from_join_code(join_code: str) -> bool:
+    code = (join_code or "").strip()
+    if not code:
+        return False
+    db = get_database()
+    try:
+        from bigtree.modules import cardgames as cardgames_mod
+    except Exception:
+        cardgames_mod = None
+    if cardgames_mod:
+        try:
+            session = cardgames_mod.get_session_by_join_code(code)
+        except Exception:
+            session = None
+        if session:
+            payload = dict(session)
+            state_json = payload.get("state_json")
+            if isinstance(state_json, str):
+                try:
+                    payload["state_json_parsed"] = json.loads(state_json)
+                except Exception:
+                    pass
+            status = payload.get("status") or payload.get("stage") or "unknown"
+            active = str(status).lower() not in ("finished", "ended", "complete", "closed")
+            game_id = payload.get("session_id") or payload.get("game_id") or payload.get("join_code")
+            metadata = {
+                "currency": payload.get("currency"),
+                "pot": payload.get("pot"),
+                "status": status,
+            }
+            players = db._extract_cardgame_players(payload)
+            return db.upsert_game(
+                game_id=str(game_id),
+                module="cardgames",
+                payload=payload,
+                title=payload.get("game_id"),
+                created_at=db._as_datetime(payload.get("created_at")),
+                ended_at=db._as_datetime(payload.get("updated_at")),
+                status=status,
+                active=active,
+                metadata=metadata,
+                run_source="api",
+                players=players,
+            )
+    try:
+        from bigtree.modules import tarot as tarot_mod
+    except Exception:
+        tarot_mod = None
+    if tarot_mod:
+        try:
+            session = tarot_mod.get_session_by_join_code(code)
+        except Exception:
+            session = None
+        if session:
+            status = session.get("status") or ("active" if session.get("active") else "ended")
+            active = bool(session.get("active")) or str(status).lower() == "active"
+            metadata = {
+                "deck_id": session.get("deck_id"),
+                "spread_id": session.get("spread_id"),
+                "status": status,
+            }
+            players = db._extract_tarot_players(session)
+            return db.upsert_game(
+                game_id=str(session.get("session_id") or session.get("id") or session.get("join_code")),
+                module="tarot",
+                payload=session,
+                title=session.get("title") or session.get("name") or "Tarot",
+                created_at=db._as_datetime(session.get("created_at") or session.get("started_at")),
+                ended_at=db._as_datetime(session.get("ended_at")),
+                status=status,
+                active=active,
+                metadata=metadata,
+                run_source="api",
+                players=players,
+            )
+    try:
+        from bigtree.modules import bingo as bingo_mod
+    except Exception:
+        bingo_mod = None
+    if bingo_mod:
+        try:
+            game = bingo_mod.get_game(code)
+        except Exception:
+            game = None
+        if game:
+            active = bool(game.get("active"))
+            status = "active" if active else "ended"
+            metadata = {
+                "currency": game.get("currency"),
+                "stage": game.get("stage"),
+                "price": game.get("price"),
+                "pot": game.get("pot"),
+            }
+            players = []
+            try:
+                for owner in bingo_mod.list_owners(game.get("game_id") or code):
+                    name = owner.get("owner_name") if isinstance(owner, dict) else None
+                    if name:
+                        players.append(name)
+            except Exception:
+                players = []
+            return db.upsert_game(
+                game_id=str(game.get("game_id") or code),
+                module="bingo",
+                payload=game,
+                title=game.get("title") or game.get("header") or "Bingo",
+                created_at=db._as_datetime(game.get("created_at")),
+                ended_at=db._as_datetime(game.get("ended_at")),
+                status=status,
+                active=active,
+                metadata=metadata,
+                run_source="api",
+                players=players,
+            )
+    return False
 
 
 async def _call_xivauth(token: str, username: Optional[str], world: Optional[str]) -> Dict[str, Any]:
@@ -382,6 +500,7 @@ async def claim_game_by_join(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "join_code is required"}, status=400)
     db = get_database()
     ok, game, status = db.claim_game_by_join_code(join_code, user["id"])
+    seed_code = join_code
     if not ok and status == "join code not found":
         try:
             from bigtree.modules import bingo as bingo_mod
@@ -389,7 +508,11 @@ async def claim_game_by_join(request: web.Request) -> web.Response:
         except Exception:
             info = None
         if info and info.get("game_id"):
-            ok, game, status = db.claim_game_by_join_code(str(info.get("game_id")), user["id"])
+            seed_code = str(info.get("game_id"))
+            ok, game, status = db.claim_game_by_join_code(seed_code, user["id"])
+        if not ok and status == "join code not found":
+            if _seed_game_from_join_code(seed_code):
+                ok, game, status = db.claim_game_by_join_code(seed_code, user["id"])
     if not ok:
         if status == "already claimed":
             return web.json_response({"ok": False, "error": "already claimed", "game": game}, status=409)

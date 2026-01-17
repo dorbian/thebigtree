@@ -452,6 +452,40 @@ class Database:
             return True, game, "claimed"
         return False, game, "claim failed"
 
+    def upsert_game(
+        self,
+        game_id: str,
+        module: str,
+        payload: Dict[str, Any],
+        title: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        ended_at: Optional[datetime] = None,
+        status: Optional[str] = None,
+        active: Optional[bool] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        run_source: str = "api",
+        players: Optional[Iterable[str]] = None,
+    ) -> bool:
+        if not game_id or not module or payload is None:
+            return False
+        self._store_game(
+            game_id=game_id,
+            module=module,
+            payload=payload,
+            title=title,
+            created_at=created_at,
+            ended_at=ended_at,
+            status=status,
+            active=bool(active),
+            metadata=metadata or {},
+            run_source=run_source,
+        )
+        if players:
+            for player in players:
+                if player:
+                    self._store_game_player(game_id, str(player).strip(), role="player")
+        return True
+
     def _link_user_game(self, user_id: int, game_id: Optional[str]) -> None:
         if not user_id or not game_id:
             return

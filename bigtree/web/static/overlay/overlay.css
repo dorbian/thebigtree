@@ -852,6 +852,11 @@
         align-items:center;
         gap:10px;
       }
+      .owner-row-actions{
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
       .owner-row strong{
         font-size:12px;
         font-weight:600;

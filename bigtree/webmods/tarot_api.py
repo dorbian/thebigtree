@@ -12,6 +12,7 @@ import bigtree
 import discord
 from bigtree.inc.logging import upload_logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.database import get_database
 from bigtree.modules import tarot as tar
 from bigtree.modules import artists
 from bigtree.webmods import uploads as upload_mod
@@ -164,6 +165,31 @@ async def create_session(req: web.Request):
     spread_id = str(body.get("spread_id") or body.get("spread") or "single")
     priestess_id = int(body.get("priestess_id") or body.get("owner_id") or 0)
     s = tar.create_session(priestess_id, deck_id, spread_id)
+    try:
+        db = get_database()
+        status_val = s.get("status") or ("active" if s.get("active") else "ended")
+        active = bool(s.get("active")) or str(status_val).lower() == "active"
+        metadata = {
+            "deck_id": s.get("deck_id"),
+            "spread_id": s.get("spread_id"),
+            "status": status_val,
+        }
+        players = db._extract_tarot_players(s)
+        db.upsert_game(
+            game_id=str(s.get("session_id") or s.get("id") or s.get("join_code")),
+            module="tarot",
+            payload=s,
+            title=s.get("title") or s.get("name") or "Tarot",
+            created_at=db._as_datetime(s.get("created_at") or s.get("started_at")),
+            ended_at=db._as_datetime(s.get("ended_at")),
+            status=status_val,
+            active=active,
+            metadata=metadata,
+            run_source="api",
+            players=players,
+        )
+    except Exception:
+        pass
     return web.json_response({
         "ok": True,
         "sessionId": s["session_id"],
@@ -221,6 +247,31 @@ async def create_session_from_priestess(req: web.Request):
     except PermissionError:
         return _json_error("unauthorized", status=403)
     new_session = tar.create_session(session.get("priestess_id") or 0, deck_id, spread_id)
+    try:
+        db = get_database()
+        status_val = new_session.get("status") or ("active" if new_session.get("active") else "ended")
+        active = bool(new_session.get("active")) or str(status_val).lower() == "active"
+        metadata = {
+            "deck_id": new_session.get("deck_id"),
+            "spread_id": new_session.get("spread_id"),
+            "status": status_val,
+        }
+        players = db._extract_tarot_players(new_session)
+        db.upsert_game(
+            game_id=str(new_session.get("session_id") or new_session.get("id") or new_session.get("join_code")),
+            module="tarot",
+            payload=new_session,
+            title=new_session.get("title") or new_session.get("name") or "Tarot",
+            created_at=db._as_datetime(new_session.get("created_at") or new_session.get("started_at")),
+            ended_at=db._as_datetime(new_session.get("ended_at")),
+            status=status_val,
+            active=active,
+            metadata=metadata,
+            run_source="api",
+            players=players,
+        )
+    except Exception:
+        pass
     return web.json_response({
         "ok": True,
         "session_id": new_session.get("session_id"),

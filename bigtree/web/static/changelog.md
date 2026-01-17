@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Wallet: claim join codes now seeds cardgames/tarot/bingo sessions when missing in Postgres.
+- Overlay: add bingo owner link copy button beside player rows.
+- Gallery: wallet badge uses icon + username when logged in.
 - Player pages: show logged-in wallet user and allow assigning sessions to the user.
 - Wallet: add player-page links for tarot/cardgames sessions and hide gallery redirects.
 - Gallery: show logged-in wallet name on the front page.
