@@ -376,6 +376,7 @@ class Database:
             )
         for row in games:
             row["players"] = indexed.get(row.get("game_id"), [])
+            self._attach_game_summary(row)
         return games
 
     def list_api_games(self, include_inactive: bool = True, limit: int = 200) -> List[Dict[str, Any]]:
@@ -391,7 +392,10 @@ class Database:
         sql += " ORDER BY g.created_at DESC LIMIT %s"
         params.append(limit)
         rows = self._execute(sql, tuple(params), fetch=True)
-        return [self._format_game_row(row) for row in rows] if rows else []
+        games = [self._format_game_row(row) for row in rows] if rows else []
+        for row in games:
+            self._attach_game_summary(row)
+        return games
 
     def claim_game_for_user(self, game_id: str, user_id: int) -> bool:
         if not game_id or not user_id:
@@ -405,6 +409,60 @@ class Database:
             (user_id, game_id, "api"),
         )
         return bool(count)
+
+    def claim_game_by_join_code(self, join_code: str, user_id: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        code = (join_code or "").strip()
+        if not code or not user_id:
+            return False, None, "join code required"
+        row = self._fetchone(
+            """
+            SELECT g.*, claimant.xiv_username AS claimed_username
+            FROM games g
+            LEFT JOIN users claimant ON claimant.id = g.claimed_by
+            WHERE lower(g.game_id) = lower(%s)
+               OR lower(g.payload->>'join_code') = lower(%s)
+               OR lower(g.payload->>'joinCode') = lower(%s)
+               OR lower(g.payload->>'join') = lower(%s)
+            LIMIT 1
+            """,
+            (code, code, code, code),
+        )
+        if not row:
+            return False, None, "join code not found"
+        game = self._format_game_row(row)
+        self._attach_game_summary(game)
+        claimed_by = row.get("claimed_by")
+        if claimed_by and int(claimed_by) != int(user_id):
+            return False, game, "already claimed"
+        if claimed_by and int(claimed_by) == int(user_id):
+            self._link_user_game(user_id, game.get("game_id"))
+            return True, game, "already claimed"
+        updated = self._execute(
+            """
+            UPDATE games
+            SET claimed_by = %s, claimed_at = CURRENT_TIMESTAMP
+            WHERE game_id = %s
+            """,
+            (user_id, row.get("game_id")),
+        )
+        if updated:
+            self._link_user_game(user_id, row.get("game_id"))
+            game["claimed_by"] = user_id
+            game["claimed_username"] = game.get("claimed_username")
+            return True, game, "claimed"
+        return False, game, "claim failed"
+
+    def _link_user_game(self, user_id: int, game_id: Optional[str]) -> None:
+        if not user_id or not game_id:
+            return
+        self._execute(
+            """
+            INSERT INTO user_games (user_id, game_id)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (user_id, game_id),
+        )
 
     def _fetch_game_players(self, game_ids: Iterable[str]) -> List[Dict[str, Any]]:
         if not game_ids:
@@ -426,6 +484,27 @@ class Database:
         data["claimed_at"] = self._format_dt(data.get("claimed_at"))
         data["claimed_username"] = data.get("claimed_username")
         return data
+
+    def _attach_game_summary(self, row: Dict[str, Any]) -> None:
+        if not row:
+            return
+        payload = row.get("payload") or {}
+        if not isinstance(payload, dict):
+            payload = {}
+        metadata = row.get("metadata") or {}
+        currency = metadata.get("currency") or payload.get("currency")
+        pot = metadata.get("pot") or payload.get("pot")
+        winnings = payload.get("winnings") or payload.get("payout") or payload.get("result")
+        status = row.get("status") or payload.get("status")
+        join_code = payload.get("join_code") or payload.get("joinCode") or payload.get("join")
+        outcome = "active" if row.get("active") else (status or "ended")
+        if winnings not in (None, ""):
+            outcome = f"{outcome} (winnings {winnings})"
+        row["currency"] = currency
+        row["pot"] = pot
+        row["winnings"] = winnings
+        row["outcome"] = outcome
+        row["join_code"] = join_code
 
     def _format_dt(self, value: Optional[datetime]) -> Optional[str]:
         if not value:

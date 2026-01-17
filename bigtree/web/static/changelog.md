@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- User area: add join-key claim box, game history table, and player-friendly details modal.
+- User area: show logged-in character name in header and streamline login controls.
 - User area: map XIVAuth /characters response to xiv_username during login.
 - XivAuth: added OAuth state secret support for multi-pod logins.
 - XivAuth: added token header/prefix config for OAuth verify calls.

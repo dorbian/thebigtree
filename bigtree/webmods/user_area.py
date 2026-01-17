@@ -339,7 +339,8 @@ async def user_games(request: web.Request) -> web.Response:
     if isinstance(user, web.Response):
         return user
     db = get_database()
-    games = db.list_user_games(user["id"])
+    include_all = str(request.query.get("all") or "").strip().lower() in {"1", "true", "yes"}
+    games = db.list_user_games(user["id"], only_active=not include_all)
     return web.json_response({"ok": True, "games": games})
 
 
@@ -359,6 +360,29 @@ async def claim_game(request: web.Request) -> web.Response:
     if not db.claim_game_for_user(game_id, user["id"]):
         return web.json_response({"ok": False, "error": "game not found or not claimable"}, status=404)
     return web.json_response({"ok": True, "game_id": game_id})
+
+
+@route("POST", "/user-area/claim-join", allow_public=True)
+async def claim_game_by_join(request: web.Request) -> web.Response:
+    user = await _resolve_user(request)
+    if isinstance(user, web.Response):
+        return user
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+    join_code = (payload.get("join_code") or payload.get("code") or "").strip()
+    if not join_code:
+        return web.json_response({"ok": False, "error": "join_code is required"}, status=400)
+    db = get_database()
+    ok, game, status = db.claim_game_by_join_code(join_code, user["id"])
+    if not ok:
+        if status == "already claimed":
+            return web.json_response({"ok": False, "error": "already claimed", "game": game}, status=409)
+        if status == "join code not found":
+            return web.json_response({"ok": False, "error": "join code not found"}, status=404)
+        return web.json_response({"ok": False, "error": status or "claim failed"}, status=400)
+    return web.json_response({"ok": True, "status": status, "game": game})
 
 
 @route("GET", "/user-area", allow_public=True)
