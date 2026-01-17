@@ -426,6 +426,142 @@ class Database:
             self._attach_game_summary(row)
         return games
 
+    def list_users(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        """List registered users/characters.
+
+        The world/server is typically stored in users.metadata["world"] when
+        coming from XivAuth.
+        """
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 1000
+        if limit < 1:
+            limit = 1
+        if limit > 5000:
+            limit = 5000
+        rows = self._execute(
+            """
+            SELECT id, xiv_username, xiv_id, metadata, created_at, updated_at
+            FROM users
+            ORDER BY updated_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+            fetch=True,
+        )
+        users: List[Dict[str, Any]] = []
+        for row in rows or []:
+            meta = row.get("metadata") or {}
+            world = None
+            try:
+                world = meta.get("world")
+            except Exception:
+                world = None
+            users.append(
+                {
+                    "id": row.get("id"),
+                    "xiv_username": row.get("xiv_username"),
+                    "xiv_id": row.get("xiv_id"),
+                    "world": world,
+                    "last_seen": (meta.get("last_seen") if isinstance(meta, dict) else None),
+                    "created_at": row.get("created_at"),
+                    "updated_at": row.get("updated_at"),
+                }
+            )
+        return users
+
+    def list_games(
+        self,
+        *,
+        q: Optional[str] = None,
+        module: Optional[str] = None,
+        player: Optional[str] = None,
+        venue_id: Optional[int] = None,
+        include_inactive: bool = True,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> Dict[str, Any]:
+        """List games with basic filtering and pagination (admin dashboard)."""
+        try:
+            page = int(page)
+        except Exception:
+            page = 1
+        if page < 1:
+            page = 1
+        try:
+            page_size = int(page_size)
+        except Exception:
+            page_size = 50
+        if page_size < 5:
+            page_size = 5
+        if page_size > 200:
+            page_size = 200
+
+        where: List[str] = []
+        params: List[Any] = []
+
+        if not include_inactive:
+            where.append("g.active = TRUE")
+
+        if module:
+            where.append("lower(g.module) = %s")
+            params.append(str(module).strip().lower())
+
+        if venue_id:
+            where.append("g.venue_id = %s")
+            params.append(int(venue_id))
+
+        if q:
+            qv = f"%{str(q).strip().lower()}%"
+            where.append("(lower(g.game_id) LIKE %s OR lower(COALESCE(g.title,'')) LIKE %s)")
+            params.extend([qv, qv])
+
+        if player:
+            pv = f"%{str(player).strip().lower()}%"
+            where.append(
+                "EXISTS (SELECT 1 FROM game_players gp WHERE gp.game_id = g.game_id AND lower(gp.name) LIKE %s)"
+            )
+            params.append(pv)
+
+        where_sql = " WHERE " + " AND ".join(where) if where else ""
+
+        # total
+        total_row = self._fetchone(
+            "SELECT COUNT(*) AS value FROM games g" + where_sql,
+            tuple(params),
+        )
+        try:
+            total = int(total_row.get("value") if total_row else 0)
+        except Exception:
+            total = 0
+
+        offset = (page - 1) * page_size
+        sql = (
+            """
+            SELECT g.*, claimant.xiv_username AS claimed_username,
+                   v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
+            FROM games g
+            LEFT JOIN users claimant ON claimant.id = g.claimed_by
+            LEFT JOIN venues v ON v.id = g.venue_id
+            """
+            + where_sql
+            + " ORDER BY g.created_at DESC LIMIT %s OFFSET %s"
+        )
+        rows = self._execute(sql, tuple(params + [page_size, offset]), fetch=True)
+        games = [self._format_game_row(row) for row in rows] if rows else []
+        if games:
+            game_ids = [g.get("game_id") for g in games if g.get("game_id")]
+            players_rows = self._fetch_game_players(game_ids)
+            indexed: Dict[str, List[Dict[str, Any]]] = {}
+            for pr in players_rows:
+                indexed.setdefault(pr["game_id"], []).append({"name": pr["name"], "role": pr.get("role")})
+            for g in games:
+                g["players"] = indexed.get(g.get("game_id"), [])
+                self._attach_game_summary(g)
+
+        return {"total": total, "page": page, "page_size": page_size, "games": games}
+
     def get_game_by_join_code(self, join_code: str) -> Optional[Dict[str, Any]]:
         code = (join_code or "").strip()
         if not code:

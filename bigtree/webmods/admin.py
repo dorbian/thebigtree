@@ -476,6 +476,39 @@ async def admin_overlay_stats(_req: web.Request):
     }
     return web.json_response({"ok": True, "stats": stats})
 
+
+@route("GET", "/admin/games/list", scopes=["admin:web"])
+async def admin_games_list(req: web.Request) -> web.Response:
+    """Paginated game listing for the forest dashboard (all modules)."""
+    db = get_database()
+    q = (req.query.get("q") or "").strip() or None
+    module = (req.query.get("module") or "").strip() or None
+    player = (req.query.get("player") or "").strip() or None
+    try:
+        venue_id = int(req.query.get("venue_id") or 0)
+    except Exception:
+        venue_id = 0
+    include_inactive = (req.query.get("include_inactive") or "1").strip() not in {"0", "false", "no"}
+    try:
+        page = int(req.query.get("page") or 1)
+    except Exception:
+        page = 1
+    try:
+        page_size = int(req.query.get("page_size") or 50)
+    except Exception:
+        page_size = 50
+
+    result = db.list_games(
+        q=q,
+        module=module,
+        player=player,
+        venue_id=venue_id or None,
+        include_inactive=include_inactive,
+        page=page,
+        page_size=page_size,
+    )
+    return web.json_response({"ok": True, **result})
+
 # ---------- FFXIV client announce ----------
 @route("POST", "/admin/announce", scopes=["admin:announce"])
 async def admin_announce(req: web.Request):

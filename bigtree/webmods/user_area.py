@@ -553,3 +553,15 @@ async def manage_games(request: web.Request) -> web.Response:
     db = get_database()
     games = db.list_api_games(include_inactive=True, limit=500)
     return web.json_response({"ok": True, "games": games})
+
+
+@route("GET", "/user-area/manage/claims", scopes=["admin:message"])
+async def manage_claims(request: web.Request) -> web.Response:
+    """List all registered XivAuth users/characters (admin view)."""
+    db = get_database()
+    try:
+        limit = int(request.query.get("limit") or 2000)
+    except Exception:
+        limit = 2000
+    users = db.list_users(limit=limit)
+    return web.json_response({"ok": True, "users": users})

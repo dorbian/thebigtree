@@ -96,6 +96,11 @@
       <button id="clearKey">Clear</button>
     </div>
     <div id="errorMessage" class="muted"></div>
+    <h2 style="margin:18px 0 8px; font-size:18px;">XIVAuth Claims</h2>
+    <p class="muted" style="margin-top:0;">All registered characters that have logged in via XivAuth.</p>
+    <div id="claimsContainer"></div>
+
+    <h2 style="margin:24px 0 8px; font-size:18px;">Games</h2>
     <div id="gamesContainer"></div>
   </section>
   <script>
@@ -105,6 +110,7 @@
     const clearBtn = document.getElementById("clearKey");
     const refreshBtn = document.getElementById("refreshBtn");
     const gamesContainer = document.getElementById("gamesContainer");
+    const claimsContainer = document.getElementById("claimsContainer");
     const errorMessage = document.getElementById("errorMessage");
 
     function getAdminKey(){
@@ -146,6 +152,55 @@
       }
     }
 
+    async function loadClaims(){
+      const key = getAdminKey();
+      if(!key){
+        claimsContainer.innerHTML = "<div class='muted'>Enter an admin API key to view claims.</div>";
+        return;
+      }
+      try{
+        const res = await fetch("/user-area/manage/claims?limit=2000", {headers: headers()});
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Unable to load claims");
+        }
+        renderClaims(data.users || []);
+      }catch(err){
+        claimsContainer.innerHTML = `<div class='muted'>${err.message || "Unable to load claims"}</div>`;
+      }
+    }
+
+    function renderClaims(users){
+      if(!users.length){
+        claimsContainer.innerHTML = "<div class='muted'>No claims/characters registered yet.</div>";
+        return;
+      }
+      claimsContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Character</th>
+              <th>Server</th>
+              <th>XIV ID</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${users.map((u, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${u.xiv_username || "-"}</td>
+                <td>${u.world || "-"}</td>
+                <td>${u.xiv_id || "-"}</td>
+                <td>${u.last_seen || u.updated_at || "-"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
     function renderGames(games){
       if(!games.length){
         gamesContainer.innerHTML = "<div class='muted'>No API games to show.</div>";
@@ -185,6 +240,7 @@
 
     saveBtn?.addEventListener("click", () => {
       setAdminKey(adminField.value.trim());
+      loadClaims();
       loadGames();
     });
     clearBtn?.addEventListener("click", () => {
@@ -192,12 +248,17 @@
       adminField.value = "";
       errorMessage.textContent = "Admin key cleared.";
       gamesContainer.innerHTML = "";
+      claimsContainer.innerHTML = "";
     });
-    refreshBtn?.addEventListener("click", () => loadGames());
+    refreshBtn?.addEventListener("click", () => {
+      loadClaims();
+      loadGames();
+    });
 
     const storedKey = getAdminKey();
     if(storedKey){
       adminField.value = storedKey;
+      loadClaims();
       loadGames();
     }
   </script>

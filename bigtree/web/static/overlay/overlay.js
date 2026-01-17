@@ -36,6 +36,19 @@
       let dashboardStatsLoading = false;
       let dashboardLogsKind = "boot";
       let dashboardLogsLoading = false;
+
+      // Games list (admin:web)
+      let gamesListVenues = [];
+      let gamesListState = {
+        q: "",
+        player: "",
+        module: "",
+        venue_id: "",
+        include_inactive: true,
+        page: 1,
+        page_size: 50,
+        total: 0,
+      };
       let calendarSelected = {
         month: 1,
         image: "",
@@ -184,8 +197,11 @@
       function renderDashboardLogs(lines, kind){
         const body = $("dashboardLogsBody");
         if (!body) return;
-        const text = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+        // Show newest first so you don't have to scroll for the latest.
+        const ordered = Array.isArray(lines) ? [...lines].reverse() : lines;
+        const text = Array.isArray(ordered) ? ordered.join("\n") : String(ordered || "");
         body.textContent = text || "No log entries found.";
+        body.scrollTop = 0;
         setDashboardLogsActive(kind);
       }
 
@@ -212,6 +228,169 @@
           }
         }finally{
           dashboardLogsLoading = false;
+        }
+      }
+
+      function getGamesFilters(){
+        return {
+          q: $("gamesFilterQuery")?.value?.trim() || "",
+          player: $("gamesFilterPlayer")?.value?.trim() || "",
+          module: $("gamesFilterModule")?.value || "",
+          venue_id: $("gamesFilterVenue")?.value || "",
+          include_inactive: $("gamesFilterInactive")?.checked ?? true,
+          page_size: parseInt($("gamesPageSize")?.value || "50", 10) || 50,
+        };
+      }
+
+      function renderGamesListVenues(){
+        const select = $("gamesFilterVenue");
+        if (!select) return;
+        const current = select.value || "";
+        const options = [`<option value="">All venues</option>`]
+          .concat((gamesListVenues || []).map(v => {
+            const id = v.id ?? v.venue_id ?? "";
+            const name = v.name || `Venue ${id}`;
+            return `<option value="${String(id)}">${escapeHtml(name)}</option>`;
+          }));
+        select.innerHTML = options.join("");
+        // Restore selection if still present
+        if (current){
+          select.value = current;
+        }
+      }
+
+      async function loadGamesListVenues(force = false){
+        if (!hasScope("admin:web")) return;
+        if (gamesListVenues.length && !force){
+          renderGamesListVenues();
+          return;
+        }
+        try{
+          const resp = await jsonFetch("/admin/venues", {method: "GET"});
+          if (resp.ok){
+            gamesListVenues = resp.venues || [];
+          }
+        }catch(err){
+          gamesListVenues = [];
+        }
+        renderGamesListVenues();
+      }
+
+      function renderGamesList(result){
+        const body = $("gamesListBody");
+        const meta = $("gamesListMeta");
+        const pageLabel = $("gamesPageLabel");
+        if (!body) return;
+        const games = result?.games || [];
+        const total = result?.total || 0;
+        const page = result?.page || 1;
+        const pageSize = result?.page_size || gamesListState.page_size;
+        gamesListState.total = total;
+        gamesListState.page = page;
+        gamesListState.page_size = pageSize;
+
+        const start = total ? ((page - 1) * pageSize + 1) : 0;
+        const end = Math.min(page * pageSize, total);
+        if (meta){
+          meta.textContent = total ? `Showing ${start}-${end} of ${total}` : "No games found.";
+        }
+        if (pageLabel){
+          const pages = Math.max(1, Math.ceil((total || 0) / pageSize));
+          pageLabel.textContent = `Page ${page} / ${pages}`;
+        }
+
+        if (!games.length){
+          body.textContent = "No games match the current filters.";
+          return;
+        }
+
+        const rows = games.map(g => {
+          const id = escapeHtml(g.game_id || "-");
+          const title = escapeHtml(g.title || "");
+          const module = escapeHtml(g.module || "-");
+          const status = escapeHtml(g.status || "-");
+          const active = g.active ? "Yes" : "No";
+          const players = Array.isArray(g.players) ? g.players.map(p => p.name).filter(Boolean).join(", ") : (g.players || "");
+          const venue = escapeHtml(g.venue_name || "-");
+          const claimed = escapeHtml(g.claimed_username || "-");
+          const created = escapeHtml(g.created_at || "-");
+          const join = escapeHtml(g.join_code || "");
+          const subtitle = join ? `<div class="muted" style="font-size:12px;">Join: <code>${join}</code></div>` : "";
+          const titleLine = title ? `<div style="font-weight:600;">${title}</div>` : "";
+          return `<tr>
+            <td><code>${id}</code>${subtitle}</td>
+            <td>${module}</td>
+            <td><span class="status-chip">${status}</span> <span class="muted">(${active})</span></td>
+            <td>${escapeHtml(players || "-")}</td>
+            <td>${venue}</td>
+            <td>${claimed}</td>
+            <td>${created}</td>
+          </tr>`;
+        }).join("");
+
+        body.innerHTML = `
+          <table class="games-list-table">
+            <thead>
+              <tr>
+                <th>Game</th>
+                <th>Module</th>
+                <th>Status</th>
+                <th>Players</th>
+                <th>Venue</th>
+                <th>Claimed by</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      async function loadGamesList(force = false){
+        if (!ensureScope("admin:web", "Admin web access required.")) return;
+        const body = $("gamesListBody");
+        if (body){
+          body.textContent = force ? "Loading games..." : (body.textContent || "Loading games...");
+        }
+        const filters = getGamesFilters();
+        const sameFilters =
+          gamesListState.q === filters.q &&
+          gamesListState.player === filters.player &&
+          gamesListState.module === filters.module &&
+          gamesListState.venue_id === filters.venue_id &&
+          gamesListState.include_inactive === filters.include_inactive &&
+          gamesListState.page_size === filters.page_size;
+
+        if (!force && sameFilters && gamesListState.total && $("gamesListBody")?.innerHTML){
+          return;
+        }
+
+        gamesListState.q = filters.q;
+        gamesListState.player = filters.player;
+        gamesListState.module = filters.module;
+        gamesListState.venue_id = filters.venue_id;
+        gamesListState.include_inactive = filters.include_inactive;
+        gamesListState.page_size = filters.page_size;
+
+        const params = new URLSearchParams();
+        if (gamesListState.q) params.set("q", gamesListState.q);
+        if (gamesListState.player) params.set("player", gamesListState.player);
+        if (gamesListState.module) params.set("module", gamesListState.module);
+        if (gamesListState.venue_id) params.set("venue_id", gamesListState.venue_id);
+        params.set("include_inactive", gamesListState.include_inactive ? "1" : "0");
+        params.set("page", String(gamesListState.page || 1));
+        params.set("page_size", String(gamesListState.page_size || 50));
+
+        try{
+          const resp = await jsonFetch(`/admin/games/list?${params.toString()}`, {method: "GET"});
+          if (!resp.ok){
+            throw new Error(resp.error || "Unable to load games");
+          }
+          renderGamesList(resp);
+        }catch(err){
+          if (body){
+            body.textContent = err.message || "Unable to load games.";
+          }
         }
       }
 
@@ -2463,6 +2642,7 @@
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
         toggleClass("menuContests", "active", which === "contests");
         toggleClass("menuMedia", "active", which === "media");
+        toggleClass("menuGamesList", "active", which === "gamesList");
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
@@ -2470,6 +2650,7 @@
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
         toggleClass("contestPanel", "hidden", which !== "contests");
         toggleClass("mediaPanel", "hidden", which !== "media");
+        toggleClass("gamesListPanel", "hidden", which !== "gamesList");
         if (which === "dashboard"){
           renderDashboardChangelog();
           loadDashboardStats();
@@ -2483,6 +2664,9 @@
         }else if (which === "cardgameSessions"){
           loadCardgameDecks();
           loadCardgameSessions();
+        }else if (which === "gamesList"){
+          loadGamesListVenues();
+          loadGamesList(true);
         }
       }
 
@@ -2601,6 +2785,13 @@
 
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
       $("menuBingo").addEventListener("click", () => showPanel("bingo"));
+      const menuGamesList = $("menuGamesList");
+      if (menuGamesList){
+        menuGamesList.addEventListener("click", () => {
+          if (!ensureScope("admin:web", "Admin web access required.")) return;
+          showPanel("gamesList");
+        });
+      }
       $("menuBingoRefresh").addEventListener("click", (ev) => {
         ev.stopPropagation();
         loadGamesMenu();
@@ -2669,6 +2860,7 @@
       bindMenuKey("menuTarotDecks");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
+      bindMenuKey("menuGamesList");
       $("bAnnounceToggle").addEventListener("change", async (ev) => {
         const gid = getGameId();
         if (!gid){
@@ -2780,10 +2972,70 @@
       on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
       on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
+      on("dashboardAddVenue", "click", async () => {
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        const name = (prompt("Venue name") || "").trim();
+        if (!name) return;
+        try{
+          const resp = await jsonFetch("/admin/venues/upsert", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name})
+          });
+          if (resp.ok){
+            showToast("Venue added.", "ok");
+            // Refresh venues list for Games filters if open.
+            loadGamesListVenues(true);
+          }else{
+            showToast(resp.error || "Venue create failed.", "err");
+          }
+        }catch(err){
+          showToast(err.message || String(err), "err");
+        }
+      });
       on("dashboardChangelogToggle", "click", () => {
         const wrap = $("dashboardChangelogWrap");
         if (!wrap) return;
         wrap.classList.toggle("hidden");
+      });
+
+      // Games list controls
+      on("gamesFilterApply", "click", () => {
+        gamesListState.page = 1;
+        loadGamesList(true);
+      });
+      on("gamesPrev", "click", () => {
+        const next = Math.max(1, (gamesListState.page || 1) - 1);
+        if (next === gamesListState.page) return;
+        gamesListState.page = next;
+        loadGamesList(true);
+      });
+      on("gamesNext", "click", () => {
+        const pageSize = gamesListState.page_size || 50;
+        const pages = Math.max(1, Math.ceil((gamesListState.total || 0) / pageSize));
+        const next = Math.min(pages, (gamesListState.page || 1) + 1);
+        if (next === gamesListState.page) return;
+        gamesListState.page = next;
+        loadGamesList(true);
+      });
+      on("gamesPageSize", "change", () => {
+        gamesListState.page = 1;
+        loadGamesList(true);
+      });
+      ["gamesFilterQuery", "gamesFilterPlayer"].forEach(id => {
+        on(id, "keydown", (ev) => {
+          if (ev.key === "Enter"){
+            ev.preventDefault();
+            gamesListState.page = 1;
+            loadGamesList(true);
+          }
+        });
+      });
+      ["gamesFilterModule", "gamesFilterVenue", "gamesFilterInactive"].forEach(id => {
+        on(id, "change", () => {
+          gamesListState.page = 1;
+          loadGamesList(true);
+        });
       });
       $("contestRefresh").addEventListener("click", () => loadContestManagement());
       $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
