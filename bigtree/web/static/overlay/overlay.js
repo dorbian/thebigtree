@@ -130,6 +130,8 @@ const $ = (id) => document.getElementById(id);
 
       let dashboardStatsLoaded = false;
       let dashboardStatsLoading = false;
+      let dashboardLogsKind = "boot";
+      let dashboardLogsLoading = false;
 
       function setStatValue(id, value){
         const el = $(id);
@@ -145,6 +147,52 @@ const $ = (id) => document.getElementById(id);
         setStatValue("dashStatRegistered", stats.registered_users ?? "--");
         setStatValue("dashStatGames", stats.api_games ?? "--");
         dashboardStatsLoaded = true;
+      }
+
+      function setDashboardLogsActive(kind){
+        const buttons = {
+          boot: $("dashboardLogsBoot"),
+          auth: $("dashboardLogsAuth"),
+          upload: $("dashboardLogsUpload"),
+        };
+        Object.entries(buttons).forEach(([key, el]) => {
+          if (!el) return;
+          el.classList.toggle("active", key === kind);
+        });
+      }
+
+      function renderDashboardLogs(lines, kind){
+        const body = $("dashboardLogsBody");
+        if (!body) return;
+        const text = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+        body.textContent = text || "No log entries found.";
+        setDashboardLogsActive(kind);
+      }
+
+      async function loadDashboardLogs(kind = "boot", force = false){
+        if (!hasScope("admin:web")) return;
+        if (dashboardLogsLoading) return;
+        if (!force && kind === dashboardLogsKind && $("dashboardLogsBody")?.textContent){
+          setDashboardLogsActive(kind);
+          return;
+        }
+        dashboardLogsLoading = true;
+        const body = $("dashboardLogsBody");
+        if (body){
+          body.textContent = "Loading logs...";
+        }
+        try{
+          const safeKind = ["boot", "auth", "upload"].includes(kind) ? kind : "boot";
+          const resp = await jsonFetch(`/admin/logs?kind=${safeKind}&lines=200`, {method: "GET"});
+          dashboardLogsKind = resp.kind || safeKind;
+          renderDashboardLogs(resp.entries || [], dashboardLogsKind);
+        }catch(err){
+          if (body){
+            body.textContent = err.message || "Unable to load logs.";
+          }
+        }finally{
+          dashboardLogsLoading = false;
+        }
       }
 
       async function loadDashboardStats(force = false){
@@ -1135,6 +1183,8 @@ const $ = (id) => document.getElementById(id);
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
         if (dashboardAuthLink) dashboardAuthLink.classList.toggle("hidden", !canAdmin);
+        const dashboardLogsWrap = $("dashboardLogsWrap");
+        if (dashboardLogsWrap) dashboardLogsWrap.classList.toggle("hidden", !canAdmin);
 
         const saved = getSavedPanel();
         const blocked =
@@ -1728,6 +1778,7 @@ const $ = (id) => document.getElementById(id);
         if (which === "dashboard"){
           renderDashboardChangelog();
           loadDashboardStats();
+          loadDashboardLogs(dashboardLogsKind);
         } else if (which === "media"){
           setMediaTab("upload");
           loadMediaLibrary();
@@ -2049,6 +2100,18 @@ const $ = (id) => document.getElementById(id);
       });
       bindElement("dashboardStatsRefresh", (el) => {
         el.addEventListener("click", () => loadDashboardStats(true));
+      });
+      bindElement("dashboardLogsBoot", (el) => {
+        el.addEventListener("click", () => loadDashboardLogs("boot", true));
+      });
+      bindElement("dashboardLogsAuth", (el) => {
+        el.addEventListener("click", () => loadDashboardLogs("auth", true));
+      });
+      bindElement("dashboardLogsUpload", (el) => {
+        el.addEventListener("click", () => loadDashboardLogs("upload", true));
+      });
+      bindElement("dashboardLogsRefresh", (el) => {
+        el.addEventListener("click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
       });
       bindElement("dashboardChangelogToggle", (el) => {
         el.addEventListener("click", () => {

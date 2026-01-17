@@ -91,6 +91,51 @@
         color: rgba(231, 242, 234, .7);
         font-size: 0.85rem;
       }
+      .dashboard-logs {
+        border: 1px solid rgba(255, 255, 255, .1);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 16px;
+        background: rgba(255, 255, 255, .02);
+      }
+      .dashboard-logs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .dashboard-logs-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .dashboard-logs-actions button {
+        border: 1px solid rgba(255, 255, 255, .15);
+        background: rgba(255, 255, 255, .03);
+        color: #e7f2ea;
+        border-radius: 10px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+      .dashboard-logs-actions button.active {
+        border-color: rgba(107, 212, 162, .7);
+        color: #6bd4a2;
+      }
+      .dashboard-logs-body {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        background: rgba(7, 12, 10, .6);
+        max-height: 240px;
+        overflow: auto;
+        font-family: "JetBrains Mono", "Consolas", monospace;
+        font-size: 0.78rem;
+        white-space: pre-wrap;
+        line-height: 1.4;
+        color: rgba(231, 242, 234, .9);
+      }
       .dashboard-admin-actions button svg {
         width: 20px;
         height: 20px;
@@ -227,6 +272,9 @@
                 <a id="dashboardXivAuthLink" class="dashboard-admin-link" href="/user-area/manage" target="_blank" rel="noreferrer">
                   <span>XivAuth claims</span>
                 </a>
+                <button type="button" id="menuArtists">
+                  <span>Artist index</span>
+                </button>
               </div>
               <p class="dashboard-admin-note">Review player claims and linked game history.</p>
             </div>
@@ -243,9 +291,6 @@
                 </button>
                 <button type="button" id="menuGallery">
                   <span>Gallery channels</span>
-                </button>
-                <button type="button" id="menuArtists">
-                  <span>Artist index</span>
                 </button>
                 <button type="button" id="menuCalendar">
                   <span>Calendar</span>
@@ -290,6 +335,21 @@
               </div>
               <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
             </div>
+          </div>
+          <div class="dashboard-logs" id="dashboardLogsWrap">
+            <div class="dashboard-logs-header">
+              <div>
+                <strong>Logs</strong>
+                <span class="muted">Boot, auth, and upload activity.</span>
+              </div>
+              <div class="dashboard-logs-actions">
+                <button type="button" id="dashboardLogsBoot">Boot logs</button>
+                <button type="button" id="dashboardLogsAuth">Auth logs</button>
+                <button type="button" id="dashboardLogsUpload">Upload logs</button>
+                <button type="button" id="dashboardLogsRefresh">Refresh</button>
+              </div>
+            </div>
+            <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
           </div>
           <div class="dashboard-readme hidden" id="dashboardChangelogWrap" style="margin-top:12px">
             <div class="dash-section-body">
@@ -1840,8 +1900,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 

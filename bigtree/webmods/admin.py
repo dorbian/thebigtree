@@ -14,7 +14,7 @@ from bigtree.inc import web_tokens
 from bigtree.inc.settings import load_settings
 from bigtree.inc.database import get_database
 from pathlib import Path
-from bigtree.inc.logging import logger, auth_logger
+from bigtree.inc.logging import logger, auth_logger, upload_logger, log_path, auth_log_path, upload_log_path
 import discord
 
 # ---------- TinyDB for admin clients ----------
@@ -78,6 +78,29 @@ def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
         if not scopes_map:
             return True, ["*"], "api_key"
         return True, _split_scopes(scopes_map.get(token)), "api_key"
+
+
+def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) -> list[str]:
+    if not path:
+        return []
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            if size == 0:
+                return []
+            read_size = min(size, max_bytes)
+            fh.seek(-read_size, os.SEEK_END)
+            data = fh.read(read_size)
+        text = data.decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        if max_lines > 0 and len(lines) > max_lines:
+            lines = lines[-max_lines:]
+        return lines
+    except Exception:
+        return []
 
     return False, [], "unknown"
 
@@ -410,6 +433,28 @@ async def admin_system_config_update(req: web.Request):
     if not db.update_system_config(name, data):
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     return web.json_response({"ok": True, "config": db.get_system_config(name)})
+
+
+@route("GET", "/admin/logs", scopes=["admin:web"])
+async def admin_logs(req: web.Request) -> web.Response:
+    kind = (req.query.get("kind") or "boot").strip().lower()
+    try:
+        lines = int(req.query.get("lines") or 200)
+    except Exception:
+        lines = 200
+    if lines < 20:
+        lines = 20
+    if lines > 1000:
+        lines = 1000
+    if kind == "auth":
+        path = auth_log_path
+    elif kind == "upload":
+        path = upload_log_path
+    else:
+        kind = "boot"
+        path = log_path
+    entries = _read_log_tail(path, max_lines=lines)
+    return web.json_response({"ok": True, "kind": kind, "lines": lines, "entries": entries})
 
 
 @route("GET", "/admin/overlay/stats", scopes=["admin:web"])

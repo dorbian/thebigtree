@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Dashboard: added log viewer for boot/auth/upload logs and moved artist index to user management.
 - Database: retry JSON/deck imports when empty and log migration paths.
 - Dashboard: grouped admin actions into user/media/config/access sections and restored gallery/media controls.
 - Gallery: wallet icon now starts XivAuth login and returns to user-area.
