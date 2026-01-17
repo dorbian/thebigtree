@@ -56,8 +56,33 @@
     border-bottom:1px solid var(--line);
     position:relative;
     z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
   }
   header h1{margin:0;font-size:20px;letter-spacing:.05em}
+  .user-box{
+    display:none;
+    align-items:center;
+    gap:10px;
+    font-size:12px;
+  }
+  .user-box button{
+    padding:6px 12px;
+    border-radius:999px;
+    border:1px solid rgba(107,212,162,.4);
+    background:#122019;
+    color:var(--text);
+    cursor:pointer;
+  }
+  .user-box span{
+    background:rgba(107,212,162,.15);
+    border:1px solid rgba(107,212,162,.4);
+    padding:4px 10px;
+    border-radius:999px;
+  }
   .subhead{
     padding:8px 22px 0;
     font-size:12px;
@@ -477,6 +502,10 @@
 
 <header>
   <h1>Tarot Reading <span class="chip" id="sessionStatus">waiting</span></h1>
+  <div class="user-box" id="userBox">
+    <span id="userName"></span>
+    <button class="btn" id="assignBtn" type="button">Assign to me</button>
+  </div>
 </header>
 <div class="subhead" style="justify-content:flex-end">
   <button class="btn" id="downloadShot" style="display:none">Download screenshot</button>
@@ -522,10 +551,59 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
   const joinCode = "{JOIN}";
+  const userBox = document.getElementById("userBox");
+  const userName = document.getElementById("userName");
+  const assignBtn = document.getElementById("assignBtn");
+  const userTokenKey = "bigtree_user_token";
   const params = new URLSearchParams(location.search);
   const themeParam = params.get("card_theme");
   const themeLocked = params.has("card_theme");
   document.body.dataset.cardTheme = themeParam || "classic";
+
+  function getUserToken(){
+    return window.localStorage.getItem(userTokenKey);
+  }
+
+  async function loadUser(){
+    const token = getUserToken();
+    if(!token){
+      userBox.style.display = "none";
+      return;
+    }
+    try{
+      const res = await fetch("/user-area/me", {headers:{Authorization:`Bearer ${token}`}});
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error("not logged in");
+      }
+      userName.textContent = data.user?.xiv_username || "Player";
+      userBox.style.display = "flex";
+    }catch(err){
+      userBox.style.display = "none";
+    }
+  }
+
+  async function assignSession(){
+    const token = getUserToken();
+    if(!token){
+      return;
+    }
+    try{
+      const res = await fetch("/user-area/claim-join", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+        body:JSON.stringify({join_code: joinCode})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || "Assign failed");
+      }
+      assignBtn.textContent = "Assigned";
+      assignBtn.disabled = true;
+    }catch(err){
+      assignBtn.textContent = "Assign failed";
+    }
+  }
 
   function toggleFullscreen(target){
     if (!target || !target.requestFullscreen){
@@ -960,4 +1038,7 @@
       });
     }));
   }
+
+  assignBtn?.addEventListener("click", assignSession);
+  loadUser();
 </script>

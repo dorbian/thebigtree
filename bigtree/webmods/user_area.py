@@ -382,6 +382,14 @@ async def claim_game_by_join(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "join_code is required"}, status=400)
     db = get_database()
     ok, game, status = db.claim_game_by_join_code(join_code, user["id"])
+    if not ok and status == "join code not found":
+        try:
+            from bigtree.modules import bingo as bingo_mod
+            info = bingo_mod.resolve_owner_token(join_code)
+        except Exception:
+            info = None
+        if info and info.get("game_id"):
+            ok, game, status = db.claim_game_by_join_code(str(info.get("game_id")), user["id"])
     if not ok:
         if status == "already claimed":
             return web.json_response({"ok": False, "error": "already claimed", "game": game}, status=409)

@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Player pages: show logged-in wallet user and allow assigning sessions to the user.
+- Wallet: add player-page links for tarot/cardgames sessions and hide gallery redirects.
+- Gallery: show logged-in wallet name on the front page.
 - User area: add join-key claim box, game history table, and player-friendly details modal.
 - User area: show logged-in character name in header and streamline login controls.
 - User area: map XIVAuth /characters response to xiv_username during login.

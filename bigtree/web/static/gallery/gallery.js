@@ -18,6 +18,8 @@
   const postGameTitle = document.getElementById("postGameTitle");
   const postGameDismiss = document.getElementById("postGameDismiss");
   const joinGameBtn = document.getElementById("joinGameBtn");
+  const walletUser = document.getElementById("walletUser");
+  const walletLogin = document.getElementById("walletLogin");
   const returnPrompt = document.getElementById("returnPrompt");
   const returnClose = document.getElementById("returnClose");
   const artistFlavor = document.getElementById("artistFlavor");
@@ -81,6 +83,7 @@
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
   let currentDetailIndex = -1;
+  const WALLET_TOKEN_KEY = "bigtree_user_token";
 
   const LINK_ORDER = ["instagram", "bluesky", "x", "artstation", "linktree", "website"];
   const LINK_LABELS = {
@@ -115,6 +118,29 @@
       toast.classList.remove("show");
       toast.setAttribute("aria-hidden", "true");
     }, 2200);
+  }
+
+  async function loadWalletUser(){
+    if (!walletUser || !walletLogin) return;
+    const token = window.localStorage.getItem(WALLET_TOKEN_KEY);
+    if (!token){
+      walletUser.style.display = "none";
+      walletLogin.style.display = "inline-flex";
+      return;
+    }
+    try{
+      const res = await fetch("/user-area/me", {headers:{Authorization:`Bearer ${token}`}});
+      const data = await res.json();
+      if (!res.ok || !data.ok){
+        throw new Error("invalid");
+      }
+      walletUser.textContent = data.user?.xiv_username || "Wallet";
+      walletUser.style.display = "inline-flex";
+      walletLogin.style.display = "none";
+    }catch(err){
+      walletUser.style.display = "none";
+      walletLogin.style.display = "inline-flex";
+    }
   }
 
   if (joinGameBtn){
@@ -493,6 +519,7 @@
       if (event.key === "ArrowRight") navigateDetail(1);
     }
   });
+  loadWalletUser();
   load();
   maybeShowPostGameBanner();
   scheduleReturnPrompt();

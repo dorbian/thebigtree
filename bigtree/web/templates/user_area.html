@@ -363,6 +363,7 @@
               <th>Currency</th>
               <th>Outcome</th>
               <th>Players</th>
+              <th>Player page</th>
               <th>Created</th>
             </tr>
           </thead>
@@ -373,12 +374,33 @@
       `;
     }
 
+    function buildPlayerUrl(game){
+      if(!game || !game.join_code){
+        return "";
+      }
+      const moduleId = game.module || "game";
+      if(moduleId === "cardgames"){
+        const payload = game.payload || {};
+        const gameId = payload.game_id || payload.gameId;
+        if(!gameId){
+          return "";
+        }
+        return `/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(game.join_code)}`;
+      }
+      if(moduleId === "tarot"){
+        return `/tarot/session/${encodeURIComponent(game.join_code)}`;
+      }
+      return "";
+    }
+
     function renderGameRow(game){
       const title = game.name || game.game_id || "Game";
       const players = (game.players || []).map(player => player.name).filter(Boolean);
       const playerText = players.length ? players.join(", ") : "-";
       const status = game.active ? "active" : "ended";
       const outcome = game.outcome || status;
+      const playerUrl = buildPlayerUrl(game);
+      const playerLink = playerUrl ? `<a href="${escapeHtml(playerUrl)}" target="_blank" rel="noreferrer">Open</a>` : "-";
       return `
         <tr class="game-row" data-game-id="${escapeHtml(game.game_id)}">
           <td>${escapeHtml(title)}</td>
@@ -387,6 +409,7 @@
           <td>${escapeHtml(game.currency || "-")}</td>
           <td>${escapeHtml(outcome)}</td>
           <td>${escapeHtml(playerText)}</td>
+          <td>${playerLink}</td>
           <td>${escapeHtml(game.created_at || "-")}</td>
         </tr>
       `;
@@ -400,6 +423,7 @@
       const players = (game.players || []).map(player => player.name).filter(Boolean);
       const playerText = players.length ? players.join(", ") : "-";
       const status = game.active ? "active" : "ended";
+      const playerUrl = buildPlayerUrl(game);
       const details = [
         {label: "Game ID", value: game.game_id},
         {label: "Type", value: game.module || "game"},
@@ -410,6 +434,7 @@
         {label: "Winnings", value: game.winnings || "-"},
         {label: "Players", value: playerText},
         {label: "Join key", value: game.join_code || "-"},
+        {label: "Player page", value: playerUrl || "-", link: playerUrl || ""},
         {label: "Created", value: game.created_at || "-"},
         {label: "Ended", value: game.ended_at || "-"},
       ];
@@ -418,7 +443,7 @@
           ${details.map(detail => `
             <div class="detail-item">
               <span>${escapeHtml(detail.label)}</span>
-              ${escapeHtml(detail.value)}
+              ${detail.link ? `<a href="${escapeHtml(detail.link)}" target="_blank" rel="noreferrer">${escapeHtml(detail.value)}</a>` : escapeHtml(detail.value)}
             </div>
           `).join("")}
         </div>
@@ -464,6 +489,9 @@
     }
 
     gamesContainer.addEventListener("click", (event) => {
+      if (event.target && event.target.tagName === "A"){
+        return;
+      }
       const row = event.target.closest(".game-row");
       if(!row){
         return;

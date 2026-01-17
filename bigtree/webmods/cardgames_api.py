@@ -39,7 +39,7 @@ async def cardgame_session_page(req: web.Request):
     view = _get_view(req)
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s or s.get("game_id") != game_id:
-        raise web.HTTPFound("/tarot/gallery")
+        return web.Response(status=404, text="Session not found.")
     tpl = _TEMPLATES.get((game_id, view))
     if not tpl:
         return web.Response(status=404, text="Not found")
@@ -50,14 +50,14 @@ async def cardgame_session_page(req: web.Request):
 async def join_any_game(req: web.Request):
     join_code = str(req.query.get("code") or "").strip()
     if not join_code:
-        raise web.HTTPFound("/tarot/gallery")
+        return web.Response(status=404, text="Join code is required.")
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if s and s.get("game_id"):
         raise web.HTTPFound(f"/cardgames/{s['game_id']}/session/{join_code}")
     t = await _run_blocking(tarot.get_session_by_join_code, join_code)
     if t:
         raise web.HTTPFound(f"/tarot/session/{join_code}")
-    raise web.HTTPFound("/tarot/gallery")
+    return web.Response(status=404, text="Session not found.")
 
 @route("POST", "/api/cardgames/{game_id}/sessions", scopes=["tarot:admin", "cardgames:admin"])
 async def create_session(req: web.Request):

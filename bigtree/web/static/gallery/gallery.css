@@ -87,6 +87,17 @@
     height:18px;
     fill:currentColor;
   }
+  .wallet-user{
+    color:var(--accent);
+    text-decoration:none;
+    border:1px solid rgba(107,212,162,.35);
+    padding:8px 12px;
+    border-radius:999px;
+    background:#0f1a14;
+    font-size:12px;
+    letter-spacing:.04em;
+    white-space:nowrap;
+  }
   header h1{margin:0 0 6px 0;letter-spacing:.08em;text-transform:uppercase}
   header p{margin:0;color:var(--muted)}
   .header-subtitle{

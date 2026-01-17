@@ -9,7 +9,10 @@
     body{margin:0;font-family:"Spectral","Georgia",serif;background:#0b1310;color:#e7f2ea;min-height:100vh;position:relative;overflow-x:hidden}
     body::before{content:"";position:fixed;inset:0;background:var(--bg-image) center/cover no-repeat;opacity:0;pointer-events:none;transition:opacity .6s ease}
     body.has-bg::before{opacity:.25}
-    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .user-box{display:none;align-items:center;gap:10px;font-size:13px}
+    .user-box button{padding:6px 12px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer}
+    .user-box span{background:rgba(107,212,162,.15);border:1px solid rgba(107,212,162,.4);padding:4px 10px;border-radius:999px}
     main{padding:18px;display:grid;gap:16px;justify-items:center}
     .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
@@ -36,8 +39,14 @@
 </head>
 <body>
   <header>
-    <h1>High/Low</h1>
-    <div class="muted" id="statusLine">Waiting for session...</div>
+    <div>
+      <h1>High/Low</h1>
+      <div class="muted" id="statusLine">Waiting for session...</div>
+    </div>
+    <div class="user-box" id="userBox">
+      <span id="userName"></span>
+      <button id="assignBtn" type="button">Assign to me</button>
+    </div>
   </header>
   <main>
     <div class="panel">
@@ -103,11 +112,60 @@
   const bgArtistClose = document.getElementById("bgArtistClose");
   const decisionHint = document.getElementById("decisionHint");
   const riskPreview = document.getElementById("riskPreview");
+  const userBox = document.getElementById("userBox");
+  const userName = document.getElementById("userName");
+  const assignBtn = document.getElementById("assignBtn");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
+  const userTokenKey = "bigtree_user_token";
   let playerToken = "";
   let sessionId = "";
   let pendingAction = false;
   let currency = "gil";
+
+  function getUserToken(){
+    return window.localStorage.getItem(userTokenKey);
+  }
+
+  async function loadUser(){
+    const token = getUserToken();
+    if(!token){
+      userBox.style.display = "none";
+      return;
+    }
+    try{
+      const res = await fetch("/user-area/me", {headers:{Authorization:`Bearer ${token}`}});
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error("not logged in");
+      }
+      userName.textContent = data.user?.xiv_username || "Player";
+      userBox.style.display = "flex";
+    }catch(err){
+      userBox.style.display = "none";
+    }
+  }
+
+  async function assignSession(){
+    const token = getUserToken();
+    if(!token){
+      statusLine.textContent = "Login to assign this game.";
+      return;
+    }
+    try{
+      const res = await fetch("/user-area/claim-join", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+        body:JSON.stringify({join_code: joinCode})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || "Assign failed");
+      }
+      statusLine.textContent = "Assigned to your wallet.";
+    }catch(err){
+      statusLine.textContent = err.message || "Assign failed.";
+    }
+  }
 
   function cardLabel(card){
     if (!card) return "--";
@@ -342,6 +400,8 @@
       decisionHint.textContent = "Choose your next move.";
     });
   });
+  assignBtn?.addEventListener("click", assignSession);
+  loadUser();
 
   async function loadState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
