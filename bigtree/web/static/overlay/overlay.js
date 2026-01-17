@@ -1101,6 +1101,9 @@
           setInputValue("systemXivTokenUrl", xiv.token_url || xiv.oauth_token_url || "");
           setInputValue("systemXivScope", xiv.scope || xiv.scopes || "");
           setInputValue("systemXivRedirectUrl", xiv.redirect_url || xiv.oauth_redirect_url || "");
+          setInputValue("systemXivTokenHeader", xiv.token_header || "");
+          setInputValue("systemXivTokenPrefix", xiv.token_prefix || "");
+          setInputValue("systemXivApiKeyHeader", xiv.api_key_header || "");
           setNumberValue("systemXivTimeout", normalizeNumber(xiv.timeout_seconds ?? xiv.timeout));
           setInputValue("systemOpenAIKey", openai.api_key || "");
           setInputValue("systemOpenAIModel", openai.openai_model || openai.model || "");
@@ -1130,6 +1133,9 @@
             token_url: ($("systemXivTokenUrl")?.value || "").trim(),
             scope: ($("systemXivScope")?.value || "").trim(),
             redirect_url: ($("systemXivRedirectUrl")?.value || "").trim(),
+            token_header: ($("systemXivTokenHeader")?.value || "").trim(),
+            token_prefix: ($("systemXivTokenPrefix")?.value || "").trim(),
+            api_key_header: ($("systemXivApiKeyHeader")?.value || "").trim(),
           };
           const timeout = normalizeNumber($("systemXivTimeout")?.value);
           if (timeout !== null){

@@ -85,15 +85,31 @@ async def _call_xivauth(token: str, username: Optional[str], world: Optional[str
     verify_url = str(section.get("verify_url") or "").strip()
     if not verify_url:
         return {"xiv_username": username or section.get("default_username") or "xivplayer"}
-    params: Dict[str, Any] = {"token": token}
+    token_header = str(section.get("token_header") or "").strip()
+    token_prefix = str(section.get("token_prefix") or "Bearer").strip()
+    params: Dict[str, Any] = {}
+    if not token_header:
+        params["token"] = token
     if username:
         params["username"] = username
     if world:
         params["world"] = world
     headers: Dict[str, str] = {}
+    if token_header:
+        if token_header.lower() == "authorization":
+            headers["Authorization"] = f"{token_prefix} {token}"
+        else:
+            headers[token_header] = token
     api_key = section.get("api_key")
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        api_key_header = str(section.get("api_key_header") or "").strip()
+        if api_key_header:
+            if api_key_header.lower() == "authorization":
+                headers["Authorization"] = f"{token_prefix} {api_key}"
+            else:
+                headers[api_key_header] = str(api_key)
+        elif "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {api_key}"
     timeout = section.get("timeout_seconds") or section.get("timeout") or 6
     try:
         timeout = float(timeout)

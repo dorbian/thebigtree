@@ -163,6 +163,8 @@
     <p class="muted">Configure the following settings so that the wallet can validate your Final Fantasy XIV identity:</p>
     <ul>
       <li>Set <code>XIVAUTH.verify_url</code> (or <code>BIGTREE__XIVAUTH__VERIFY_URL</code>) to the endpoint that accepts <code>token</code>, <code>username</code>, and <code>world</code> and returns JSON with <code>xiv_username</code>.</li>
+      <li>If your verify endpoint expects the user token in a header, set <code>XIVAUTH.token_header</code> (e.g. <code>Authorization</code>) and optionally <code>XIVAUTH.token_prefix</code> (default <code>Bearer</code>).</li>
+      <li>If your verify endpoint needs a service API key in a custom header, set <code>XIVAUTH.api_key_header</code> (default uses <code>Authorization: Bearer</code>).</li>
       <li>Provide <code>XIVAUTH.api_key</code> for that service (e.g., via <code>BIGTREE__XIVAUTH__API_KEY</code>). The wallet adds the bearer token automatically.</li>
       <li>Set <code>XIVAUTH.client_id</code> and <code>XIVAUTH.client_secret</code> so the login button can start the OAuth flow.</li>
       <li>If you use a self-hosted XivAuth proxy, override <code>XIVAUTH.authorize_url</code> and <code>XIVAUTH.token_url</code>.</li>
