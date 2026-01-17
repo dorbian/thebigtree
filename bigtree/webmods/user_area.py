@@ -330,7 +330,13 @@ async def current_user(request: web.Request) -> web.Response:
     user = await _resolve_user(request)
     if isinstance(user, web.Response):
         return user
-    return web.json_response({"ok": True, "user": user})
+    payload = {}
+    if isinstance(user, dict):
+        payload = dict(user)
+        for key, value in payload.items():
+            if hasattr(value, "isoformat"):
+                payload[key] = value.isoformat()
+    return web.json_response({"ok": True, "user": payload})
 
 
 @route("GET", "/user-area/games", allow_public=True)
