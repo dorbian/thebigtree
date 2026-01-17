@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
+import time
 from typing import Any, Dict, Optional
+from urllib.parse import urlencode
 
 import aiohttp
 from aiohttp import web
@@ -37,6 +40,44 @@ def _load_xivauth_config() -> Dict[str, Any]:
     except Exception:
         pass
     return merged
+
+
+def _get_xivauth_value(config: Dict[str, Any], *keys: str, default: Any = None) -> Any:
+    for key in keys:
+        value = config.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _prune_oauth_states() -> None:
+    now = time.time()
+    stale = [key for key, ts in OAUTH_STATES.items() if now - ts > OAUTH_STATE_TTL]
+    for key in stale:
+        OAUTH_STATES.pop(key, None)
+
+
+def _create_user_session(auth_data: Dict[str, Any], username: Optional[str], world: Optional[str]) -> Dict[str, Any]:
+    xiv_username = auth_data.get("xiv_username") or username or "xivplayer"
+    xiv_id = auth_data.get("xiv_id") or auth_data.get("character_id")
+    metadata = auth_data.get("metadata") or {}
+    if world:
+        metadata["world"] = world
+    db = get_database()
+    user = db.upsert_user(xiv_username, xiv_id, metadata)
+    if not user:
+        raise ValueError("user record could not be created")
+    db.link_user_to_matches(user["id"], user["xiv_username"])
+    session_token = db.create_user_session(user["id"])
+    return {
+        "token": session_token,
+        "user": {
+            "id": user["id"],
+            "xiv_username": user["xiv_username"],
+            "xiv_id": user.get("xiv_id"),
+            "metadata": user.get("metadata"),
+        },
+    }
 
 
 async def _call_xivauth(token: str, username: Optional[str], world: Optional[str]) -> Dict[str, Any]:
@@ -108,28 +149,95 @@ async def login_user(request: web.Request) -> web.Response:
     except ValueError as exc:
         logger.warning("[user-area] xivauth denied login: %s", exc)
         return web.json_response({"ok": False, "error": str(exc)}, status=401)
-    xiv_username = auth_data.get("xiv_username") or username or "xivplayer"
-    xiv_id = auth_data.get("xiv_id") or auth_data.get("character_id")
-    metadata = auth_data.get("metadata") or {}
-    if world:
-        metadata["world"] = world
-    db = get_database()
-    user = db.upsert_user(xiv_username, xiv_id, metadata)
-    if not user:
-        return web.json_response({"ok": False, "error": "user record could not be created"}, status=500)
-    db.link_user_to_matches(user["id"], user["xiv_username"])
-    session_token = db.create_user_session(user["id"])
+    try:
+        session = _create_user_session(auth_data, username, world)
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
     response = {
         "ok": True,
-        "token": session_token,
-        "user": {
-            "id": user["id"],
-            "xiv_username": user["xiv_username"],
-            "xiv_id": user.get("xiv_id"),
-            "metadata": user.get("metadata"),
-        },
+        "token": session["token"],
+        "user": session["user"],
     }
     return web.json_response(response)
+
+
+@route("GET", "/user-area/oauth/start", allow_public=True)
+async def xivauth_oauth_start(_request: web.Request) -> web.Response:
+    config = _load_xivauth_config()
+    client_id = str(_get_xivauth_value(config, "client_id", "oauth_client_id") or "").strip()
+    if not client_id:
+        return web.Response(text="XivAuth client_id is not configured.", status=500)
+    authorize_url = str(
+        _get_xivauth_value(config, "authorize_url", "oauth_authorize_url", default="https://xivauth.net/oauth/authorize")
+    ).strip()
+    scope = str(_get_xivauth_value(config, "scope", "scopes", default="user character")).strip()
+    redirect_url = str(_get_xivauth_value(config, "redirect_url", "oauth_redirect_url") or "").strip()
+    settings = getattr(bigtree, "settings", None)
+    if not redirect_url:
+        base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
+        redirect_url = f"{base_url.rstrip('/')}/user-area/oauth/callback"
+    state = secrets.token_urlsafe(24)
+    _prune_oauth_states()
+    OAUTH_STATES[state] = time.time()
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_url,
+        "scope": scope,
+        "state": state,
+    }
+    url = f"{authorize_url}{'&' if '?' in authorize_url else '?'}{urlencode(params)}"
+    raise web.HTTPFound(url)
+
+
+@route("GET", "/user-area/oauth/callback", allow_public=True)
+async def xivauth_oauth_callback(request: web.Request) -> web.Response:
+    code = request.query.get("code")
+    state = request.query.get("state")
+    if not code or not state or state not in OAUTH_STATES:
+        return web.Response(text="Invalid OAuth state.", status=400)
+    issued = OAUTH_STATES.pop(state, 0)
+    if issued and time.time() - issued > OAUTH_STATE_TTL:
+        return web.Response(text="OAuth state expired.", status=400)
+    config = _load_xivauth_config()
+    client_id = str(_get_xivauth_value(config, "client_id", "oauth_client_id") or "").strip()
+    client_secret = str(_get_xivauth_value(config, "client_secret", "oauth_client_secret") or "").strip()
+    if not client_id or not client_secret:
+        return web.Response(text="XivAuth OAuth client credentials are not configured.", status=500)
+    token_url = str(
+        _get_xivauth_value(config, "token_url", "oauth_token_url", default="https://xivauth.net/oauth/token")
+    ).strip()
+    redirect_url = str(_get_xivauth_value(config, "redirect_url", "oauth_redirect_url") or "").strip()
+    settings = getattr(bigtree, "settings", None)
+    if not redirect_url:
+        base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
+        redirect_url = f"{base_url.rstrip('/')}/user-area/oauth/callback"
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "redirect_uri": redirect_url,
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(token_url, data=payload) as resp:
+                data = await resp.json()
+                if resp.status != 200:
+                    raise ValueError(f"xivauth token error: {resp.status} {data}")
+    except Exception as exc:
+        logger.warning("[user-area] xivauth token exchange failed: %s", exc)
+        return web.Response(text="XivAuth token exchange failed.", status=502)
+    access_token = data.get("access_token") or data.get("token")
+    if not access_token:
+        return web.Response(text="XivAuth token missing.", status=502)
+    try:
+        auth_data = await _call_xivauth(access_token, None, None)
+        session_data = _create_user_session(auth_data, None, None)
+    except ValueError as exc:
+        logger.warning("[user-area] xivauth login failed: %s", exc)
+        return web.Response(text="XivAuth login failed.", status=401)
+    return web.HTTPFound(f"/user-area?user_token={session_data['token']}")
 
 
 @route("GET", "/user-area/me", allow_public=True)

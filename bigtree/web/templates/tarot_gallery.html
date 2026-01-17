@@ -25,7 +25,7 @@
   </div>
   <div class="header-actions">
     <button class="join-game" id="joinGameBtn" type="button" onclick="const code=(prompt('Enter join code')||'').trim(); if(code){ window.location.assign(`/cardgames/join?code=${encodeURIComponent(code)}`);}">Join game</button>
-    <a class="icon-link" href="/user-area" aria-label="Player wallet" title="Log in via XivAuth">
+    <a class="icon-link" href="/user-area/oauth/start" aria-label="Player wallet" title="Log in via XivAuth">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 7h16a2 2 0 0 1 2 2v3h-2V9H4v10h12v2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm16 7h2v5a2 2 0 0 1-2 2H6v-2h14zM9 12.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>
       </svg>

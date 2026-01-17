@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Gallery: wallet icon now starts XivAuth login and returns to user-area.
+- User area: added XivAuth OAuth login button and callback flow for user-area sessions.
+- User area: added XivAuth OAuth configuration keys (client_id/secret, authorize_url, token_url, scope, redirect_url).
 - FFXIV client: add cardgames host panel for creating sessions and copying join links.
 - FFXIV client: add public cardgames URL setting for generated links.
 - FFXIV client: add in-plugin host gameplay view with card images and actions.
