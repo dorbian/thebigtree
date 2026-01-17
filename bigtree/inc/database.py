@@ -6,7 +6,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import psycopg2
@@ -38,11 +38,31 @@ class Database:
         self._conn_info = conn_info
         self._connect_retries = retries
         self._connect_delay = delay
+
+        # internal state
         self._lock = threading.RLock()
         self._initialized = False
         self._json_imported = False
         self._decks_synced = False
         self._configs_seeded = False
+
+    # ---------------- json helpers ----------------
+    @staticmethod
+    def _json_safe(value: Any) -> Any:
+        """Convert common DB-native types to JSON-serializable values."""
+        if isinstance(value, (datetime, date)):
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+        return value
+
+    @classmethod
+    def _json_safe_dict(cls, row: Dict[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for k, v in (row or {}).items():
+            out[k] = cls._json_safe(v)
+        return out
 
     def initialize(self):
         with self._lock:
@@ -465,8 +485,8 @@ class Database:
                     "xiv_id": row.get("xiv_id"),
                     "world": world,
                     "last_seen": (meta.get("last_seen") if isinstance(meta, dict) else None),
-                    "created_at": row.get("created_at"),
-                    "updated_at": row.get("updated_at"),
+                    "created_at": self._json_safe(row.get("created_at")),
+                    "updated_at": self._json_safe(row.get("updated_at")),
                 }
             )
         return users
@@ -597,7 +617,7 @@ class Database:
             """,
             fetch=True,
         )
-        return [dict(r) for r in (rows or [])]
+        return [self._json_safe_dict(dict(r)) for r in (rows or [])]
 
     def upsert_venue(
         self,
@@ -624,7 +644,7 @@ class Database:
             """,
             (name.strip(), currency_name, minimal_spend, background_image, Json(metadata)),
         )
-        return dict(row) if row else None
+        return self._json_safe_dict(dict(row)) if row else None
 
     def get_venue(self, venue_id: int) -> Optional[Dict[str, Any]]:
         row = self._fetchone(
@@ -635,7 +655,7 @@ class Database:
             """,
             (venue_id,),
         )
-        return dict(row) if row else None
+        return self._json_safe_dict(dict(row)) if row else None
 
     def update_venue(self, venue_id: int, *, currency_name: Optional[str] = None, minimal_spend: Optional[int] = None, background_image: Optional[str] = None) -> bool:
         if not venue_id:
