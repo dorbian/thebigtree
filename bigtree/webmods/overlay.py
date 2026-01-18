@@ -15,5 +15,7 @@ async def overlay_page(_req: web.Request):
             admin_background = raw.replace('"', "").replace("'", "").strip()
     except Exception:
         admin_background = ""
+    if not admin_background:
+        admin_background = "/static/images/admin_background.png"
     html = srv.render_template("overlay.html", {"ADMIN_BACKGROUND": admin_background}) if srv else "<h1>Overlay</h1>"
     return web.Response(text=html, content_type="text/html")
