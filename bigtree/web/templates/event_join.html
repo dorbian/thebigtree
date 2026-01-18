@@ -45,7 +45,7 @@
 <body>
   <div class="card">
     <h1 id="eventTitle">Forest Event</h1>
-    <div class="muted" id="eventMeta">Loading event <code>{{ event_code }}</code>…</div>
+    <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>…</div>
 
     <div class="status" id="eventStatus">Loading…</div>
 
@@ -60,12 +60,23 @@
   </div>
 
   <script>
-    const EVENT_CODE = {{ event_code | tojson }};
+    // NOTE: bigtree templates are python .format() (not Jinja). {event_code} is sanitized server-side.
+    const EVENT_CODE = "{event_code}";
+
+    const TOKEN_KEY = "bigtree_user_token";
+    function getToken(){
+      try{ return window.localStorage.getItem(TOKEN_KEY); }catch(e){ return null; }
+    }
+    function authHeaders(){
+      const token = getToken();
+      if (!token) return {};
+      return {"Authorization": `Bearer ${token}`};
+    }
 
     async function jsonFetch(url, opts){
       const res = await fetch(url, {
         credentials: "include",
-        headers: {"Content-Type":"application/json"},
+        headers: {"Content-Type":"application/json", ...authHeaders()},
         ...opts,
       });
       const text = await res.text();

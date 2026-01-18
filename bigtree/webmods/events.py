@@ -16,6 +16,9 @@ from bigtree.webmods.user_area import _resolve_user
 @route("GET", "/events/{code}", allow_public=True)
 async def event_join_page(req: web.Request) -> web.Response:
     code = (req.match_info.get("code") or "").strip()
+    # Prevent injection into the simple .format() template renderer.
+    if code:
+        code = "".join([c for c in code if (c.isalnum() or c in {"-", "_"})])
     settings = getattr(bigtree, "settings", None)
     base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
     html = DynamicWebServer.render_template(
