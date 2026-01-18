@@ -40,26 +40,42 @@
     button:hover,a.btn:hover{background:rgba(255,255,255,.07)}
     code{background:rgba(0,0,0,.35); padding:2px 6px; border-radius:8px}
     .status{margin-top:12px; padding:12px 14px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(231,242,234,.10)}
+    .game-list{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
+    .game-card{
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(214,178,110,.2);
+      background:rgba(12,18,15,.7);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .game-card a{color:#e7f2ea;text-decoration:none}
+    .game-meta{font-size:12px; color:rgba(231,242,234,.75)}
   </style>
 </head>
 <body>
   <div class="card">
-    <h1 id="eventTitle">Forest Event</h1>
-    <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>…</div>
+  <h1 id="eventTitle">Forest Event</h1>
+  <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>...</div>
+  <div class="status" id="eventWalletBalance">Wallet balance: -</div>
 
-    <div class="status" id="eventStatus">Loading…</div>
+  <div class="status" id="eventStatus">Loading...</div>
 
-    <div class="row">
-      <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
-      <button id="joinBtn" type="button">Join event</button>
-    </div>
-
-    <div class="muted" style="margin-top:12px; font-size:13px;">
-      Tip: if you just logged in, come back here and press “Join event”.
-    </div>
+  <div class="row">
+    <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
+    <button id="joinBtn" type="button">Join event</button>
   </div>
 
-  <script>
+  <div class="muted" style="margin-top:12px; font-size:13px;">
+    Tip: if you just logged in, come back here and press "Join event".
+  </div>
+  <div class="game-list" id="eventGames"></div>
+</div>
+
+<script>
     // NOTE: bigtree templates are python .format() (not Jinja). {event_code} is sanitized server-side.
     const EVENT_CODE = "{event_code}";
 
@@ -91,6 +107,41 @@
       if (el) el.textContent = msg;
     }
 
+    function setWalletBalance(balance, currency){
+      const el = document.getElementById("eventWalletBalance");
+      if (!el) return;
+      if (balance === null || balance === undefined){
+        el.textContent = "Wallet balance: -";
+        return;
+      }
+      const suffix = currency ? ` ${currency}` : "";
+      el.textContent = `Wallet balance: ${balance}${suffix}`;
+    }
+
+    function renderGames(games){
+      const list = document.getElementById("eventGames");
+      if (!list) return;
+      if (!games || !games.length){
+        list.innerHTML = "<div class='muted'>No open tables yet.</div>";
+        return;
+      }
+      list.innerHTML = games.map(game => {
+        const title = game.title || game.type || "Game";
+        const join = game.join_url;
+        const meta = [game.module, game.currency].filter(Boolean).join(" • ");
+        const joinBtn = join ? `<a class="btn" href="${join}">Open table</a>` : "<span class='muted'>No link</span>";
+        return `
+          <div class="game-card">
+            <div>
+              <div>${title}</div>
+              <div class="game-meta">${meta}</div>
+            </div>
+            ${joinBtn}
+          </div>
+        `;
+      }).join("");
+    }
+
     async function load(){
       try{
         const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}`, {method:"GET"});
@@ -106,20 +157,30 @@
 
         if (data.requires_login){
           setStatus("Please login first (XIVAuth) using the Wallet button, then come back and join.");
+          setWalletBalance(null, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
         }else if (data.joined){
           let msg = "You are already joined.";
           if (ev.wallet_enabled && data.wallet_balance !== null && data.wallet_balance !== undefined){
             msg += ` Wallet balance: ${data.wallet_balance}`;
           }
+          setWalletBalance(data.wallet_balance, ev.currency_name);
           setStatus(msg);
           document.getElementById("joinBtn").textContent = "Joined";
           document.getElementById("joinBtn").disabled = true;
+          try{
+            const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
+            renderGames((games && games.games) || []);
+          }catch(err){
+            renderGames([]);
+          }
         }else if ((ev.status || "") === "ended"){
           setStatus("This event has ended. You can no longer join.");
+          setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = true;
         }else{
           setStatus("Ready to join.");
+          setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
         }
       }catch(err){
@@ -142,3 +203,4 @@
   </script>
 </body>
 </html>
+

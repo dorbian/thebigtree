@@ -1064,6 +1064,33 @@ class Database:
         )
         return True
 
+    def add_event_wallet_balance(
+        self,
+        event_id: int,
+        user_id: int,
+        delta: int,
+        *,
+        host_name: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> Tuple[bool, int, str]:
+        try:
+            delta = int(delta)
+        except Exception:
+            return False, 0, "invalid"
+        meta = {}
+        if host_name:
+            meta["host_name"] = str(host_name)
+        if comment:
+            meta["comment"] = str(comment)
+        return self.apply_game_wallet_delta(
+            event_id=int(event_id),
+            user_id=int(user_id),
+            delta=delta,
+            reason="admin_add",
+            metadata=meta,
+            allow_negative=True,
+        )
+
     def get_event_wallet_balance(self, event_id: int, user_id: int) -> int:
         try:
             event_id = int(event_id)
@@ -1766,7 +1793,7 @@ class Database:
         pot = metadata.get("pot") or payload.get("pot")
         winnings = payload.get("winnings") or payload.get("payout") or payload.get("result")
         status = row.get("status") or payload.get("status")
-        join_code = payload.get("join_code") or payload.get("joinCode") or payload.get("join")
+        join_code = metadata.get("join_code") or payload.get("join_code") or payload.get("joinCode") or payload.get("join")
         outcome = "active" if row.get("active") else (status or "ended")
         if winnings not in (None, ""):
             outcome = f"{outcome} (winnings {winnings})"
@@ -1775,6 +1802,52 @@ class Database:
         row["winnings"] = winnings
         row["outcome"] = outcome
         row["join_code"] = join_code
+
+    def set_game_join_code(self, game_id: str, join_code: str) -> bool:
+        gid = str(game_id or "").strip()
+        code = str(join_code or "").strip()
+        if not gid or not code:
+            return False
+        self._execute(
+            """
+            UPDATE games
+            SET metadata = games.metadata || %s
+            WHERE game_id = %s
+            """,
+            (Json({"join_code": code}), gid),
+        )
+        return True
+
+    def list_event_games(self, event_id: int, include_inactive: bool = False, limit: int = 200) -> List[Dict[str, Any]]:
+        try:
+            event_id = int(event_id)
+            limit = int(limit)
+        except Exception:
+            return []
+        if event_id <= 0:
+            return []
+        if limit < 1:
+            limit = 1
+        if limit > 1000:
+            limit = 1000
+        sql = """
+        SELECT g.*, claimant.xiv_username AS claimed_username,
+               v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
+        FROM games g
+        LEFT JOIN users claimant ON claimant.id = g.claimed_by
+        LEFT JOIN venues v ON v.id = g.venue_id
+        WHERE g.event_id = %s
+        """
+        params: List[Any] = [int(event_id)]
+        if not include_inactive:
+            sql += " AND g.active = TRUE"
+        sql += " ORDER BY g.created_at DESC LIMIT %s"
+        params.append(int(limit))
+        rows = self._execute(sql, tuple(params), fetch=True) or []
+        games = [self._format_game_row(r) for r in rows]
+        for g in games:
+            self._attach_game_summary(g)
+        return games
 
     def _format_dt(self, value: Optional[datetime]) -> Optional[str]:
         if not value:

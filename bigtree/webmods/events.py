@@ -91,6 +91,55 @@ async def event_join(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "event": ev})
 
 
+@route("GET", "/api/events/{code}/games", allow_public=True)
+async def event_games(req: web.Request) -> web.Response:
+    code = (req.match_info.get("code") or "").strip()
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    games = db.list_event_games(int(ev["id"]), include_inactive=False, limit=500)
+    enabled = ev.get("metadata") or {}
+    enabled_games = enabled.get("enabled_games") or enabled.get("games") or []
+    enabled_set = set()
+    if isinstance(enabled_games, str):
+        enabled_set = {g.strip().lower() for g in enabled_games.split(",") if g.strip()}
+    elif isinstance(enabled_games, list):
+        enabled_set = {str(g).strip().lower() for g in enabled_games if str(g).strip()}
+
+    out = []
+    for g in games:
+        module = (g.get("module") or "").lower()
+        payload = g.get("payload") or {}
+        if not isinstance(payload, dict):
+            payload = {}
+        game_type = str(payload.get("game_id") or payload.get("gameId") or module or "game").lower()
+        if enabled_set:
+            if module not in enabled_set and game_type not in enabled_set:
+                continue
+        join_code = g.get("join_code")
+        join_url = ""
+        if module == "cardgames" and join_code:
+            game_id = payload.get("game_id") or payload.get("gameId")
+            if game_id:
+                join_url = f"/cardgames/{game_id}/session/{join_code}"
+        elif module == "tarot" and join_code:
+            join_url = f"/tarot/session/{join_code}"
+        elif module == "bingo" and join_code:
+            join_url = f"/bingo/owner?token={join_code}"
+        out.append({
+            "game_id": g.get("game_id"),
+            "title": g.get("title"),
+            "module": module,
+            "type": game_type,
+            "join_code": join_code,
+            "join_url": join_url,
+            "currency": g.get("currency"),
+            "active": bool(g.get("active")),
+        })
+    return web.json_response({"ok": True, "event": ev, "games": out})
+
+
 # ---------------- admin/host management ----------------
 
 
@@ -126,6 +175,7 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         venue_id = 0
     currency_name = (body.get("currency_name") or "").strip() or None
     wallet_enabled = bool(body.get("wallet_enabled") or False)
+    carry_over = bool(body.get("carry_over") or body.get("carryover") or False)
 
     db = get_database()
     # Default currency from venue when not explicitly set on the event
@@ -140,7 +190,7 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         venue_id=venue_id or None,
         currency_name=currency_name,
         wallet_enabled=wallet_enabled,
-        metadata={},
+        metadata={"carry_over": carry_over},
     )
     if not ev:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
@@ -219,10 +269,14 @@ async def admin_event_wallet_set(req: web.Request) -> web.Response:
         body = {}
     user_id = body.get("user_id")
     xiv_username = (body.get("xiv_username") or "").strip()
+    host_name = (body.get("host_name") or body.get("host") or "").strip()
+    comment = (body.get("comment") or "").strip()
     try:
-        balance = int(body.get("balance") or 0)
+        delta = int(body.get("delta") or body.get("amount") or 0)
     except Exception:
-        return web.json_response({"ok": False, "error": "balance must be a number"}, status=400)
+        return web.json_response({"ok": False, "error": "amount must be a number"}, status=400)
+    if not comment:
+        return web.json_response({"ok": False, "error": "comment is required"}, status=400)
 
     db = get_database()
     ev = db._fetchone("SELECT wallet_enabled FROM events WHERE id = %s", (int(event_id),))
@@ -241,5 +295,15 @@ async def admin_event_wallet_set(req: web.Request) -> web.Response:
     if not user_id:
         return web.json_response({"ok": False, "error": "user not found"}, status=404)
 
-    db.set_event_wallet_balance(int(event_id), int(user_id), int(balance))
-    return web.json_response({"ok": True, "event_id": event_id, "user_id": int(user_id), "balance": int(balance)})
+    ok, balance, status = db.add_event_wallet_balance(
+        int(event_id),
+        int(user_id),
+        int(delta),
+        host_name=host_name,
+        comment=comment,
+    )
+    if not ok:
+        return web.json_response({"ok": False, "error": status or "update failed"}, status=400)
+    return web.json_response(
+        {"ok": True, "event_id": event_id, "user_id": int(user_id), "balance": int(balance)}
+    )

@@ -126,6 +126,15 @@
       font-size:12px;
       color:rgba(231,242,234,.75);
     }
+    .panel table{
+      table-layout:fixed;
+      width:100%;
+    }
+    .panel table th,
+    .panel table td{
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
     .header-claim input{
       width:200px;
     }
@@ -492,8 +501,8 @@
               <th>Type</th>
               <th>Status</th>
               <th>Currency</th>
+              <th>Paid</th>
               <th>Outcome</th>
-              <th>Players</th>
               <th>Player page</th>
               <th>Created</th>
             </tr>
@@ -521,27 +530,63 @@
       if(moduleId === "tarot"){
         return `/tarot/session/${encodeURIComponent(game.join_code)}`;
       }
+      if(moduleId === "bingo"){
+        return `/bingo/owner?token=${encodeURIComponent(game.join_code)}`;
+      }
       return "";
     }
 
+    function formatGameType(game){
+      const moduleId = (game.module || "").toLowerCase();
+      if (moduleId === "cardgames"){
+        const payload = game.payload || {};
+        const raw = payload.game_id || payload.gameId || "";
+        return raw ? String(raw) : "Cardgame";
+      }
+      if (moduleId === "bingo") return "Bingo";
+      if (moduleId === "tarot") return "Tarot";
+      return moduleId ? moduleId : "Game";
+    }
+
+    function getGameTitle(game){
+      const title = game.title || game.name;
+      if (title) return String(title);
+      return formatGameType(game);
+    }
+
+    function getGamePaid(game){
+      const meta = game.metadata || {};
+      const paid = game.pot ?? meta.price;
+      if (paid === undefined || paid === null || paid === ""){
+        return "-";
+      }
+      const currency = game.currency || "";
+      return currency ? `${paid} ${currency}` : String(paid);
+    }
+
+    function formatDateOnly(value){
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleDateString();
+    }
+
     function renderGameRow(game){
-      const title = game.name || game.game_id || "Game";
-      const players = (game.players || []).map(player => player.name).filter(Boolean);
-      const playerText = players.length ? players.join(", ") : "-";
+      const title = getGameTitle(game);
       const status = game.active ? "active" : "ended";
-      const outcome = game.outcome || status;
+      const outcome = game.active ? "-" : (game.outcome || status);
       const playerUrl = buildPlayerUrl(game);
       const playerLink = playerUrl ? `<a href="${escapeHtml(playerUrl)}" target="_blank" rel="noreferrer">Open</a>` : "-";
       return `
         <tr class="game-row" data-game-id="${escapeHtml(game.game_id)}">
           <td>${escapeHtml(title)}</td>
-          <td>${escapeHtml(game.module || "game")}</td>
+          <td>${escapeHtml(formatGameType(game))}</td>
           <td><span class="status-chip">${escapeHtml(status)}</span></td>
           <td>${escapeHtml(game.currency || "-")}</td>
+          <td>${escapeHtml(getGamePaid(game))}</td>
           <td>${escapeHtml(outcome)}</td>
-          <td>${escapeHtml(playerText)}</td>
           <td>${playerLink}</td>
-          <td>${escapeHtml(game.created_at || "-")}</td>
+          <td>${escapeHtml(formatDateOnly(game.created_at))}</td>
         </tr>
       `;
     }
@@ -550,23 +595,20 @@
       if(!game){
         return;
       }
-      gameDetailTitle.textContent = game.name || game.game_id || "Game details";
-      const players = (game.players || []).map(player => player.name).filter(Boolean);
-      const playerText = players.length ? players.join(", ") : "-";
+      gameDetailTitle.textContent = getGameTitle(game);
       const status = game.active ? "active" : "ended";
       const playerUrl = buildPlayerUrl(game);
       const details = [
-        {label: "Game ID", value: game.game_id},
-        {label: "Type", value: game.module || "game"},
+        {label: "Title", value: getGameTitle(game)},
+        {label: "Type", value: formatGameType(game)},
         {label: "Status", value: status},
-        {label: "Outcome", value: game.outcome || status},
+        {label: "Outcome", value: game.active ? "-" : (game.outcome || status)},
         {label: "Currency", value: game.currency || "-"},
-        {label: "Pot", value: game.pot || "-"},
+        {label: "Paid", value: getGamePaid(game)},
         {label: "Winnings", value: game.winnings || "-"},
-        {label: "Players", value: playerText},
         {label: "Join key", value: game.join_code || "-"},
         {label: "Player page", value: playerUrl || "-", link: playerUrl || ""},
-        {label: "Created", value: game.created_at || "-"},
+        {label: "Created", value: formatDateOnly(game.created_at)},
         {label: "Ended", value: game.ended_at || "-"},
       ];
       gameDetailBody.innerHTML = `
@@ -650,9 +692,12 @@
       const currency = ev.currency_name || "-";
       const wallet = ev.wallet_enabled ? `${ev.wallet_balance ?? 0}` : "-";
       const gamesCount = ev.games_count ?? 0;
+      const eventLink = status === "active" && code
+        ? `<div style="margin-top:6px;"><a href="/events/${encodeURIComponent(code)}" target="_blank" rel="noreferrer">Open event</a></div>`
+        : "";
       return `
         <tr class="event-row" data-event-code="${escapeHtml(code)}">
-          <td>${escapeHtml(title)}<div class="muted" style="font-size:12px;"><code>${escapeHtml(code)}</code></div></td>
+          <td>${escapeHtml(title)}<div class="muted" style="font-size:12px;"><code>${escapeHtml(code)}</code></div>${eventLink}</td>
           <td><span class="status-chip">${escapeHtml(status)}</span></td>
           <td>${escapeHtml(venue)}</td>
           <td>${escapeHtml(currency)}</td>
@@ -693,12 +738,14 @@
                 const reason = String(h.reason || "update");
                 const meta = h.metadata || {};
                 const gameTag = meta.game_id ? ` (${escapeHtml(String(meta.game_id))})` : "";
+                const hostTag = meta.host_name ? ` · ${escapeHtml(String(meta.host_name))}` : "";
+                const commentTag = meta.comment ? ` · ${escapeHtml(String(meta.comment))}` : "";
                 return `
                   <tr>
                     <td>${escapeHtml(String(h.created_at || ""))}</td>
                     <td>${escapeHtml(`${sign}${delta}`)}</td>
                     <td>${escapeHtml(String(h.balance ?? 0))}</td>
-                    <td>${escapeHtml(reason)}${gameTag}</td>
+                    <td>${escapeHtml(reason)}${gameTag}${hostTag}${commentTag}</td>
                   </tr>
                 `;
               }).join("")}

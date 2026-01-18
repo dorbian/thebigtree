@@ -452,13 +452,20 @@
           }
         }
         $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
+        const carryEl = $("eventCarryOver");
+        if (carryEl){
+          const meta = eventObj?.metadata || {};
+          carryEl.checked = !!(meta.carry_over || meta.carryover);
+        }
         const walletUser = $("eventWalletUser");
         const walletAmount = $("eventWalletAmount");
         const walletSet = $("eventWalletSet");
         const walletStatus = $("eventWalletStatus");
+        const walletComment = $("eventWalletComment");
         const walletEnabled = !!eventObj?.wallet_enabled;
         if (walletUser) walletUser.disabled = !walletEnabled || isNew;
         if (walletAmount) walletAmount.disabled = !walletEnabled || isNew;
+        if (walletComment) walletComment.disabled = !walletEnabled || isNew;
         if (walletSet) walletSet.disabled = !walletEnabled || isNew;
         if (walletStatus){
           walletStatus.textContent = walletEnabled ? "Ready." : "Wallet is disabled for this event.";
@@ -554,6 +561,7 @@
           venue_id: $("eventVenue")?.value || "",
           currency_name: $("eventCurrency")?.value?.trim() || "",
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
+          carry_over: $("eventCarryOver")?.checked || false,
         };
         const joinInfo = $("eventJoinInfo");
         if (joinInfo) joinInfo.textContent = "Saving...";
@@ -1715,6 +1723,8 @@ This will block new games from being created in this event, but existing games c
         const tarotDecksBtn = $("menuTarotDecks");
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
+        const crapsBtn = $("menuCraps");
+        const slotsBtn = $("menuSlots");
         if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
         if (contestsBtn) contestsBtn.classList.toggle("hidden", !canAdmin);
         if (mediaBtn) mediaBtn.classList.toggle("hidden", !canMedia);
@@ -1722,6 +1732,8 @@ This will block new games from being created in this event, but existing games c
         if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
         if (cardgameBtn) cardgameBtn.classList.toggle("hidden", !canCardgames);
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
+        if (crapsBtn) crapsBtn.classList.toggle("hidden", !canCardgames);
+        if (slotsBtn) slotsBtn.classList.toggle("hidden", !canCardgames);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canGallery);
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canGallery);
         const systemConfigBtn = $("menuSystemConfig");
@@ -1736,7 +1748,7 @@ This will block new games from being created in this event, but existing games c
           (!canBingo && (saved === "bingo" || saved === "media")) ||
           (!canAdmin && (saved === "contests")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
-          (!canCardgames && (saved === "cardgameSessions"));
+          (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots"));
         if (blocked){
           showPanel("dashboard");
         }
@@ -2391,6 +2403,8 @@ This will block new games from being created in this event, but existing games c
         }
         if (canCardgames){
           allowedPanels.add("cardgameSessions");
+          allowedPanels.add("craps");
+          allowedPanels.add("slots");
         }
         let nextPanel = saved || (canBingo ? "bingo" : "dashboard");
         if (!allowedPanels.has(nextPanel)){
@@ -2962,12 +2976,16 @@ This will block new games from being created in this event, but existing games c
         toggleClass("menuMedia", "active", which === "media");
         toggleClass("menuGamesList", "active", which === "gamesList");
         toggleClass("menuGamesEvents", "active", which === "events");
+        toggleClass("menuCraps", "active", which === "craps");
+        toggleClass("menuSlots", "active", which === "slots");
         // Venues are accessed via Dashboard buttons for now.
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
         toggleClass("cardgameSessionsPanel", "hidden", which !== "cardgameSessions");
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
+        toggleClass("crapsPanel", "hidden", which !== "craps");
+        toggleClass("slotsPanel", "hidden", which !== "slots");
         toggleClass("contestPanel", "hidden", which !== "contests");
         toggleClass("mediaPanel", "hidden", which !== "media");
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
@@ -3221,6 +3239,18 @@ This will block new games from being created in this event, but existing games c
       $("menuMedia").addEventListener("click", () => {
         showPanel("media");
       });
+      const menuCraps = $("menuCraps");
+      if (menuCraps){
+        menuCraps.addEventListener("click", () => {
+          showPanel("craps");
+        });
+      }
+      const menuSlots = $("menuSlots");
+      if (menuSlots){
+        menuSlots.addEventListener("click", () => {
+          showPanel("slots");
+        });
+      }
       $("menuArtists").addEventListener("click", () => {
         if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
           setStatus("Artist access requires admin permissions.", "err");
@@ -3638,6 +3668,8 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         const eventId = parseInt(modal?.dataset?.event_id || "0", 10) || 0;
         const user = $("eventWalletUser")?.value || "";
         const amountRaw = $("eventWalletAmount")?.value || "0";
+        const comment = $("eventWalletComment")?.value || "";
+        const hostName = $("brandUserName")?.textContent?.trim() || "";
         const amount = parseInt(amountRaw, 10);
         if (!eventId){
           if (status) status.textContent = "Save the event first.";
@@ -3645,6 +3677,10 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         }
         if (!user){
           if (status) status.textContent = "Pick a player.";
+          return;
+        }
+        if (!comment.trim()){
+          if (status) status.textContent = "Add a comment for the wallet change.";
           return;
         }
         if (!Number.isFinite(amount)){
@@ -3655,12 +3691,20 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         try{
           const resp = await jsonFetch(`/admin/events/${eventId}/wallets/set`, {
             method: "POST",
-            body: JSON.stringify({xiv_username: user, balance: amount})
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+              xiv_username: user,
+              delta: amount,
+              comment: comment,
+              host_name: hostName
+            })
           });
           if (!resp.ok){
             throw new Error(resp.error || "Unable to set wallet balance");
           }
-          if (status) status.textContent = "Wallet balance updated.";
+          if (status) status.textContent = `Wallet balance is now ${resp.balance}.`;
+          const commentEl = $("eventWalletComment");
+          if (commentEl) commentEl.value = "";
         }catch(err){
           if (status) status.textContent = err.message || "Unable to set wallet balance.";
         }
@@ -4034,7 +4078,24 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           if (flairEl){
             flairEl.value = String(data.flair_text || "");
           }
+          const columnsEl = $("galleryColumns");
+          if (columnsEl){
+            columnsEl.value = data.columns ? String(data.columns) : "";
+          }
+          const inspEveryEl = $("galleryInspirationEvery");
+          if (inspEveryEl){
+            inspEveryEl.value = data.inspiration_every ? String(data.inspiration_every) : "";
+          }
+          const inspTextEl = $("galleryInspirationText");
+          if (inspTextEl){
+            if (Array.isArray(data.inspiration_texts)){
+              inspTextEl.value = data.inspiration_texts.join("\n");
+            }else{
+              inspTextEl.value = String(data.inspiration_texts || "");
+            }
+          }
           setStatusText("galleryFlairStatus", "Ready.", "");
+          setStatusText("galleryLayoutStatus", "Ready.", "");
         }catch(err){
           setGalleryChannelStatus(err.message, "err");
         }
@@ -4668,6 +4729,26 @@ Games and events will keep their history, but this venue will be removed.`)) ret
       $("galleryFlairClear").addEventListener("click", () => {
         const el = $("galleryFlairText");
         if (el) el.value = "";
+      });
+      $("galleryLayoutSave").addEventListener("click", async () => {
+        const columns = $("galleryColumns")?.value || "";
+        const every = $("galleryInspirationEvery")?.value || "";
+        const text = $("galleryInspirationText")?.value || "";
+        setStatusText("galleryLayoutStatus", "Saving...", "");
+        try{
+          await jsonFetch("/api/gallery/settings", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+              columns: columns ? parseInt(columns, 10) : null,
+              inspiration_every: every ? parseInt(every, 10) : null,
+              inspiration_texts: String(text || "")
+            })
+          }, true);
+          setStatusText("galleryLayoutStatus", "Layout saved.", "ok");
+        }catch(err){
+          setStatusText("galleryLayoutStatus", err.message, "err");
+        }
       });
 
       $("galleryChannelCreate").addEventListener("click", async () => {

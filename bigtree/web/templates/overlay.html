@@ -292,6 +292,12 @@
           </div>
 
           <div class="nav-block">
+            <div class="nav-title">Casino</div>
+            <div class="menu-item" id="menuCraps" tabindex="0"><span class="menu-label">Craps</span></div>
+            <div class="menu-item" id="menuSlots" tabindex="0"><span class="menu-label">Slots</span></div>
+          </div>
+
+          <div class="nav-block">
             <div class="nav-title">Discord</div>
             <div class="menu-item" id="menuContests" tabindex="0"><span class="menu-label">Contests</span></div>
           </div>
@@ -387,7 +393,7 @@
                   <span>Media library</span>
                 </button>
                 <button type="button" id="menuGallery">
-                  <span>Gallery channels</span>
+                  <span>Gallery</span>
                 </button>
                 <button type="button" id="menuCalendar">
                   <span>Calendar</span>
@@ -870,6 +876,16 @@
             </div>
           </div>
           <div class="status" id="cgStatus">Ready.</div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="crapsPanel">
+          <h2>Craps</h2>
+          <p class="muted">Casino tables for craps will appear here once enabled.</p>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="slotsPanel">
+          <h2>Slots</h2>
+          <p class="muted">Single-player slot sessions will appear here once enabled.</p>
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
@@ -1624,6 +1640,10 @@
               <span>Wallet enabled</span>
               <input id="eventWalletEnabled" type="checkbox" />
             </label>
+            <label style="display:flex; flex-direction:column; gap:6px;">
+              <span>Wallet carry-over</span>
+              <input id="eventCarryOver" type="checkbox" />
+            </label>
           </div>
 
           <div class="status" id="eventJoinInfo" style="margin-top:10px;">Create the event to get a join link.</div>
@@ -1640,12 +1660,16 @@
                 <select id="eventWalletUser"><option value="">Select player</option></select>
               </label>
               <label style="min-width:160px;">
-                Amount
+                Amount to add
                 <input id="eventWalletAmount" type="number" step="1" placeholder="0">
+              </label>
+              <label style="min-width:220px; flex:1;">
+                Comment (required)
+                <input id="eventWalletComment" placeholder="Reason for the adjustment">
               </label>
               <div>
                 <label>&nbsp;</label>
-                <button id="eventWalletSet" type="button">Set balance</button>
+                <button id="eventWalletSet" type="button">Add balance</button>
               </div>
             </div>
           <div class="status" id="eventWalletStatus">Ready.</div>
@@ -2044,6 +2068,31 @@
           </div>
         </div>
         <div class="status" id="galleryFlairStatus">Flair text is shown as text only (not an image).</div>
+        <div class="section-divider"></div>
+        <h3>Gallery Layout</h3>
+        <div class="row">
+          <div>
+            <label for="galleryColumns">Cards per row</label>
+            <input id="galleryColumns" type="number" min="1" max="8" placeholder="e.g. 5">
+          </div>
+          <div>
+            <label for="galleryInspirationEvery">Inspiration every N cards</label>
+            <input id="galleryInspirationEvery" type="number" min="1" max="50" placeholder="e.g. 12">
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label for="galleryInspirationText">Inspiration text (one per line)</label>
+            <textarea id="galleryInspirationText" rows="4" placeholder="Leave what you can. The forest will hold it.&#10;Some offerings are for the living."></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="galleryLayoutSave">Save layout</button>
+          </div>
+        </div>
+        <div class="status" id="galleryLayoutStatus">Controls the gallery layout on the public page.</div>
       </div>
     </div>
     <div class="modal" id="galleryImportModal">

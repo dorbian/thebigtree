@@ -551,6 +551,11 @@ async def claim_game_by_join(request: web.Request) -> web.Response:
         if status == "join code not found":
             return web.json_response({"ok": False, "error": "join code not found"}, status=404)
         return web.json_response({"ok": False, "error": status or "claim failed"}, status=400)
+    try:
+        if game and game.get("module") == "bingo":
+            db.set_game_join_code(game.get("game_id") or "", join_code)
+    except Exception:
+        pass
     return web.json_response({"ok": True, "status": status, "game": game})
 
 

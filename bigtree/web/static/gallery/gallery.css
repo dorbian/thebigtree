@@ -143,7 +143,7 @@
   button{background:#122019;border-color:rgba(107,212,162,.4);cursor:pointer}
   .grid{
     margin-top:16px;
-    column-count:5;
+    column-count:var(--gallery-columns, 5);
     column-gap:16px;
     position:relative;
     z-index:1;

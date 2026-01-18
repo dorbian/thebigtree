@@ -46,6 +46,9 @@
   let gallerySeed = null;
   let galleryTotal = 0;
   let galleryLoading = false;
+  let gallerySettings = {};
+  let inspirationLines = [];
+  let inspirationEvery = 12;
   const GALLERY_CACHE_KEY = "forest_gallery_cache_v1";
   let activeArtistFilter = null;
   const REACTIONS = [
@@ -300,6 +303,36 @@
     }catch(err){}
   }
 
+  function normalizeInspirationLines(raw){
+    if (Array.isArray(raw)){
+      return raw.map(line => String(line || "").trim()).filter(Boolean);
+    }
+    if (typeof raw === "string"){
+      return raw
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  function applyGallerySettings(settings){
+    const cfg = settings || {};
+    gallerySettings = cfg;
+    const columns = parseInt(cfg.columns || 0, 10);
+    if (columns > 0 && grid){
+      grid.style.setProperty("--gallery-columns", String(columns));
+    }else if (grid){
+      grid.style.removeProperty("--gallery-columns");
+    }
+    inspirationLines = normalizeInspirationLines(cfg.inspiration_texts || cfg.flair_text);
+    if (!inspirationLines.length){
+      inspirationLines = [...DIVIDER_LINES];
+    }
+    const every = parseInt(cfg.inspiration_every || 0, 10);
+    inspirationEvery = every > 0 ? every : 12;
+  }
+
   async function loadBatch(offset){
     if (galleryLoading) return;
     galleryLoading = true;
@@ -312,6 +345,9 @@
           grid.innerHTML = "<div class='muted'>Gallery unavailable.</div>";
         }
         return;
+      }
+      if (data.settings){
+        applyGallerySettings(data.settings);
       }
       if (gallerySeed === null && Number.isFinite(data.seed)){
         gallerySeed = data.seed;
@@ -807,16 +843,13 @@
 
   function insertDividers(items){
     const out = [];
-    const dividerEvery = 12;
-    let dividerIndex = 0;
+    const dividerEvery = inspirationEvery || 12;
     for (let i = 0; i < items.length; i += 1){
       out.push(items[i]);
       if ((i + 1) % dividerEvery === 0){
-        out.push({
-          _divider: true,
-          title: DIVIDER_LINES[dividerIndex % DIVIDER_LINES.length]
-        });
-        dividerIndex += 1;
+        const pool = inspirationLines.length ? inspirationLines : DIVIDER_LINES;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        out.push({_divider: true, title: pick});
       }
     }
     return out;

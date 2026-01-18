@@ -394,6 +394,12 @@ async def gallery_images(_req: web.Request):
         items = [items[idx] for idx in indices]
     else:
         items = [items[idx] for idx in indices]
+    cfg = get_database().get_system_config("gallery") or {}
+    settings = {
+        "columns": cfg.get("columns"),
+        "inspiration_every": cfg.get("inspiration_every"),
+        "inspiration_texts": cfg.get("inspiration_texts") or cfg.get("flair_text") or "",
+    }
     resp = web.json_response({
         "ok": True,
         "items": items,
@@ -401,6 +407,7 @@ async def gallery_images(_req: web.Request):
         "seed": seed,
         "offset": offset,
         "limit": limit,
+        "settings": settings,
     })
     resp.headers["Cache-Control"] = "public, max-age=60"
     return resp
@@ -436,6 +443,9 @@ async def gallery_settings_get(_req: web.Request):
         "upload_channel_id": gallery_mod.get_upload_channel_id(),
         "hidden_decks": gallery_mod.get_hidden_decks(),
         "flair_text": cfg.get("flair_text") or "",
+        "columns": cfg.get("columns"),
+        "inspiration_every": cfg.get("inspiration_every"),
+        "inspiration_texts": cfg.get("inspiration_texts") or "",
     })
 
 @route("POST", "/api/gallery/settings", scopes=["tarot:admin", "admin:web"])
@@ -447,6 +457,9 @@ async def gallery_settings_set(req: web.Request):
     channel_present = "upload_channel_id" in body
     hidden_present = "hidden_decks" in body
     flair_present = "flair_text" in body
+    columns_present = "columns" in body
+    inspiration_every_present = "inspiration_every" in body
+    inspiration_texts_present = "inspiration_texts" in body
 
     payload = {"upload_channel_id": gallery_mod.get_upload_channel_id()}
     if channel_present:
@@ -475,12 +488,35 @@ async def gallery_settings_set(req: web.Request):
         cfg = db.get_system_config("gallery") or {}
         cfg["flair_text"] = str(body.get("flair_text") or "").strip()
         db.update_system_config("gallery", cfg)
+    if columns_present or inspiration_every_present or inspiration_texts_present:
+        db = get_database()
+        cfg = db.get_system_config("gallery") or {}
+        if columns_present:
+            try:
+                cfg["columns"] = int(body.get("columns") or 0) or None
+            except Exception:
+                cfg["columns"] = None
+        if inspiration_every_present:
+            try:
+                cfg["inspiration_every"] = int(body.get("inspiration_every") or 0) or None
+            except Exception:
+                cfg["inspiration_every"] = None
+        if inspiration_texts_present:
+            raw = body.get("inspiration_texts")
+            if isinstance(raw, list):
+                cfg["inspiration_texts"] = [str(x).strip() for x in raw if str(x).strip()]
+            else:
+                cfg["inspiration_texts"] = str(raw or "").strip()
+        db.update_system_config("gallery", cfg)
 
     return web.json_response({
         "ok": True,
         "settings": payload,
         "hidden_decks": deck_payload.get("hidden_decks"),
         "flair_text": (get_database().get_system_config("gallery") or {}).get("flair_text") or "",
+        "columns": (get_database().get_system_config("gallery") or {}).get("columns"),
+        "inspiration_every": (get_database().get_system_config("gallery") or {}).get("inspiration_every"),
+        "inspiration_texts": (get_database().get_system_config("gallery") or {}).get("inspiration_texts") or "",
     })
 
 @route("POST", "/api/gallery/upload-channel", scopes=["tarot:admin"])

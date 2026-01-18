@@ -629,6 +629,20 @@
         letter-spacing:.14em;
         color:var(--neutral-2);
       }
+      .dashboard-logs-tabs{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        align-items:center;
+      }
+      .dashboard-logs-tab{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+      }
+      #dashboardPluginWrap{
+        min-height:160px;
+      }
       #tarotDecksPanel{
         padding:16px;
         font-size:12px;

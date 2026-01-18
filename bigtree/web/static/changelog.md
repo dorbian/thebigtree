@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Wallet: refine game list fields (paid amount, title-first, date-only), add bingo player links, and improve event return links.
+- Events: add public event games listing and show wallet balance + open tables on the event page.
+- Gallery: add configurable layout/inspiration settings and randomize inspiration text.
+- Overlay: add casino menu placeholders, gallery layout controls, and wallet top-up comments/carry-over.
 - Wallet: enforce custom-currency balances on cardgame joins and credit winnings on finish.
 - Events: log wallet activity (top-ups, joins, wins), show it in wallet event details, and add house total summary.
 - Overlay: add plugin setup panel and refine games list pagination layout.
