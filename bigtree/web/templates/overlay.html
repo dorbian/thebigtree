@@ -14,6 +14,17 @@
         flex-wrap: wrap;
         margin-bottom: 16px;
       }
+      .login-screen{
+        background:
+          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 60%),
+          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 60%),
+          linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
+          url("{ADMIN_BACKGROUND}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+      }
       .dashboard-kpis {
         display: flex;
         flex-wrap: wrap;
@@ -1597,6 +1608,11 @@
 
           <div class="status" id="eventJoinInfo" style="margin-top:10px;">Create the event to get a join link.</div>
 
+          <div style="margin-top:12px;">
+            <strong>Registered players</strong>
+            <div class="dashboard-logs-body" id="eventPlayersList" style="max-height:180px; margin-top:8px;">No players loaded.</div>
+          </div>
+
           <div class="row" style="justify-content:space-between; margin-top:12px; flex-wrap:wrap; gap:10px;">
             <button class="btn-ghost danger-btn" id="eventEnd" type="button" style="display:none;">End event</button>
             <div style="display:flex; gap:8px; align-items:center;">
@@ -2249,8 +2265,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 

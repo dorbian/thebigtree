@@ -468,6 +468,36 @@ async def user_games(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "games": games})
 
 
+@route("GET", "/user-area/events", allow_public=True)
+async def user_events(request: web.Request) -> web.Response:
+    user = await _resolve_user(request)
+    if isinstance(user, web.Response):
+        return user
+    db = get_database()
+    include_ended = (request.query.get("all") or request.query.get("include_ended") or "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+    events = db.list_user_events(int(user["id"]), include_ended=include_ended, limit=500)
+    return web.json_response({"ok": True, "events": events})
+
+
+@route("GET", "/user-area/events/{code}", allow_public=True)
+async def user_event_detail(request: web.Request) -> web.Response:
+    code = (request.match_info.get("code") or "").strip()
+    if code:
+        code = "".join([c for c in code if (c.isalnum() or c in {"-", "_"})])
+    user = await _resolve_user(request)
+    if isinstance(user, web.Response):
+        return user
+    db = get_database()
+    detail = db.get_user_event_detail(int(user["id"]), code)
+    if not detail:
+        return web.json_response({"ok": False, "error": "event not found or not joined"}, status=404)
+    return web.json_response({"ok": True, **detail})
+
+
 @route("POST", "/user-area/claim", allow_public=True)
 async def claim_game(request: web.Request) -> web.Response:
     user = await _resolve_user(request)

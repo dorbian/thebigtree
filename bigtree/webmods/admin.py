@@ -414,6 +414,7 @@ async def admin_system_config(_req: web.Request):
     configs = {
         "xivauth": db.get_system_config("xivauth"),
         "openai": db.get_system_config("openai"),
+        "overlay": db.get_system_config("overlay"),
     }
     return web.json_response({"ok": True, "configs": configs})
 
@@ -425,7 +426,7 @@ async def admin_system_config_update(req: web.Request):
     except Exception:
         body = {}
     name = (body.get("name") or "").strip().lower()
-    if name not in {"xivauth", "openai"}:
+    if name not in {"xivauth", "openai", "overlay"}:
         return web.json_response({"ok": False, "error": "invalid config name"}, status=400)
     data = body.get("data")
     if not isinstance(data, dict):

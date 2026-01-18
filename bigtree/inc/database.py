@@ -929,7 +929,217 @@ class Database:
                 )
         except Exception:
             pass
-        return True
+          return True
+
+    def get_event_players(self, event_id: int, limit: int = 5000) -> List[Dict[str, Any]]:
+        if not event_id:
+            return []
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 5000
+        if limit < 1:
+            limit = 1
+        if limit > 10000:
+            limit = 10000
+        rows = self._execute(
+            """
+            SELECT u.id AS user_id, u.xiv_username, ep.role, ep.joined_at
+            FROM event_players ep
+            JOIN users u ON u.id = ep.user_id
+            WHERE ep.event_id = %s
+            ORDER BY ep.joined_at ASC
+            LIMIT %s
+            """,
+            (int(event_id), int(limit)),
+            fetch=True,
+        ) or []
+        return [self._json_safe_dict(dict(r)) for r in rows]
+
+    def _find_active_event_id_for_venue(self, venue_id: int) -> Optional[int]:
+        if not venue_id:
+            return None
+        row = self._fetchone(
+            """
+            SELECT id
+            FROM events
+            WHERE venue_id = %s AND status = 'active'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (int(venue_id),),
+        )
+        try:
+            return int(row.get("id")) if row and row.get("id") else None
+        except Exception:
+            return None
+
+    def list_user_events(self, user_id: int, include_ended: bool = True, limit: int = 200) -> List[Dict[str, Any]]:
+        if not user_id:
+            return []
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 200
+        if limit < 1:
+            limit = 1
+        if limit > 1000:
+            limit = 1000
+        sql = """
+        SELECT e.id, e.event_code, e.title, e.venue_id, e.status, e.currency_name, e.wallet_enabled,
+               e.metadata, e.created_by, e.created_at, e.ended_at,
+               v.name AS venue_name,
+               ep.joined_at,
+               ew.balance AS wallet_balance
+        FROM event_players ep
+        JOIN events e ON e.id = ep.event_id
+        LEFT JOIN venues v ON v.id = e.venue_id
+        LEFT JOIN event_wallets ew ON ew.event_id = e.id AND ew.user_id = ep.user_id
+        WHERE ep.user_id = %s
+        """
+        params: List[Any] = [int(user_id)]
+        if not include_ended:
+            sql += " AND e.status = 'active'"
+        sql += " ORDER BY e.created_at DESC LIMIT %s"
+        params.append(int(limit))
+        events = [self._json_safe_dict(dict(r)) for r in (self._execute(sql, tuple(params), fetch=True) or [])]
+        if not events:
+            return []
+
+        # Enrich with games_count + net_winnings (best-effort).
+        user_row = self._fetchone("SELECT xiv_username FROM users WHERE id = %s", (int(user_id),))
+        xiv_username = (user_row.get("xiv_username") if isinstance(user_row, dict) else "") or ""
+        event_ids = [int(e.get("id")) for e in events if e and e.get("id")]
+
+        counts: Dict[int, int] = {}
+        if event_ids and xiv_username:
+            rows = self._execute(
+                """
+                SELECT g.event_id, COUNT(DISTINCT g.game_id) AS value
+                FROM games g
+                LEFT JOIN game_players gp ON gp.game_id = g.game_id
+                WHERE g.event_id = ANY(%s)
+                  AND (g.claimed_by = %s OR lower(gp.name) = lower(%s))
+                GROUP BY g.event_id
+                """,
+                (event_ids, int(user_id), str(xiv_username)),
+                fetch=True,
+            ) or []
+            for r in rows:
+                try:
+                    counts[int(r.get("event_id"))] = int(r.get("value") or 0)
+                except Exception:
+                    continue
+
+        winnings_by_event: Dict[int, int] = {}
+        if event_ids:
+            rows = self._execute(
+                """
+                SELECT event_id, payload
+                FROM games
+                WHERE claimed_by = %s AND event_id = ANY(%s)
+                """,
+                (int(user_id), event_ids),
+                fetch=True,
+            ) or []
+            for r in rows:
+                try:
+                    eid = int(r.get("event_id") or 0)
+                except Exception:
+                    continue
+                payload = r.get("payload") or {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                val = payload.get("winnings") or payload.get("payout") or payload.get("result")
+                try:
+                    amount = int(float(val)) if val not in (None, "") else 0
+                except Exception:
+                    amount = 0
+                winnings_by_event[eid] = winnings_by_event.get(eid, 0) + amount
+
+        for ev in events:
+            meta = ev.get("metadata") or {}
+            carry_over = False
+            try:
+                carry_over = bool(meta.get("carry_over") or meta.get("carryover"))
+            except Exception:
+                carry_over = False
+            ev["games_count"] = counts.get(int(ev.get("id") or 0), 0)
+            ev["net_winnings"] = winnings_by_event.get(int(ev.get("id") or 0), 0)
+            ev["carry_over"] = carry_over
+            ev["wallet_usable"] = bool(ev.get("wallet_enabled")) and (ev.get("status") == "active" or carry_over)
+        return events
+
+    def get_user_event_detail(self, user_id: int, event_code: str) -> Optional[Dict[str, Any]]:
+        if not user_id or not event_code:
+            return None
+        ev = self.get_event_by_code(event_code)
+        if not ev:
+            return None
+        # Must be joined to view details.
+        joined = self._fetchone(
+            "SELECT joined_at FROM event_players WHERE event_id = %s AND user_id = %s",
+            (int(ev["id"]), int(user_id)),
+        )
+        if not joined:
+            return None
+        user_row = self._fetchone("SELECT xiv_username FROM users WHERE id = %s", (int(user_id),))
+        xiv_username = (user_row.get("xiv_username") if isinstance(user_row, dict) else "") or ""
+
+        wallet_balance = None
+        if ev.get("wallet_enabled"):
+            w = self._fetchone(
+                "SELECT balance FROM event_wallets WHERE event_id = %s AND user_id = %s",
+                (int(ev["id"]), int(user_id)),
+            )
+            if w:
+                try:
+                    wallet_balance = int(w.get("balance") or 0)
+                except Exception:
+                    wallet_balance = 0
+
+        # Games played in this event by the user (claimed, or named in players list).
+        rows = self._execute(
+            """
+            SELECT DISTINCT g.*, claimant.xiv_username AS claimed_username,
+                   v.id AS venue_id, v.name AS venue_name, v.currency_name AS venue_currency_name
+            FROM games g
+            LEFT JOIN users claimant ON claimant.id = g.claimed_by
+            LEFT JOIN venues v ON v.id = g.venue_id
+            LEFT JOIN game_players gp ON gp.game_id = g.game_id
+            WHERE g.event_id = %s AND (g.claimed_by = %s OR lower(gp.name) = lower(%s))
+            ORDER BY g.created_at DESC
+            LIMIT 500
+            """,
+            (int(ev["id"]), int(user_id), str(xiv_username)),
+            fetch=True,
+        ) or []
+        games = [self._format_game_row(r) for r in rows]
+        if games:
+            game_ids = [g.get("game_id") for g in games if g.get("game_id")]
+            players_rows = self._fetch_game_players(game_ids)
+            indexed: Dict[str, List[Dict[str, Any]]] = {}
+            for pr in players_rows:
+                indexed.setdefault(pr["game_id"], []).append({"name": pr["name"], "role": pr.get("role")})
+            for g in games:
+                g["players"] = indexed.get(g.get("game_id"), [])
+                self._attach_game_summary(g)
+
+        meta = ev.get("metadata") or {}
+        carry_over = False
+        try:
+            carry_over = bool(meta.get("carry_over") or meta.get("carryover"))
+        except Exception:
+            carry_over = False
+
+        return {
+            "event": ev,
+            "joined_at": self._json_safe(joined.get("joined_at") if isinstance(joined, dict) else None),
+            "wallet_balance": wallet_balance,
+            "wallet_usable": bool(ev.get("wallet_enabled")) and (ev.get("status") == "active" or carry_over),
+            "carry_over": carry_over,
+            "games": games,
+        }
 
     def get_user_venue(self, user_id: int) -> Optional[Dict[str, Any]]:
         if not user_id:
@@ -1445,6 +1655,8 @@ class Database:
                     event_id = int(ev.get("id"))
         except Exception:
             event_id = None
+        if event_id is None and venue_id:
+            event_id = self._find_active_event_id_for_venue(int(venue_id))
 
         sql = """
         INSERT INTO games (game_id, module, title, channel_id, created_by, venue_id, event_id, created_at, ended_at, status, active, payload, metadata, run_source)

@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Wallet: show active/past events alongside games and add event details modal.
+- Events: show registered players list in overlay event modal.
+- Overlay: support admin login background via `system_configs.overlay.admin_background`.
 - Wallet: claim join codes now seeds cardgames/tarot/bingo sessions when missing in Postgres.
 - Overlay: add bingo owner link copy button beside player rows.
 - Gallery: wallet badge uses icon + username when logged in.

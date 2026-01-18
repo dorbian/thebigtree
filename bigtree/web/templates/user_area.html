@@ -294,8 +294,16 @@
     </div>
   </header><br>
   <section class="panel">
-    <h2>Your games</h2>
-    <div id="gamesContainer" class="muted">Login to view your game history.</div>
+    <h2>Active</h2>
+    <div class="muted" style="margin-bottom:10px;">Active events and games you can still return to.</div>
+    <div id="activeEventsContainer" class="muted" style="margin-bottom:18px;"></div>
+    <div id="activeGamesContainer" class="muted">Login to view your game history.</div>
+  </section>
+  <section class="panel">
+    <h2>Past</h2>
+    <div class="muted" style="margin-bottom:10px;">Previous events and finished games.</div>
+    <div id="pastEventsContainer" class="muted" style="margin-bottom:18px;"></div>
+    <div id="pastGamesContainer" class="muted"></div>
   </section>
   <div class="modal" id="gameDetailModal" role="dialog" aria-modal="true">
     <div class="modal-card">
@@ -306,12 +314,25 @@
       <div id="gameDetailBody"></div>
     </div>
   </div>
+  <div class="modal" id="eventDetailModal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="actions" style="justify-content:space-between;">
+        <h3 id="eventDetailTitle">Event details</h3>
+        <button id="eventDetailClose" type="button">Close</button>
+      </div>
+      <div id="eventDetailBody"></div>
+    </div>
+  </div>
   <script>
     const TOKEN_KEY = "bigtree_user_token";
     const loginLink = document.getElementById("loginLink");
     const logoutBtn = document.getElementById("logoutBtn");
     const userName = document.getElementById("userName");
     const gamesContainer = document.getElementById("gamesContainer");
+    const activeEventsContainer = document.getElementById("activeEventsContainer");
+    const activeGamesContainer = document.getElementById("activeGamesContainer");
+    const pastEventsContainer = document.getElementById("pastEventsContainer");
+    const pastGamesContainer = document.getElementById("pastGamesContainer");
     const headerClaim = document.getElementById("headerClaim");
     const claimJoinCode = document.getElementById("claimJoinCode");
     const claimJoinBtn = document.getElementById("claimJoinBtn");
@@ -320,7 +341,12 @@
     const gameDetailBody = document.getElementById("gameDetailBody");
     const gameDetailTitle = document.getElementById("gameDetailTitle");
     const gameDetailClose = document.getElementById("gameDetailClose");
+    const eventDetailModal = document.getElementById("eventDetailModal");
+    const eventDetailTitle = document.getElementById("eventDetailTitle");
+    const eventDetailBody = document.getElementById("eventDetailBody");
+    const eventDetailClose = document.getElementById("eventDetailClose");
     let gameLookup = {};
+    let eventLookup = {};
 
     function escapeHtml(value){
       const text = value === undefined || value === null ? "" : String(value);
@@ -410,7 +436,8 @@
     async function fetchGames(){
       const token = getToken();
       if(!token){
-        gamesContainer.textContent = "Login to view your game history.";
+        if (activeGamesContainer) activeGamesContainer.textContent = "Login to view your game history.";
+        if (pastGamesContainer) pastGamesContainer.textContent = "";
         return;
       }
       try{
@@ -419,16 +446,23 @@
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Failed to load games");
         }
-        renderGames(data.games || []);
+        const games = data.games || [];
+        const activeGames = games.filter(g => !!g.active);
+        const pastGames = games.filter(g => !g.active);
+        renderGames(activeGames, activeGamesContainer);
+        renderGames(pastGames, pastGamesContainer, {emptyText: "No past games found yet."});
       }catch(err){
-        gamesContainer.textContent = err.message || "Unable to load games.";
+        if (activeGamesContainer) activeGamesContainer.textContent = err.message || "Unable to load games.";
+        if (pastGamesContainer) pastGamesContainer.textContent = "";
       }
     }
 
-    function renderGames(games){
+    function renderGames(games, target, opts){
+      const options = opts || {};
       gameLookup = {};
+      if(!target) return;
       if(!games || !games.length){
-        gamesContainer.innerHTML = "<div class='muted'>No games found yet.</div>";
+        target.innerHTML = `<div class='muted'>${escapeHtml(options.emptyText || "No games found yet.")}</div>`;
         return;
       }
       games.forEach((game) => {
@@ -436,7 +470,7 @@
           gameLookup[game.game_id] = game;
         }
       });
-      gamesContainer.innerHTML = `
+      target.innerHTML = `
         <table>
           <thead>
             <tr>
@@ -538,6 +572,142 @@
       gameDetailModal.classList.remove("open");
     }
 
+    async function fetchEvents(){
+      const token = getToken();
+      if(!token){
+        if (activeEventsContainer) activeEventsContainer.textContent = "Login to view your events.";
+        if (pastEventsContainer) pastEventsContainer.textContent = "";
+        return;
+      }
+      try{
+        const res = await fetch("/user-area/events?all=1", {headers: authHeaders()});
+        const data = await res.json();
+        if(!res.ok || !data.ok){
+          throw new Error(data.error || "Failed to load events");
+        }
+        const events = data.events || [];
+        const activeEvents = events.filter(ev => (ev.status || "") === "active");
+        const pastEvents = events.filter(ev => (ev.status || "") !== "active");
+        renderEvents(activeEvents, activeEventsContainer, {emptyText: "No active events right now."});
+        renderEvents(pastEvents, pastEventsContainer, {emptyText: "No past events found yet."});
+      }catch(err){
+        if (activeEventsContainer) activeEventsContainer.textContent = err.message || "Unable to load events.";
+        if (pastEventsContainer) pastEventsContainer.textContent = "";
+      }
+    }
+
+    function renderEvents(events, target, opts){
+      const options = opts || {};
+      eventLookup = {};
+      if (!target) return;
+      if(!events || !events.length){
+        target.innerHTML = `<div class='muted'>${escapeHtml(options.emptyText || "No events found yet.")}</div>`;
+        return;
+      }
+      events.forEach((ev) => {
+        if (ev && ev.event_code){
+          eventLookup[ev.event_code] = ev;
+        }
+      });
+      target.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Status</th>
+              <th>Venue</th>
+              <th>Currency</th>
+              <th>Wallet</th>
+              <th>Games</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${events.map(renderEventRow).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderEventRow(ev){
+      const code = ev.event_code || "";
+      const title = ev.title || code || "Event";
+      const status = ev.status || "-";
+      const venue = ev.venue_name || "-";
+      const currency = ev.currency_name || "-";
+      const wallet = ev.wallet_enabled ? `${ev.wallet_balance ?? 0}` : "-";
+      const gamesCount = ev.games_count ?? 0;
+      return `
+        <tr class="event-row" data-event-code="${escapeHtml(code)}">
+          <td>${escapeHtml(title)}<div class="muted" style="font-size:12px;"><code>${escapeHtml(code)}</code></div></td>
+          <td><span class="status-chip">${escapeHtml(status)}</span></td>
+          <td>${escapeHtml(venue)}</td>
+          <td>${escapeHtml(currency)}</td>
+          <td>${escapeHtml(wallet)}</td>
+          <td>${escapeHtml(String(gamesCount))}</td>
+        </tr>
+      `;
+    }
+
+    async function openEventModalByCode(code){
+      if (!code) return;
+      eventDetailTitle.textContent = "Event details";
+      eventDetailBody.innerHTML = "<div class='muted'>Loading...</div>";
+      eventDetailModal.classList.add("open");
+      try{
+        const res = await fetch(`/user-area/events/${encodeURIComponent(code)}`, {headers: authHeaders()});
+        const data = await res.json();
+        if (!res.ok || !data.ok){
+          throw new Error(data.error || "Unable to load event");
+        }
+        const ev = data.event || {};
+        const games = data.games || [];
+        const walletEnabled = !!ev.wallet_enabled;
+        const walletBalance = data.wallet_balance ?? null;
+        const walletUsable = !!data.wallet_usable;
+        const status = ev.status || "-";
+        const currency = ev.currency_name || "-";
+        const venue = ev.venue_name || "-";
+        const usableText = walletEnabled ? (walletUsable ? "usable in new events" : "not usable in new events") : "-";
+        const gameRows = games.length ? `
+          <table style="margin-top:12px;">
+            <thead><tr><th>Game</th><th>Type</th><th>Status</th><th>Outcome</th><th>Join key</th></tr></thead>
+            <tbody>
+              ${games.map(g => `
+                <tr class="game-row" data-game-id="${escapeHtml(g.game_id || "")}">
+                  <td>${escapeHtml(g.title || g.game_id || "Game")}</td>
+                  <td>${escapeHtml(g.module || "-")}</td>
+                  <td>${escapeHtml(g.active ? "active" : "ended")}</td>
+                  <td>${escapeHtml(g.outcome || "-")}</td>
+                  <td><code>${escapeHtml(g.join_code || "-")}</code></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        ` : "<div class='muted' style='margin-top:12px;'>No games recorded for this event yet.</div>";
+
+        eventDetailTitle.textContent = ev.title || ev.event_code || "Event details";
+        eventDetailBody.innerHTML = `
+          <div class="detail-grid">
+            <div class="detail-item"><span>Event code</span>${escapeHtml(ev.event_code || "-")}</div>
+            <div class="detail-item"><span>Status</span>${escapeHtml(status)}</div>
+            <div class="detail-item"><span>Venue</span>${escapeHtml(venue)}</div>
+            <div class="detail-item"><span>Currency</span>${escapeHtml(currency)}</div>
+            <div class="detail-item"><span>Wallet enabled</span>${walletEnabled ? "Yes" : "No"}</div>
+            <div class="detail-item"><span>Wallet balance</span>${walletEnabled ? escapeHtml(String(walletBalance ?? 0)) : "-"}</div>
+            <div class="detail-item"><span>Wallet carry-over</span>${walletEnabled ? (data.carry_over ? "Yes" : "No") : "-"}</div>
+            <div class="detail-item"><span>Usable later</span>${walletEnabled ? escapeHtml(usableText) : "-"}</div>
+          </div>
+          ${gameRows}
+        `;
+      }catch(err){
+        eventDetailBody.innerHTML = `<div class='status-error'>${escapeHtml(err.message || "Unable to load event.")}</div>`;
+      }
+    }
+
+    function closeEventModal(){
+      eventDetailModal.classList.remove("open");
+    }
+
     async function claimByJoinCode(){
       const token = getToken();
       if(!token){
@@ -566,12 +736,13 @@
         claimJoinCode.value = "";
         setMessage(claimMessage, "Game claimed. It will show in your list.", "status-ok");
         await fetchGames();
+        await fetchEvents();
       }catch(err){
         setMessage(claimMessage, err.message || "Claim failed.", "status-error");
       }
     }
 
-    gamesContainer.addEventListener("click", (event) => {
+    function handleGamesTableClick(event){
       if (event.target && event.target.tagName === "A"){
         return;
       }
@@ -582,13 +753,28 @@
       const gameId = row.getAttribute("data-game-id");
       const game = gameLookup[gameId];
       openGameModal(game);
-    });
+    }
+
+    if (activeGamesContainer) activeGamesContainer.addEventListener("click", handleGamesTableClick);
+    if (pastGamesContainer) pastGamesContainer.addEventListener("click", handleGamesTableClick);
+
+    function handleEventsTableClick(event){
+      const row = event.target.closest(".event-row");
+      if(!row) return;
+      const code = row.getAttribute("data-event-code") || "";
+      openEventModalByCode(code);
+    }
+    if (activeEventsContainer) activeEventsContainer.addEventListener("click", handleEventsTableClick);
+    if (pastEventsContainer) pastEventsContainer.addEventListener("click", handleEventsTableClick);
 
     claimJoinBtn.addEventListener("click", claimByJoinCode);
     logoutBtn.addEventListener("click", () => {
       setToken("");
       setUserHeader(null);
-      gamesContainer.textContent = "Login to view your game history.";
+      if (activeGamesContainer) activeGamesContainer.textContent = "Login to view your game history.";
+      if (pastGamesContainer) pastGamesContainer.textContent = "";
+      if (activeEventsContainer) activeEventsContainer.textContent = "Login to view your events.";
+      if (pastEventsContainer) pastEventsContainer.textContent = "";
     });
     gameDetailClose.addEventListener("click", closeGameModal);
     gameDetailModal.addEventListener("click", (event) => {
@@ -596,9 +782,17 @@
         closeGameModal();
       }
     });
+    if (eventDetailClose) eventDetailClose.addEventListener("click", closeEventModal);
+    if (eventDetailModal){
+      eventDetailModal.addEventListener("click", (event) => {
+        if(event.target === eventDetailModal){
+          closeEventModal();
+        }
+      });
+    }
 
     applyTokenFromUrl();
-    loadCurrentUser().then(fetchGames);
+    loadCurrentUser().then(() => Promise.all([fetchGames(), fetchEvents()]));
   </script>
 </body>
 </html>

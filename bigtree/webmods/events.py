@@ -163,3 +163,21 @@ async def admin_events_end(req: web.Request) -> web.Response:
     if not db.end_event(event_id):
         return web.json_response({"ok": False, "error": "event not found or already ended"}, status=404)
     return web.json_response({"ok": True})
+
+
+@route("GET", "/admin/events/{event_id}/players", scopes=["admin:web", "event:host"])
+async def admin_event_players(req: web.Request) -> web.Response:
+    try:
+        event_id = int(req.match_info.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    if not event_id:
+        return web.json_response({"ok": False, "error": "event_id required"}, status=400)
+    db = get_database()
+    ev = db._fetchone("SELECT id FROM events WHERE id = %s", (int(event_id),))
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    players = db.get_event_players(int(event_id), limit=5000)
+    # Only expose minimal fields.
+    minimal = [{"xiv_username": p.get("xiv_username"), "joined_at": p.get("joined_at")} for p in players]
+    return web.json_response({"ok": True, "event_id": event_id, "players": minimal})

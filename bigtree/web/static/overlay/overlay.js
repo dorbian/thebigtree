@@ -430,6 +430,7 @@
         const isNew = !eventObj || !eventObj.id;
         modal.dataset.event_id = String(eventObj?.id || "");
         modal.dataset.event_code = String(eventObj?.event_code || "");
+        loadEventPlayers(eventObj?.id || 0);
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
         $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
@@ -460,12 +461,39 @@
           if (joinInfo) joinInfo.innerHTML = `Join link: <a href="${joinUrl}" target="_blank" rel="noopener">${escapeHtml(joinUrl)}</a>`;
           if (copyBtn) copyBtn.style.display = "inline-flex";
           if (endBtn) endBtn.style.display = (eventObj.status === "ended") ? "none" : "inline-flex";
-        }else{
-          if (joinInfo) joinInfo.textContent = "Create the event to get a join link.";
-          if (copyBtn) copyBtn.style.display = "none";
-          if (endBtn) endBtn.style.display = "none";
+          }else{
+            if (joinInfo) joinInfo.textContent = "Create the event to get a join link.";
+            if (copyBtn) copyBtn.style.display = "none";
+            if (endBtn) endBtn.style.display = "none";
+          }
         }
-      }
+
+        async function loadEventPlayers(eventId){
+          const box = $("eventPlayersList");
+          if (!box) return;
+          const id = parseInt(String(eventId || "0"), 10) || 0;
+          if (!id){
+            box.textContent = "Save the event to view registered players.";
+            return;
+          }
+          box.textContent = "Loading players...";
+          try{
+            const resp = await jsonFetch(`/admin/events/${encodeURIComponent(String(id))}/players`, {method: "GET"});
+            if (!resp.ok){
+              throw new Error(resp.error || "Unable to load players");
+            }
+            const players = resp.players || [];
+            if (!players.length){
+              box.textContent = "No players have joined yet.";
+              return;
+            }
+            box.textContent = players
+              .map(p => (p && p.xiv_username ? String(p.xiv_username) : "Unknown"))
+              .join("\n");
+          }catch(err){
+            box.textContent = err.message || "Unable to load players.";
+          }
+        }
 
       async function saveEventModal(){
         const modal = $("eventModal");
@@ -7110,5 +7138,4 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
-
 
