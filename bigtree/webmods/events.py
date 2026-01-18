@@ -128,6 +128,11 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
     wallet_enabled = bool(body.get("wallet_enabled") or False)
 
     db = get_database()
+    # Default currency from venue when not explicitly set on the event
+    if (not currency_name) and venue_id:
+        v = db.get_venue(int(venue_id))
+        if v and v.get("currency_name"):
+            currency_name = str(v.get("currency_name"))
     ev = db.upsert_event(
         event_id=event_id or None,
         event_code=event_code,

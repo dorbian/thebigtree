@@ -671,6 +671,24 @@ class Database:
         )
         return [self._json_safe_dict(dict(r)) for r in (rows or [])]
 
+    def delete_venue(self, venue_id: int) -> bool:
+        """Delete a venue by id.
+
+        Related games/events keep their history via ON DELETE SET NULL, and
+        venue hosts in user_venues are removed via ON DELETE CASCADE.
+        """
+        try:
+            venue_id = int(venue_id)
+        except Exception:
+            return False
+        if venue_id <= 0:
+            return False
+        count = self._execute(
+            "DELETE FROM venues WHERE id = %s",
+            (venue_id,),
+        )
+        return bool(count)
+
     def upsert_venue(
         self,
         name: str,

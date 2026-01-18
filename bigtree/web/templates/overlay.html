@@ -1527,6 +1527,10 @@
             <label>&nbsp;</label>
             <button id="venueSave">Save venue</button>
           </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-danger" id="venueDelete" style="display:none;">Delete venue</button>
+          </div>
         </div>
         <div class="row">
           <div>
@@ -1966,6 +1970,25 @@
             <button class="btn-ghost" id="galleryImportOpen">Import from Discord channel</button>
           </div>
         </div>
+        <div class="section-divider"></div>
+        <h3>Flair Text</h3>
+        <div class="row">
+          <div style="flex:1">
+            <label for="galleryFlairText">Text shown in the gallery (optional)</label>
+            <textarea id="galleryFlairText" rows="3" placeholder="e.g. The Forest whispers: be kind to the artists."></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="galleryFlairSave">Save flair text</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="galleryFlairClear">Clear</button>
+          </div>
+        </div>
+        <div class="status" id="galleryFlairStatus">Flair text is shown as text only (not an image).</div>
       </div>
     </div>
     <div class="modal" id="galleryImportModal">

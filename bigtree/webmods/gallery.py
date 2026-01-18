@@ -9,6 +9,7 @@ import discord
 import bigtree
 from bigtree.inc.plogon import get_with_leaf_path
 from bigtree.inc.webserver import route
+from bigtree.inc.database import get_database
 from bigtree.modules import media as media_mod
 from bigtree.modules import artists as artist_mod
 from bigtree.modules import tarot as tarot_mod
@@ -426,15 +427,18 @@ async def gallery_hidden_set(req: web.Request):
     invalidate_gallery_cache()
     return web.json_response({"ok": True, "hidden": payload})
 
-@route("GET", "/api/gallery/settings", scopes=["tarot:admin"])
+@route("GET", "/api/gallery/settings", scopes=["tarot:admin", "admin:web"])
 async def gallery_settings_get(_req: web.Request):
+    db = get_database()
+    cfg = db.get_system_config("gallery") or {}
     return web.json_response({
         "ok": True,
         "upload_channel_id": gallery_mod.get_upload_channel_id(),
         "hidden_decks": gallery_mod.get_hidden_decks(),
+        "flair_text": cfg.get("flair_text") or "",
     })
 
-@route("POST", "/api/gallery/settings", scopes=["tarot:admin"])
+@route("POST", "/api/gallery/settings", scopes=["tarot:admin", "admin:web"])
 async def gallery_settings_set(req: web.Request):
     try:
         body = await req.json()
@@ -442,6 +446,7 @@ async def gallery_settings_set(req: web.Request):
         body = {}
     channel_present = "upload_channel_id" in body
     hidden_present = "hidden_decks" in body
+    flair_present = "flair_text" in body
 
     payload = {"upload_channel_id": gallery_mod.get_upload_channel_id()}
     if channel_present:
@@ -464,10 +469,18 @@ async def gallery_settings_set(req: web.Request):
         deck_payload = gallery_mod.set_hidden_decks(hidden_decks)
         invalidate_gallery_cache()
 
+    
+    if flair_present:
+        db = get_database()
+        cfg = db.get_system_config("gallery") or {}
+        cfg["flair_text"] = str(body.get("flair_text") or "").strip()
+        db.update_system_config("gallery", cfg)
+
     return web.json_response({
         "ok": True,
         "settings": payload,
-        "hidden_decks": deck_payload.get("hidden_decks")
+        "hidden_decks": deck_payload.get("hidden_decks"),
+        "flair_text": (get_database().get_system_config("gallery") or {}).get("flair_text") or "",
     })
 
 @route("POST", "/api/gallery/upload-channel", scopes=["tarot:admin"])

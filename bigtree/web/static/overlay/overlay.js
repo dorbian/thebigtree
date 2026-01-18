@@ -430,10 +430,25 @@
         const isNew = !eventObj || !eventObj.id;
         modal.dataset.event_id = String(eventObj?.id || "");
         modal.dataset.event_code = String(eventObj?.event_code || "");
-        $("eventModalTitle").textContent = isNew ? "Add event" : `Event ${eventObj.event_code}`;
+        $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
         $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
         $("eventCurrency").value = eventObj?.currency_name || "";
+        // If the event does not override currency, default from the venue.
+        if (!(eventObj?.currency_name) && (eventObj?.venue_id)){
+          const v = (eventsVenues || []).find(x => Number(x.id) === Number(eventObj.venue_id)) || null;
+          if (v && v.currency_name){
+            $("eventCurrency").value = String(v.currency_name);
+          }
+        }
+        // If currency not set on the event, default it from the selected venue
+        if (!$("eventCurrency").value){
+          const vid = parseInt($("eventVenue").value || "0", 10) || 0;
+          const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
+          if (v && v.currency_name){
+            $("eventCurrency").value = String(v.currency_name || "");
+          }
+        }
         $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
 
         const joinInfo = $("eventJoinInfo");
@@ -484,6 +499,10 @@
         if (!modal) return;
         const id = parseInt(modal.dataset.event_id || "0", 10) || 0;
         if (!id) return;
+        const title = $("eventTitle")?.value?.trim() || modal.dataset.event_code || `Event ${id}`;
+        if (!window.confirm(`End event "${title}"?
+
+This will block new games from being created in this event, but existing games can still be finished.`)) return;
         const joinInfo = $("eventJoinInfo");
         if (joinInfo) joinInfo.textContent = "Ending event...";
         try{
@@ -3306,6 +3325,12 @@
         }else{
           $("venueAdmins").value = "";
         }
+
+        const delBtn = $("venueDelete");
+        if (delBtn){
+          const canDelete = !!v && !!v.id;
+          delBtn.style.display = canDelete ? "inline-flex" : "none";
+        }
       }
 
       function openVenueModal(mode){
@@ -3353,6 +3378,33 @@
         const v = (venueCache || []).find(x => Number(x.id) === id) || null;
         setVenueFields(v);
       });
+      on("venueDelete", "click", async () => {
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        const venueId = parseInt($("venueSelect").value || "0", 10) || 0;
+        if (!venueId){ setVenueStatus("Pick a venue to delete.", "err"); return; }
+        const name = $("venueName").value.trim() || `Venue ${venueId}`;
+        if (!window.confirm(`Delete venue "${name}"?
+
+Games and events will keep their history, but this venue will be removed.`)) return;
+        setVenueStatus("Deleting...", "");
+        try{
+          const resp = await jsonFetch("/admin/venues/delete", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({venue_id: venueId})
+          });
+          if (!resp.ok) throw new Error(resp.error || "Delete failed");
+          showToast("Venue deleted.", "ok");
+          await loadVenuesForModal();
+          await loadVenuesPanel(true);
+          setVenueFields(null);
+          $("venueSelect").value = "";
+          setVenueStatus("Deleted.", "ok");
+        }catch(err){
+          setVenueStatus(err.message || String(err), "err");
+        }
+      });
+
       on("venueSave", "click", async () => {
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
         const name = $("venueName").value.trim();
@@ -3494,6 +3546,16 @@
         }
       });
       on("eventSave", "click", () => saveEventModal());
+      on("eventVenue", "change", () => {
+        const currencyEl = 0 0"eventCurrency");
+        if (!currencyEl) return;
+        if (currencyEl.value && currencyEl.value.trim()) return;
+        const vid = parseInt(0 0"eventVenue")?.value || "0", 10) || 0;
+        const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
+        if (v && v.currency_name){
+          currencyEl.value = String(v.currency_name || "");
+        }
+      });
       on("eventEnd", "click", () => endEventModal());
       on("eventCopyJoin", "click", () => {
         const modal = $("eventModal");
@@ -3503,6 +3565,18 @@
         const joinUrl = `${base}/events/${code}`;
         copyToClipboard(joinUrl);
       });
+
+      on("eventVenue", "change", () => {
+        const currencyEl = $("eventCurrency");
+        if (!currencyEl) return;
+        if (currencyEl.value && currencyEl.value.trim()) return;
+        const vid = parseInt($("eventVenue")?.value || "0", 10) || 0;
+        const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
+        if (v && v.currency_name){
+          currencyEl.value = String(v.currency_name || "");
+        }
+      });
+
 
       on("dashboardChangelogToggle", "click", () => {
         const modal = $("changelogModal");
@@ -3856,6 +3930,11 @@
             select.value = channelId;
           }
           setGalleryChannelStatus(channelId ? "Upload channel set." : "Pick a channel to use for uploads.", channelId ? "ok" : "");
+          const flairEl = $("galleryFlairText");
+          if (flairEl){
+            flairEl.value = String(data.flair_text || "");
+          }
+          setStatusText("galleryFlairStatus", "Ready.", "");
         }catch(err){
           setGalleryChannelStatus(err.message, "err");
         }
@@ -4472,6 +4551,25 @@
           setGalleryChannelStatus(err.message, "err");
         }
       });
+      $("galleryFlairSave").addEventListener("click", async () => {
+        const flair = $("galleryFlairText")?.value || "";
+        setStatusText("galleryFlairStatus", "Saving...", "");
+        try{
+          await jsonFetch("/api/gallery/settings", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({flair_text: String(flair)})
+          }, true);
+          setStatusText("galleryFlairStatus", "Flair text saved.", "ok");
+        }catch(err){
+          setStatusText("galleryFlairStatus", err.message, "err");
+        }
+      });
+      $("galleryFlairClear").addEventListener("click", () => {
+        const el = $("galleryFlairText");
+        if (el) el.value = "";
+      });
+
       $("galleryChannelCreate").addEventListener("click", async () => {
         const name = $("galleryChannelName").value.trim();
         const categoryId = $("galleryChannelCategory").value.trim();

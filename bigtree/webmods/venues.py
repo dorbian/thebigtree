@@ -138,6 +138,26 @@ async def admin_venues_list(_req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "venues": db.list_venues()})
 
 
+@route("POST", "/admin/venues/delete", scopes=["admin:web"])
+async def venues_delete(req: web.Request):
+    db = get_database()
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    venue_id = body.get("venue_id")
+    try:
+        venue_id = int(venue_id)
+    except Exception:
+        venue_id = 0
+    if not venue_id:
+        return web.json_response({"ok": False, "error": "venue_id required"}, status=400)
+    ok = db.delete_venue(venue_id)
+    if not ok:
+        return web.json_response({"ok": False, "error": "not deleted"}, status=400)
+    return web.json_response({"ok": True})
+
+
 @route("POST", "/admin/venues/upsert", scopes=["admin:web"])
 async def admin_venues_upsert(req: web.Request) -> web.Response:
     try:
