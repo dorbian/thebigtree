@@ -3546,16 +3546,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         }
       });
       on("eventSave", "click", () => saveEventModal());
-      on("eventVenue", "change", () => {
-        const currencyEl = 0 0"eventCurrency");
-        if (!currencyEl) return;
-        if (currencyEl.value && currencyEl.value.trim()) return;
-        const vid = parseInt(0 0"eventVenue")?.value || "0", 10) || 0;
-        const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
-        if (v && v.currency_name){
-          currencyEl.value = String(v.currency_name || "");
-        }
-      });
       on("eventEnd", "click", () => endEventModal());
       on("eventCopyJoin", "click", () => {
         const modal = $("eventModal");
@@ -7120,6 +7110,5 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
-
 
 
