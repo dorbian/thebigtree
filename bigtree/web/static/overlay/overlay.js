@@ -431,6 +431,7 @@
         modal.dataset.event_id = String(eventObj?.id || "");
         modal.dataset.event_code = String(eventObj?.event_code || "");
         loadEventPlayers(eventObj?.id || 0);
+        loadEventSummary(eventObj?.id || 0);
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
         $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
@@ -516,6 +517,30 @@
           }catch(err){
             box.textContent = err.message || "Unable to load players.";
             if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
+          }
+        }
+
+        async function loadEventSummary(eventId){
+          const el = $("eventHouseTotal");
+          if (!el) return;
+          const id = parseInt(String(eventId || "0"), 10) || 0;
+          if (!id){
+            el.textContent = "House total: -";
+            return;
+          }
+          el.textContent = "House total: loading...";
+          try{
+            const resp = await jsonFetch(`/admin/events/${encodeURIComponent(String(id))}/summary`, {method: "GET"});
+            if (!resp.ok){
+              throw new Error(resp.error || "Unable to load totals");
+            }
+            const totals = resp.totals || {};
+            const net = totals.net ?? 0;
+            const currency = resp.currency_name || "";
+            const label = currency ? `${net} ${currency}` : String(net);
+            el.textContent = `House total: ${label}`;
+          }catch(err){
+            el.textContent = "House total: unavailable";
           }
         }
 

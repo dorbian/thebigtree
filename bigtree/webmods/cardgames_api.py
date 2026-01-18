@@ -7,6 +7,7 @@ from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
 from bigtree.modules import tarot
+from bigtree.webmods.user_area import _resolve_user
 
 async def _run_blocking(func, *args):
     return await asyncio.to_thread(func, *args)
@@ -17,6 +18,51 @@ def _get_view(req: web.Request) -> str:
 
 def _get_token(req: web.Request, body: Dict[str, Any]) -> str:
     return (req.headers.get("X-Cardgame-Token") or str(body.get("token") or "")).strip()
+
+def _normalize_currency(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+async def _ensure_wallet_balance(req: web.Request, join_code: str, session: Dict[str, Any]) -> web.Response | Dict[str, Any] | None:
+    db = get_database()
+    ctx = db.get_game_wallet_context(join_code=join_code, game_id=session.get("session_id"))
+    if not ctx:
+        return None
+    if not ctx.get("wallet_enabled"):
+        return None
+    currency = _normalize_currency(ctx.get("currency"))
+    if not currency or currency == "gil":
+        return None
+    pot = int(ctx.get("pot") or 0)
+    if pot <= 0:
+        return None
+    user = await _resolve_user(req)
+    if isinstance(user, web.Response):
+        return user
+    event_id = int(ctx.get("event_id") or 0)
+    game_id = ctx.get("game_id") or session.get("session_id")
+    if db.has_wallet_history_entry(event_id=event_id, user_id=int(user["id"]), reason="game_join", game_id=game_id):
+        db.add_user_game(int(user["id"]), str(game_id), role="player")
+        return {"user": user}
+    ok, balance, status = db.apply_game_wallet_delta(
+        event_id=event_id,
+        user_id=int(user["id"]),
+        delta=-pot,
+        reason="game_join",
+        metadata={"game_id": str(game_id), "join_code": join_code, "currency": currency, "amount": pot},
+        allow_negative=False,
+    )
+    if not ok:
+        return web.json_response(
+            {
+                "ok": False,
+                "error": "insufficient balance",
+                "required": pot,
+                "balance": balance,
+            },
+            status=409,
+        )
+    db.add_user_game(int(user["id"]), str(game_id), role="player")
+    return {"user": user, "balance": balance}
 
 _TEMPLATES = {
     ("blackjack", "player"): "cardgames_blackjack_player.html",
@@ -132,6 +178,12 @@ async def list_all_sessions(req: web.Request):
 @route("POST", "/api/cardgames/{game_id}/sessions/{join_code}/join", allow_public=True)
 async def join_session(req: web.Request):
     join_code = req.match_info["join_code"]
+    s = await _run_blocking(cg.get_session_by_join_code, join_code)
+    if not s:
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
+    wallet_resp = await _ensure_wallet_balance(req, join_code, s)
+    if isinstance(wallet_resp, web.Response):
+        return wallet_resp
     try:
         payload = await _run_blocking(cg.join_session, join_code)
     except Exception as exc:
@@ -253,6 +305,57 @@ async def finish_session(req: web.Request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    try:
+        s = await _run_blocking(cg.get_session_by_id, session_id)
+        if s:
+            db = get_database()
+            payload = dict(s or {})
+            status_val = payload.get("status") or "finished"
+            active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
+            metadata = {
+                "currency": payload.get("currency"),
+                "pot": payload.get("pot"),
+                "status": status_val,
+            }
+            db.upsert_game(
+                game_id=str(payload.get("session_id") or ""),
+                module="cardgames",
+                payload=payload,
+                title=payload.get("game_id"),
+                created_at=db._as_datetime(payload.get("created_at")),
+                ended_at=db._as_datetime(payload.get("updated_at")),
+                status=status_val,
+                active=active,
+                metadata=metadata,
+                run_source="api",
+                players=db._extract_cardgame_players(payload),
+            )
+            ctx = db.get_game_wallet_context(game_id=str(payload.get("session_id") or ""))
+            if ctx and ctx.get("wallet_enabled"):
+                currency = _normalize_currency(ctx.get("currency"))
+                winnings = int(ctx.get("winnings") or 0)
+                if currency and currency != "gil" and winnings > 0:
+                    user_id = db.get_primary_game_user(str(payload.get("session_id") or ""), role="player")
+                    if user_id and not db.has_wallet_history_entry(
+                        event_id=int(ctx.get("event_id") or 0),
+                        user_id=int(user_id),
+                        reason="game_win",
+                        game_id=str(payload.get("session_id") or ""),
+                    ):
+                        db.apply_game_wallet_delta(
+                            event_id=int(ctx.get("event_id") or 0),
+                            user_id=int(user_id),
+                            delta=winnings,
+                            reason="game_win",
+                            metadata={
+                                "game_id": str(payload.get("session_id") or ""),
+                                "currency": currency,
+                                "amount": winnings,
+                            },
+                            allow_negative=True,
+                        )
+    except Exception:
+        pass
     return web.json_response({"ok": True})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/clone", allow_public=True)

@@ -243,6 +243,19 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS event_wallet_history (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                delta BIGINT NOT NULL,
+                balance BIGINT NOT NULL,
+                reason TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_by BIGINT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS venue_members (
                 id SERIAL PRIMARY KEY,
                 venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
@@ -1027,6 +1040,7 @@ class Database:
             return False
         if event_id <= 0 or user_id <= 0:
             return False
+        prev = self.get_event_wallet_balance(event_id, user_id)
         # Ensure wallet row exists.
         self._execute(
             """
@@ -1038,7 +1052,254 @@ class Database:
             """,
             (event_id, user_id, balance),
         )
+        delta = balance - int(prev or 0)
+        self._record_event_wallet_history(
+            event_id=event_id,
+            user_id=user_id,
+            delta=delta,
+            balance=balance,
+            reason="admin_set",
+            metadata={"source": "admin", "previous": int(prev or 0)},
+            created_by=None,
+        )
         return True
+
+    def get_event_wallet_balance(self, event_id: int, user_id: int) -> int:
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+        except Exception:
+            return 0
+        if event_id <= 0 or user_id <= 0:
+            return 0
+        row = self._fetchone(
+            "SELECT balance FROM event_wallets WHERE event_id = %s AND user_id = %s",
+            (event_id, user_id),
+        )
+        try:
+            return int(row.get("balance") or 0) if row else 0
+        except Exception:
+            return 0
+
+    def _record_event_wallet_history(
+        self,
+        *,
+        event_id: int,
+        user_id: int,
+        delta: int,
+        balance: int,
+        reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        created_by: Optional[int] = None,
+    ) -> None:
+        self._execute(
+            """
+            INSERT INTO event_wallet_history (event_id, user_id, delta, balance, reason, metadata, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                int(event_id),
+                int(user_id),
+                int(delta),
+                int(balance),
+                reason,
+                Json(metadata or {}),
+                created_by,
+            ),
+        )
+
+    def list_event_wallet_history(self, event_id: int, user_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+            limit = int(limit)
+        except Exception:
+            return []
+        if event_id <= 0 or user_id <= 0:
+            return []
+        if limit < 1:
+            limit = 1
+        if limit > 1000:
+            limit = 1000
+        rows = self._execute(
+            """
+            SELECT delta, balance, reason, metadata, created_by, created_at
+            FROM event_wallet_history
+            WHERE event_id = %s AND user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (event_id, user_id, limit),
+            fetch=True,
+        ) or []
+        return [self._json_safe_dict(dict(r)) for r in rows]
+
+    @staticmethod
+    def _normalize_currency(value: Optional[str]) -> str:
+        return str(value or "").strip().lower()
+
+    def _wallet_usable(self, event_status: Optional[str], event_metadata: Optional[Dict[str, Any]]) -> bool:
+        status = str(event_status or "").strip().lower()
+        meta = event_metadata or {}
+        carry_over = bool(meta.get("carry_over") or meta.get("carryover"))
+        return status == "active" or carry_over
+
+    def get_game_wallet_context(self, *, join_code: Optional[str] = None, game_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        code = (join_code or "").strip()
+        gid = (game_id or "").strip()
+        if not code and not gid:
+            return None
+        row = self._fetchone(
+            """
+            SELECT g.game_id, g.event_id, g.payload, g.metadata,
+                   e.status AS event_status, e.wallet_enabled, e.currency_name, e.metadata AS event_metadata
+            FROM games g
+            LEFT JOIN events e ON e.id = g.event_id
+            WHERE (%s != '' AND lower(g.game_id) = lower(%s))
+               OR (%s != '' AND (lower(g.payload->>'join_code') = lower(%s)
+                                OR lower(g.payload->>'joinCode') = lower(%s)
+                                OR lower(g.payload->>'join') = lower(%s)))
+            LIMIT 1
+            """,
+            (gid, gid, code, code, code, code),
+        )
+        if not row:
+            return None
+        payload = row.get("payload") or {}
+        if not isinstance(payload, dict):
+            payload = {}
+        metadata = row.get("metadata") or {}
+        currency = metadata.get("currency") or payload.get("currency") or row.get("currency_name")
+        pot = metadata.get("pot") or payload.get("pot") or 0
+        winnings = payload.get("winnings") or payload.get("payout") or payload.get("result") or 0
+        try:
+            pot = int(float(pot or 0))
+        except Exception:
+            pot = 0
+        try:
+            winnings = int(float(winnings or 0))
+        except Exception:
+            winnings = 0
+        return {
+            "game_id": row.get("game_id"),
+            "event_id": row.get("event_id"),
+            "currency": currency,
+            "pot": pot,
+            "winnings": winnings,
+            "wallet_enabled": bool(row.get("wallet_enabled")),
+            "wallet_usable": self._wallet_usable(row.get("event_status"), row.get("event_metadata")),
+        }
+
+    def apply_game_wallet_delta(
+        self,
+        *,
+        event_id: int,
+        user_id: int,
+        delta: int,
+        reason: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        allow_negative: bool = False,
+    ) -> Tuple[bool, int, str]:
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+            delta = int(delta)
+        except Exception:
+            return False, 0, "invalid"
+        if event_id <= 0 or user_id <= 0:
+            return False, 0, "invalid"
+        with self._connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT balance
+                    FROM event_wallets
+                    WHERE event_id = %s AND user_id = %s
+                    FOR UPDATE
+                    """,
+                    (event_id, user_id),
+                )
+                row = cur.fetchone()
+                balance = int(row.get("balance") or 0) if row else 0
+                next_balance = balance + delta
+                if not allow_negative and next_balance < 0:
+                    return False, balance, "insufficient"
+                cur.execute(
+                    """
+                    INSERT INTO event_wallets (event_id, user_id, balance)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (event_id, user_id) DO UPDATE
+                      SET balance = EXCLUDED.balance,
+                          updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (event_id, user_id, next_balance),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO event_wallet_history (event_id, user_id, delta, balance, reason, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (event_id, user_id, delta, next_balance, reason, Json(metadata or {})),
+                )
+                return True, next_balance, "ok"
+
+    def has_wallet_history_entry(self, *, event_id: int, user_id: int, reason: str, game_id: Optional[str]) -> bool:
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+        except Exception:
+            return False
+        if not event_id or not user_id or not reason or not game_id:
+            return False
+        row = self._fetchone(
+            """
+            SELECT 1 AS ok
+            FROM event_wallet_history
+            WHERE event_id = %s
+              AND user_id = %s
+              AND reason = %s
+              AND metadata->>'game_id' = %s
+            LIMIT 1
+            """,
+            (event_id, user_id, reason, str(game_id)),
+        )
+        return bool(row)
+
+    def get_event_house_total(self, event_id: int) -> Dict[str, int]:
+        try:
+            event_id = int(event_id)
+        except Exception:
+            return {"total_pot": 0, "total_winnings": 0, "net": 0}
+        if event_id <= 0:
+            return {"total_pot": 0, "total_winnings": 0, "net": 0}
+        rows = self._execute(
+            "SELECT payload, metadata FROM games WHERE event_id = %s",
+            (event_id,),
+            fetch=True,
+        ) or []
+        total_pot = 0
+        total_winnings = 0
+        for r in rows:
+            payload = r.get("payload") or {}
+            if not isinstance(payload, dict):
+                payload = {}
+            metadata = r.get("metadata") or {}
+            currency = metadata.get("currency") or payload.get("currency")
+            if self._normalize_currency(currency) == "gil":
+                continue
+            pot = metadata.get("pot") or payload.get("pot") or 0
+            winnings = payload.get("winnings") or payload.get("payout") or payload.get("result") or 0
+            try:
+                pot_val = int(float(pot or 0))
+            except Exception:
+                pot_val = 0
+            try:
+                winnings_val = int(float(winnings or 0))
+            except Exception:
+                winnings_val = 0
+            total_pot += pot_val
+            total_winnings += winnings_val
+        return {"total_pot": total_pot, "total_winnings": total_winnings, "net": total_pot - total_winnings}
 
     def _find_active_event_id_for_venue(self, venue_id: int) -> Optional[int]:
         if not venue_id:
@@ -1216,6 +1477,10 @@ class Database:
         except Exception:
             carry_over = False
 
+        wallet_history = []
+        if ev.get("wallet_enabled"):
+            wallet_history = self.list_event_wallet_history(int(ev["id"]), int(user_id), limit=200)
+
         return {
             "event": ev,
             "joined_at": self._json_safe(joined.get("joined_at") if isinstance(joined, dict) else None),
@@ -1223,6 +1488,7 @@ class Database:
             "wallet_usable": bool(ev.get("wallet_enabled")) and (ev.get("status") == "active" or carry_over),
             "carry_over": carry_over,
             "games": games,
+            "wallet_history": wallet_history,
         }
 
     def get_user_venue(self, user_id: int) -> Optional[Dict[str, Any]]:
@@ -1425,6 +1691,38 @@ class Database:
             """,
             (user_id, game_id),
         )
+
+    def add_user_game(self, user_id: int, game_id: str, role: Optional[str] = None) -> bool:
+        if not user_id or not game_id:
+            return False
+        self._execute(
+            """
+            INSERT INTO user_games (user_id, game_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (int(user_id), str(game_id), role),
+        )
+        return True
+
+    def get_primary_game_user(self, game_id: str, role: Optional[str] = "player") -> Optional[int]:
+        gid = str(game_id or "").strip()
+        if not gid:
+            return None
+        row = self._fetchone(
+            """
+            SELECT user_id
+            FROM user_games
+            WHERE game_id = %s AND (%s IS NULL OR role = %s)
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (gid, role, role),
+        )
+        try:
+            return int(row.get("user_id")) if row else None
+        except Exception:
+            return None
 
     def _fetch_game_players(self, game_ids: Iterable[str]) -> List[Dict[str, Any]]:
         if not game_ids:

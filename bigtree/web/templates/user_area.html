@@ -119,6 +119,13 @@
       display:block;
       fill:currentColor;
     }
+    .section-title{
+      font-weight:600;
+      letter-spacing:.02em;
+      text-transform:uppercase;
+      font-size:12px;
+      color:rgba(231,242,234,.75);
+    }
     .header-claim input{
       width:200px;
     }
@@ -671,10 +678,33 @@
         const walletEnabled = !!ev.wallet_enabled;
         const walletBalance = data.wallet_balance ?? null;
         const walletUsable = !!data.wallet_usable;
+        const walletHistory = Array.isArray(data.wallet_history) ? data.wallet_history : [];
         const status = ev.status || "-";
         const currency = ev.currency_name || "-";
         const venue = ev.venue_name || "-";
         const usableText = walletEnabled ? (walletUsable ? "usable in new events" : "not usable in new events") : "-";
+        const historyRows = walletHistory.length ? `
+          <table style="margin-top:12px;">
+            <thead><tr><th>Time</th><th>Change</th><th>Balance</th><th>Reason</th></tr></thead>
+            <tbody>
+              ${walletHistory.map(h => {
+                const delta = Number(h.delta ?? 0);
+                const sign = delta > 0 ? "+" : "";
+                const reason = String(h.reason || "update");
+                const meta = h.metadata || {};
+                const gameTag = meta.game_id ? ` (${escapeHtml(String(meta.game_id))})` : "";
+                return `
+                  <tr>
+                    <td>${escapeHtml(String(h.created_at || ""))}</td>
+                    <td>${escapeHtml(`${sign}${delta}`)}</td>
+                    <td>${escapeHtml(String(h.balance ?? 0))}</td>
+                    <td>${escapeHtml(reason)}${gameTag}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        ` : "<div class='muted' style='margin-top:12px;'>No wallet activity yet.</div>";
         const gameRows = games.length ? `
           <table style="margin-top:12px;">
             <thead><tr><th>Game</th><th>Type</th><th>Status</th><th>Outcome</th><th>Join key</th></tr></thead>
@@ -704,6 +734,8 @@
             <div class="detail-item"><span>Wallet carry-over</span>${walletEnabled ? (data.carry_over ? "Yes" : "No") : "-"}</div>
             <div class="detail-item"><span>Usable later</span>${walletEnabled ? escapeHtml(usableText) : "-"}</div>
           </div>
+          <div class="section-title" style="margin-top:16px;">Wallet history</div>
+          ${walletEnabled ? historyRows : "<div class='muted' style='margin-top:12px;'>Wallet is disabled for this event.</div>"}
           ${gameRows}
         `;
       }catch(err){

@@ -182,6 +182,28 @@ async def admin_event_players(req: web.Request) -> web.Response:
     minimal = [{"xiv_username": p.get("xiv_username"), "joined_at": p.get("joined_at")} for p in players]
     return web.json_response({"ok": True, "event_id": event_id, "players": minimal})
 
+@route("GET", "/admin/events/{event_id}/summary", scopes=["admin:web", "event:host"])
+async def admin_event_summary(req: web.Request) -> web.Response:
+    try:
+        event_id = int(req.match_info.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    if not event_id:
+        return web.json_response({"ok": False, "error": "event_id required"}, status=400)
+    db = get_database()
+    ev = db._fetchone("SELECT id, currency_name FROM events WHERE id = %s", (int(event_id),))
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    totals = db.get_event_house_total(int(event_id))
+    return web.json_response(
+        {
+            "ok": True,
+            "event_id": event_id,
+            "currency_name": ev.get("currency_name"),
+            "totals": totals,
+        }
+    )
+
 
 @route("POST", "/admin/events/{event_id}/wallets/set", scopes=["admin:web", "event:host"])
 async def admin_event_wallet_set(req: web.Request) -> web.Response:

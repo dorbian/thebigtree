@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Wallet: enforce custom-currency balances on cardgame joins and credit winnings on finish.
+- Events: log wallet activity (top-ups, joins, wins), show it in wallet event details, and add house total summary.
 - Overlay: add plugin setup panel and refine games list pagination layout.
 - Overlay: allow event wallet top-ups by host and store /auth users for admin selection.
 - Wallet: show larger user pill and store XivAuth world on login.
