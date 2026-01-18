@@ -929,7 +929,7 @@ class Database:
                 )
         except Exception:
             pass
-          return True
+        return True
 
     def get_event_players(self, event_id: int, limit: int = 5000) -> List[Dict[str, Any]]:
         if not event_id:
