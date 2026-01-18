@@ -1368,6 +1368,9 @@
         const authKeysBtn = $("menuAuthKeys");
         const authTempBtn = $("menuAuthTemp");
         const deckDeleteBtn = $("taDeleteDeck");
+        const venueAddBtn = $("dashboardAddVenue");
+        const venueAdmins = $("venueAdmins");
+        const venueSave = $("venueSave");
         if (authRolesBtn){
           authRolesBtn.classList.toggle("hidden", !isElfmin);
         }
@@ -1380,6 +1383,15 @@
         if (deckDeleteBtn){
           deckDeleteBtn.classList.toggle("hidden", !isElfmin);
           deckDeleteBtn.disabled = !isElfmin;
+        }
+        if (venueAddBtn){
+          venueAddBtn.classList.toggle("hidden", !isElfmin);
+        }
+        if (venueAdmins){
+          venueAdmins.disabled = !isElfmin;
+        }
+        if (venueSave){
+          venueSave.disabled = !isElfmin;
         }
       }
 
@@ -1968,11 +1980,15 @@
         overlayToggleBtn.classList.remove("active");
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
+        const brandUserVenue = $("brandUserVenue");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
         if (brandUser){
           if (brandUserName){
             brandUserName.textContent = "";
+          }
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
           }
           if (brandUserIcon){
             brandUserIcon.src = "";
@@ -1988,6 +2004,7 @@
       async function loadAuthUser(){
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
+        const brandUserVenue = $("brandUserVenue");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
         if (!brandUser || !brandUserName || !brandUserIcon || !brandUserFallback){
@@ -2023,12 +2040,24 @@
               brandUserIcon.classList.add("hidden");
               brandUserFallback.classList.remove("hidden");
             }
+            if (brandUserVenue){
+              try{
+                const venueResp = await jsonFetch("/admin/venues/for-user", {method:"GET"});
+                const venue = venueResp?.venue;
+                brandUserVenue.textContent = venue?.name ? `Venue: ${venue.name}` : "";
+              }catch(_e){
+                brandUserVenue.textContent = "";
+              }
+            }
           }else{
             brandUserName.textContent = "";
             brandUser.classList.add("hidden");
           }
         }catch(err){
           brandUserName.textContent = "";
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
+          }
           brandUserIcon.src = "";
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
@@ -2982,6 +3011,7 @@
       let venueCache = [];
       let venueMediaCache = [];
       let venueDeckCache = [];
+      let venueAdminCache = [];
 
       function showVenueModal(show){
         const modal = $("venueModal");
@@ -3001,6 +3031,23 @@
           .concat((venueCache || []).map(v => `<option value="${String(v.id)}">${escapeHtml(v.name || `Venue ${v.id}`)}</option>`));
         sel.innerHTML = opts.join("");
         if (cur) sel.value = cur;
+      }
+
+      function renderVenueAdminsSelect(selectedIds){
+        const sel = $("venueAdmins");
+        if (!sel) return;
+        const ids = Array.isArray(selectedIds) ? selectedIds.map(String) : [];
+        if (!venueAdminCache.length){
+          sel.innerHTML = "";
+          return;
+        }
+        const opts = (venueAdminCache || []).map(member => {
+          const id = String(member.discord_id || member.id || "");
+          const name = member.display_name || member.username || id;
+          const selected = ids.includes(id) ? "selected" : "";
+          return `<option value="${escapeHtml(id)}" ${selected}>${escapeHtml(name)} (${escapeHtml(id)})</option>`;
+        });
+        sel.innerHTML = opts.join("");
       }
 
       function renderVenueBackgroundSelect(){
@@ -3049,6 +3096,16 @@
         renderVenueDeckSelect();
       }
 
+      async function loadVenueAdmins(force = false){
+        if (venueAdminCache.length && !force) return;
+        try{
+          const data = await jsonFetch("/admin/discord/members", {method:"GET"});
+          venueAdminCache = data.members || [];
+        }catch(_e){
+          venueAdminCache = [];
+        }
+      }
+
       async function loadVenuesForModal(){
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
         try{
@@ -3066,21 +3123,16 @@
         $("venueMinBet").value = String(v?.minimal_spend ?? 0);
         $("venueBackground").value = v?.background_image || "";
         $("venueDeck").value = v?.deck_id || "";
-        const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
-        if (Array.isArray(ids)){
-          $("venueAdmins").value = ids.join(", ");
-        }else if (typeof ids === "string"){
-          $("venueAdmins").value = ids;
-        }else{
-          $("venueAdmins").value = "";
-        }
+        const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : [];
+        renderVenueAdminsSelect(Array.isArray(ids) ? ids : []);
       }
 
-      function openVenueModal(mode){
+      async function openVenueModal(mode){
         const m = mode || {};
         showVenueModal(true);
         setVenueStatus("Loading...", "");
         loadVenueDeps();
+        await loadVenueAdmins();
         loadVenuesForModal().then(() => {
           if (m.id){
             const id = Number(m.id);
@@ -3123,6 +3175,10 @@
       });
       on("venueSave", "click", async () => {
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        if (!authUserIsElfmin){
+          setVenueStatus("Admin role required.", "err");
+          return;
+        }
         const name = $("venueName").value.trim();
         if (!name){ setVenueStatus("Name is required.", "err"); return; }
         const currency = $("venueCurrency").value.trim();
@@ -3131,13 +3187,17 @@
         if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
         if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
         if (!deck){ setVenueStatus("Card deck must be selected.", "err"); return; }
+        const adminSelect = $("venueAdmins");
+        const adminIds = adminSelect
+          ? Array.from(adminSelect.selectedOptions || []).map(opt => opt.value).filter(Boolean)
+          : [];
         const payload = {
           name,
           currency_name: currency || null,
           minimal_spend: parseInt($("venueMinBet").value || "0", 10) || 0,
           background_image: bg || null,
           deck_id: deck || null,
-          admin_discord_ids: $("venueAdmins").value || null,
+          admin_discord_ids: adminIds,
         };
         setVenueStatus("Saving...", "");
         try{
@@ -3299,24 +3359,25 @@
           loadGamesList(true);
         });
       });
-      $("contestRefresh").addEventListener("click", () => loadContestManagement());
-      $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
-      $("contestCreate").addEventListener("click", () => createContest());
-      $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
-      $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
-      $("contestCreateChannelOpen").addEventListener("click", () => {
-        $("contestChannelModal").classList.add("show");
+      on("contestRefresh", "click", () => loadContestManagement());
+      on("contestChannelRefresh", "click", () => loadContestChannels());
+      on("contestCreate", "click", () => createContest());
+      on("contestEmojiSelect", "change", () => updateContestChannelPreview());
+      on("contestChannelName", "input", () => updateContestChannelPreview());
+      on("contestCreateChannelOpen", "click", () => {
+        $("contestChannelModal")?.classList.add("show");
         loadContestChannels();
       });
-      $("contestChannelClose").addEventListener("click", () => {
-        $("contestChannelModal").classList.remove("show");
+      on("contestChannelClose", "click", () => {
+        $("contestChannelModal")?.classList.remove("show");
       });
-      $("contestChannelModal").addEventListener("click", (event) => {
-        if (event.target === $("contestChannelModal")){
-          $("contestChannelModal").classList.remove("show");
+      on("contestChannelModal", "click", (event) => {
+        const modal = $("contestChannelModal");
+        if (modal && event.target === modal){
+          modal.classList.remove("show");
         }
       });
-      $("contestPanel").addEventListener("click", (event) => {
+      on("contestPanel", "click", (event) => {
         const btn = event.target.closest(".contest-init");
         if (!btn) return;
         const channelId = btn.dataset.channel || "";
@@ -3325,18 +3386,18 @@
           setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
         }
       });
-      $("tarotClaimsRefresh").addEventListener("click", () => {
+      on("tarotClaimsRefresh", "click", () => {
         loadTarotClaimsDecks();
         loadTarotClaimsChannels();
       });
-      $("tarotClaimsPost").addEventListener("click", () => postTarotClaims());
-      $("contestChannelCreate").addEventListener("click", async () => {
+      on("tarotClaimsPost", "click", () => postTarotClaims());
+      on("contestChannelCreate", "click", async () => {
         try{
           const channelId = await createContestChannel();
           if (channelId){
             $("contestChannel").value = channelId;
           }
-          $("contestChannelModal").classList.remove("show");
+          $("contestChannelModal")?.classList.remove("show");
           await loadContestManagement();
         }catch(err){
           // status already handled
@@ -6759,6 +6820,3 @@
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
-
-
-

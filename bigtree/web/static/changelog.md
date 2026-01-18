@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Overlay: add venue name under host name and show plugin setup instructions.
+- Overlay: venue admin list now uses stored Discord users with name-sorted selection.
+- User-area manage: include API key when loading claims/games.
 - Wallet: claim join codes now seeds cardgames/tarot/bingo sessions when missing in Postgres.
 - Overlay: add bingo owner link copy button beside player rows.
 - Gallery: wallet badge uses icon + username when logged in.

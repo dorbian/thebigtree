@@ -478,6 +478,21 @@ async def admin_overlay_stats(_req: web.Request):
     return web.json_response({"ok": True, "stats": stats})
 
 
+@route("GET", "/admin/discord/members", scopes=["admin:web"])
+async def admin_discord_members(req: web.Request) -> web.Response:
+    db = get_database()
+    try:
+        limit = int(req.query.get("limit") or 2000)
+    except Exception:
+        limit = 2000
+    if limit < 1:
+        limit = 1
+    if limit > 5000:
+        limit = 5000
+    members = db.list_discord_users(limit=limit)
+    return web.json_response({"ok": True, "members": members})
+
+
 @route("GET", "/admin/games/list", scopes=["admin:web"])
 async def admin_games_list(req: web.Request) -> web.Response:
     """Paginated game listing for the forest dashboard (all modules)."""

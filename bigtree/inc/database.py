@@ -248,6 +248,15 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS discord_users (
+                discord_id BIGINT PRIMARY KEY,
+                username TEXT,
+                display_name TEXT,
+                avatar_url TEXT,
+                last_seen TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS system_configs (
                 name TEXT PRIMARY KEY,
                 data JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -369,6 +378,38 @@ class Database:
         WHERE s.token = %s AND s.expires_at > CURRENT_TIMESTAMP
         """
         return self._fetchone(sql, (token,))
+
+    def upsert_discord_user(
+        self,
+        discord_id: int,
+        username: Optional[str] = None,
+        display_name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+    ) -> bool:
+        if not discord_id:
+            return False
+        self._execute(
+            """
+            INSERT INTO discord_users (discord_id, username, display_name, avatar_url, last_seen)
+            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (discord_id) DO UPDATE
+              SET username = COALESCE(EXCLUDED.username, discord_users.username),
+                  display_name = COALESCE(EXCLUDED.display_name, discord_users.display_name),
+                  avatar_url = COALESCE(EXCLUDED.avatar_url, discord_users.avatar_url),
+                  last_seen = CURRENT_TIMESTAMP
+            """,
+            (int(discord_id), username, display_name, avatar_url),
+        )
+        return True
+
+    def list_discord_users(self, limit: int = 2000) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT discord_id, username, display_name, avatar_url, last_seen
+        FROM discord_users
+        ORDER BY COALESCE(display_name, username) ASC NULLS LAST
+        LIMIT %s
+        """
+        return self._execute(sql, (int(limit),), fetch=True) or []
 
     def link_user_to_matches(self, user_id: int, name: str):
         if not name:
@@ -1259,6 +1300,12 @@ class Database:
                 except Exception:
                     return None
         return None
+
+    def get_venue_for_discord_admin(self, discord_id: int) -> Optional[Dict[str, Any]]:
+        venue_id = self._find_venue_for_discord_admin(discord_id)
+        if not venue_id:
+            return None
+        return self.get_venue(int(venue_id))
 
     def _store_game_player(self, game_id: str, name: str, role: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         if not name:
