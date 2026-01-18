@@ -780,6 +780,8 @@
                   <option value="blackjack">Blackjack</option>
                   <option value="poker">Poker</option>
                   <option value="highlow">High/Low</option>
+                  <option value="slots">Slots</option>
+                  <option value="crapslite">Craps (lite)</option>
                 </select>
               </div>
               <div>
@@ -1644,6 +1646,28 @@
               <span>Wallet carry-over</span>
               <input id="eventCarryOver" type="checkbox" />
             </label>
+
+            <label>
+              Background image (optional)
+              <input id="eventBackgroundUrl" placeholder="/media/forest.png or https://..." />
+            </label>
+            <div style="display:flex; gap:8px; align-items:end;">
+              <button class="btn-ghost" id="eventUseSelectedMedia" type="button">Use selected media</button>
+              <button class="btn-ghost" id="eventOpenMedia" type="button">Open media library</button>
+            </div>
+
+            <div class="status" id="eventBackgroundStatus" style="grid-column:1 / -1;">No background selected.</div>
+
+            <div style="grid-column:1 / -1;">
+              <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:600;">Enabled minigames</div>
+                  <div class="muted" style="font-size:12px;">Controls what shows up on the public event page.</div>
+                </div>
+                <button class="btn-ghost" id="eventPickGames" type="button">Pick minigames</button>
+              </div>
+              <div class="status" id="eventGamesStatus" style="margin-top:8px;">All games allowed (no filter).</div>
+            </div>
           </div>
 
           <div class="status" id="eventJoinInfo" style="margin-top:10px;">Create the event to get a join link.</div>
@@ -1684,6 +1708,37 @@
                 <span>Copy join link</span>
               </button>
               <button id="eventSave" type="button">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="eventGamesModal">
+      <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+          <div class="modal-title">Pick minigames</div>
+          <button class="btn-ghost icon-btn icon-btn--small" id="eventGamesClose" type="button" aria-label="Close" title="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12.01l-6.3-6.3-1.41 1.41 6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="muted" style="margin-bottom:10px;">If you select at least one minigame, only those will appear on the event page.</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="bingo" /> Bingo</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="tarot" /> Tarot</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="blackjack" /> Blackjack</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="poker" /> Poker</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="highlow" /> High/Low</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="slots" /> Slots</label>
+            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" class="event-game-check" value="crapslite" /> Craps (lite)</label>
+          </div>
+
+          <div class="row" style="justify-content:space-between; margin-top:14px; gap:10px; flex-wrap:wrap;">
+            <button class="btn-ghost" id="eventGamesClear" type="button">Clear (allow all)</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-ghost" id="eventGamesCancel" type="button">Cancel</button>
+              <button id="eventGamesSave" type="button">Save</button>
             </div>
           </div>
         </div>

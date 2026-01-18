@@ -500,7 +500,6 @@
               <th>Game</th>
               <th>Type</th>
               <th>Status</th>
-              <th>Currency</th>
               <th>Paid</th>
               <th>Outcome</th>
               <th>Player page</th>
@@ -515,11 +514,12 @@
     }
 
     function buildPlayerUrl(game){
-      if(!game || !game.join_code){
+      if(!game){
         return "";
       }
       const moduleId = game.module || "game";
       if(moduleId === "cardgames"){
+        if(!game.join_code) return "";
         const payload = game.payload || {};
         const gameId = payload.game_id || payload.gameId;
         if(!gameId){
@@ -528,10 +528,20 @@
         return `/cardgames/${encodeURIComponent(gameId)}/session/${encodeURIComponent(game.join_code)}`;
       }
       if(moduleId === "tarot"){
+        if(!game.join_code) return "";
         return `/tarot/session/${encodeURIComponent(game.join_code)}`;
       }
       if(moduleId === "bingo"){
-        return `/bingo/owner?token=${encodeURIComponent(game.join_code)}`;
+        // Prefer owner token (join_code). If it's missing, fall back to game+owner params.
+        if(game.join_code){
+          return `/bingo/owner?token=${encodeURIComponent(game.join_code)}`;
+        }
+        const gid = game.game_id ? String(game.game_id) : "";
+        const owner = game.claimed_username ? String(game.claimed_username) : "";
+        if(gid && owner){
+          return `/bingo/owner?game=${encodeURIComponent(gid)}&owner=${encodeURIComponent(owner)}`;
+        }
+        return "";
       }
       return "";
     }
@@ -582,7 +592,6 @@
           <td>${escapeHtml(title)}</td>
           <td>${escapeHtml(formatGameType(game))}</td>
           <td><span class="status-chip">${escapeHtml(status)}</span></td>
-          <td>${escapeHtml(game.currency || "-")}</td>
           <td>${escapeHtml(getGamePaid(game))}</td>
           <td>${escapeHtml(outcome)}</td>
           <td>${playerLink}</td>
@@ -603,7 +612,6 @@
         {label: "Type", value: formatGameType(game)},
         {label: "Status", value: status},
         {label: "Outcome", value: game.active ? "-" : (game.outcome || status)},
-        {label: "Currency", value: game.currency || "-"},
         {label: "Paid", value: getGamePaid(game)},
         {label: "Winnings", value: game.winnings || "-"},
         {label: "Join key", value: game.join_code || "-"},

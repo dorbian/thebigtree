@@ -177,6 +177,15 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
     wallet_enabled = bool(body.get("wallet_enabled") or False)
     carry_over = bool(body.get("carry_over") or body.get("carryover") or False)
 
+    background_url = str(body.get("background_url") or body.get("background") or "").strip()
+    enabled_games = body.get("enabled_games") or body.get("enabledGames")
+    if isinstance(enabled_games, str):
+        enabled_games = [x.strip() for x in enabled_games.split(",") if x.strip()]
+    if isinstance(enabled_games, list):
+        enabled_games = [str(x).strip().lower() for x in enabled_games if str(x).strip()]
+    else:
+        enabled_games = []
+
     db = get_database()
     # Default currency from venue when not explicitly set on the event
     if (not currency_name) and venue_id:
@@ -190,7 +199,11 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         venue_id=venue_id or None,
         currency_name=currency_name,
         wallet_enabled=wallet_enabled,
-        metadata={"carry_over": carry_over},
+        metadata={
+            "carry_over": carry_over,
+            "background_url": background_url or None,
+            "enabled_games": enabled_games,
+        },
     )
     if not ev:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)

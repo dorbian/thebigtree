@@ -118,14 +118,50 @@
       el.textContent = `Wallet balance: ${balance}${suffix}`;
     }
 
-    function renderGames(games){
+    function renderGames(games, enabledGames){
       const list = document.getElementById("eventGames");
       if (!list) return;
-      if (!games || !games.length){
+      const open = Array.isArray(games) ? games : [];
+      const enabled = Array.isArray(enabledGames) ? enabledGames : [];
+
+      // If the host configured a filter, show those games even when no table exists yet.
+      if (enabled.length){
+        const byType = {};
+        open.forEach(g => {
+          const key = String(g.type || g.game_id || g.module || "").toLowerCase();
+          if (!byType[key]) byType[key] = g;
+        });
+        const cards = enabled.map(key => {
+          const k = String(key || "").trim().toLowerCase();
+          const game = byType[k] || null;
+          const title = game ? (game.title || game.type || "Game") : k;
+          const join = game ? game.join_url : "";
+          const meta = game
+            ? [game.module, game.currency].filter(Boolean).join(" • ")
+            : "Waiting for a host to open a table";
+          const joinBtn = join
+            ? `<a class="btn" href="${join}">Open table</a>`
+            : "<span class='muted'>Not available yet</span>";
+          return `
+            <div class="game-card">
+              <div>
+                <div>${title}</div>
+                <div class="game-meta">${meta}</div>
+              </div>
+              ${joinBtn}
+            </div>
+          `;
+        }).join("");
+        list.innerHTML = cards || "<div class='muted'>No games configured.</div>";
+        return;
+      }
+
+      if (!open.length){
         list.innerHTML = "<div class='muted'>No open tables yet.</div>";
         return;
       }
-      list.innerHTML = games.map(game => {
+
+      list.innerHTML = open.map(game => {
         const title = game.title || game.type || "Game";
         const join = game.join_url;
         const meta = [game.module, game.currency].filter(Boolean).join(" • ");
@@ -147,6 +183,11 @@
         const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}`, {method:"GET"});
         if (!data.ok) throw new Error(data.error || "event not found");
         const ev = data.event || {};
+        const enabledGames = (ev && ev.metadata && (ev.metadata.enabled_games || ev.metadata.enabledGames)) || [];
+        const bg = (ev && ev.metadata && (ev.metadata.background_url || ev.metadata.background)) || "";
+        if (bg){
+          document.body.style.backgroundImage = `url('${bg}')`;
+        }
         document.getElementById("eventTitle").textContent = ev.title ? ev.title : `Event ${ev.event_code}`;
         const meta = [];
         if (ev.venue_name) meta.push(`Venue: ${ev.venue_name}`);
@@ -170,9 +211,9 @@
           document.getElementById("joinBtn").disabled = true;
           try{
             const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
-            renderGames((games && games.games) || []);
+            renderGames((games && games.games) || [], enabledGames);
           }catch(err){
-            renderGames([]);
+            renderGames([], enabledGames);
           }
         }else if ((ev.status || "") === "ended"){
           setStatus("This event has ended. You can no longer join.");

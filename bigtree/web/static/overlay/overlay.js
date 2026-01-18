@@ -422,6 +422,63 @@
         renderEventsList();
       }
 
+      function setEventBackgroundStatus(url){
+        const el = $("eventBackgroundStatus");
+        if (!el) return;
+        if (!url){
+          el.textContent = "No background selected.";
+          return;
+        }
+        el.textContent = "Background selected.";
+      }
+
+      function getEventEnabledGames(modal){
+        const raw = (modal && modal.dataset && modal.dataset.enabled_games) ? String(modal.dataset.enabled_games) : "";
+        if (!raw) return [];
+        try{
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed.map(x => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
+        }catch(_e){
+          return [];
+        }
+      }
+
+      function setEventGamesStatus(games){
+        const el = $("eventGamesStatus");
+        if (!el) return;
+        const list = Array.isArray(games) ? games.filter(Boolean) : [];
+        if (!list.length){
+          el.textContent = "All games allowed (no filter).";
+          return;
+        }
+        el.textContent = `Enabled: ${list.join(", ")}`;
+      }
+
+      function showEventGamesModal(show){
+        const modal = $("eventGamesModal");
+        if (!modal) return;
+        modal.classList.toggle("show", !!show);
+      }
+
+      function syncEventGamesModalChecks(enabled){
+        const set = new Set((enabled || []).map(x => String(x || "").trim().toLowerCase()).filter(Boolean));
+        document.querySelectorAll("#eventGamesModal .event-game-check").forEach(cb => {
+          const val = String(cb.value || "").trim().toLowerCase();
+          cb.checked = set.has(val);
+        });
+      }
+
+      function readEventGamesModalChecks(){
+        const out = [];
+        document.querySelectorAll("#eventGamesModal .event-game-check").forEach(cb => {
+          if (cb.checked){
+            const val = String(cb.value || "").trim().toLowerCase();
+            if (val) out.push(val);
+          }
+        });
+        return out;
+      }
+
       function openEventModal(eventObj){
         const modal = $("eventModal");
         if (!modal) return;
@@ -457,6 +514,27 @@
           const meta = eventObj?.metadata || {};
           carryEl.checked = !!(meta.carry_over || meta.carryover);
         }
+
+        // Event background + enabled minigames
+        const meta = eventObj?.metadata || {};
+        const bgEl = $("eventBackgroundUrl");
+        if (bgEl){
+          const bg = String(meta.background_url || meta.background || "").trim();
+          bgEl.value = bg;
+          bgEl.dataset.artistId = meta.background_artist_id || meta.backgroundArtistId || "";
+          bgEl.dataset.artistName = meta.background_artist_name || meta.backgroundArtistName || "";
+          setEventBackgroundStatus(bg);
+        }
+        const enabled = Array.isArray(meta.enabled_games)
+          ? meta.enabled_games
+          : (Array.isArray(meta.enabledGames) ? meta.enabledGames : []);
+        modal.dataset.enabled_games = JSON.stringify(
+          Array.isArray(enabled)
+            ? enabled.map(x => String(x || "").trim().toLowerCase()).filter(Boolean)
+            : []
+        );
+        setEventGamesStatus(getEventEnabledGames(modal));
+
         const walletUser = $("eventWalletUser");
         const walletAmount = $("eventWalletAmount");
         const walletSet = $("eventWalletSet");
@@ -562,6 +640,8 @@
           currency_name: $("eventCurrency")?.value?.trim() || "",
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
           carry_over: $("eventCarryOver")?.checked || false,
+          background_url: $("eventBackgroundUrl") ? $("eventBackgroundUrl").value.trim() : "",
+          enabled_games: getEventEnabledGames(modal),
         };
         const joinInfo = $("eventJoinInfo");
         if (joinInfo) joinInfo.textContent = "Saving...";
@@ -3661,6 +3741,66 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         const base = (window.location.origin || "").replace(/\/$/, "");
         const joinUrl = `${base}/events/${code}`;
         copyToClipboard(joinUrl);
+      });
+
+      // Event background helpers (uses media library selection)
+      on("eventUseSelectedMedia", "click", () => {
+        const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
+        if (!pick){
+          setStatusText("eventJoinInfo", "Select a media item first.", "err");
+          return;
+        }
+        const el = $("eventBackgroundUrl");
+        if (!el) return;
+        el.value = pick;
+        el.dataset.artistId = currentMediaEdit.artist_id || "";
+        el.dataset.artistName = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "";
+        setEventBackgroundStatus(pick);
+      });
+      on("eventOpenMedia", "click", () => {
+        librarySelectHandler = (item) => {
+          const pick = item && (item.url || item.fallback_url || "");
+          if (!pick){
+            setStatusText("eventJoinInfo", "Select a media item first.", "err");
+            return;
+          }
+          const el = $("eventBackgroundUrl");
+          if (!el) return;
+          el.value = pick;
+          el.dataset.artistId = item.artist_id || "";
+          el.dataset.artistName = item.artist_name || item.artist_id || "";
+          setEventBackgroundStatus(pick);
+          showLibraryModal(false);
+        };
+        showLibraryModal(true);
+        loadLibrary("media");
+      });
+
+      // Event minigames modal
+      on("eventPickGames", "click", () => {
+        const modal = $("eventModal");
+        const enabled = getEventEnabledGames(modal);
+        syncEventGamesModalChecks(enabled);
+        showEventGamesModal(true);
+      });
+      ["eventGamesClose", "eventGamesCancel"].forEach(id => {
+        on(id, "click", () => showEventGamesModal(false));
+      });
+      on("eventGamesModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "eventGamesModal"){
+          showEventGamesModal(false);
+        }
+      });
+      on("eventGamesClear", "click", () => {
+        document.querySelectorAll("#eventGamesModal .event-game-check").forEach(cb => { cb.checked = false; });
+      });
+      on("eventGamesSave", "click", () => {
+        const modal = $("eventModal");
+        if (!modal) return;
+        const enabled = readEventGamesModalChecks();
+        modal.dataset.enabled_games = JSON.stringify(enabled);
+        setEventGamesStatus(enabled);
+        showEventGamesModal(false);
       });
       on("eventWalletSet", "click", async () => {
         const modal = $("eventModal");
