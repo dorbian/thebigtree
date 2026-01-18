@@ -20,10 +20,7 @@
       align-items:flex-end;
       gap:16px;
     }
-    header h1{
-      margin:0;
-      font-size:32px;
-    }
+    header h1{margin:0;font-size:32px;}
     .panel{
       margin:0 auto 32px;
       padding:24px;
@@ -32,40 +29,10 @@
       border:1px solid rgba(214,178,110,.2);
       border-radius:18px;
     }
-    .control-row{
-      display:flex;
-      flex-wrap:wrap;
-      gap:12px;
-      margin-bottom:16px;
-    }
-    .control-row input{
-      flex:1;
-      min-width:220px;
-    }
-    table{
-      width:100%;
-      border-collapse:collapse;
-      font-size:13px;
-    }
-    th,td{
-      padding:8px 10px;
-      border-bottom:1px solid rgba(231,242,234,.1);
-    }
-    th{
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      font-size:11px;
-      color:#9fb4a6;
-    }
-    .muted{
-      color:rgba(231,242,234,.65);
-    }
-    .status-chip{
-      padding:3px 10px;
-      border-radius:999px;
-      border:1px solid rgba(214,178,110,.4);
-      font-size:12px;
-    }
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th,td{padding:8px 10px;border-bottom:1px solid rgba(231,242,234,.1);vertical-align:top;}
+    th{text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:#9fb4a6;}
+    .muted{color:rgba(231,242,234,.65);}
     button{
       border:none;
       border-radius:8px;
@@ -76,70 +43,40 @@
       background:#6bd4a2;
       color:#06100b;
     }
+    .err{color:#ffb3b3;}
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>Game Management</h1>
-      <p class="muted">Tracks API-run games and claim ownership for auditing.</p>
+      <p class="muted">Registered Characters (XIVAuth claims) and game history.</p>
     </div>
     <button id="refreshBtn">Refresh</button>
   </header>
+
   <section class="panel">
-    <div class="control-row">
-      <label>
-        Admin API key
-        <input id="adminKey" type="password" placeholder="X-Bigtree-Key">
-      </label>
-      <button id="saveKey">Save for session</button>
-      <button id="clearKey">Clear</button>
-    </div>
     <div id="errorMessage" class="muted"></div>
+
     <h2 style="margin:18px 0 8px; font-size:18px;">Registered Characters</h2>
-    <p class="muted" style="margin-top:0;">All characters registered via XivAuth (with server/world when known).</p>
+    <p class="muted" style="margin-top:0;">All characters registered via XIVAuth (with server/world when known).</p>
     <div id="claimsContainer"></div>
 
     <h2 style="margin:24px 0 8px; font-size:18px;">Games</h2>
+    <p class="muted" style="margin-top:0;">Most recent games recorded by the forest.</p>
     <div id="gamesContainer"></div>
   </section>
+
   <script>
-    const STORAGE_KEY = "bigtree_admin_key";
-    const adminField = document.getElementById("adminKey");
-    const saveBtn = document.getElementById("saveKey");
-    const clearBtn = document.getElementById("clearKey");
     const refreshBtn = document.getElementById("refreshBtn");
     const gamesContainer = document.getElementById("gamesContainer");
     const claimsContainer = document.getElementById("claimsContainer");
     const errorMessage = document.getElementById("errorMessage");
 
-    function getAdminKey(){
-      return window.localStorage.getItem(STORAGE_KEY) || "";
-    }
-
-    function setAdminKey(value){
-      if(value){
-        window.localStorage.setItem(STORAGE_KEY, value);
-      }else{
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-
-    function headers(){
-      const key = getAdminKey();
-      return key ? {"X-Bigtree-Key": key} : {};
-    }
-
     async function loadGames(){
-      const key = getAdminKey();
-      if(!key){
-        errorMessage.textContent = "Enter an admin API key first.";
-        gamesContainer.innerHTML = "";
-        return;
-      }
       errorMessage.textContent = "Loading...";
       try{
-        const res = await fetch("/user-area/manage/games", {headers: headers()});
+        const res = await fetch("/user-area/manage/games");
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load games");
@@ -148,18 +85,14 @@
         errorMessage.textContent = "";
       }catch(err){
         errorMessage.textContent = err.message;
+        errorMessage.classList.add("err");
         gamesContainer.innerHTML = "";
       }
     }
 
     async function loadClaims(){
-      const key = getAdminKey();
-      if(!key){
-        claimsContainer.innerHTML = "<div class='muted'>Enter an admin API key to view claims.</div>";
-        return;
-      }
       try{
-        const res = await fetch("/user-area/manage/claims?limit=2000", {headers: headers()});
+        const res = await fetch("/user-area/manage/claims?limit=2000");
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load claims");
@@ -172,7 +105,7 @@
 
     function renderClaims(users){
       if(!users.length){
-        claimsContainer.innerHTML = "<div class='muted'>No claims/characters registered yet.</div>";
+        claimsContainer.innerHTML = "<div class='muted'>No characters registered yet.</div>";
         return;
       }
       claimsContainer.innerHTML = `
@@ -203,7 +136,7 @@
 
     function renderGames(games){
       if(!games.length){
-        gamesContainer.innerHTML = "<div class='muted'>No API games to show.</div>";
+        gamesContainer.innerHTML = "<div class='muted'>No games to show.</div>";
         return;
       }
       gamesContainer.innerHTML = `
@@ -216,21 +149,19 @@
               <th>Status</th>
               <th>Active</th>
               <th>Claimed by</th>
-              <th>Claimed at</th>
               <th>Created</th>
             </tr>
           </thead>
           <tbody>
-            ${games.map((game, index) => `
+            ${games.map((g, idx) => `
               <tr>
-                <td>${index + 1}</td>
-                <td>${game.game_id}</td>
-                <td>${game.module}</td>
-                <td><span class="status-chip">${game.status || "unknown"}</span></td>
-                <td>${game.active ? "Yes" : "No"}</td>
-                <td>${game.claimed_username || "-"}</td>
-                <td>${game.claimed_at || "-"}</td>
-                <td>${game.created_at || "-"}</td>
+                <td>${idx + 1}</td>
+                <td>${g.game_id || g.id || "-"}</td>
+                <td>${g.module || "-"}</td>
+                <td>${g.status || "-"}</td>
+                <td>${g.active ? "Yes" : "No"}</td>
+                <td>${g.claimed_by || "-"}</td>
+                <td>${g.created_at || "-"}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -238,29 +169,12 @@
       `;
     }
 
-    saveBtn?.addEventListener("click", () => {
-      setAdminKey(adminField.value.trim());
-      loadClaims();
-      loadGames();
-    });
-    clearBtn?.addEventListener("click", () => {
-      setAdminKey("");
-      adminField.value = "";
-      errorMessage.textContent = "Admin key cleared.";
-      gamesContainer.innerHTML = "";
-      claimsContainer.innerHTML = "";
-    });
-    refreshBtn?.addEventListener("click", () => {
-      loadClaims();
-      loadGames();
-    });
-
-    const storedKey = getAdminKey();
-    if(storedKey){
-      adminField.value = storedKey;
-      loadClaims();
-      loadGames();
+    async function refreshAll(){
+      await Promise.all([loadClaims(), loadGames()]);
     }
+
+    refreshBtn.addEventListener("click", refreshAll);
+    refreshAll();
   </script>
 </body>
 </html>

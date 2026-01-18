@@ -473,6 +473,7 @@ async def admin_overlay_stats(_req: web.Request):
         "players_engaged": _count("SELECT COUNT(DISTINCT user_id) AS value FROM user_games"),
         "registered_users": _count("SELECT COUNT(*) AS value FROM users"),
         "api_games": _count("SELECT COUNT(*) AS value FROM games"),
+        "venues": _count("SELECT COUNT(*) AS value FROM venues"),
     }
     return web.json_response({"ok": True, "stats": stats})
 

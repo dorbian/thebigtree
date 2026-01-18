@@ -548,14 +548,14 @@ async def user_area_manage_page(_req: web.Request) -> web.Response:
     return web.Response(text=html, content_type="text/html")
 
 
-@route("GET", "/user-area/manage/games", scopes=["admin:message"])
+@route("GET", "/user-area/manage/games", scopes=["admin:web"])
 async def manage_games(request: web.Request) -> web.Response:
     db = get_database()
     games = db.list_api_games(include_inactive=True, limit=500)
     return web.json_response({"ok": True, "games": games})
 
 
-@route("GET", "/user-area/manage/claims", scopes=["admin:message"])
+@route("GET", "/user-area/manage/claims", scopes=["admin:web"])
 async def manage_claims(request: web.Request) -> web.Response:
     """List all registered XivAuth users/characters (admin view)."""
     db = get_database()

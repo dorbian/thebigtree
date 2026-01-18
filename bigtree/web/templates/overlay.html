@@ -325,6 +325,10 @@
                 <div class="stat-value" id="dashStatGames">--</div>
                 <div class="stat-label">API games</div>
               </article>
+              <article class="stat-card">
+                <div class="stat-value" id="dashStatVenues">--</div>
+                <div class="stat-label">Venues</div>
+              </article>
             </div>
             <button class="dashboard-stats-refresh" id="dashboardStatsRefresh" type="button">Refresh stats</button>
           </div>
@@ -438,27 +442,22 @@
             </div>
             <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
           </div>
-          <div class="dashboard-readme hidden" id="dashboardChangelogWrap" style="margin-top:12px">
-            <div class="dash-section-body">
-              <div class="dash-changelog" id="dashChangelog">Loading changelog...</div>
-            </div>
-          </div>
         </section>
 
         <section class="panel hidden" style="animation-delay:.03s" id="gamesListPanel">
           <h2>Games</h2>
           <p class="muted">All games ever recorded by the forest. Filter by venue, module, or player.</p>
           <div class="dash-section-body">
-            <div class="row" style="gap:10px; flex-wrap:wrap; align-items:flex-end;">
-              <label style="min-width:220px; flex:1;">
+            <div class="games-filters">
+              <label class="games-filter">
                 Search
                 <input id="gamesFilterQuery" placeholder="game id, title, join code..." />
               </label>
-              <label style="min-width:180px; flex:0.8;">
+              <label class="games-filter">
                 Player
                 <input id="gamesFilterPlayer" placeholder="character name..." />
               </label>
-              <label style="min-width:160px; flex:0.6;">
+              <label class="games-filter">
                 Module
                 <select id="gamesFilterModule">
                   <option value="">All</option>
@@ -467,15 +466,15 @@
                   <option value="cardgames">Cardgames</option>
                 </select>
               </label>
-              <label style="min-width:200px; flex:0.9;">
+              <label class="games-filter">
                 Venue
                 <select id="gamesFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label style="min-width:160px; flex:0.55;">
+              <label class="games-filter games-filter--checkbox">
                 <span style="display:block; margin-bottom:6px;">Include inactive</span>
                 <input id="gamesFilterInactive" type="checkbox" checked style="transform:translateY(2px);" />
               </label>
-              <button class="btn-ghost" id="gamesFilterApply" type="button" style="min-width:120px;">Apply</button>
+              <button class="btn-ghost games-filter-apply" id="gamesFilterApply" type="button">Apply</button>
             </div>
 
             <div class="dashboard-logs-body" id="gamesListBody" style="max-height:480px; margin-top:12px;"></div>
@@ -496,6 +495,24 @@
                 <button class="btn-ghost" id="gamesNext" type="button">Next</button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.035s" id="venuesPanel">
+          <h2>Venues</h2>
+          <p class="muted">Manage venues, currencies, backgrounds, and deck defaults. Click a row to edit.</p>
+          <div class="dash-section-body">
+            <div class="row venues-toolbar">
+              <label class="venues-search">
+                Search
+                <input id="venuesFilterQuery" placeholder="name, currency, deck..." />
+              </label>
+              <button class="btn-ghost" id="venuesRefresh" type="button" title="Refresh" aria-label="Refresh">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+              </button>
+              <button id="venuesAdd" type="button">Add venue</button>
+            </div>
+            <div class="dashboard-logs-body" id="venuesListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
         </section>
           <section class="panel" style="animation-delay:.05s" id="bingoPanel">
@@ -1518,6 +1535,21 @@
         <div class="status" id="venueStatus">Ready.</div>
       </div>
     </div>
+
+    <div class="modal" id="changelogModal">
+      <div class="modal-card modal-card--wide">
+        <div class="modal-header">
+          <div class="modal-title">Changelog</div>
+          <button class="btn-ghost icon-btn" id="changelogClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.3-6.31z"/></svg>
+          </button>
+        </div>
+        <div class="dash-section-body">
+          <div class="dash-changelog" id="dashChangelog">Loading changelog...</div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal" id="deckCreateModal">
       <div class="modal-card">
         <div class="modal-header">

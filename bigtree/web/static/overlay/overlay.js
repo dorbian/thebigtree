@@ -155,6 +155,7 @@
         setStatValue("dashStatPlayers", stats.players_engaged ?? "--");
         setStatValue("dashStatRegistered", stats.registered_users ?? "--");
         setStatValue("dashStatGames", stats.api_games ?? "--");
+        setStatValue("dashStatVenues", stats.venues ?? "--");
         dashboardStatsLoaded = true;
       }
 
@@ -177,6 +178,7 @@
           setStatValue("dashStatPlayers", "--");
           setStatValue("dashStatRegistered", "--");
           setStatValue("dashStatGames", "--");
+          setStatValue("dashStatVenues", "--");
         }finally{
           dashboardStatsLoading = false;
         }
@@ -2643,6 +2645,7 @@
         toggleClass("menuContests", "active", which === "contests");
         toggleClass("menuMedia", "active", which === "media");
         toggleClass("menuGamesList", "active", which === "gamesList");
+        // Venues are accessed via Dashboard buttons for now.
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
@@ -2651,10 +2654,13 @@
         toggleClass("contestPanel", "hidden", which !== "contests");
         toggleClass("mediaPanel", "hidden", which !== "media");
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
+        toggleClass("venuesPanel", "hidden", which !== "venues");
         if (which === "dashboard"){
           renderDashboardChangelog();
           loadDashboardStats();
           loadDashboardLogs(dashboardLogsKind);
+        } else if (which === "venues"){
+          loadVenuesPanel(true);
         } else if (which === "media"){
           setMediaTab("upload");
           loadMediaLibrary();
@@ -3076,7 +3082,17 @@
         setVenueStatus("Loading...", "");
         loadVenueDeps();
         loadVenuesForModal().then(() => {
-          if (m.new){
+          if (m.id){
+            const id = Number(m.id);
+            const found = (venueCache || []).find(v => Number(v.id) === id) || null;
+            if (found){
+              $("venueSelect").value = String(found.id);
+              setVenueFields(found);
+            }else{
+              $("venueSelect").value = "";
+              setVenueFields(null);
+            }
+          }else if (m.new){
             $("venueSelect").value = "";
             setVenueFields(null);
           }else{
@@ -3093,7 +3109,9 @@
         });
       }
 
-      on("dashboardVenueList", "click", () => openVenueModal({new:false}));
+      on("dashboardVenueList", "click", () => {
+        showPanelOnce("venues");
+      });
       on("dashboardAddVenue", "click", () => openVenueModal({new:true}));
       on("venueClose", "click", () => showVenueModal(false));
       on("venueModal", "click", (ev) => { if (ev.target === $("venueModal")) showVenueModal(false); });
@@ -3143,10 +3161,104 @@
           setVenueStatus(err.message || String(err), "err");
         }
       });
+
+      // --- Venues panel (list view) ---
+      let venuesPanelLoaded = false;
+      const venuesPanelState = { q: "" };
+
+      function venueMatchesQuery(v, q){
+        if (!q) return true;
+        const hay = [v?.name, v?.currency_name, v?.deck_id, v?.background_image].filter(Boolean).join(" ").toLowerCase();
+        return hay.includes(q.toLowerCase());
+      }
+
+      function renderVenuesPanel(){
+        const body = $("venuesListBody");
+        if (!body) return;
+        const q = (venuesPanelState.q || "").trim();
+        const rows = (venueCache || []).filter(v => venueMatchesQuery(v, q));
+        if (!rows.length){
+          body.innerHTML = "<div class='muted'>No venues found.</div>";
+          return;
+        }
+        body.innerHTML = `
+          <table class="tight-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Currency</th>
+                <th>Min bet</th>
+                <th>Deck</th>
+                <th>Background</th>
+                <th>Admins</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(v => {
+                const ids = (v.metadata && Array.isArray(v.metadata.admin_discord_ids)) ? v.metadata.admin_discord_ids : [];
+                return `
+                  <tr class="venue-row" data-venue-id="${escapeHtml(String(v.id))}">
+                    <td><strong>${escapeHtml(v.name || "-")}</strong><div class="muted" style="font-size:12px;">#${escapeHtml(String(v.id))}</div></td>
+                    <td>${escapeHtml(v.currency_name || "-")}</td>
+                    <td>${escapeHtml(String(v.minimal_spend ?? 0))}</td>
+                    <td>${escapeHtml(v.deck_id || "-")}</td>
+                    <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.background_image || "-")}</td>
+                    <td class="muted">${ids.length ? escapeHtml(ids.join(", ")) : "-"}</td>
+                  </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        `;
+        body.querySelectorAll(".venue-row").forEach(tr => {
+          tr.addEventListener("click", () => {
+            const id = Number(tr.getAttribute("data-venue-id"));
+            openVenueModal({id});
+          });
+        });
+      }
+
+      async function loadVenuesPanel(force = false){
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        if (venuesPanelLoaded && !force){
+          renderVenuesPanel();
+          return;
+        }
+        venuesPanelLoaded = true;
+        try{
+          const data = await jsonFetch("/admin/venues", {method:"GET"});
+          venueCache = data.venues || [];
+        }catch(_e){
+          venueCache = [];
+        }
+        renderVenuesPanel();
+        loadGamesListVenues(true);
+      }
+
+      on("venuesRefresh", "click", () => loadVenuesPanel(true));
+      on("venuesAdd", "click", () => openVenueModal({new:true}));
+      on("venuesFilterQuery", "input", () => {
+        venuesPanelState.q = $("venuesFilterQuery").value || "";
+        renderVenuesPanel();
+      });
+
       on("dashboardChangelogToggle", "click", () => {
-        const wrap = $("dashboardChangelogWrap");
-        if (!wrap) return;
-        wrap.classList.toggle("hidden");
+        const modal = $("changelogModal");
+        if (!modal) return;
+        modal.classList.add("show");
+        renderDashboardChangelog();
+      });
+
+      on("changelogClose", "click", () => {
+        const modal = $("changelogModal");
+        if (!modal) return;
+        modal.classList.remove("show");
+      });
+
+      on("changelogModal", "click", (ev) => {
+        // Click backdrop to close.
+        if (ev.target && ev.target.id === "changelogModal"){
+          ev.currentTarget.classList.remove("show");
+        }
       });
 
       // Games list controls

@@ -2219,6 +2219,28 @@
         color:#f1b1b1;
         margin-right:4px;
       }
+
+      /* --- Games list layout (prevent filter controls from overlapping) --- */
+      .games-filters{
+        display:grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap:10px;
+        align-items:end;
+      }
+      .games-filter{min-width:0}
+      .games-filter input,
+      .games-filter select{width:100%}
+      .games-filter--checkbox{display:flex;flex-direction:column;gap:6px}
+      .games-filter-apply{justify-self:end;min-width:120px}
+
+      /* --- Venues list panel --- */
+      .venues-toolbar{gap:10px;flex-wrap:wrap;align-items:flex-end}
+      .venues-search{min-width:260px;flex:1}
+      .tight-table{width:100%;border-collapse:collapse;font-size:13px}
+      .tight-table th,.tight-table td{padding:8px 10px;border-bottom:1px solid rgba(231,242,234,.10);vertical-align:top}
+      .tight-table th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(231,242,234,.65)}
+      .venue-row{cursor:pointer}
+      .venue-row:hover{background:rgba(255,255,255,.03)}
       @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
       @media (max-width:900px){
