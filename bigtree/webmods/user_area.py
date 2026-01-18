@@ -108,6 +108,8 @@ def _create_user_session(auth_data: Dict[str, Any], username: Optional[str], wor
     xiv_username = auth_data.get("xiv_username") or username or "xivplayer"
     xiv_id = auth_data.get("xiv_id") or auth_data.get("character_id")
     metadata = auth_data.get("metadata") or {}
+    if not world:
+        world = auth_data.get("home_world") or auth_data.get("world")
     if world:
         metadata["world"] = world
     db = get_database()

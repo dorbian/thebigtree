@@ -451,6 +451,17 @@
           }
         }
         $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
+        const walletUser = $("eventWalletUser");
+        const walletAmount = $("eventWalletAmount");
+        const walletSet = $("eventWalletSet");
+        const walletStatus = $("eventWalletStatus");
+        const walletEnabled = !!eventObj?.wallet_enabled;
+        if (walletUser) walletUser.disabled = !walletEnabled || isNew;
+        if (walletAmount) walletAmount.disabled = !walletEnabled || isNew;
+        if (walletSet) walletSet.disabled = !walletEnabled || isNew;
+        if (walletStatus){
+          walletStatus.textContent = walletEnabled ? "Ready." : "Wallet is disabled for this event.";
+        }
 
         const joinInfo = $("eventJoinInfo");
         const copyBtn = $("eventCopyJoin");
@@ -474,6 +485,7 @@
           const id = parseInt(String(eventId || "0"), 10) || 0;
           if (!id){
             box.textContent = "Save the event to view registered players.";
+            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
             return;
           }
           box.textContent = "Loading players...";
@@ -485,13 +497,25 @@
             const players = resp.players || [];
             if (!players.length){
               box.textContent = "No players have joined yet.";
+              if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
               return;
             }
             box.textContent = players
               .map(p => (p && p.xiv_username ? String(p.xiv_username) : "Unknown"))
               .join("\n");
+            const select = $("eventWalletUser");
+            if (select){
+              const options = ["<option value=\"\">Select player</option>"].concat(
+                players.map(p => {
+                  const name = String(p.xiv_username || "").trim();
+                  return name ? `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>` : "";
+                }).filter(Boolean)
+              );
+              select.innerHTML = options.join("");
+            }
           }catch(err){
             box.textContent = err.message || "Unable to load players.";
+            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
           }
         }
 
@@ -3582,6 +3606,39 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         const base = (window.location.origin || "").replace(/\/$/, "");
         const joinUrl = `${base}/events/${code}`;
         copyToClipboard(joinUrl);
+      });
+      on("eventWalletSet", "click", async () => {
+        const modal = $("eventModal");
+        const status = $("eventWalletStatus");
+        const eventId = parseInt(modal?.dataset?.event_id || "0", 10) || 0;
+        const user = $("eventWalletUser")?.value || "";
+        const amountRaw = $("eventWalletAmount")?.value || "0";
+        const amount = parseInt(amountRaw, 10);
+        if (!eventId){
+          if (status) status.textContent = "Save the event first.";
+          return;
+        }
+        if (!user){
+          if (status) status.textContent = "Pick a player.";
+          return;
+        }
+        if (!Number.isFinite(amount)){
+          if (status) status.textContent = "Enter a valid amount.";
+          return;
+        }
+        if (status) status.textContent = "Saving...";
+        try{
+          const resp = await jsonFetch(`/admin/events/${eventId}/wallets/set`, {
+            method: "POST",
+            body: JSON.stringify({xiv_username: user, balance: amount})
+          });
+          if (!resp.ok){
+            throw new Error(resp.error || "Unable to set wallet balance");
+          }
+          if (status) status.textContent = "Wallet balance updated.";
+        }catch(err){
+          if (status) status.textContent = err.message || "Unable to set wallet balance.";
+        }
       });
 
       on("eventVenue", "change", () => {
@@ -7138,4 +7195,3 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
-

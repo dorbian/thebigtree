@@ -181,3 +181,43 @@ async def admin_event_players(req: web.Request) -> web.Response:
     # Only expose minimal fields.
     minimal = [{"xiv_username": p.get("xiv_username"), "joined_at": p.get("joined_at")} for p in players]
     return web.json_response({"ok": True, "event_id": event_id, "players": minimal})
+
+
+@route("POST", "/admin/events/{event_id}/wallets/set", scopes=["admin:web", "event:host"])
+async def admin_event_wallet_set(req: web.Request) -> web.Response:
+    try:
+        event_id = int(req.match_info.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    if not event_id:
+        return web.json_response({"ok": False, "error": "event_id required"}, status=400)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    user_id = body.get("user_id")
+    xiv_username = (body.get("xiv_username") or "").strip()
+    try:
+        balance = int(body.get("balance") or 0)
+    except Exception:
+        return web.json_response({"ok": False, "error": "balance must be a number"}, status=400)
+
+    db = get_database()
+    ev = db._fetchone("SELECT wallet_enabled FROM events WHERE id = %s", (int(event_id),))
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    if not bool(ev.get("wallet_enabled")):
+        return web.json_response({"ok": False, "error": "wallet not enabled for event"}, status=409)
+
+    if user_id:
+        try:
+            user_id = int(user_id)
+        except Exception:
+            user_id = 0
+    if not user_id and xiv_username:
+        user_id = db.find_user_id_by_xiv_username(xiv_username)
+    if not user_id:
+        return web.json_response({"ok": False, "error": "user not found"}, status=404)
+
+    db.set_event_wallet_balance(int(event_id), int(user_id), int(balance))
+    return web.json_response({"ok": True, "event_id": event_id, "user_id": int(user_id), "balance": int(balance)})

@@ -164,6 +164,17 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS discord_users (
+                discord_id BIGINT PRIMARY KEY,
+                name TEXT,
+                display_name TEXT,
+                global_name TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS games (
                 id SERIAL PRIMARY KEY,
                 game_id TEXT UNIQUE NOT NULL,
@@ -485,6 +496,57 @@ class Database:
         for row in games:
             self._attach_game_summary(row)
         return games
+
+    def upsert_discord_user(
+        self,
+        discord_id: int,
+        name: Optional[str] = None,
+        display_name: Optional[str] = None,
+        global_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        try:
+            discord_id = int(discord_id)
+        except Exception:
+            return False
+        if not discord_id:
+            return False
+        payload = metadata or {}
+        self._execute(
+            """
+            INSERT INTO discord_users (discord_id, name, display_name, global_name, metadata)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (discord_id) DO UPDATE
+              SET name = COALESCE(EXCLUDED.name, discord_users.name),
+                  display_name = COALESCE(EXCLUDED.display_name, discord_users.display_name),
+                  global_name = COALESCE(EXCLUDED.global_name, discord_users.global_name),
+                  metadata = discord_users.metadata || EXCLUDED.metadata,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (discord_id, name, display_name, global_name, Json(payload)),
+        )
+        return True
+
+    def list_discord_users(self, limit: int = 2000) -> List[Dict[str, Any]]:
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 2000
+        if limit < 1:
+            limit = 1
+        if limit > 10000:
+            limit = 10000
+        rows = self._execute(
+            """
+            SELECT discord_id, name, display_name, global_name, metadata, created_at, updated_at
+            FROM discord_users
+            ORDER BY updated_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+            fetch=True,
+        )
+        return [self._json_safe_dict(dict(r)) for r in (rows or [])]
 
     def list_users(self, limit: int = 1000) -> List[Dict[str, Any]]:
         """List registered users/characters.
@@ -955,6 +1017,28 @@ class Database:
             fetch=True,
         ) or []
         return [self._json_safe_dict(dict(r)) for r in rows]
+
+    def set_event_wallet_balance(self, event_id: int, user_id: int, balance: int) -> bool:
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+            balance = int(balance)
+        except Exception:
+            return False
+        if event_id <= 0 or user_id <= 0:
+            return False
+        # Ensure wallet row exists.
+        self._execute(
+            """
+            INSERT INTO event_wallets (event_id, user_id, balance)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (event_id, user_id) DO UPDATE
+              SET balance = EXCLUDED.balance,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (event_id, user_id, balance),
+        )
+        return True
 
     def _find_active_event_id_for_venue(self, venue_id: int) -> Optional[int]:
         if not venue_id:

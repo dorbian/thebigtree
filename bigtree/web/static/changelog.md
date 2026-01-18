@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Overlay: add plugin setup panel and refine games list pagination layout.
+- Overlay: allow event wallet top-ups by host and store /auth users for admin selection.
+- Wallet: show larger user pill and store XivAuth world on login.
 - Wallet: show active/past events alongside games and add event details modal.
 - Events: show registered players list in overlay event modal.
 - Overlay: support admin login background via `system_configs.overlay.admin_background`.

@@ -71,7 +71,8 @@
       }
       .login-card{
         width:min(480px,92vw);
-        background:rgba(10,16,28,.86);
+        background:rgba(10,16,28,.62);
+        backdrop-filter: blur(6px);
         border:1px solid var(--line);
         border-radius:var(--radius);
         padding:24px;
@@ -2251,4 +2252,3 @@
         .app-shell{grid-template-columns:1fr}
         .sidebar{border-right:none;border-bottom:1px solid var(--line)}
       }
-

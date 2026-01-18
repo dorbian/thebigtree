@@ -516,6 +516,39 @@ async def admin_discord_members(_req: web.Request) -> web.Response:
     except Exception:
         members = []
 
+    # Merge stored users so hosts appear even if guild cache is missing.
+    try:
+        stored = get_database().list_discord_users(limit=5000)
+    except Exception:
+        stored = []
+    merged: Dict[int, Dict[str, Any]] = {}
+    for m in members:
+        try:
+            merged[int(m.get("id") or 0)] = dict(m)
+        except Exception:
+            continue
+    for row in stored or []:
+        try:
+            did = int(row.get("discord_id") or 0)
+        except Exception:
+            continue
+        if not did:
+            continue
+        if did in merged:
+            entry = merged[did]
+            entry["name"] = entry.get("name") or row.get("name") or ""
+            entry["display_name"] = entry.get("display_name") or row.get("display_name") or ""
+            entry["global_name"] = entry.get("global_name") or row.get("global_name") or ""
+        else:
+            merged[did] = {
+                "id": did,
+                "name": row.get("name") or "",
+                "display_name": row.get("display_name") or "",
+                "global_name": row.get("global_name") or "",
+                "joined_at": row.get("updated_at"),
+                "bot": False,
+            }
+    members = list(merged.values())
     # Sort by display name for convenient selection.
     members.sort(key=lambda x: (str(x.get("display_name") or x.get("name") or "").lower(), int(x.get("id") or 0)))
     return web.json_response({"ok": True, "members": to_jsonable(members)})
