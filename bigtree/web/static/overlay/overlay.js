@@ -39,6 +39,8 @@
 
       // Games list (admin:web)
       let gamesListVenues = [];
+      let eventsVenues = [];
+      let eventsCache = [];
       let gamesListState = {
         q: "",
         player: "",
@@ -276,6 +278,224 @@
           gamesListVenues = [];
         }
         renderGamesListVenues();
+      }
+
+      // ---- Events panel ----
+
+      function renderEventsVenues(){
+        const select = $("eventsFilterVenue");
+        const modalSelect = $("eventVenue");
+        const current = select ? (select.value || "") : "";
+        const modalCurrent = modalSelect ? (modalSelect.value || "") : "";
+        const options = [`<option value="">All venues</option>`]
+          .concat((eventsVenues || []).map(v => {
+            const id = v.id ?? v.venue_id ?? "";
+            const name = v.name || `Venue ${id}`;
+            return `<option value="${String(id)}">${escapeHtml(name)}</option>`;
+          }));
+        if (select){
+          select.innerHTML = options.join("");
+          if (current) select.value = current;
+        }
+        if (modalSelect){
+          modalSelect.innerHTML = [`<option value="">None</option>`]
+            .concat((eventsVenues || []).map(v => {
+              const id = v.id ?? v.venue_id ?? "";
+              const name = v.name || `Venue ${id}`;
+              return `<option value="${String(id)}">${escapeHtml(name)}</option>`;
+            }))
+            .join("");
+          if (modalCurrent) modalSelect.value = modalCurrent;
+        }
+      }
+
+      async function loadEventsVenues(force = false){
+        if (!hasScope("admin:web") && !hasScope("event:host")) return;
+        if (eventsVenues.length && !force){
+          renderEventsVenues();
+          return;
+        }
+        try{
+          const resp = await jsonFetch("/admin/venues", {method: "GET"});
+          if (resp.ok){
+            eventsVenues = resp.venues || [];
+          }
+        }catch(err){
+          eventsVenues = [];
+        }
+        renderEventsVenues();
+      }
+
+      function getEventsFilters(){
+        return {
+          q: $("eventsFilterQuery")?.value?.trim() || "",
+          venue_id: $("eventsFilterVenue")?.value || "",
+          include_ended: $("eventsFilterEnded")?.checked ?? true,
+        };
+      }
+
+      function renderEventsList(){
+        const body = $("eventsListBody");
+        if (!body) return;
+        const q = ($("eventsFilterQuery")?.value || "").trim().toLowerCase();
+        let items = [...(eventsCache || [])];
+        if (q){
+          items = items.filter(e => String(e.event_code || "").toLowerCase().includes(q) || String(e.title || "").toLowerCase().includes(q));
+        }
+        const vid = $("eventsFilterVenue")?.value || "";
+        if (vid){
+          items = items.filter(e => String(e.venue_id || "") === String(vid));
+        }
+        const includeEnded = $("eventsFilterEnded")?.checked ?? true;
+        if (!includeEnded){
+          items = items.filter(e => (e.status || "") !== "ended");
+        }
+
+        if (!items.length){
+          body.textContent = "No events found.";
+          return;
+        }
+
+        const rows = items.map(e => {
+          const code = escapeHtml(e.event_code || "-");
+          const title = escapeHtml(e.title || "");
+          const venue = escapeHtml(e.venue_name || "-");
+          const status = escapeHtml(e.status || "active");
+          const currency = escapeHtml(e.currency_name || "-");
+          const wallet = e.wallet_enabled ? "Yes" : "No";
+          const created = escapeHtml(e.created_at || "-");
+          return `<tr class="venue-row" data-event-code="${escapeHtml(e.event_code || "")}">
+            <td><code>${code}</code></td>
+            <td>${title}</td>
+            <td>${venue}</td>
+            <td>${status}</td>
+            <td>${currency}</td>
+            <td>${wallet}</td>
+            <td>${created}</td>
+          </tr>`;
+        }).join("");
+
+        body.innerHTML = `
+          <table class="tight-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Title</th>
+                <th>Venue</th>
+                <th>Status</th>
+                <th>Currency</th>
+                <th>Wallet</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
+        body.querySelectorAll("tr[data-event-code]").forEach(tr => {
+          tr.addEventListener("click", () => {
+            const code = tr.getAttribute("data-event-code") || "";
+            const ev = (eventsCache || []).find(x => String(x.event_code || "") === String(code));
+            if (ev) openEventModal(ev);
+          });
+        });
+      }
+
+      async function loadEventsList(force = false){
+        if (!hasScope("admin:web") && !hasScope("event:host")) return;
+        const body = $("eventsListBody");
+        if (body && force){
+          body.textContent = "Loading events...";
+        }
+        try{
+          const f = getEventsFilters();
+          const params = new URLSearchParams();
+          if (f.q) params.set("q", f.q);
+          if (f.venue_id) params.set("venue_id", f.venue_id);
+          params.set("include_ended", f.include_ended ? "1" : "0");
+          const resp = await jsonFetch(`/admin/events?${params.toString()}`, {method: "GET"});
+          if (resp.ok){
+            eventsCache = resp.events || [];
+          }
+        }catch(err){
+          eventsCache = [];
+        }
+        renderEventsList();
+      }
+
+      function openEventModal(eventObj){
+        const modal = $("eventModal");
+        if (!modal) return;
+        modal.classList.add("show");
+        loadEventsVenues();
+        const isNew = !eventObj || !eventObj.id;
+        modal.dataset.event_id = String(eventObj?.id || "");
+        modal.dataset.event_code = String(eventObj?.event_code || "");
+        $("eventModalTitle").textContent = isNew ? "Add event" : `Event ${eventObj.event_code}`;
+        $("eventTitle").value = eventObj?.title || "";
+        $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
+        $("eventCurrency").value = eventObj?.currency_name || "";
+        $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
+
+        const joinInfo = $("eventJoinInfo");
+        const copyBtn = $("eventCopyJoin");
+        const endBtn = $("eventEnd");
+        if (eventObj?.event_code){
+          const base = (window.location.origin || "").replace(/\/$/, "");
+          const joinUrl = `${base}/events/${eventObj.event_code}`;
+          if (joinInfo) joinInfo.innerHTML = `Join link: <a href="${joinUrl}" target="_blank" rel="noopener">${escapeHtml(joinUrl)}</a>`;
+          if (copyBtn) copyBtn.style.display = "inline-flex";
+          if (endBtn) endBtn.style.display = (eventObj.status === "ended") ? "none" : "inline-flex";
+        }else{
+          if (joinInfo) joinInfo.textContent = "Create the event to get a join link.";
+          if (copyBtn) copyBtn.style.display = "none";
+          if (endBtn) endBtn.style.display = "none";
+        }
+      }
+
+      async function saveEventModal(){
+        const modal = $("eventModal");
+        if (!modal) return;
+        const payload = {
+          id: modal.dataset.event_id || "",
+          event_code: modal.dataset.event_code || "",
+          title: $("eventTitle")?.value?.trim() || "",
+          venue_id: $("eventVenue")?.value || "",
+          currency_name: $("eventCurrency")?.value?.trim() || "",
+          wallet_enabled: $("eventWalletEnabled")?.checked || false,
+        };
+        const joinInfo = $("eventJoinInfo");
+        if (joinInfo) joinInfo.textContent = "Saving...";
+        try{
+          const resp = await jsonFetch("/admin/events/upsert", {method: "POST", body: JSON.stringify(payload)});
+          if (!resp.ok) throw new Error(resp.error || "save failed");
+          const ev = resp.event;
+          // Update cache
+          const idx = (eventsCache || []).findIndex(x => x.id === ev.id);
+          if (idx >= 0) eventsCache[idx] = ev; else eventsCache.unshift(ev);
+          renderEventsList();
+          openEventModal(ev);
+        }catch(err){
+          if (joinInfo) joinInfo.textContent = err.message || "Unable to save event.";
+        }
+      }
+
+      async function endEventModal(){
+        const modal = $("eventModal");
+        if (!modal) return;
+        const id = parseInt(modal.dataset.event_id || "0", 10) || 0;
+        if (!id) return;
+        const joinInfo = $("eventJoinInfo");
+        if (joinInfo) joinInfo.textContent = "Ending event...";
+        try{
+          const resp = await jsonFetch("/admin/events/end", {method: "POST", body: JSON.stringify({event_id: id})});
+          if (!resp.ok) throw new Error(resp.error || "end failed");
+          await loadEventsList(true);
+          const updated = (eventsCache || []).find(x => x.id === id);
+          if (updated) openEventModal(updated);
+          else modal.classList.remove("show");
+        }catch(err){
+          if (joinInfo) joinInfo.textContent = err.message || "Unable to end event.";
+        }
       }
 
       function renderGamesList(result){
@@ -1368,9 +1588,6 @@
         const authKeysBtn = $("menuAuthKeys");
         const authTempBtn = $("menuAuthTemp");
         const deckDeleteBtn = $("taDeleteDeck");
-        const venueAddBtn = $("dashboardAddVenue");
-        const venueAdmins = $("venueAdmins");
-        const venueSave = $("venueSave");
         if (authRolesBtn){
           authRolesBtn.classList.toggle("hidden", !isElfmin);
         }
@@ -1383,15 +1600,6 @@
         if (deckDeleteBtn){
           deckDeleteBtn.classList.toggle("hidden", !isElfmin);
           deckDeleteBtn.disabled = !isElfmin;
-        }
-        if (venueAddBtn){
-          venueAddBtn.classList.toggle("hidden", !isElfmin);
-        }
-        if (venueAdmins){
-          venueAdmins.disabled = !isElfmin;
-        }
-        if (venueSave){
-          venueSave.disabled = !isElfmin;
         }
       }
 
@@ -1411,7 +1619,6 @@
         const tarotDecksBtn = $("menuTarotDecks");
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
-        const galleryFlairBtn = $("menuGalleryFlair");
         if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
         if (contestsBtn) contestsBtn.classList.toggle("hidden", !canAdmin);
         if (mediaBtn) mediaBtn.classList.toggle("hidden", !canMedia);
@@ -1421,7 +1628,6 @@
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canGallery);
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canGallery);
-        if (galleryFlairBtn) galleryFlairBtn.classList.toggle("hidden", !canGallery);
         const systemConfigBtn = $("menuSystemConfig");
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
@@ -1982,15 +2188,11 @@
         overlayToggleBtn.classList.remove("active");
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
-        const brandUserVenue = $("brandUserVenue");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
         if (brandUser){
           if (brandUserName){
             brandUserName.textContent = "";
-          }
-          if (brandUserVenue){
-            brandUserVenue.textContent = "";
           }
           if (brandUserIcon){
             brandUserIcon.src = "";
@@ -2006,7 +2208,6 @@
       async function loadAuthUser(){
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
-        const brandUserVenue = $("brandUserVenue");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
         if (!brandUser || !brandUserName || !brandUserIcon || !brandUserFallback){
@@ -2042,24 +2243,12 @@
               brandUserIcon.classList.add("hidden");
               brandUserFallback.classList.remove("hidden");
             }
-            if (brandUserVenue){
-              try{
-                const venueResp = await jsonFetch("/admin/venues/for-user", {method:"GET"});
-                const venue = venueResp?.venue;
-                brandUserVenue.textContent = venue?.name ? `Venue: ${venue.name}` : "";
-              }catch(_e){
-                brandUserVenue.textContent = "";
-              }
-            }
           }else{
             brandUserName.textContent = "";
             brandUser.classList.add("hidden");
           }
         }catch(err){
           brandUserName.textContent = "";
-          if (brandUserVenue){
-            brandUserVenue.textContent = "";
-          }
           brandUserIcon.src = "";
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
@@ -2676,6 +2865,7 @@
         toggleClass("menuContests", "active", which === "contests");
         toggleClass("menuMedia", "active", which === "media");
         toggleClass("menuGamesList", "active", which === "gamesList");
+        toggleClass("menuGamesEvents", "active", which === "events");
         // Venues are accessed via Dashboard buttons for now.
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
@@ -2685,6 +2875,7 @@
         toggleClass("contestPanel", "hidden", which !== "contests");
         toggleClass("mediaPanel", "hidden", which !== "media");
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
+        toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
         if (which === "dashboard"){
           renderDashboardChangelog();
@@ -2704,6 +2895,9 @@
         }else if (which === "gamesList"){
           loadGamesListVenues();
           loadGamesList(true);
+        }else if (which === "events"){
+          loadEventsVenues();
+          loadEventsList(true);
         }
       }
 
@@ -2829,6 +3023,13 @@
           showPanel("gamesList");
         });
       }
+      const menuGamesEvents = $("menuGamesEvents");
+      if (menuGamesEvents){
+        menuGamesEvents.addEventListener("click", () => {
+          if (!ensureScope("event:host", "Event host scope required.") && !ensureScope("admin:web", "Admin web access required.")) return;
+          showPanel("events");
+        });
+      }
       $("menuBingoRefresh").addEventListener("click", (ev) => {
         ev.stopPropagation();
         loadGamesMenu();
@@ -2924,18 +3125,6 @@
       $("menuMedia").addEventListener("click", () => {
         showPanel("media");
       });
-      on("menuGalleryFlair", "click", () => {
-        if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
-          setStatus("Gallery access requires admin permissions.", "err");
-          return;
-        }
-        showPanel("media");
-        const label = $("mediaBulkLabel");
-        if (label){
-          label.focus();
-          label.scrollIntoView({block: "center", behavior: "smooth"});
-        }
-      });
       $("menuArtists").addEventListener("click", () => {
         if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
           setStatus("Artist access requires admin permissions.", "err");
@@ -3025,7 +3214,6 @@
       let venueCache = [];
       let venueMediaCache = [];
       let venueDeckCache = [];
-      let venueAdminCache = [];
 
       function showVenueModal(show){
         const modal = $("venueModal");
@@ -3045,23 +3233,6 @@
           .concat((venueCache || []).map(v => `<option value="${String(v.id)}">${escapeHtml(v.name || `Venue ${v.id}`)}</option>`));
         sel.innerHTML = opts.join("");
         if (cur) sel.value = cur;
-      }
-
-      function renderVenueAdminsSelect(selectedIds){
-        const sel = $("venueAdmins");
-        if (!sel) return;
-        const ids = Array.isArray(selectedIds) ? selectedIds.map(String) : [];
-        if (!venueAdminCache.length){
-          sel.innerHTML = "";
-          return;
-        }
-        const opts = (venueAdminCache || []).map(member => {
-          const id = String(member.discord_id || member.id || "");
-          const name = member.display_name || member.username || id;
-          const selected = ids.includes(id) ? "selected" : "";
-          return `<option value="${escapeHtml(id)}" ${selected}>${escapeHtml(name)} (${escapeHtml(id)})</option>`;
-        });
-        sel.innerHTML = opts.join("");
       }
 
       function renderVenueBackgroundSelect(){
@@ -3110,16 +3281,6 @@
         renderVenueDeckSelect();
       }
 
-      async function loadVenueAdmins(force = false){
-        if (venueAdminCache.length && !force) return;
-        try{
-          const data = await jsonFetch("/admin/discord/members", {method:"GET"});
-          venueAdminCache = data.members || [];
-        }catch(_e){
-          venueAdminCache = [];
-        }
-      }
-
       async function loadVenuesForModal(){
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
         try{
@@ -3137,16 +3298,21 @@
         $("venueMinBet").value = String(v?.minimal_spend ?? 0);
         $("venueBackground").value = v?.background_image || "";
         $("venueDeck").value = v?.deck_id || "";
-        const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : [];
-        renderVenueAdminsSelect(Array.isArray(ids) ? ids : []);
+        const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
+        if (Array.isArray(ids)){
+          $("venueAdmins").value = ids.join(", ");
+        }else if (typeof ids === "string"){
+          $("venueAdmins").value = ids;
+        }else{
+          $("venueAdmins").value = "";
+        }
       }
 
-      async function openVenueModal(mode){
+      function openVenueModal(mode){
         const m = mode || {};
         showVenueModal(true);
         setVenueStatus("Loading...", "");
         loadVenueDeps();
-        await loadVenueAdmins();
         loadVenuesForModal().then(() => {
           if (m.id){
             const id = Number(m.id);
@@ -3189,10 +3355,6 @@
       });
       on("venueSave", "click", async () => {
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
-        if (!authUserIsElfmin){
-          setVenueStatus("Admin role required.", "err");
-          return;
-        }
         const name = $("venueName").value.trim();
         if (!name){ setVenueStatus("Name is required.", "err"); return; }
         const currency = $("venueCurrency").value.trim();
@@ -3201,17 +3363,13 @@
         if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
         if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
         if (!deck){ setVenueStatus("Card deck must be selected.", "err"); return; }
-        const adminSelect = $("venueAdmins");
-        const adminIds = adminSelect
-          ? Array.from(adminSelect.selectedOptions || []).map(opt => opt.value).filter(Boolean)
-          : [];
         const payload = {
           name,
           currency_name: currency || null,
           minimal_spend: parseInt($("venueMinBet").value || "0", 10) || 0,
           background_image: bg || null,
           deck_id: deck || null,
-          admin_discord_ids: adminIds,
+          admin_discord_ids: $("venueAdmins").value || null,
         };
         setVenueStatus("Saving...", "");
         try{
@@ -3246,27 +3404,6 @@
         return hay.includes(q.toLowerCase());
       }
 
-      async function deleteVenueById(venueId, venueName){
-        if (!ensureScope("admin:web", "Admin web scope required.")) return;
-        if (!venueId) return;
-        const label = venueName ? `venue "${venueName}"` : "this venue";
-        if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
-        try{
-          const resp = await jsonFetch("/admin/venues/delete", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({venue_id: venueId})
-          });
-          if (!resp.ok){
-            throw new Error(resp.error || "Delete failed");
-          }
-          showToast("Venue deleted.", "ok");
-          await loadVenuesPanel(true);
-        }catch(err){
-          showToast(err.message || "Unable to delete venue.", "err");
-        }
-      }
-
       function renderVenuesPanel(){
         const body = $("venuesListBody");
         if (!body) return;
@@ -3278,52 +3415,36 @@
         }
         body.innerHTML = `
           <table class="tight-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Currency</th>
-                  <th>Min bet</th>
-                  <th>Deck</th>
-                  <th>Background</th>
-                  <th>Admins</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.map(v => {
-                  const ids = (v.metadata && Array.isArray(v.metadata.admin_discord_ids)) ? v.metadata.admin_discord_ids : [];
-                  return `
-                    <tr class="venue-row" data-venue-id="${escapeHtml(String(v.id))}">
-                      <td><strong>${escapeHtml(v.name || "-")}</strong><div class="muted" style="font-size:12px;">#${escapeHtml(String(v.id))}</div></td>
-                      <td>${escapeHtml(v.currency_name || "-")}</td>
-                      <td>${escapeHtml(String(v.minimal_spend ?? 0))}</td>
-                      <td>${escapeHtml(v.deck_id || "-")}</td>
-                      <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.background_image || "-")}</td>
-                      <td class="muted">${ids.length ? escapeHtml(ids.join(", ")) : "-"}</td>
-                      <td>
-                        <div class="venue-actions">
-                          <button class="venue-action-btn danger venue-delete" data-venue-id="${escapeHtml(String(v.id))}" data-venue-name="${escapeHtml(v.name || "")}" title="Delete venue" aria-label="Delete venue">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>`;
-                }).join("")}
-              </tbody>
-            </table>
-          `;
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Currency</th>
+                <th>Min bet</th>
+                <th>Deck</th>
+                <th>Background</th>
+                <th>Admins</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(v => {
+                const ids = (v.metadata && Array.isArray(v.metadata.admin_discord_ids)) ? v.metadata.admin_discord_ids : [];
+                return `
+                  <tr class="venue-row" data-venue-id="${escapeHtml(String(v.id))}">
+                    <td><strong>${escapeHtml(v.name || "-")}</strong><div class="muted" style="font-size:12px;">#${escapeHtml(String(v.id))}</div></td>
+                    <td>${escapeHtml(v.currency_name || "-")}</td>
+                    <td>${escapeHtml(String(v.minimal_spend ?? 0))}</td>
+                    <td>${escapeHtml(v.deck_id || "-")}</td>
+                    <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.background_image || "-")}</td>
+                    <td class="muted">${ids.length ? escapeHtml(ids.join(", ")) : "-"}</td>
+                  </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        `;
         body.querySelectorAll(".venue-row").forEach(tr => {
           tr.addEventListener("click", () => {
             const id = Number(tr.getAttribute("data-venue-id"));
             openVenueModal({id});
-          });
-        });
-        body.querySelectorAll(".venue-delete").forEach(btn => {
-          btn.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            const id = Number(btn.getAttribute("data-venue-id") || "0");
-            const name = btn.getAttribute("data-venue-name") || "";
-            deleteVenueById(id, name);
           });
         });
       }
@@ -3350,6 +3471,37 @@
       on("venuesFilterQuery", "input", () => {
         venuesPanelState.q = $("venuesFilterQuery").value || "";
         renderVenuesPanel();
+      });
+
+      // Events panel controls
+      on("eventsRefresh", "click", () => {
+        loadEventsVenues(true);
+        loadEventsList(true);
+      });
+      on("eventsAdd", "click", () => openEventModal({}));
+      on("eventsFilterQuery", "keydown", (ev) => {
+        if (ev.key === "Enter"){
+          ev.preventDefault();
+          loadEventsList(true);
+        }
+      });
+      on("eventsFilterVenue", "change", () => loadEventsList(true));
+      on("eventsFilterEnded", "change", () => loadEventsList(true));
+      on("eventModalClose", "click", () => $("eventModal")?.classList.remove("show"));
+      on("eventModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "eventModal"){
+          ev.currentTarget.classList.remove("show");
+        }
+      });
+      on("eventSave", "click", () => saveEventModal());
+      on("eventEnd", "click", () => endEventModal());
+      on("eventCopyJoin", "click", () => {
+        const modal = $("eventModal");
+        const code = modal?.dataset?.event_code || "";
+        if (!code) return;
+        const base = (window.location.origin || "").replace(/\/$/, "");
+        const joinUrl = `${base}/events/${code}`;
+        copyToClipboard(joinUrl);
       });
 
       on("dashboardChangelogToggle", "click", () => {
@@ -3410,25 +3562,24 @@
           loadGamesList(true);
         });
       });
-      on("contestRefresh", "click", () => loadContestManagement());
-      on("contestChannelRefresh", "click", () => loadContestChannels());
-      on("contestCreate", "click", () => createContest());
-      on("contestEmojiSelect", "change", () => updateContestChannelPreview());
-      on("contestChannelName", "input", () => updateContestChannelPreview());
-      on("contestCreateChannelOpen", "click", () => {
-        $("contestChannelModal")?.classList.add("show");
+      $("contestRefresh").addEventListener("click", () => loadContestManagement());
+      $("contestChannelRefresh").addEventListener("click", () => loadContestChannels());
+      $("contestCreate").addEventListener("click", () => createContest());
+      $("contestEmojiSelect").addEventListener("change", () => updateContestChannelPreview());
+      $("contestChannelName").addEventListener("input", () => updateContestChannelPreview());
+      $("contestCreateChannelOpen").addEventListener("click", () => {
+        $("contestChannelModal").classList.add("show");
         loadContestChannels();
       });
-      on("contestChannelClose", "click", () => {
-        $("contestChannelModal")?.classList.remove("show");
+      $("contestChannelClose").addEventListener("click", () => {
+        $("contestChannelModal").classList.remove("show");
       });
-      on("contestChannelModal", "click", (event) => {
-        const modal = $("contestChannelModal");
-        if (modal && event.target === modal){
-          modal.classList.remove("show");
+      $("contestChannelModal").addEventListener("click", (event) => {
+        if (event.target === $("contestChannelModal")){
+          $("contestChannelModal").classList.remove("show");
         }
       });
-      on("contestPanel", "click", (event) => {
+      $("contestPanel").addEventListener("click", (event) => {
         const btn = event.target.closest(".contest-init");
         if (!btn) return;
         const channelId = btn.dataset.channel || "";
@@ -3437,18 +3588,18 @@
           setContestCreateStatus("Channel selected. Fill out details and create.", "ok");
         }
       });
-      on("tarotClaimsRefresh", "click", () => {
+      $("tarotClaimsRefresh").addEventListener("click", () => {
         loadTarotClaimsDecks();
         loadTarotClaimsChannels();
       });
-      on("tarotClaimsPost", "click", () => postTarotClaims());
-      on("contestChannelCreate", "click", async () => {
+      $("tarotClaimsPost").addEventListener("click", () => postTarotClaims());
+      $("contestChannelCreate").addEventListener("click", async () => {
         try{
           const channelId = await createContestChannel();
           if (channelId){
             $("contestChannel").value = channelId;
           }
-          $("contestChannelModal")?.classList.remove("show");
+          $("contestChannelModal").classList.remove("show");
           await loadContestManagement();
         }catch(err){
           // status already handled
@@ -6871,3 +7022,6 @@
         initAuthenticatedSession();
       }
       renderCard(null, [], "BING");
+
+
+

@@ -72,18 +72,11 @@
     const gamesContainer = document.getElementById("gamesContainer");
     const claimsContainer = document.getElementById("claimsContainer");
     const errorMessage = document.getElementById("errorMessage");
-    const API_KEY_KEY = "bt_api_key";
-
-    function getAuthHeaders(){
-      const token = window.localStorage.getItem(API_KEY_KEY);
-      if(!token) return {};
-      return {"X-API-Key": token};
-    }
 
     async function loadGames(){
       errorMessage.textContent = "Loading...";
       try{
-        const res = await fetch("/user-area/manage/games", {headers:getAuthHeaders()});
+        const res = await fetch("/user-area/manage/games");
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load games");
@@ -99,7 +92,7 @@
 
     async function loadClaims(){
       try{
-        const res = await fetch("/user-area/manage/claims?limit=2000", {headers:getAuthHeaders()});
+        const res = await fetch("/user-area/manage/claims?limit=2000");
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load claims");

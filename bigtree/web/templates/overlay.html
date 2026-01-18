@@ -91,10 +91,6 @@
         color: rgba(231, 242, 234, .7);
         font-size: 0.85rem;
       }
-      .dashboard-admin-note code {
-        white-space: normal;
-        overflow-wrap: anywhere;
-      }
       .dashboard-logs {
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 14px;
@@ -111,12 +107,12 @@
       }
       .dashboard-logs-actions {
         display: flex;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 8px;
       }
       .dashboard-logs-tabs{
         display:flex;
-        flex-wrap:nowrap;
+        flex-wrap:wrap;
         gap:8px;
         align-items:center;
       }
@@ -245,10 +241,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
                 <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
               </svg>
-              <span class="brand-user-labels">
-                <span id="brandUserName"></span>
-                <span class="brand-user-meta" id="brandUserVenue"></span>
-              </span>
+              <span id="brandUserName"></span>
             </div>
           </div>
 
@@ -295,6 +288,7 @@
           <div class="nav-block">
             <div class="nav-title">Games</div>
             <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">List</span></div>
+            <div class="menu-item" id="menuGamesEvents" tabindex="0"><span class="menu-label">Events</span></div>
           </div>
 
 
@@ -375,7 +369,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
                 </svg>
-                <div class="dashboard-admin-title">Gallery</div>
+                <div class="dashboard-admin-title">Media management</div>
               </div>
               <div class="dashboard-admin-actions">
                 <button type="button" id="menuMedia">
@@ -387,11 +381,8 @@
                 <button type="button" id="menuCalendar">
                   <span>Calendar</span>
                 </button>
-                <button type="button" id="menuGalleryFlair">
-                  <span>Flair text</span>
-                </button>
               </div>
-              <p class="dashboard-admin-note">Uploads, flair labels, and calendar highlights.</p>
+              <p class="dashboard-admin-note">Uploads, artist records, and calendar highlights.</p>
             </div>
             <div class="dashboard-admin-card">
               <div class="dashboard-admin-header">
@@ -429,20 +420,6 @@
                 </button>
               </div>
               <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
-            </div>
-            <div class="dashboard-admin-card">
-              <div class="dashboard-admin-header">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 3h7v4h-7v-4z"/>
-                </svg>
-                <div class="dashboard-admin-title">FFXIV plugin setup</div>
-              </div>
-              <div class="dashboard-admin-actions">
-                <a class="dashboard-admin-link" href="/with.leaf" target="_blank" rel="noreferrer">
-                  <span>Open with.leaf</span>
-                </a>
-              </div>
-              <p class="dashboard-admin-note">In XIVLauncher: Settings → Dalamud → Experimental → Custom Plugin Repositories. Add <code>https://rites.thebigtree.life/with.leaf</code>.</p>
             </div>
           </div>
           <div class="dashboard-logs" id="dashboardLogsWrap">
@@ -519,6 +496,32 @@
                 <button class="btn-ghost" id="gamesNext" type="button">Next</button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="panel hidden" style="animation-delay:.032s" id="eventsPanel">
+          <h2>Events</h2>
+          <p class="muted">Create game events that players can join with XIVAuth. Events can be hosted by a venue and optionally use a dedicated wallet currency.</p>
+          <div class="dash-section-body">
+            <div class="row events-toolbar">
+              <label class="events-search">
+                Search
+                <input id="eventsFilterQuery" placeholder="event code or title..." />
+              </label>
+              <label style="min-width:220px;">
+                Venue
+                <select id="eventsFilterVenue"><option value="">All venues</option></select>
+              </label>
+              <label class="games-filter games-filter--checkbox" style="min-width:170px;">
+                <span style="display:block; margin-bottom:6px;">Include ended</span>
+                <input id="eventsFilterEnded" type="checkbox" checked style="transform:translateY(2px);" />
+              </label>
+              <button class="btn-ghost" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+              </button>
+              <button id="eventsAdd" type="button">Add event</button>
+            </div>
+            <div class="dashboard-logs-body" id="eventsListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
         </section>
 
@@ -1552,11 +1555,55 @@
         <div class="row">
           <div>
             <label for="venueAdmins">Admin Discord IDs</label>
-            <select id="venueAdmins" multiple size="6"></select>
-            <div class="muted" style="font-size:12px;margin-top:6px;">Select admins to auto-attach new games to this venue when created_by matches.</div>
+            <input id="venueAdmins" placeholder="comma-separated (e.g. 123,456)">
+            <div class="muted" style="font-size:12px;margin-top:6px;">Used to auto-attach new games to this venue when created_by matches.</div>
           </div>
         </div>
         <div class="status" id="venueStatus">Ready.</div>
+      </div>
+    </div>
+
+    <div class="modal" id="eventModal">
+      <div class="modal-content" style="max-width:720px;">
+        <div class="modal-header">
+          <div class="modal-title" id="eventModalTitle">Event</div>
+          <button class="modal-close" id="eventModalClose" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12.01l-6.3-6.3-1.41 1.41 6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <label>
+              Title
+              <input id="eventTitle" placeholder="e.g. Friday bingo night" />
+            </label>
+            <label>
+              Venue
+              <select id="eventVenue"><option value="">None</option></select>
+            </label>
+            <label>
+              Currency name (optional)
+              <input id="eventCurrency" placeholder="e.g. Leaves" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:6px;">
+              <span>Wallet enabled</span>
+              <input id="eventWalletEnabled" type="checkbox" />
+            </label>
+          </div>
+
+          <div class="status" id="eventJoinInfo" style="margin-top:10px;">Create the event to get a join link.</div>
+
+          <div class="row" style="justify-content:space-between; margin-top:12px; flex-wrap:wrap; gap:10px;">
+            <button class="btn-ghost danger-btn" id="eventEnd" type="button" style="display:none;">End event</button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn-ghost" id="eventCopyJoin" type="button" style="display:none;">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 18H8V7h11v16z"/></svg>
+                <span>Copy join link</span>
+              </button>
+              <button id="eventSave" type="button">Save</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2179,3 +2226,8 @@
     </script>
   </body>
 </html>
+
+
+
+
+

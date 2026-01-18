@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Forest Event</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/gallery/gallery.css">
+  <style>
+    body{
+      margin:0;
+      font-family:"Spectral","Georgia",serif;
+      background:linear-gradient(180deg,#07100c,#030906);
+      color:#e7f2ea;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+    }
+    .card{
+      width:min(760px, 100%);
+      background:rgba(12,18,15,.92);
+      border:1px solid rgba(214,178,110,.18);
+      border-radius:18px;
+      padding:22px;
+      box-shadow:0 18px 50px rgba(0,0,0,.45);
+    }
+    h1{margin:0 0 6px 0;font-size:28px;}
+    .muted{opacity:.8}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px;}
+    button,a.btn{
+      display:inline-flex; align-items:center; gap:10px;
+      padding:10px 14px; border-radius:12px;
+      border:1px solid rgba(214,178,110,.25);
+      background:rgba(255,255,255,.04);
+      color:#e7f2ea; text-decoration:none;
+      cursor:pointer;
+    }
+    button:hover,a.btn:hover{background:rgba(255,255,255,.07)}
+    code{background:rgba(0,0,0,.35); padding:2px 6px; border-radius:8px}
+    .status{margin-top:12px; padding:12px 14px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(231,242,234,.10)}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="eventTitle">Forest Event</h1>
+    <div class="muted" id="eventMeta">Loading event <code>{{ event_code }}</code>…</div>
+
+    <div class="status" id="eventStatus">Loading…</div>
+
+    <div class="row">
+      <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
+      <button id="joinBtn" type="button">Join event</button>
+    </div>
+
+    <div class="muted" style="margin-top:12px; font-size:13px;">
+      Tip: if you just logged in, come back here and press “Join event”.
+    </div>
+  </div>
+
+  <script>
+    const EVENT_CODE = {{ event_code | tojson }};
+
+    async function jsonFetch(url, opts){
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: {"Content-Type":"application/json"},
+        ...opts,
+      });
+      const text = await res.text();
+      let data;
+      try{ data = JSON.parse(text); }catch(e){ data = {ok:false, error:text || res.statusText}; }
+      if (!res.ok && data && data.ok === undefined) data.ok = false;
+      return data;
+    }
+
+    function setStatus(msg){
+      const el = document.getElementById("eventStatus");
+      if (el) el.textContent = msg;
+    }
+
+    async function load(){
+      try{
+        const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}`, {method:"GET"});
+        if (!data.ok) throw new Error(data.error || "event not found");
+        const ev = data.event || {};
+        document.getElementById("eventTitle").textContent = ev.title ? ev.title : `Event ${ev.event_code}`;
+        const meta = [];
+        if (ev.venue_name) meta.push(`Venue: ${ev.venue_name}`);
+        if (ev.currency_name) meta.push(`Currency: ${ev.currency_name}`);
+        if (ev.wallet_enabled) meta.push("Wallet enabled");
+        meta.push(`Status: ${ev.status || "active"}`);
+        document.getElementById("eventMeta").textContent = meta.join(" · ");
+
+        if (data.requires_login){
+          setStatus("Please login first (XIVAuth) using the Wallet button, then come back and join.");
+          document.getElementById("joinBtn").disabled = false;
+        }else if (data.joined){
+          let msg = "You are already joined.";
+          if (ev.wallet_enabled && data.wallet_balance !== null && data.wallet_balance !== undefined){
+            msg += ` Wallet balance: ${data.wallet_balance}`;
+          }
+          setStatus(msg);
+          document.getElementById("joinBtn").textContent = "Joined";
+          document.getElementById("joinBtn").disabled = true;
+        }else if ((ev.status || "") === "ended"){
+          setStatus("This event has ended. You can no longer join.");
+          document.getElementById("joinBtn").disabled = true;
+        }else{
+          setStatus("Ready to join.");
+          document.getElementById("joinBtn").disabled = false;
+        }
+      }catch(err){
+        setStatus(err.message || "Unable to load event.");
+      }
+    }
+
+    document.getElementById("joinBtn").addEventListener("click", async () => {
+      try{
+        setStatus("Joining...");
+        const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/join`, {method:"POST", body:"{}"});
+        if (!data.ok) throw new Error(data.error || "unable to join");
+        await load();
+      }catch(err){
+        setStatus(err.message || "Unable to join.");
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

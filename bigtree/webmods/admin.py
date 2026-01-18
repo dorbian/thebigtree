@@ -13,6 +13,7 @@ from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
 from bigtree.inc.settings import load_settings
 from bigtree.inc.database import get_database
+from bigtree.inc.jsonutil import to_jsonable
 from pathlib import Path
 from bigtree.inc.logging import logger, auth_logger, upload_logger, log_path, auth_log_path, upload_log_path
 import discord
@@ -478,19 +479,45 @@ async def admin_overlay_stats(_req: web.Request):
     return web.json_response({"ok": True, "stats": stats})
 
 
-@route("GET", "/admin/discord/members", scopes=["admin:web"])
-async def admin_discord_members(req: web.Request) -> web.Response:
-    db = get_database()
+@route("GET", "/admin/discord/members", scopes=["admin:web", "event:host", "venue:host"])
+async def admin_discord_members(_req: web.Request) -> web.Response:
+    """List discord members for host selection in the dashboard.
+
+    We keep the payload intentionally small and JSON-safe (join times are ISO).
+    """
+    members = []
     try:
-        limit = int(req.query.get("limit") or 2000)
+        bot = getattr(bigtree, "bot", None)
+        guilds = (getattr(bot, "guilds", None) or []) if bot else []
+        # Prefer the first guild if multiple are connected.
+        guild = guilds[0] if guilds else None
+        if guild:
+            # Ensure cache is populated when privileged intents are enabled.
+            try:
+                # Discord.py: guild.members exists if member cache is available.
+                iter_members = list(getattr(guild, "members", []) or [])
+            except Exception:
+                iter_members = []
+            for m in iter_members:
+                try:
+                    members.append(
+                        {
+                            "id": int(getattr(m, "id", 0) or 0),
+                            "name": str(getattr(m, "name", "") or ""),
+                            "display_name": str(getattr(m, "display_name", "") or ""),
+                            "global_name": str(getattr(m, "global_name", "") or ""),
+                            "joined_at": getattr(m, "joined_at", None),
+                            "bot": bool(getattr(m, "bot", False)),
+                        }
+                    )
+                except Exception:
+                    continue
     except Exception:
-        limit = 2000
-    if limit < 1:
-        limit = 1
-    if limit > 5000:
-        limit = 5000
-    members = db.list_discord_users(limit=limit)
-    return web.json_response({"ok": True, "members": members})
+        members = []
+
+    # Sort by display name for convenient selection.
+    members.sort(key=lambda x: (str(x.get("display_name") or x.get("name") or "").lower(), int(x.get("id") or 0)))
+    return web.json_response({"ok": True, "members": to_jsonable(members)})
 
 
 @route("GET", "/admin/games/list", scopes=["admin:web"])

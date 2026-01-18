@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import string
 import sqlite3
 import threading
 import time
@@ -195,6 +196,42 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS events (
+                id SERIAL PRIMARY KEY,
+                event_code TEXT UNIQUE NOT NULL,
+                title TEXT,
+                venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                currency_name TEXT,
+                wallet_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_by BIGINT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TIMESTAMPTZ
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS event_players (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role TEXT NOT NULL DEFAULT 'player',
+                metadata JSONB DEFAULT '{}'::jsonb,
+                joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event_id, user_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS event_wallets (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                balance BIGINT NOT NULL DEFAULT 0,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event_id, user_id)
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS venue_members (
                 id SERIAL PRIMARY KEY,
                 venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
@@ -248,15 +285,6 @@ class Database:
             )
             """,
             """
-            CREATE TABLE IF NOT EXISTS discord_users (
-                discord_id BIGINT PRIMARY KEY,
-                username TEXT,
-                display_name TEXT,
-                avatar_url TEXT,
-                last_seen TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
             CREATE TABLE IF NOT EXISTS system_configs (
                 name TEXT PRIMARY KEY,
                 data JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -272,6 +300,7 @@ class Database:
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
             self._ensure_column(conn, "games", "venue_id", "INTEGER")
+            self._ensure_column(conn, "games", "event_id", "INTEGER")
             self._ensure_column(conn, "venues", "deck_id", "TEXT")
         logger.debug("[database] schema ready")
 
@@ -378,38 +407,6 @@ class Database:
         WHERE s.token = %s AND s.expires_at > CURRENT_TIMESTAMP
         """
         return self._fetchone(sql, (token,))
-
-    def upsert_discord_user(
-        self,
-        discord_id: int,
-        username: Optional[str] = None,
-        display_name: Optional[str] = None,
-        avatar_url: Optional[str] = None,
-    ) -> bool:
-        if not discord_id:
-            return False
-        self._execute(
-            """
-            INSERT INTO discord_users (discord_id, username, display_name, avatar_url, last_seen)
-            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (discord_id) DO UPDATE
-              SET username = COALESCE(EXCLUDED.username, discord_users.username),
-                  display_name = COALESCE(EXCLUDED.display_name, discord_users.display_name),
-                  avatar_url = COALESCE(EXCLUDED.avatar_url, discord_users.avatar_url),
-                  last_seen = CURRENT_TIMESTAMP
-            """,
-            (int(discord_id), username, display_name, avatar_url),
-        )
-        return True
-
-    def list_discord_users(self, limit: int = 2000) -> List[Dict[str, Any]]:
-        sql = """
-        SELECT discord_id, username, display_name, avatar_url, last_seen
-        FROM discord_users
-        ORDER BY COALESCE(display_name, username) ASC NULLS LAST
-        LIMIT %s
-        """
-        return self._execute(sql, (int(limit),), fetch=True) or []
 
     def link_user_to_matches(self, user_id: int, name: str):
         if not name:
@@ -546,11 +543,6 @@ class Database:
         page_size: int = 50,
     ) -> Dict[str, Any]:
         """List games with basic filtering and pagination (admin dashboard)."""
-        if self._count_rows("games") == 0:
-            try:
-                self._migrate_json_backups()
-            except Exception:
-                pass
         try:
             page = int(page)
         except Exception:
@@ -744,13 +736,182 @@ class Database:
         )
         return bool(count)
 
-    def delete_venue(self, venue_id: int) -> bool:
-        if not venue_id:
+    # ---------------- events ----------------
+
+    def _generate_event_code(self, length: int = 8) -> str:
+        alphabet = string.ascii_lowercase + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(length))
+
+    def create_event(
+        self,
+        *,
+        title: Optional[str],
+        venue_id: Optional[int] = None,
+        currency_name: Optional[str] = None,
+        wallet_enabled: bool = False,
+        created_by: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        metadata = metadata or {}
+        # Make a few attempts at generating a unique code.
+        for _ in range(10):
+            code = self._generate_event_code(8)
+            row = self._fetchone(
+                """
+                INSERT INTO events (event_code, title, venue_id, currency_name, wallet_enabled, metadata, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (event_code) DO NOTHING
+                RETURNING id, event_code, title, venue_id, status, currency_name, wallet_enabled, metadata, created_by, created_at, ended_at
+                """,
+                (code, title, venue_id, currency_name, bool(wallet_enabled), Json(metadata), created_by),
+            )
+            if row:
+                return self._json_safe_dict(dict(row))
+        return None
+
+    def upsert_event(
+        self,
+        *,
+        event_id: Optional[int] = None,
+        event_code: Optional[str] = None,
+        title: Optional[str] = None,
+        venue_id: Optional[int] = None,
+        currency_name: Optional[str] = None,
+        wallet_enabled: Optional[bool] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        metadata = metadata or {}
+        if event_id:
+            row = self._fetchone(
+                """
+                UPDATE events
+                SET title = COALESCE(%s, title),
+                    venue_id = COALESCE(%s, venue_id),
+                    currency_name = COALESCE(%s, currency_name),
+                    wallet_enabled = COALESCE(%s, wallet_enabled),
+                    metadata = events.metadata || %s
+                WHERE id = %s
+                RETURNING id, event_code, title, venue_id, status, currency_name, wallet_enabled, metadata, created_by, created_at, ended_at
+                """,
+                (title, venue_id, currency_name, wallet_enabled, Json(metadata), int(event_id)),
+            )
+            return self._json_safe_dict(dict(row)) if row else None
+        if event_code:
+            row = self._fetchone(
+                """
+                UPDATE events
+                SET title = COALESCE(%s, title),
+                    venue_id = COALESCE(%s, venue_id),
+                    currency_name = COALESCE(%s, currency_name),
+                    wallet_enabled = COALESCE(%s, wallet_enabled),
+                    metadata = events.metadata || %s
+                WHERE lower(event_code) = lower(%s)
+                RETURNING id, event_code, title, venue_id, status, currency_name, wallet_enabled, metadata, created_by, created_at, ended_at
+                """,
+                (title, venue_id, currency_name, wallet_enabled, Json(metadata), event_code),
+            )
+            return self._json_safe_dict(dict(row)) if row else None
+        # Create new if neither id nor code is provided.
+        return self.create_event(
+            title=title,
+            venue_id=venue_id,
+            currency_name=currency_name,
+            wallet_enabled=bool(wallet_enabled),
+            created_by=None,
+            metadata=metadata,
+        )
+
+    def list_events(
+        self,
+        *,
+        q: Optional[str] = None,
+        venue_id: Optional[int] = None,
+        include_ended: bool = True,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        params: List[Any] = []
+        where = []
+        if q:
+            where.append("(lower(e.event_code) LIKE lower(%s) OR lower(e.title) LIKE lower(%s))")
+            params.extend([f"%{q}%", f"%{q}%"])
+        if venue_id:
+            where.append("e.venue_id = %s")
+            params.append(int(venue_id))
+        if not include_ended:
+            where.append("e.status = 'active'")
+
+        sql = """
+        SELECT e.id, e.event_code, e.title, e.venue_id, e.status, e.currency_name, e.wallet_enabled,
+               e.metadata, e.created_by, e.created_at, e.ended_at,
+               v.name AS venue_name
+        FROM events e
+        LEFT JOIN venues v ON v.id = e.venue_id
+        """
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY e.created_at DESC LIMIT %s"
+        params.append(int(limit))
+        rows = self._execute(sql, tuple(params), fetch=True) or []
+        return [self._json_safe_dict(dict(r)) for r in rows]
+
+    def get_event_by_code(self, event_code: str) -> Optional[Dict[str, Any]]:
+        code = (event_code or "").strip()
+        if not code:
+            return None
+        row = self._fetchone(
+            """
+            SELECT e.id, e.event_code, e.title, e.venue_id, e.status, e.currency_name, e.wallet_enabled,
+                   e.metadata, e.created_by, e.created_at, e.ended_at,
+                   v.name AS venue_name
+            FROM events e
+            LEFT JOIN venues v ON v.id = e.venue_id
+            WHERE lower(e.event_code) = lower(%s)
+            LIMIT 1
+            """,
+            (code,),
+        )
+        return self._json_safe_dict(dict(row)) if row else None
+
+    def end_event(self, event_id: int) -> bool:
+        if not event_id:
             return False
-        # Detach games before delete to avoid dangling venue links.
-        self._execute("UPDATE games SET venue_id = NULL WHERE venue_id = %s", (venue_id,))
-        count = self._execute("DELETE FROM venues WHERE id = %s", (venue_id,))
+        count = self._execute(
+            """
+            UPDATE events
+            SET status = 'ended',
+                ended_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND status != 'ended'
+            """,
+            (int(event_id),),
+        )
         return bool(count)
+
+    def join_event(self, event_id: int, user_id: int) -> bool:
+        if not event_id or not user_id:
+            return False
+        self._execute(
+            """
+            INSERT INTO event_players (event_id, user_id, role)
+            VALUES (%s, %s, 'player')
+            ON CONFLICT DO NOTHING
+            """,
+            (int(event_id), int(user_id)),
+        )
+        # Ensure wallet row exists for wallet-enabled events.
+        try:
+            ev = self._fetchone("SELECT wallet_enabled FROM events WHERE id = %s", (int(event_id),))
+            if ev and bool(ev.get("wallet_enabled")):
+                self._execute(
+                    """
+                    INSERT INTO event_wallets (event_id, user_id, balance)
+                    VALUES (%s, %s, 0)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (int(event_id), int(user_id)),
+                )
+        except Exception:
+            pass
+        return True
 
     def get_user_venue(self, user_id: int) -> Optional[Dict[str, Any]]:
         if not user_id:
@@ -1252,15 +1413,31 @@ class Database:
         if venue_id is None and created_by:
             venue_id = self._find_venue_for_discord_admin(int(created_by))
 
+        # Optional event link. If payload carries an event_code, attach event_id.
+        event_id = None
+        try:
+            event_code = None
+            if isinstance(payload, dict):
+                event_code = payload.get("event_code") or payload.get("eventCode") or payload.get("event")
+            if not event_code and isinstance(metadata, dict):
+                event_code = metadata.get("event_code") or metadata.get("event")
+            if event_code:
+                ev = self.get_event_by_code(str(event_code))
+                if ev and ev.get("status") != "ended":
+                    event_id = int(ev.get("id"))
+        except Exception:
+            event_id = None
+
         sql = """
-        INSERT INTO games (game_id, module, title, channel_id, created_by, venue_id, created_at, ended_at, status, active, payload, metadata, run_source)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO games (game_id, module, title, channel_id, created_by, venue_id, event_id, created_at, ended_at, status, active, payload, metadata, run_source)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (game_id) DO UPDATE
           SET module = EXCLUDED.module,
               title = COALESCE(EXCLUDED.title, games.title),
               channel_id = COALESCE(EXCLUDED.channel_id, games.channel_id),
               created_by = COALESCE(EXCLUDED.created_by, games.created_by),
               venue_id = COALESCE(EXCLUDED.venue_id, games.venue_id),
+              event_id = COALESCE(EXCLUDED.event_id, games.event_id),
               created_at = COALESCE(EXCLUDED.created_at, games.created_at),
               ended_at = COALESCE(EXCLUDED.ended_at, games.ended_at),
               status = COALESCE(EXCLUDED.status, games.status),
@@ -1278,6 +1455,7 @@ class Database:
                 channel_id,
                 created_by,
                 venue_id,
+                event_id,
                 created_at,
                 ended_at,
                 status,
@@ -1313,12 +1491,6 @@ class Database:
                 except Exception:
                     return None
         return None
-
-    def get_venue_for_discord_admin(self, discord_id: int) -> Optional[Dict[str, Any]]:
-        venue_id = self._find_venue_for_discord_admin(discord_id)
-        if not venue_id:
-            return None
-        return self.get_venue(int(venue_id))
 
     def _store_game_player(self, game_id: str, name: str, role: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         if not name:

@@ -629,9 +629,6 @@
     const title = item.title || "Untitled Offering";
     const artistLinks = artist.links || {};
     const origin = (item.origin || "").trim() || getOrigin(item);
-    const safeArtistName = escapeHtml(artistName);
-    const safeTitle = escapeHtml(title);
-    const safeOrigin = escapeHtml(origin);
     const type = getTypeBadge(item);
     const tags = getTags(item);
     const infoText = [title, artistName, origin].filter(Boolean).join(" - ");
@@ -680,7 +677,7 @@
       tags: tags
     }));
     const media = imgUrl
-      ? `<img src="${imgUrl}" alt="${safeTitle}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+      ? `<img src="${imgUrl}" alt="${title}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
     const viewButton = item.url
       ? `<button class="view-btn" data-full="${fullPayload}">View</button>`
@@ -690,15 +687,15 @@
         <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}" data-full="${fullPayload}">
           <div class="card-media">
             ${media}
-            <div class="card-watermark">${safeArtistName}</div>
+            <div class="card-watermark">${artistName}</div>
           </div>
           <div class="card-body">
-            <div class="artist-name">${safeArtistName}</div>
-            <div class="work-title">${safeTitle}</div>
-            <div class="origin">${safeOrigin}</div>
+            <div class="artist-name">${artistName}</div>
+            <div class="work-title">${title}</div>
+            <div class="origin">${origin}</div>
             ${contextRow ? `<div class="context-row">${contextRow}</div>` : ""}
             ${tags.length ? `<div class="pill-row">${tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-            <a class="artist-link" href="#" data-artist="${artistPayload}">Offered by ${safeArtistName}</a>
+            <a class="artist-link" href="#" data-artist="${artistPayload}">Offered by ${artistName}</a>
             <div class="reaction-row">${reactionRow}</div>
             <div class="card-actions">
               ${viewButton}

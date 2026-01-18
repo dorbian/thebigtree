@@ -6,17 +6,9 @@ from aiohttp import web
 import bigtree
 from bigtree.inc.webserver import route, DynamicWebServer
 from bigtree.inc.database import get_database
-from bigtree.inc import web_tokens
 
 # Reuse the user resolver from user_area (Bearer user token)
 from bigtree.webmods.user_area import _resolve_user
-
-
-def _extract_web_token(req: web.Request) -> str:
-    auth = req.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-API-Key") or req.headers.get("X-Bigtree-Key") or ""
 
 
 @route("GET", "/venues", allow_public=True)
@@ -196,27 +188,6 @@ async def admin_venues_upsert(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "venue": venue})
 
 
-@route("POST", "/admin/venues/delete", scopes=["admin:web"])
-async def admin_venues_delete(req: web.Request) -> web.Response:
-    try:
-        body = await req.json()
-    except Exception:
-        body = {}
-    try:
-        venue_id = int(body.get("venue_id") or 0)
-    except Exception:
-        venue_id = 0
-    if not venue_id:
-        return web.json_response({"ok": False, "error": "venue_id required"}, status=400)
-    db = get_database()
-    if not db.get_venue(venue_id):
-        return web.json_response({"ok": False, "error": "venue not found"}, status=404)
-    ok = db.delete_venue(venue_id)
-    if not ok:
-        return web.json_response({"ok": False, "error": "delete failed"}, status=500)
-    return web.json_response({"ok": True, "venue_id": venue_id})
-
-
 @route("POST", "/admin/venues/assign-admin", scopes=["admin:web"])
 async def admin_venues_assign_admin(req: web.Request) -> web.Response:
     try:
@@ -239,15 +210,3 @@ async def admin_venues_assign_admin(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "user not found"}, status=404)
     db.set_user_venue_role(int(user_id), venue_id, role="admin")
     return web.json_response({"ok": True})
-
-
-@route("GET", "/admin/venues/for-user", scopes=["admin:web"])
-async def admin_venues_for_user(req: web.Request) -> web.Response:
-    token = _extract_web_token(req)
-    doc = web_tokens.find_token(token) if token else None
-    user_id = doc.get("user_id") if isinstance(doc, dict) else None
-    if not user_id:
-        return web.json_response({"ok": True, "venue": None})
-    db = get_database()
-    venue = db.get_venue_for_discord_admin(int(user_id))
-    return web.json_response({"ok": True, "venue": venue})

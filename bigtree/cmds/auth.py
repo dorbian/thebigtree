@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import bigtree
-from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
 from bigtree.inc.logging import auth_logger
 
@@ -195,16 +194,6 @@ class AuthCog(commands.Cog):
                 user_name=display_name,
                 user_icon=avatar_url,
             )
-            try:
-                db = get_database()
-                db.upsert_discord_user(
-                    discord_id=member.id,
-                    username=getattr(member, "name", None),
-                    display_name=display_name,
-                    avatar_url=avatar_url,
-                )
-            except Exception:
-                pass
             auth_logger.info(
                 "[auth] issued user=%s scopes=%s",
                 member.id,
