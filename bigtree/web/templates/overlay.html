@@ -91,6 +91,10 @@
         color: rgba(231, 242, 234, .7);
         font-size: 0.85rem;
       }
+      .dashboard-admin-note code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
       .dashboard-logs {
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 14px;
@@ -107,12 +111,12 @@
       }
       .dashboard-logs-actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
       }
       .dashboard-logs-tabs{
         display:flex;
-        flex-wrap:wrap;
+        flex-wrap:nowrap;
         gap:8px;
         align-items:center;
       }
@@ -371,7 +375,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 5h16a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm0 2v10h15a0 0 0 0 0 0 0V7H4zm3 8 3-4 3 3 2-2 4 5H7z"/>
                 </svg>
-                <div class="dashboard-admin-title">Media management</div>
+                <div class="dashboard-admin-title">Gallery</div>
               </div>
               <div class="dashboard-admin-actions">
                 <button type="button" id="menuMedia">
@@ -383,8 +387,11 @@
                 <button type="button" id="menuCalendar">
                   <span>Calendar</span>
                 </button>
+                <button type="button" id="menuGalleryFlair">
+                  <span>Flair text</span>
+                </button>
               </div>
-              <p class="dashboard-admin-note">Uploads, artist records, and calendar highlights.</p>
+              <p class="dashboard-admin-note">Uploads, flair labels, and calendar highlights.</p>
             </div>
             <div class="dashboard-admin-card">
               <div class="dashboard-admin-header">

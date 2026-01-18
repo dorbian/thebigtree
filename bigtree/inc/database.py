@@ -546,6 +546,11 @@ class Database:
         page_size: int = 50,
     ) -> Dict[str, Any]:
         """List games with basic filtering and pagination (admin dashboard)."""
+        if self._count_rows("games") == 0:
+            try:
+                self._migrate_json_backups()
+            except Exception:
+                pass
         try:
             page = int(page)
         except Exception:
@@ -737,6 +742,14 @@ class Database:
             """,
             (currency_name, minimal_spend, background_image, deck_id, venue_id),
         )
+        return bool(count)
+
+    def delete_venue(self, venue_id: int) -> bool:
+        if not venue_id:
+            return False
+        # Detach games before delete to avoid dangling venue links.
+        self._execute("UPDATE games SET venue_id = NULL WHERE venue_id = %s", (venue_id,))
+        count = self._execute("DELETE FROM venues WHERE id = %s", (venue_id,))
         return bool(count)
 
     def get_user_venue(self, user_id: int) -> Optional[Dict[str, Any]]:

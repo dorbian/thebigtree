@@ -1411,6 +1411,7 @@
         const tarotDecksBtn = $("menuTarotDecks");
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
+        const galleryFlairBtn = $("menuGalleryFlair");
         if (bingoBtn) bingoBtn.classList.toggle("hidden", !canBingo);
         if (contestsBtn) contestsBtn.classList.toggle("hidden", !canAdmin);
         if (mediaBtn) mediaBtn.classList.toggle("hidden", !canMedia);
@@ -1420,6 +1421,7 @@
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (artistsBtn) artistsBtn.classList.toggle("hidden", !canGallery);
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canGallery);
+        if (galleryFlairBtn) galleryFlairBtn.classList.toggle("hidden", !canGallery);
         const systemConfigBtn = $("menuSystemConfig");
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
@@ -2922,6 +2924,18 @@
       $("menuMedia").addEventListener("click", () => {
         showPanel("media");
       });
+      on("menuGalleryFlair", "click", () => {
+        if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
+          setStatus("Gallery access requires admin permissions.", "err");
+          return;
+        }
+        showPanel("media");
+        const label = $("mediaBulkLabel");
+        if (label){
+          label.focus();
+          label.scrollIntoView({block: "center", behavior: "smooth"});
+        }
+      });
       $("menuArtists").addEventListener("click", () => {
         if (!(hasScope("tarot:admin") || hasScope("admin:web"))){
           setStatus("Artist access requires admin permissions.", "err");
@@ -3232,6 +3246,27 @@
         return hay.includes(q.toLowerCase());
       }
 
+      async function deleteVenueById(venueId, venueName){
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        if (!venueId) return;
+        const label = venueName ? `venue "${venueName}"` : "this venue";
+        if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+        try{
+          const resp = await jsonFetch("/admin/venues/delete", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({venue_id: venueId})
+          });
+          if (!resp.ok){
+            throw new Error(resp.error || "Delete failed");
+          }
+          showToast("Venue deleted.", "ok");
+          await loadVenuesPanel(true);
+        }catch(err){
+          showToast(err.message || "Unable to delete venue.", "err");
+        }
+      }
+
       function renderVenuesPanel(){
         const body = $("venuesListBody");
         if (!body) return;
@@ -3243,36 +3278,52 @@
         }
         body.innerHTML = `
           <table class="tight-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Currency</th>
-                <th>Min bet</th>
-                <th>Deck</th>
-                <th>Background</th>
-                <th>Admins</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(v => {
-                const ids = (v.metadata && Array.isArray(v.metadata.admin_discord_ids)) ? v.metadata.admin_discord_ids : [];
-                return `
-                  <tr class="venue-row" data-venue-id="${escapeHtml(String(v.id))}">
-                    <td><strong>${escapeHtml(v.name || "-")}</strong><div class="muted" style="font-size:12px;">#${escapeHtml(String(v.id))}</div></td>
-                    <td>${escapeHtml(v.currency_name || "-")}</td>
-                    <td>${escapeHtml(String(v.minimal_spend ?? 0))}</td>
-                    <td>${escapeHtml(v.deck_id || "-")}</td>
-                    <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.background_image || "-")}</td>
-                    <td class="muted">${ids.length ? escapeHtml(ids.join(", ")) : "-"}</td>
-                  </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        `;
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Currency</th>
+                  <th>Min bet</th>
+                  <th>Deck</th>
+                  <th>Background</th>
+                  <th>Admins</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map(v => {
+                  const ids = (v.metadata && Array.isArray(v.metadata.admin_discord_ids)) ? v.metadata.admin_discord_ids : [];
+                  return `
+                    <tr class="venue-row" data-venue-id="${escapeHtml(String(v.id))}">
+                      <td><strong>${escapeHtml(v.name || "-")}</strong><div class="muted" style="font-size:12px;">#${escapeHtml(String(v.id))}</div></td>
+                      <td>${escapeHtml(v.currency_name || "-")}</td>
+                      <td>${escapeHtml(String(v.minimal_spend ?? 0))}</td>
+                      <td>${escapeHtml(v.deck_id || "-")}</td>
+                      <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.background_image || "-")}</td>
+                      <td class="muted">${ids.length ? escapeHtml(ids.join(", ")) : "-"}</td>
+                      <td>
+                        <div class="venue-actions">
+                          <button class="venue-action-btn danger venue-delete" data-venue-id="${escapeHtml(String(v.id))}" data-venue-name="${escapeHtml(v.name || "")}" title="Delete venue" aria-label="Delete venue">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          `;
         body.querySelectorAll(".venue-row").forEach(tr => {
           tr.addEventListener("click", () => {
             const id = Number(tr.getAttribute("data-venue-id"));
             openVenueModal({id});
+          });
+        });
+        body.querySelectorAll(".venue-delete").forEach(btn => {
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const id = Number(btn.getAttribute("data-venue-id") || "0");
+            const name = btn.getAttribute("data-venue-name") || "";
+            deleteVenueById(id, name);
           });
         });
       }

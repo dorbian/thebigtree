@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Gallery: escape origin/title/artist fields so flair text renders as text.
+- Dashboard: add Gallery admin card with media/calendar/flair actions.
+- Venues: add delete controls in the admin list and normalize refresh button size.
+- Games list: auto-trigger JSON migration when empty to repopulate.
+- Wallet: remove join-key label and align user pill sizing with header actions.
 - Overlay: add venue name under host name and show plugin setup instructions.
 - Overlay: venue admin list now uses stored Discord users with name-sorted selection.
 - User-area manage: include API key when loading claims/games.

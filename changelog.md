@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Gallery: escape origin/title/artist fields so flair text renders as text.
+- Dashboard: add Gallery admin card with media/calendar/flair actions.
+- Venues: add delete controls in the admin list and normalize refresh button size.
+- Games list: auto-trigger JSON migration when empty to repopulate.
+- Wallet: remove join-key label and align user pill sizing with header actions.
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
 - Backend: persist XIVAuth/OpenAI config in Postgres, import the INI defaults on first run, and expose a management API plus overlay UI to edit those settings.
 - Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.

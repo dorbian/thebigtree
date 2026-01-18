@@ -196,6 +196,27 @@ async def admin_venues_upsert(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "venue": venue})
 
 
+@route("POST", "/admin/venues/delete", scopes=["admin:web"])
+async def admin_venues_delete(req: web.Request) -> web.Response:
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        venue_id = int(body.get("venue_id") or 0)
+    except Exception:
+        venue_id = 0
+    if not venue_id:
+        return web.json_response({"ok": False, "error": "venue_id required"}, status=400)
+    db = get_database()
+    if not db.get_venue(venue_id):
+        return web.json_response({"ok": False, "error": "venue not found"}, status=404)
+    ok = db.delete_venue(venue_id)
+    if not ok:
+        return web.json_response({"ok": False, "error": "delete failed"}, status=500)
+    return web.json_response({"ok": True, "venue_id": venue_id})
+
+
 @route("POST", "/admin/venues/assign-admin", scopes=["admin:web"])
 async def admin_venues_assign_admin(req: web.Request) -> web.Response:
     try:

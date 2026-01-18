@@ -2250,6 +2250,14 @@
       .tight-table{width:100%;border-collapse:collapse;font-size:13px}
       .tight-table th,.tight-table td{padding:8px 10px;border-bottom:1px solid rgba(231,242,234,.10);vertical-align:top}
       .tight-table th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(231,242,234,.65)}
+      #venuesRefresh.btn-ghost{width:34px;height:34px;padding:0;border-radius:10px;}
+      #venuesRefresh.btn-ghost svg{width:16px;height:16px;fill:currentColor;}
+      .venue-actions{display:flex;gap:6px;justify-content:flex-end;align-items:center;}
+      .venue-action-btn{width:30px;height:30px;padding:0;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);background:transparent;color:var(--muted);cursor:pointer;}
+      .venue-action-btn:hover{color:var(--ink);border-color:rgba(255,255,255,.3);}
+      .venue-action-btn svg{width:14px;height:14px;fill:currentColor;}
+      .venue-action-btn.danger{border-color:rgba(210,92,92,.45);color:#f1b1b1;}
+      .venue-action-btn.danger:hover{border-color:rgba(210,92,92,.75);color:#ffd6d6;}
       .venue-row{cursor:pointer}
       .venue-row:hover{background:rgba(255,255,255,.03)}
       @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
