@@ -20,7 +20,7 @@ except Exception:
     import logging
     logger = logging.getLogger("bigtree")
 
-GAMES = {"blackjack", "poker", "highlow"}
+GAMES = {"blackjack", "poker", "highlow", "slots", "crapslite"}
 _DB_PATH: Optional[str] = None
 _DB_READY = False
 _DB_CONFIGURED = False
@@ -727,6 +727,24 @@ def _init_state(game_id: str, deck_id: Optional[str]) -> Dict[str, Any]:
         return _init_poker_state(deck_id)
     if game_id == "highlow":
         return _init_highlow_state(deck_id)
+    if game_id == "slots":
+        return {
+            "status": "created",
+            "spins": 0,
+            "total_won": 0,
+            "bet": 0,
+            "last_spin": None,
+        }
+    if game_id == "crapslite":
+        return {
+            "status": "created",
+            "round": 0,
+            "betting_open": False,
+            # token -> {user_id, name, bets: [{amount, ts}], total_bet, total_payout}
+            "players": {},
+            "last_roll": None,
+            "last_resolution": None,
+        }
     raise ValueError("invalid game")
 
 def _start_game(game_id: str, state: Dict[str, Any]) -> None:
@@ -736,6 +754,8 @@ def _start_game(game_id: str, state: Dict[str, Any]) -> None:
         _start_poker(state)
     elif game_id == "highlow":
         _start_highlow(state)
+    elif game_id in ("slots", "crapslite"):
+        state["status"] = "live"
 
 def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
     if game_id == "blackjack":
@@ -749,6 +769,95 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
         else:
             choice = str(action or "")
         return _apply_highlow_action(state, choice)
+    if game_id == "slots":
+        action = str(action or "").strip().lower()
+        if state.get("status") != "live":
+            return state, "not active"
+        if action not in ("spin",):
+            return state, "invalid action"
+        # Bet can be supplied per spin; otherwise use state bet.
+        bet = 0
+        try:
+            bet = int(payload.get("bet") or payload.get("amount") or state.get("bet") or 0)
+        except Exception:
+            bet = int(state.get("bet") or 0)
+        if bet <= 0:
+            return state, "invalid bet"
+
+        symbols = [
+            ("cherry", 30),
+            ("lemon", 25),
+            ("bar", 20),
+            ("seven", 15),
+            ("diamond", 10),
+        ]
+        population = [s for s, _w in symbols]
+        weights = [w for _s, w in symbols]
+        reels = random.choices(population, weights=weights, k=3)
+
+        payout_mult = 0
+        if reels[0] == reels[1] == reels[2]:
+            paytable = {
+                "cherry": 2,
+                "lemon": 3,
+                "bar": 5,
+                "seven": 10,
+                "diamond": 15,
+            }
+            payout_mult = int(paytable.get(reels[0], 0))
+        elif reels.count("cherry") == 2:
+            payout_mult = 1
+
+        nonce = str(payload.get("nonce") or "").strip() or _new_id()
+        payout = bet * payout_mult
+        state["spins"] = int(state.get("spins") or 0) + 1
+        state["total_won"] = int(state.get("total_won") or 0) + int(payout)
+        state["last_spin"] = {
+            "reels": reels,
+            "bet": bet,
+            "multiplier": payout_mult,
+            "payout": payout,
+            "nonce": nonce,
+            "ts": _now(),
+        }
+        return state, None
+    if game_id == "crapslite":
+        action = str(action or "").strip().lower()
+        if state.get("status") != "live":
+            return state, "not active"
+        if action not in ("bet",):
+            return state, "invalid action"
+        if not state.get("betting_open"):
+            return state, "betting is closed"
+
+        token = str(payload.get("player_token") or "").strip()
+        if not token:
+            return state, "missing player token"
+        players = state.get("players") or {}
+        player = players.get(token)
+        if not isinstance(player, dict):
+            return state, "unknown player"
+
+        amount = 0
+        try:
+            amount = int(payload.get("amount") or payload.get("bet") or 0)
+        except Exception:
+            amount = 0
+        if amount <= 0:
+            return state, "invalid bet"
+
+        nonce = str(payload.get("nonce") or "").strip() or _new_id()
+        bet_entry = {"amount": amount, "nonce": nonce, "ts": _now()}
+        bets = player.get("bets")
+        if not isinstance(bets, list):
+            bets = []
+        bets.append(bet_entry)
+        player["bets"] = bets
+        player["total_bet"] = int(player.get("total_bet") or 0) + amount
+        players[token] = player
+        state["players"] = players
+        state["last_action"] = {"action": "bet", "amount": amount, "ts": _now()}
+        return state, None
     return state, "invalid game"
 
 def _poker_visible_community(state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -909,13 +1018,49 @@ def _update_session(session_id: str, payload: Dict[str, Any]) -> None:
         )
     _with_conn(_update)
 
-def join_session(join_code: str) -> Dict[str, Any]:
+def join_session(join_code: str, player_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Join a session as a player.
+
+    For single-player games we keep a single player_token on the session.
+    For crapslite we allow multiple joins; tokens are stored in
+    state.players.
+    """
     s = get_session_by_join_code(join_code)
     if not s:
         raise ValueError("not found")
     token = _new_id()
+
+    if s.get("game_id") == "crapslite":
+        state = s.get("state") or {}
+        players = state.get("players")
+        if not isinstance(players, dict):
+            players = {}
+        meta = player_meta or {}
+        user_id = meta.get("user_id") or meta.get("id") or meta.get("userId")
+        name = (meta.get("name") or meta.get("xiv_username") or meta.get("xiv_name") or meta.get("username") or "").strip()
+        players[token] = {
+            "user_id": user_id,
+            "name": name or "Player",
+            "bets": [],
+            "total_bet": 0,
+            "total_payout": 0,
+            "joined_at": _now(),
+        }
+        state["players"] = players
+        s["state"] = state
+        # Keep player_token for backwards compatibility (first join wins)
+        if not s.get("player_token"):
+            s["player_token"] = token
+        _update_session(s["session_id"], s)
+        _add_event(s["session_id"], "PLAYER_JOINED", {"name": players[token]["name"]})
+        return {"player_token": token, "session": get_session_by_id(s["session_id"]) or s}
+
+    # Default behavior for single-player games.
     def _update(conn):
-        conn.execute("UPDATE sessions SET player_token = ?, updated_at = ? WHERE session_id = ?", (token, _now(), s["session_id"]))
+        conn.execute(
+            "UPDATE sessions SET player_token = ?, updated_at = ? WHERE session_id = ?",
+            (token, _now(), s["session_id"]),
+        )
     _with_conn(_update)
     _add_event(s["session_id"], "PLAYER_JOINED", {})
     s["player_token"] = token
@@ -958,6 +1103,9 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
         state["pot"] = int(s.get("pot") or 0)
     if s.get("game_id") == "highlow" and not state.get("base_pot"):
         state["base_pot"] = int(s.get("pot") or 0)
+    if s.get("game_id") == "slots":
+        # Slots uses session pot as the default per-spin bet.
+        state["bet"] = int(s.get("pot") or 0)
     _start_game(s["game_id"], state)
     s["status"] = "live"
     s["state"] = state
@@ -1041,15 +1189,123 @@ def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
         _update_session(session_id, s)
         _add_event(session_id, "STATE_UPDATED", {"action": action})
         return s
+    if s.get("game_id") == "crapslite" and action in ("start_round", "open_bets", "close_bets", "roll"):
+        if s.get("status") != "live":
+            raise ValueError("session not live")
+        state = s.get("state") or {}
+        act = "start_round" if action == "open_bets" else action
+        if act == "start_round":
+            state["round"] = int(state.get("round") or 0) + 1
+            state["betting_open"] = True
+            state["last_roll"] = None
+            state["last_resolution"] = None
+            players = state.get("players")
+            if not isinstance(players, dict):
+                players = {}
+            # Clear bets for a fresh round.
+            for p in players.values():
+                if isinstance(p, dict):
+                    p["bets"] = []
+                    p["total_bet"] = 0
+            state["players"] = players
+            state["last_action"] = {"action": "start_round", "ts": _now()}
+            s["state"] = state
+            _update_session(session_id, s)
+            _add_event(session_id, "STATE_UPDATED", {"action": "start_round"})
+            return s
+        if act == "close_bets":
+            state["betting_open"] = False
+            state["last_action"] = {"action": "close_bets", "ts": _now()}
+            s["state"] = state
+            _update_session(session_id, s)
+            _add_event(session_id, "STATE_UPDATED", {"action": "close_bets"})
+            return s
+        if act == "roll":
+            if state.get("betting_open"):
+                raise ValueError("betting is still open")
+            lr = state.get("last_resolution")
+            try:
+                if isinstance(lr, dict) and int(lr.get("round") or 0) == int(state.get("round") or 0):
+                    raise ValueError("already rolled this round")
+            except Exception:
+                pass
+            die1 = random.randint(1, 6)
+            die2 = random.randint(1, 6)
+            total = die1 + die2
+            if total in (7, 11):
+                outcome = "win"
+            elif total in (2, 3, 12):
+                outcome = "lose"
+            else:
+                outcome = "push"
+
+            players = state.get("players")
+            if not isinstance(players, dict):
+                players = {}
+            per_player: Dict[str, Any] = {}
+            for ptoken, p in players.items():
+                if not isinstance(p, dict):
+                    continue
+                bets = p.get("bets") if isinstance(p.get("bets"), list) else []
+                bet_results = []
+                total_stake = 0
+                payout = 0
+                for b in bets:
+                    try:
+                        amt = int((b or {}).get("amount") or 0)
+                    except Exception:
+                        amt = 0
+                    if amt <= 0:
+                        continue
+                    total_stake += amt
+                    if outcome == "win":
+                        bet_payout = amt * 2
+                    elif outcome == "push":
+                        bet_payout = amt
+                    else:
+                        bet_payout = 0
+                    payout += bet_payout
+                    bet_results.append({"amount": amt, "result": outcome, "payout": bet_payout})
+                per_player[ptoken] = {
+                    "name": p.get("name") or "Player",
+                    "total_stake": total_stake,
+                    "payout": payout,
+                    "bets": bet_results,
+                }
+                p["total_payout"] = int(p.get("total_payout") or 0) + int(payout)
+                players[ptoken] = p
+
+            state["players"] = players
+            state["last_roll"] = {"d1": die1, "d2": die2, "total": total, "ts": _now()}
+            state["last_resolution"] = {
+                "round": int(state.get("round") or 0),
+                "roll_total": total,
+                "outcome": outcome,
+                "per_player": per_player,
+                "ts": _now(),
+            }
+            state["last_action"] = {"action": "roll", "ts": _now()}
+            s["state"] = state
+            _update_session(session_id, s)
+            _add_event(session_id, "STATE_UPDATED", {"action": "roll", "roll_total": total, "outcome": outcome})
+            return s
     raise ValueError("invalid action")
 
 def player_action(session_id: str, token: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
         raise ValueError("not found")
-    if token != s.get("player_token"):
-        raise PermissionError("unauthorized")
     state = s.get("state") or {}
+    if s.get("game_id") == "crapslite":
+        players = state.get("players") if isinstance(state, dict) else None
+        if not isinstance(players, dict) or token not in players:
+            raise PermissionError("unauthorized")
+        # Inject the player token so the state reducer can attribute the bet.
+        payload = dict(payload or {})
+        payload["player_token"] = token
+    else:
+        if token != s.get("player_token"):
+            raise PermissionError("unauthorized")
     if s.get("game_id") == "highlow" and not state.get("base_pot"):
         state["base_pot"] = int(s.get("pot") or 0)
     if s.get("status") != "live":
@@ -1117,7 +1373,7 @@ def _background_artist_payload(artist_id: Optional[str], artist_name: Optional[s
         return {"artist_id": artist_id, "name": name, "links": {}}
     return {"artist_id": None, "name": "Forest", "links": {}}
 
-def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
+def get_state(session: Dict[str, Any], view: str = "player", token: Optional[str] = None) -> Dict[str, Any]:
     state = session.get("state") or {}
     game_id = session.get("game_id")
     if game_id == "blackjack" and view != "priestess":
@@ -1149,6 +1405,33 @@ def get_state(session: Dict[str, Any], view: str = "player") -> Dict[str, Any]:
         stage = state.get("stage") or ""
         if stage != "showdown" and (state.get("status") or "") != "finished":
             state["player_hand"] = []
+    if game_id == "crapslite":
+        # Never leak player tokens to clients.
+        st = dict(state)
+        players = st.get("players")
+        public_players: List[Dict[str, Any]] = []
+        you: Optional[Dict[str, Any]] = None
+        if isinstance(players, dict):
+            for ptoken, p in players.items():
+                if not isinstance(p, dict):
+                    continue
+                entry = {
+                    "name": p.get("name") or "Player",
+                    "total_bet": int(p.get("total_bet") or 0),
+                    "total_payout": int(p.get("total_payout") or 0),
+                    "bets": list(p.get("bets") or []),
+                }
+                public_players.append(entry)
+                if view == "player" and token and ptoken == token:
+                    you = entry
+        # For players, only show their own bet list; others show totals.
+        if view == "player":
+            for entry in public_players:
+                if you is None or entry is not you:
+                    entry["bets"] = []
+        st["players"] = public_players
+        st["you"] = you
+        state = st
     return {
         "session": {
             "session_id": session.get("session_id"),

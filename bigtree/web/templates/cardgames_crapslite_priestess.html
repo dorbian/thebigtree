@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Craps-lite Host</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    main{padding:18px;display:grid;gap:16px;justify-items:center}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:980px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    .muted{color:#9fb4a6}
+    button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:800}
+    button[disabled]{opacity:.45;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .box{background:#0c1511;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
+    .k{font-weight:800}
+    .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(107,212,162,.35);background:rgba(107,212,162,.10);padding:4px 10px;border-radius:999px}
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Craps-lite (Host)</h1>
+    <div class="muted" id="statusLine">Loading...</div>
+  </div>
+  <div class="row">
+    <a class="pill" id="playerLink" href="#">Player link</a>
+    <button id="startBtn" type="button">Start round</button>
+    <button id="closeBtn" type="button">Close bets</button>
+    <button id="rollBtn" type="button">Roll</button>
+    <button id="finishBtn" type="button">Finish</button>
+  </div>
+</header>
+<main>
+  <div class="panel">
+    <div class="row">
+      <div>Round: <span class="k" id="roundValue">0</span></div>
+      <div>Betting: <span class="k" id="bettingValue">--</span></div>
+      <div>Last roll: <span class="k" id="rollValue">--</span></div>
+      <div>Outcome: <span class="k" id="outcomeValue">--</span></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="muted">Players</div>
+    <div class="grid" id="playersGrid"></div>
+  </div>
+</main>
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "crapslite";
+  const qs = new URLSearchParams(window.location.search);
+  const hostToken = qs.get("token") || "";
+
+  const statusLine = document.getElementById("statusLine");
+  const roundValue = document.getElementById("roundValue");
+  const bettingValue = document.getElementById("bettingValue");
+  const rollValue = document.getElementById("rollValue");
+  const outcomeValue = document.getElementById("outcomeValue");
+  const playersGrid = document.getElementById("playersGrid");
+
+  const playerLink = document.getElementById("playerLink");
+  const startBtn = document.getElementById("startBtn");
+  const closeBtn = document.getElementById("closeBtn");
+  const rollBtn = document.getElementById("rollBtn");
+  const finishBtn = document.getElementById("finishBtn");
+
+  function renderPlayers(state){
+    const players = state.players || [];
+    if(!players.length){
+      playersGrid.innerHTML = '<div class="box muted">No players joined yet.</div>';
+      return;
+    }
+    playersGrid.innerHTML = players.map(p => {
+      const bets = (p.bets || []).map(b => `${b.amount}`).join(", ");
+      return `
+        <div class="box">
+          <div class="k">${escapeHtml(p.name || "Player")}</div>
+          <div class="muted">Round bet: <span class="k">${p.total_bet||0}</span></div>
+          <div class="muted">Lifetime payout: <span class="k">${p.total_payout||0}</span></div>
+          <div class="muted">Bets: ${bets || "-"}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function escapeHtml(str){
+    return String(str||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
+  }
+
+  async function fetchState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      throw new Error(data.error || "state failed");
+    }
+    const st = data.state;
+    const s = st.session || {};
+    const state = st.game || {};
+    roundValue.textContent = state.round || 0;
+    bettingValue.textContent = state.betting_open ? "OPEN" : "CLOSED";
+    const lr = state.last_roll;
+    rollValue.textContent = lr ? `${lr.d1}+${lr.d2}=${lr.total}` : "--";
+    const lres = state.last_resolution;
+    outcomeValue.textContent = lres ? String(lres.outcome || "--") : "--";
+    renderPlayers(state);
+    playerLink.href = `/cardgames/${gameId}/session/${joinCode}`;
+    statusLine.textContent = `Session ${s.status || "?"}`;
+  }
+
+  async function hostAction(action){
+    if(!hostToken){
+      statusLine.textContent = "Missing priestess token.";
+      return;
+    }
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${(await currentSessionId())}/host-action?token=${encodeURIComponent(hostToken)}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action})
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      throw new Error(data.error || "host action failed");
+    }
+    await fetchState();
+  }
+
+  let _sessionId = "";
+  async function currentSessionId(){
+    if(_sessionId) return _sessionId;
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+    const data = await res.json();
+    if(res.ok && data.ok){
+      _sessionId = data.state.session.session_id;
+    }
+    return _sessionId;
+  }
+
+  async function startRound(){
+    startBtn.disabled = true;
+    try{await hostAction("start_round");}
+    finally{startBtn.disabled = false;}
+  }
+  async function closeBets(){
+    closeBtn.disabled = true;
+    try{await hostAction("close_bets");}
+    finally{closeBtn.disabled = false;}
+  }
+  async function roll(){
+    rollBtn.disabled = true;
+    try{await hostAction("roll");}
+    finally{rollBtn.disabled = false;}
+  }
+  async function finish(){
+    finishBtn.disabled = true;
+    try{
+      const sid = await currentSessionId();
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sid}/finish?token=${encodeURIComponent(hostToken)}`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || "finish failed");
+      }
+      statusLine.textContent = "Finished.";
+    }finally{finishBtn.disabled = false;}
+  }
+
+  startBtn.addEventListener("click", startRound);
+  closeBtn.addEventListener("click", closeBets);
+  rollBtn.addEventListener("click", roll);
+  finishBtn.addEventListener("click", finish);
+
+  (async()=>{try{await fetchState();setInterval(()=>fetchState().catch(()=>{}),1200);}catch(e){statusLine.textContent=e.message||"failed"}})();
+</script>
+</body>
+</html>

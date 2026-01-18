@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Slots Host</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    main{padding:18px;display:grid;gap:16px;justify-items:center}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:860px}
+    .muted{color:#9fb4a6}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:700}
+    button[disabled]{opacity:.45;cursor:not-allowed}
+    code{background:#0c1511;border:1px solid rgba(255,255,255,.08);padding:2px 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Slots (Host)</h1>
+      <div class="muted" id="statusLine">Loading...</div>
+    </div>
+    <div class="row">
+      <button id="startBtn" type="button">Start session</button>
+      <button id="finishBtn" type="button">Finish session</button>
+    </div>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <div>Join code: <code id="joinCode"></code></div>
+        <div>Default bet: <strong id="betValue">0</strong> <span id="currencyLabel">gil</span></div>
+      </div>
+      <div class="muted" style="margin-top:10px">This mode is solo (no shared table). Players spin on their own.</div>
+    </div>
+    <div class="panel">
+      <div class="muted">Player link</div>
+      <div class="row" style="justify-content:flex-start">
+        <code id="playerLink"></code>
+      </div>
+    </div>
+  </main>
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "slots";
+  const url = new URL(window.location.href);
+  const priestessToken = url.searchParams.get("token") || "";
+
+  const statusLine = document.getElementById("statusLine");
+  const startBtn = document.getElementById("startBtn");
+  const finishBtn = document.getElementById("finishBtn");
+  const joinCodeEl = document.getElementById("joinCode");
+  const betValue = document.getElementById("betValue");
+  const currencyLabel = document.getElementById("currencyLabel");
+  const playerLink = document.getElementById("playerLink");
+
+  joinCodeEl.textContent = joinCode;
+  playerLink.textContent = `${window.location.origin}/cardgames/${gameId}/session/${joinCode}`;
+
+  async function fetchState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
+    const st = data.state;
+    betValue.textContent = st.session?.pot ?? 0;
+    currencyLabel.textContent = st.session?.currency ?? "gil";
+    statusLine.textContent = `Session: ${st.session?.status || "--"}`;
+  }
+
+  async function start(){
+    if(!priestessToken){
+      statusLine.textContent = "Missing priestess token.";
+      return;
+    }
+    startBtn.disabled = true;
+    try{
+      const sessionIdRes = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+      const stData = await sessionIdRes.json();
+      const sid = stData.state?.session?.session_id;
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sid}/start`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({token: priestessToken})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "start failed");
+      statusLine.textContent = "Session started.";
+      await fetchState();
+    }catch(err){
+      statusLine.textContent = err.message || "start failed";
+    }finally{
+      startBtn.disabled = false;
+    }
+  }
+
+  async function finish(){
+    if(!priestessToken){
+      statusLine.textContent = "Missing priestess token.";
+      return;
+    }
+    finishBtn.disabled = true;
+    try{
+      const sessionIdRes = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=priestess`);
+      const stData = await sessionIdRes.json();
+      const sid = stData.state?.session?.session_id;
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sid}/finish`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({token: priestessToken})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "finish failed");
+      statusLine.textContent = "Session finished.";
+    }catch(err){
+      statusLine.textContent = err.message || "finish failed";
+    }finally{
+      finishBtn.disabled = false;
+    }
+  }
+
+  startBtn.addEventListener("click", start);
+  finishBtn.addEventListener("click", finish);
+  (async()=>{try{await fetchState();setInterval(()=>fetchState().catch(()=>{}),1500);}catch(e){statusLine.textContent=e.message||"failed"}})();
+</script>
+</body>
+</html>

@@ -71,6 +71,10 @@ _TEMPLATES = {
     ("poker", "priestess"): "cardgames_poker_priestess.html",
     ("highlow", "player"): "cardgames_highlow_player.html",
     ("highlow", "priestess"): "cardgames_highlow_priestess.html",
+    ("slots", "player"): "cardgames_slots_player.html",
+    ("slots", "priestess"): "cardgames_slots_priestess.html",
+    ("crapslite", "player"): "cardgames_crapslite_player.html",
+    ("crapslite", "priestess"): "cardgames_crapslite_priestess.html",
 }
 
 def _render_template(name: str, mapping: Dict[str, str]) -> str:
@@ -138,6 +142,14 @@ async def create_session(req: web.Request):
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     try:
         db = get_database()
+        creator = await _resolve_user(req)
+        created_by = None
+        if not isinstance(creator, web.Response) and isinstance(creator, dict):
+            created_by = creator.get("discord_id") or creator.get("discordId") or creator.get("discord")
+            try:
+                created_by = int(created_by) if created_by is not None else None
+            except Exception:
+                created_by = None
         payload = dict(s or {})
         status_val = payload.get("status") or "created"
         active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
@@ -152,6 +164,7 @@ async def create_session(req: web.Request):
             module="cardgames",
             payload=payload,
             title=payload.get("game_id"),
+            created_by=created_by,
             created_at=db._as_datetime(payload.get("created_at")),
             ended_at=db._as_datetime(payload.get("updated_at")),
             status=status_val,
@@ -181,11 +194,20 @@ async def join_session(req: web.Request):
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
         return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
-    wallet_resp = await _ensure_wallet_balance(req, join_code, s)
-    if isinstance(wallet_resp, web.Response):
-        return wallet_resp
+    # Slots + crapslite place/charge bets during actions, not on join.
+    if str(s.get("game_id") or "").lower() not in ("slots", "crapslite"):
+        wallet_resp = await _ensure_wallet_balance(req, join_code, s)
+        if isinstance(wallet_resp, web.Response):
+            return wallet_resp
+    player_meta = None
     try:
-        payload = await _run_blocking(cg.join_session, join_code)
+        u = await _resolve_user(req)
+        if not isinstance(u, web.Response) and isinstance(u, dict):
+            player_meta = u
+    except Exception:
+        player_meta = None
+    try:
+        payload = await _run_blocking(cg.join_session, join_code, player_meta)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc), "redirect": "/tarot/gallery"}, status=400)
     return web.json_response({"ok": True, **payload})
@@ -197,7 +219,8 @@ async def get_state(req: web.Request):
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
         return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
-    return web.json_response({"ok": True, "state": cg.get_state(s, view=view)})
+    token = req.headers.get("X-Cardgame-Token") or ""
+    return web.json_response({"ok": True, "state": cg.get_state(s, view=view, token=token)})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/stream", allow_public=True)
 async def stream_events(req: web.Request):
@@ -217,7 +240,8 @@ async def stream_events(req: web.Request):
     )
     await resp.prepare(req)
     last_seq = 0
-    initial = {"type": "STATE", "state": cg.get_state(s, view=view)}
+    token = req.headers.get("X-Cardgame-Token") or ""
+    initial = {"type": "STATE", "state": cg.get_state(s, view=view, token=token)}
     await resp.write(f"data: {json.dumps(initial)}\n\n".encode("utf-8"))
     session_id = s["session_id"]
     try:
@@ -266,12 +290,150 @@ async def player_action(req: web.Request):
     token = _get_token(req, body)
     action = str(body.get("action") or "").strip().lower()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    # Load session to support wallet-backed bet/debit flows.
+    s0 = await _run_blocking(cg.get_session_by_id, session_id)
+    if not s0:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    game_id = str(s0.get("game_id") or "").strip().lower()
+
+    # Wallet handling for bet-per-action games (slots / crapslite).
+    db = get_database()
+    ctx = None
+    try:
+        ctx = db.get_game_wallet_context(join_code=s0.get("join_code"), game_id=s0.get("session_id"))
+    except Exception:
+        ctx = None
+    wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
+    wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
+    needs_wallet = wallet_enabled and wallet_currency and wallet_currency != "gil"
+
+    # For wallet-enabled sessions, these actions must have a logged-in user.
+    user = None
+    if needs_wallet and game_id in ("slots", "crapslite") and action in ("spin", "bet"):
+        u = await _resolve_user(req)
+        if isinstance(u, web.Response):
+            return u
+        user = u
+    # If we need to debit a bet, do so BEFORE the game reducer runs.
+    if needs_wallet and user and game_id == "crapslite" and action == "bet":
+        try:
+            bet_amount = int(payload.get("amount") or payload.get("bet") or 0)
+        except Exception:
+            bet_amount = 0
+        if bet_amount <= 0:
+            return web.json_response({"ok": False, "error": "invalid bet"}, status=400)
+        nonce = str(payload.get("nonce") or "").strip()
+        if not nonce:
+            return web.json_response({"ok": False, "error": "missing nonce"}, status=400)
+        reason = f"craps_bet_{nonce}"
+        if db.has_wallet_history_entry(
+            event_id=int(ctx.get("event_id") or 0),
+            user_id=int(user["id"]),
+            reason=reason,
+            game_id=str(s0.get("session_id")),
+        ):
+            return web.json_response({"ok": False, "error": "duplicate bet"}, status=409)
+        ok, balance, status = db.apply_game_wallet_delta(
+            event_id=int(ctx.get("event_id") or 0),
+            user_id=int(user["id"]),
+            delta=-bet_amount,
+            reason=reason,
+            metadata={
+                "game_id": str(s0.get("session_id")),
+                "join_code": s0.get("join_code"),
+                "currency": wallet_currency,
+                "amount": bet_amount,
+                "nonce": nonce,
+                "kind": "crapslite_bet",
+            },
+            allow_negative=False,
+        )
+        if not ok:
+            return web.json_response(
+                {"ok": False, "error": "insufficient balance", "required": bet_amount, "balance": balance},
+                status=409,
+            )
+        db.add_user_game(int(user["id"]), str(s0.get("session_id")), role="player")
+
+    if needs_wallet and user and game_id == "slots" and action == "spin":
+        # Slots: debit per spin, keyed by a client-provided nonce.
+        try:
+            bet_amount = int(payload.get("bet") or payload.get("amount") or s0.get("pot") or 0)
+        except Exception:
+            bet_amount = int(s0.get("pot") or 0)
+        if bet_amount <= 0:
+            return web.json_response({"ok": False, "error": "invalid bet"}, status=400)
+        nonce = str(payload.get("nonce") or "").strip()
+        if not nonce:
+            return web.json_response({"ok": False, "error": "missing nonce"}, status=400)
+        reason = f"slots_spin_bet_{nonce}"
+        if db.has_wallet_history_entry(
+            event_id=int(ctx.get("event_id") or 0),
+            user_id=int(user["id"]),
+            reason=reason,
+            game_id=str(s0.get("session_id")),
+        ):
+            return web.json_response({"ok": False, "error": "duplicate spin"}, status=409)
+        ok, balance, status = db.apply_game_wallet_delta(
+            event_id=int(ctx.get("event_id") or 0),
+            user_id=int(user["id"]),
+            delta=-bet_amount,
+            reason=reason,
+            metadata={
+                "game_id": str(s0.get("session_id")),
+                "join_code": s0.get("join_code"),
+                "currency": wallet_currency,
+                "amount": bet_amount,
+                "nonce": nonce,
+                "kind": "slots_spin_bet",
+            },
+            allow_negative=False,
+        )
+        if not ok:
+            return web.json_response(
+                {"ok": False, "error": "insufficient balance", "required": bet_amount, "balance": balance},
+                status=409,
+            )
+        db.add_user_game(int(user["id"]), str(s0.get("session_id")), role="player")
+
     try:
         s = await _run_blocking(cg.player_action, session_id, token, action, payload)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    # Slots: after a successful spin, pay out if needed.
+    if needs_wallet and user and game_id == "slots" and action == "spin":
+        try:
+            st = (s or {}).get("state") or {}
+            last_spin = st.get("last_spin") or {}
+            payout = int(last_spin.get("payout") or 0)
+            nonce = str(last_spin.get("nonce") or payload.get("nonce") or "").strip()
+        except Exception:
+            payout = 0
+            nonce = str(payload.get("nonce") or "").strip()
+        if payout > 0 and nonce:
+            reason = f"slots_spin_pay_{nonce}"
+            if not db.has_wallet_history_entry(
+                event_id=int(ctx.get("event_id") or 0),
+                user_id=int(user["id"]),
+                reason=reason,
+                game_id=str(s0.get("session_id")),
+            ):
+                db.apply_game_wallet_delta(
+                    event_id=int(ctx.get("event_id") or 0),
+                    user_id=int(user["id"]),
+                    delta=payout,
+                    reason=reason,
+                    metadata={
+                        "game_id": str(s0.get("session_id")),
+                        "currency": wallet_currency,
+                        "amount": payout,
+                        "nonce": nonce,
+                        "kind": "slots_spin_payout",
+                    },
+                    allow_negative=True,
+                )
     return web.json_response({"ok": True, "session": s})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/host-action", allow_public=True)
@@ -289,6 +451,61 @@ async def host_action(req: web.Request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    # If this was a crapslite roll, distribute payouts to all joined players.
+    try:
+        game_id = str((s or {}).get("game_id") or "").strip().lower()
+        if game_id == "crapslite" and action == "roll":
+            db = get_database()
+            ctx = db.get_game_wallet_context(join_code=(s or {}).get("join_code"), game_id=(s or {}).get("session_id"))
+            wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
+            wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
+            needs_wallet = wallet_enabled and wallet_currency and wallet_currency != "gil"
+            if needs_wallet:
+                raw = await _run_blocking(cg.get_session_by_id, session_id)
+                st = (raw or {}).get("state") or {}
+                lr = st.get("last_resolution") or {}
+                round_no = int((lr or {}).get("round") or 0)
+                per_player = (lr or {}).get("per_player") or {}
+                players = st.get("players") or {}
+                for ptoken, res in per_player.items():
+                    p = players.get(ptoken) if isinstance(players, dict) else None
+                    if not isinstance(p, dict):
+                        continue
+                    uid = p.get("user_id")
+                    try:
+                        uid_int = int(uid) if uid is not None else 0
+                    except Exception:
+                        uid_int = 0
+                    if uid_int <= 0:
+                        continue
+                    try:
+                        payout = int((res or {}).get("payout") or 0)
+                    except Exception:
+                        payout = 0
+                    # Deduplicate by round per user.
+                    reason = f"craps_roll_{round_no}"
+                    if payout > 0 and not db.has_wallet_history_entry(
+                        event_id=int(ctx.get("event_id") or 0),
+                        user_id=uid_int,
+                        reason=reason,
+                        game_id=str(session_id),
+                    ):
+                        db.apply_game_wallet_delta(
+                            event_id=int(ctx.get("event_id") or 0),
+                            user_id=uid_int,
+                            delta=payout,
+                            reason=reason,
+                            metadata={
+                                "game_id": str(session_id),
+                                "currency": wallet_currency,
+                                "amount": payout,
+                                "round": round_no,
+                                "kind": "crapslite_payout",
+                            },
+                            allow_negative=True,
+                        )
+    except Exception:
+        pass
     return web.json_response({"ok": True, "session": s})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/finish", allow_public=True)

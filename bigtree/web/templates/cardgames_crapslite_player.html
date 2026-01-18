@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Craps‑lite</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    main{padding:18px;display:grid;gap:16px;justify-items:center}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:960px}
+    .muted{color:#9fb4a6}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .box{background:#0c1511;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
+    button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:700}
+    button[disabled]{opacity:.45;cursor:not-allowed}
+    input{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c1511;color:#e7f2ea;width:140px}
+    ul{margin:8px 0 0 18px}
+    .dice{font-size:22px;font-weight:900;letter-spacing:1px}
+    .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 12px;border:1px solid rgba(255,255,255,.1);background:rgba(107,212,162,.1)}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Craps‑lite</h1>
+      <div class="muted" id="statusLine">Connecting…</div>
+    </div>
+    <div class="pill"><span class="muted">Join:</span> <strong id="joinCode">{JOIN}</strong></div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="row">
+        <div>Betting: <strong id="bettingState">--</strong></div>
+        <div>Round: <strong id="roundNo">0</strong></div>
+        <div>Last roll: <strong id="lastRoll" class="dice">--</strong></div>
+      </div>
+      <div class="row muted" id="outcomeLine">Outcome: --</div>
+    </div>
+
+    <div class="panel grid">
+      <div class="box">
+        <div class="muted">Place a bet (multiple bets allowed)</div>
+        <div class="row" style="justify-content:flex-start">
+          <input id="betAmount" type="number" min="1" step="1" placeholder="Amount" />
+          <button id="betBtn" type="button">Bet</button>
+        </div>
+        <div class="muted" style="margin-top:10px">Your bets this round</div>
+        <ul id="yourBets"></ul>
+      </div>
+      <div class="box">
+        <div class="muted">Table</div>
+        <div id="tableList" class="muted">--</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="muted">Rules</div>
+      <div class="muted">
+        One shared roll. Host opens betting, players place one or more bets, host closes betting, then rolls.
+        Roll 7 or 11 = win (pays 2x per bet). Roll 2, 3, or 12 = lose. Anything else = push (stake returned).
+      </div>
+    </div>
+  </main>
+
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "crapslite";
+  const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
+  const statusLine = document.getElementById("statusLine");
+  const bettingState = document.getElementById("bettingState");
+  const roundNo = document.getElementById("roundNo");
+  const lastRoll = document.getElementById("lastRoll");
+  const outcomeLine = document.getElementById("outcomeLine");
+  const betAmount = document.getElementById("betAmount");
+  const betBtn = document.getElementById("betBtn");
+  const yourBets = document.getElementById("yourBets");
+  const tableList = document.getElementById("tableList");
+
+  let playerToken = window.localStorage.getItem(tokenKey) || "";
+
+  function randNonce(){
+    // 16 bytes random -> hex
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function join(){
+    if(playerToken) return;
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({})});
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
+    playerToken = data.player_token || "";
+    if(!playerToken) throw new Error("no player token");
+    window.localStorage.setItem(tokenKey, playerToken);
+  }
+
+  async function fetchState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {headers:{"X-Cardgame-Token": playerToken}});
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
+    const st = data.state || {};
+
+    bettingState.textContent = st.betting_open ? "OPEN" : "CLOSED";
+    roundNo.textContent = st.round || 0;
+    if(st.last_roll && st.last_roll.d1){
+      lastRoll.textContent = `${st.last_roll.d1} + ${st.last_roll.d2} = ${st.last_roll.total}`;
+    }else{
+      lastRoll.textContent = "--";
+    }
+    const lr = st.last_resolution || null;
+    outcomeLine.textContent = lr ? `Outcome: ${lr.outcome} (roll ${lr.roll_total})` : "Outcome: --";
+
+    // You
+    const you = st.you || null;
+    const bets = (you && Array.isArray(you.bets)) ? you.bets : [];
+    yourBets.innerHTML = bets.length ? bets.map(b=>`<li>${b.amount}</li>`).join("") : "<li class='muted'>No bets yet.</li>";
+
+    // Table (names + totals only)
+    const players = Array.isArray(st.players) ? st.players : [];
+    if(!players.length){
+      tableList.textContent = "No players yet.";
+    }else{
+      tableList.innerHTML = players.map(p=>{
+        const name = (p.name || "Player");
+        const tb = (p.total_bet || 0);
+        const tp = (p.total_payout || 0);
+        return `<div><strong>${name}</strong> — bet: ${tb} — payout: ${tp}</div>`;
+      }).join("");
+    }
+
+    betBtn.disabled = !st.betting_open;
+    statusLine.textContent = "Connected.";
+  }
+
+  async function placeBet(){
+    const amt = parseInt(betAmount.value || "0", 10);
+    if(!amt || amt <= 0){
+      statusLine.textContent = "Enter a valid amount.";
+      return;
+    }
+    const nonce = randNonce();
+    betBtn.disabled = true;
+    try{
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/action`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({token: playerToken, action:"bet", payload:{amount: amt, nonce}})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "bet failed");
+      betAmount.value = "";
+      await fetchState();
+    }catch(err){
+      statusLine.textContent = err.message || "bet failed";
+    }finally{
+      betBtn.disabled = false;
+    }
+  }
+
+  (async()=>{
+    try{
+      await join();
+      await fetchState();
+      setInterval(()=>fetchState().catch(()=>{}), 1000);
+    }catch(err){
+      statusLine.textContent = err.message || "failed";
+    }
+  })();
+
+  betBtn.addEventListener("click", placeBet);
+</script>
+</body>
+</html>

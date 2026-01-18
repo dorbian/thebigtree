@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Slots</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
+    header{padding:18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    main{padding:18px;display:grid;gap:16px;justify-items:center}
+    .panel{background:#101a15;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;width:100%;max-width:860px}
+    .muted{color:#9fb4a6}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+    button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:700}
+    button[disabled]{opacity:.45;cursor:not-allowed}
+    .reels{display:flex;gap:10px;justify-content:center;margin-top:10px}
+    .reel{width:90px;height:90px;border-radius:14px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
+    .big{font-size:18px;font-weight:800}
+    input{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c1511;color:#e7f2ea}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Slots</h1>
+      <div class="muted" id="statusLine">Joining session…</div>
+    </div>
+    <div class="muted">Join: <strong id="joinCode"></strong></div>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <div>Default bet: <strong id="defaultBet">0</strong> <span id="currencyLabel">gil</span></div>
+        <div>Spins: <strong id="spins">0</strong></div>
+        <div>Total payout: <strong id="totalWon">0</strong> <span id="currencyLabel2">gil</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label class="muted">Bet</label>
+        <input id="betInput" type="number" min="1" step="1" value="0" />
+        <button id="spinBtn" type="button">Spin</button>
+      </div>
+      <div class="reels">
+        <div class="reel" id="r1">—</div>
+        <div class="reel" id="r2">—</div>
+        <div class="reel" id="r3">—</div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div class="big" id="payoutLine">Payout: —</div>
+      </div>
+      <div class="muted" style="text-align:center;margin-top:10px">No table chat. Just you, luck, and the reels.</div>
+    </div>
+  </main>
+
+<script>
+  const joinCode = "{JOIN}";
+  const gameId = "slots";
+  document.getElementById("joinCode").textContent = joinCode;
+
+  const statusLine = document.getElementById("statusLine");
+  const defaultBet = document.getElementById("defaultBet");
+  const spinsEl = document.getElementById("spins");
+  const totalWonEl = document.getElementById("totalWon");
+  const currencyLabel = document.getElementById("currencyLabel");
+  const currencyLabel2 = document.getElementById("currencyLabel2");
+  const betInput = document.getElementById("betInput");
+  const spinBtn = document.getElementById("spinBtn");
+  const r1 = document.getElementById("r1");
+  const r2 = document.getElementById("r2");
+  const r3 = document.getElementById("r3");
+  const payoutLine = document.getElementById("payoutLine");
+
+  const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
+  let playerToken = window.localStorage.getItem(tokenKey) || "";
+  let sessionId = "";
+
+  function sym(s){
+    const map = {cherry:"🍒", lemon:"🍋", bar:"🟥", seven:"7️⃣", diamond:"💎"};
+    return map[s] || s || "—";
+  }
+
+  function nonce(){
+    try{
+      const arr = new Uint8Array(12);
+      window.crypto.getRandomValues(arr);
+      return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+    }catch(e){
+      return String(Date.now()) + Math.random().toString(16).slice(2);
+    }
+  }
+
+  async function join(){
+    if(playerToken) return;
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST"});
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
+    playerToken = data.player_token;
+    window.localStorage.setItem(tokenKey, playerToken);
+  }
+
+  async function fetchState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
+      headers: playerToken ? {"X-Cardgame-Token": playerToken} : {}
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
+    const st = data.state;
+    sessionId = st.session.session_id;
+    const currency = st.session.currency || "gil";
+    currencyLabel.textContent = currency;
+    currencyLabel2.textContent = currency;
+    const bet = (st.state && st.state.bet) ? st.state.bet : (st.session.pot || 0);
+    defaultBet.textContent = String(bet || 0);
+    if(!betInput.value || Number(betInput.value) <= 0){
+      betInput.value = String(bet || 0);
+    }
+    spinsEl.textContent = String(st.state?.spins || 0);
+    totalWonEl.textContent = String(st.state?.total_won || 0);
+
+    const ls = st.state?.last_spin;
+    if(ls && Array.isArray(ls.reels)){
+      r1.textContent = sym(ls.reels[0]);
+      r2.textContent = sym(ls.reels[1]);
+      r3.textContent = sym(ls.reels[2]);
+      payoutLine.textContent = `Payout: ${ls.payout || 0} (${ls.multiplier || 0}x)`;
+    }
+  }
+
+  async function spin(){
+    spinBtn.disabled = true;
+    try{
+      const bet = Math.max(1, parseInt(betInput.value || "0", 10) || 0);
+      const n = nonce();
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/player-action`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({token: playerToken, action:"spin", payload:{bet, nonce:n}})
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "spin failed");
+      statusLine.textContent = "Spun.";
+      await fetchState();
+    }catch(err){
+      statusLine.textContent = err.message || "spin failed";
+    }finally{
+      spinBtn.disabled = false;
+    }
+  }
+
+  (async () => {
+    try{
+      await join();
+      statusLine.textContent = "Connected.";
+      await fetchState();
+      setInterval(() => fetchState().catch(() => {}), 1000);
+    }catch(err){
+      statusLine.textContent = err.message || "failed";
+    }
+  })();
+
+  spinBtn.addEventListener("click", spin);
+</script>
+</body>
+</html>
