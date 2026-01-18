@@ -188,6 +188,7 @@ class Database:
                 currency_name TEXT,
                 minimal_spend BIGINT,
                 background_image TEXT,
+                deck_id TEXT,
                 metadata JSONB DEFAULT '{}'::jsonb,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -262,6 +263,7 @@ class Database:
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")
             self._ensure_column(conn, "games", "venue_id", "INTEGER")
+            self._ensure_column(conn, "venues", "deck_id", "TEXT")
         logger.debug("[database] schema ready")
 
     def _count_rows(self, table: str) -> int:
@@ -534,15 +536,22 @@ class Database:
 
         if q:
             qv = f"%{str(q).strip().lower()}%"
-            where.append("(lower(g.game_id) LIKE %s OR lower(COALESCE(g.title,'')) LIKE %s)")
-            params.extend([qv, qv])
+            where.append(
+                "(lower(g.game_id) LIKE %s "
+                "OR lower(COALESCE(g.title,'')) LIKE %s "
+                "OR lower(COALESCE(g.payload->>'join_code','')) LIKE %s "
+                "OR lower(COALESCE(g.payload->>'joinCode','')) LIKE %s "
+                "OR lower(COALESCE(g.payload->>'join','')) LIKE %s)"
+            )
+            params.extend([qv, qv, qv, qv, qv])
 
         if player:
             pv = f"%{str(player).strip().lower()}%"
             where.append(
-                "EXISTS (SELECT 1 FROM game_players gp WHERE gp.game_id = g.game_id AND lower(gp.name) LIKE %s)"
+                "(EXISTS (SELECT 1 FROM game_players gp WHERE gp.game_id = g.game_id AND lower(gp.name) LIKE %s) "
+                "OR EXISTS (SELECT 1 FROM user_games ug JOIN users u ON u.id = ug.user_id WHERE ug.game_id = g.game_id AND lower(u.xiv_username) LIKE %s))"
             )
-            params.append(pv)
+            params.extend([pv, pv])
 
         where_sql = " WHERE " + " AND ".join(where) if where else ""
 
@@ -577,7 +586,12 @@ class Database:
             for pr in players_rows:
                 indexed.setdefault(pr["game_id"], []).append({"name": pr["name"], "role": pr.get("role")})
             for g in games:
-                g["players"] = indexed.get(g.get("game_id"), [])
+                gid = g.get("game_id")
+                players = indexed.get(gid, [])
+                if not players:
+                    # Fallback: some legacy payloads only store players in JSON.
+                    players = [{"name": p, "role": "player"} for p in self._extract_players_from_payload(g.get("payload"))]
+                g["players"] = players
                 self._attach_game_summary(g)
 
         return {"total": total, "page": page, "page_size": page_size, "games": games}
@@ -611,7 +625,7 @@ class Database:
     def list_venues(self) -> List[Dict[str, Any]]:
         rows = self._execute(
             """
-            SELECT id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            SELECT id, name, currency_name, minimal_spend, background_image, deck_id, metadata, created_at, updated_at
             FROM venues
             ORDER BY name ASC
             """,
@@ -625,6 +639,7 @@ class Database:
         currency_name: Optional[str] = None,
         minimal_spend: Optional[int] = None,
         background_image: Optional[str] = None,
+        deck_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         if not name:
@@ -632,24 +647,25 @@ class Database:
         metadata = metadata or {}
         row = self._fetchone(
             """
-            INSERT INTO venues (name, currency_name, minimal_spend, background_image, metadata)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO venues (name, currency_name, minimal_spend, background_image, deck_id, metadata)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (name) DO UPDATE
               SET currency_name = COALESCE(EXCLUDED.currency_name, venues.currency_name),
                   minimal_spend = COALESCE(EXCLUDED.minimal_spend, venues.minimal_spend),
                   background_image = COALESCE(EXCLUDED.background_image, venues.background_image),
+                  deck_id = COALESCE(EXCLUDED.deck_id, venues.deck_id),
                   metadata = venues.metadata || EXCLUDED.metadata,
                   updated_at = CURRENT_TIMESTAMP
-            RETURNING id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            RETURNING id, name, currency_name, minimal_spend, background_image, deck_id, metadata, created_at, updated_at
             """,
-            (name.strip(), currency_name, minimal_spend, background_image, Json(metadata)),
+            (name.strip(), currency_name, minimal_spend, background_image, deck_id, Json(metadata)),
         )
         return self._json_safe_dict(dict(row)) if row else None
 
     def get_venue(self, venue_id: int) -> Optional[Dict[str, Any]]:
         row = self._fetchone(
             """
-            SELECT id, name, currency_name, minimal_spend, background_image, metadata, created_at, updated_at
+            SELECT id, name, currency_name, minimal_spend, background_image, deck_id, metadata, created_at, updated_at
             FROM venues
             WHERE id = %s
             """,
@@ -657,7 +673,15 @@ class Database:
         )
         return self._json_safe_dict(dict(row)) if row else None
 
-    def update_venue(self, venue_id: int, *, currency_name: Optional[str] = None, minimal_spend: Optional[int] = None, background_image: Optional[str] = None) -> bool:
+    def update_venue(
+        self,
+        venue_id: int,
+        *,
+        currency_name: Optional[str] = None,
+        minimal_spend: Optional[int] = None,
+        background_image: Optional[str] = None,
+        deck_id: Optional[str] = None,
+    ) -> bool:
         if not venue_id:
             return False
         count = self._execute(
@@ -666,10 +690,11 @@ class Database:
             SET currency_name = COALESCE(%s, currency_name),
                 minimal_spend = COALESCE(%s, minimal_spend),
                 background_image = COALESCE(%s, background_image),
+                deck_id = COALESCE(%s, deck_id),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             """,
-            (currency_name, minimal_spend, background_image, venue_id),
+            (currency_name, minimal_spend, background_image, deck_id, venue_id),
         )
         return bool(count)
 
@@ -679,7 +704,7 @@ class Database:
         row = self._fetchone(
             """
             SELECT vm.venue_id, vm.role, vm.metadata AS membership_metadata,
-                   v.id AS id, v.name, v.currency_name, v.minimal_spend, v.background_image, v.metadata,
+                   v.id AS id, v.name, v.currency_name, v.minimal_spend, v.background_image, v.deck_id, v.metadata,
                    v.created_at, v.updated_at
             FROM venue_members vm
             JOIN venues v ON v.id = vm.venue_id
@@ -1160,6 +1185,7 @@ class Database:
         title: Optional[str] = None,
         channel_id: Optional[int] = None,
         created_by: Optional[int] = None,
+        venue_id: Optional[int] = None,
         created_at: Optional[datetime] = None,
         ended_at: Optional[datetime] = None,
         status: Optional[str] = None,
@@ -1169,14 +1195,18 @@ class Database:
     ):
         metadata = metadata or {}
         metadata.setdefault("run_source", run_source)
+        if venue_id is None and created_by:
+            venue_id = self._find_venue_for_discord_admin(int(created_by))
+
         sql = """
-        INSERT INTO games (game_id, module, title, channel_id, created_by, created_at, ended_at, status, active, payload, metadata, run_source)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO games (game_id, module, title, channel_id, created_by, venue_id, created_at, ended_at, status, active, payload, metadata, run_source)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (game_id) DO UPDATE
           SET module = EXCLUDED.module,
               title = COALESCE(EXCLUDED.title, games.title),
               channel_id = COALESCE(EXCLUDED.channel_id, games.channel_id),
               created_by = COALESCE(EXCLUDED.created_by, games.created_by),
+              venue_id = COALESCE(EXCLUDED.venue_id, games.venue_id),
               created_at = COALESCE(EXCLUDED.created_at, games.created_at),
               ended_at = COALESCE(EXCLUDED.ended_at, games.ended_at),
               status = COALESCE(EXCLUDED.status, games.status),
@@ -1193,6 +1223,7 @@ class Database:
                 title,
                 channel_id,
                 created_by,
+                venue_id,
                 created_at,
                 ended_at,
                 status,
@@ -1202,6 +1233,32 @@ class Database:
                 run_source,
             ),
         )
+
+    def _find_venue_for_discord_admin(self, discord_id: int) -> Optional[int]:
+        """Resolve a default venue for a Discord admin.
+
+        Venues store a list of Discord IDs in venues.metadata.admin_discord_ids.
+        If a game is created without an explicit venue_id, we attach the venue
+        based on created_by.
+        """
+        if not discord_id:
+            return None
+        try:
+            did = str(int(discord_id))
+        except Exception:
+            did = str(discord_id)
+        rows = self._execute("SELECT id, metadata FROM venues", fetch=True) or []
+        for r in rows:
+            md = r.get("metadata") or {}
+            ids = md.get("admin_discord_ids")
+            if isinstance(ids, str):
+                ids = [x.strip() for x in ids.split(",") if x.strip()]
+            if isinstance(ids, list) and did in {str(x) for x in ids}:
+                try:
+                    return int(r.get("id"))
+                except Exception:
+                    return None
+        return None
 
     def _store_game_player(self, game_id: str, name: str, role: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         if not name:
@@ -1320,4 +1377,46 @@ class Database:
         fallback = payload.get("player_name")
         if fallback:
             names.append(fallback)
+        return [str(n).strip() for n in dict.fromkeys(names) if str(n).strip()]
+
+    def _extract_players_from_payload(self, payload: Any) -> List[str]:
+        """Best-effort player extraction from arbitrary game payloads.
+
+        Used for legacy games where we didn't persist game_players rows.
+        """
+        if not payload:
+            return []
+        if not isinstance(payload, dict):
+            return []
+
+        names: List[str] = []
+        # Common keys
+        for key in ("players", "owners", "roster", "participants"):
+            raw = payload.get(key)
+            if isinstance(raw, dict):
+                raw = list(raw.values())
+            if isinstance(raw, list):
+                for entry in raw:
+                    if isinstance(entry, str):
+                        names.append(entry)
+                    elif isinstance(entry, dict):
+                        nm = entry.get("name") or entry.get("owner_name") or entry.get("player") or entry.get("player_name")
+                        if nm:
+                            names.append(nm)
+
+        # Bingo state JSON (often nested)
+        state = payload.get("state")
+        if isinstance(state, dict):
+            owners = state.get("owners") or state.get("players")
+            if isinstance(owners, list):
+                for entry in owners:
+                    if isinstance(entry, dict) and entry.get("owner_name"):
+                        names.append(entry.get("owner_name"))
+
+        # Cardgames embedded state
+        try:
+            names.extend(self._extract_cardgame_players(payload))
+        except Exception:
+            pass
+
         return [str(n).strip() for n in dict.fromkeys(names) if str(n).strip()]

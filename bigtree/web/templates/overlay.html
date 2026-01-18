@@ -204,6 +204,18 @@
         cursor: pointer;
         align-self: flex-start;
       }
+
+      .section-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+
+      /* Bingo owners list: compact + scrollable */
+      #bOwners{max-height:360px;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(0,0,0,.12);}
+      .owners-table{width:100%;border-collapse:collapse;font-size:0.88rem;}
+      .owners-table th,.owners-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:middle;}
+      .owners-table th{position:sticky;top:0;background:rgba(9,14,12,.95);backdrop-filter: blur(6px);color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;z-index:2;}
+      .owner-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
+      .owner-actions .icon-action{padding:6px;border-radius:10px;}
+      .owner-actions .icon-action svg{width:16px;height:16px;}
+      .owner-actions .mini-btn{padding:6px 10px;border-radius:10px;font-size:0.82rem;}
     </style>
   </head>
   <body>
@@ -342,9 +354,7 @@
                 <div class="dashboard-admin-title">Venue management</div>
               </div>
               <div class="dashboard-admin-actions">
-                <a class="dashboard-admin-link" href="/venues" target="_blank" rel="noreferrer">
-                  <span>List</span>
-                </a>
+                <button type="button" id="dashboardVenueList"><span>List</span></button>
                 <button type="button" id="dashboardAddVenue"><span>Add</span></button>
               </div>
               <p class="dashboard-admin-note">Assign yourself to a venue, set venue currency rules, and review venue-linked games.</p>
@@ -517,10 +527,15 @@
             <div class="section-divider"></div>
 
             <div class="bingo-section">
-              <h3>Players &amp; Cards</h3>
+              <div class="section-header-row">
+                <h3>Players &amp; Cards</h3>
+                <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
+                </button>
+              </div>
               <div class="empty-state" id="bOwnersEmpty">
                 <div class="muted">No players yet. Refresh to pull current owners.</div>
-                <button class="btn-ghost" id="bOwnersRefresh">Refresh players</button>
+                <div class="muted" style="font-size:12px;">Use the refresh icon above.</div>
               </div>
               <div class="list" id="bOwners"></div>
             </div>
@@ -1370,7 +1385,9 @@
       <div class="modal-card modal-card--wide">
         <div class="modal-header">
           <div class="modal-title">Player Cards</div>
-          <button class="btn-ghost" id="bOwnerClose">Close</button>
+          <button class="btn-ghost icon-btn" id="bOwnerClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.3-6.31z"/></svg>
+          </button>
         </div>
         <div class="context-header" id="bOwnerSummary">
           <div>
@@ -1389,7 +1406,9 @@
       <div class="modal-card">
         <div class="modal-header">
           <div class="modal-title">Player Link</div>
-          <button class="btn-ghost" id="bPurchaseClose">Close</button>
+          <button class="btn-ghost icon-btn" id="bPurchaseClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.3-6.31z"/></svg>
+          </button>
         </div>
         <div class="row">
           <div>
@@ -1440,6 +1459,63 @@
             </div>
           </section>
         </div>
+      </div>
+    </div>
+
+    <div class="modal" id="venueModal">
+      <div class="modal-card modal-card--wide">
+        <div class="modal-header">
+          <div class="modal-title">Venue</div>
+          <button class="btn-ghost icon-btn" id="venueClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.3-6.31z"/></svg>
+          </button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="venueSelect">Existing venues</label>
+            <select id="venueSelect"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="venueNew">New venue</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="venueSave">Save venue</button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="venueName"><span class="req">*</span> Name</label>
+            <input id="venueName" placeholder="e.g. The Quicksand">
+          </div>
+          <div>
+            <label for="venueCurrency">Currency</label>
+            <input id="venueCurrency" placeholder="e.g. gil">
+          </div>
+          <div>
+            <label for="venueMinBet">Minimum bet</label>
+            <input id="venueMinBet" type="number" min="0" value="0">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="venueBackground">Game background</label>
+            <select id="venueBackground"></select>
+          </div>
+          <div>
+            <label for="venueDeck">Card deck</label>
+            <select id="venueDeck"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="venueAdmins">Admin Discord IDs</label>
+            <input id="venueAdmins" placeholder="comma-separated (e.g. 123,456)">
+            <div class="muted" style="font-size:12px;margin-top:6px;">Used to auto-attach new games to this venue when created_by matches.</div>
+          </div>
+        </div>
+        <div class="status" id="venueStatus">Ready.</div>
       </div>
     </div>
     <div class="modal" id="deckCreateModal">

@@ -2972,25 +2972,175 @@
       on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
       on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
-      on("dashboardAddVenue", "click", async () => {
+      // Venue management (dashboard)
+      let venueCache = [];
+      let venueMediaCache = [];
+      let venueDeckCache = [];
+
+      function showVenueModal(show){
+        const modal = $("venueModal");
+        if (!modal) return;
+        modal.classList.toggle("show", !!show);
+      }
+
+      function setVenueStatus(msg, kind){
+        setStatusText("venueStatus", msg, kind);
+      }
+
+      function renderVenueSelect(){
+        const sel = $("venueSelect");
+        if (!sel) return;
+        const cur = sel.value || "";
+        const opts = [`<option value="">(pick a venue)</option>`]
+          .concat((venueCache || []).map(v => `<option value="${String(v.id)}">${escapeHtml(v.name || `Venue ${v.id}`)}</option>`));
+        sel.innerHTML = opts.join("");
+        if (cur) sel.value = cur;
+      }
+
+      function renderVenueBackgroundSelect(){
+        const sel = $("venueBackground");
+        if (!sel) return;
+        const cur = sel.value || "";
+        const opts = [`<option value="">(default)</option>`]
+          .concat((venueMediaCache || []).map(it => {
+            const label = it.title || it.name || it.filename || "Image";
+            return `<option value="${escapeHtml(it.url || "")}">${escapeHtml(label)}</option>`;
+          }));
+        sel.innerHTML = opts.join("");
+        if (cur) sel.value = cur;
+      }
+
+      function renderVenueDeckSelect(){
+        const sel = $("venueDeck");
+        if (!sel) return;
+        const cur = sel.value || "";
+        const opts = [`<option value="">(default)</option>`]
+          .concat((venueDeckCache || []).map(d => {
+            const id = d.id || d.deck || d.deck_id;
+            if (!id) return "";
+            const nm = d.name || d.title || id;
+            return `<option value="${escapeHtml(String(id))}">${escapeHtml(String(nm))}</option>`;
+          }).filter(Boolean));
+        sel.innerHTML = opts.join("");
+        if (cur) sel.value = cur;
+      }
+
+      async function loadVenueDeps(){
+        // Load media + decks (best-effort)
+        venueMediaCache = [];
+        venueDeckCache = [];
+        try{
+          const res = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){ handleUnauthorized(); throw new Error("Unauthorized"); }
+          const data = await res.json();
+          if (data.ok) venueMediaCache = data.items || [];
+        }catch(_e){ venueMediaCache = []; }
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          if (data && (data.ok || Array.isArray(data.decks))) venueDeckCache = data.decks || [];
+        }catch(_e){ venueDeckCache = []; }
+        renderVenueBackgroundSelect();
+        renderVenueDeckSelect();
+      }
+
+      async function loadVenuesForModal(){
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
-        const name = (prompt("Venue name") || "").trim();
-        if (!name) return;
+        try{
+          const data = await jsonFetch("/admin/venues", {method:"GET"});
+          venueCache = data.venues || [];
+        }catch(err){
+          venueCache = [];
+        }
+        renderVenueSelect();
+      }
+
+      function setVenueFields(v){
+        $("venueName").value = v?.name || "";
+        $("venueCurrency").value = v?.currency_name || "";
+        $("venueMinBet").value = String(v?.minimal_spend ?? 0);
+        $("venueBackground").value = v?.background_image || "";
+        $("venueDeck").value = v?.deck_id || "";
+        const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
+        if (Array.isArray(ids)){
+          $("venueAdmins").value = ids.join(", ");
+        }else if (typeof ids === "string"){
+          $("venueAdmins").value = ids;
+        }else{
+          $("venueAdmins").value = "";
+        }
+      }
+
+      function openVenueModal(mode){
+        const m = mode || {};
+        showVenueModal(true);
+        setVenueStatus("Loading...", "");
+        loadVenueDeps();
+        loadVenuesForModal().then(() => {
+          if (m.new){
+            $("venueSelect").value = "";
+            setVenueFields(null);
+          }else{
+            // Load first venue into fields for convenience
+            const first = venueCache && venueCache.length ? venueCache[0] : null;
+            if (first){
+              $("venueSelect").value = String(first.id);
+              setVenueFields(first);
+            }else{
+              setVenueFields(null);
+            }
+          }
+          setVenueStatus("Ready.", "");
+        });
+      }
+
+      on("dashboardVenueList", "click", () => openVenueModal({new:false}));
+      on("dashboardAddVenue", "click", () => openVenueModal({new:true}));
+      on("venueClose", "click", () => showVenueModal(false));
+      on("venueModal", "click", (ev) => { if (ev.target === $("venueModal")) showVenueModal(false); });
+      on("venueNew", "click", () => { $("venueSelect").value = ""; setVenueFields(null); setVenueStatus("Creating new venue.", ""); });
+      on("venueSelect", "change", () => {
+        const id = parseInt($("venueSelect").value || "0", 10) || 0;
+        const v = (venueCache || []).find(x => Number(x.id) === id) || null;
+        setVenueFields(v);
+      });
+      on("venueSave", "click", async () => {
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        const name = $("venueName").value.trim();
+        if (!name){ setVenueStatus("Name is required.", "err"); return; }
+        const currency = $("venueCurrency").value.trim();
+        const bg = $("venueBackground").value || "";
+        const deck = $("venueDeck").value || "";
+        if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
+        if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
+        if (!deck){ setVenueStatus("Card deck must be selected.", "err"); return; }
+        const payload = {
+          name,
+          currency_name: currency || null,
+          minimal_spend: parseInt($("venueMinBet").value || "0", 10) || 0,
+          background_image: bg || null,
+          deck_id: deck || null,
+          admin_discord_ids: $("venueAdmins").value || null,
+        };
+        setVenueStatus("Saving...", "");
         try{
           const resp = await jsonFetch("/admin/venues/upsert", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({name})
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify(payload)
           });
-          if (resp.ok){
-            showToast("Venue added.", "ok");
-            // Refresh venues list for Games filters if open.
-            loadGamesListVenues(true);
-          }else{
-            showToast(resp.error || "Venue create failed.", "err");
+          if (!resp.ok) throw new Error(resp.error || "Save failed");
+          showToast("Venue saved.", "ok");
+          // Refresh caches
+          await loadVenuesForModal();
+          await loadGamesListVenues(true);
+          const saved = resp.venue;
+          if (saved && saved.id){
+            $("venueSelect").value = String(saved.id);
+            setVenueFields(saved);
           }
+          setVenueStatus("Saved.", "ok");
         }catch(err){
-          showToast(err.message || String(err), "err");
+          setVenueStatus(err.message || String(err), "err");
         }
       });
       on("dashboardChangelogToggle", "click", () => {
@@ -3552,28 +3702,44 @@
           return;
         }
         if (empty) empty.style.display = "none";
-        el.innerHTML = "";
+        // Table layout: easiest to scan/scroll with large groups
+        const table = document.createElement("table");
+        table.className = "owners-table";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th style="text-align:left">Player</th>
+              <th style="width:90px">Cards</th>
+              <th style="width:180px">Claim</th>
+              <th style="width:170px;text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const tbody = table.querySelector("tbody");
+
         owners.forEach(o => {
-          const item = document.createElement("div");
-          item.className = "owner-row";
-          const claim = getOwnerClaimStatus(o.owner_name || "");
+          const ownerName = o.owner_name || "";
+          const claim = getOwnerClaimStatus(ownerName);
           const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
-          item.innerHTML = `
-            <div class="owner-row-main">
-              <div class="owner-row-name">
-                <strong>${o.owner_name}</strong>
-                <span class="${badgeClass}">${claim.label}</span>
-              </div>
-              <div class="owner-row-actions">
-                <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" data-owner="${o.owner_name}">
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><strong>${escapeHtml(ownerName)}</strong></td>
+            <td>${escapeHtml(o.cards)}</td>
+            <td><span class="${badgeClass}">${escapeHtml(claim.label)}</span></td>
+            <td>
+              <div class="owner-actions">
+                <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" aria-label="Copy player link">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg>
                 </button>
-                <button class="btn-ghost owner-view-btn" data-owner="${o.owner_name}">View Cards (${o.cards})</button>
+                <button class="btn-ghost mini-btn owner-view-btn">Cards</button>
               </div>
-            </div>
+            </td>
           `;
-          const viewBtn = item.querySelector(".owner-view-btn");
-          const copyBtn = item.querySelector(".owner-copy-btn");
+          const viewBtn = tr.querySelector(".owner-view-btn");
+          const copyBtn = tr.querySelector(".owner-copy-btn");
+          if (viewBtn) viewBtn.setAttribute("data-owner", ownerName);
+          if (copyBtn) copyBtn.setAttribute("data-owner", ownerName);
           if (viewBtn){
             viewBtn.addEventListener("click", () => {
               const name = viewBtn.getAttribute("data-owner") || "";
@@ -3605,8 +3771,11 @@
               }
             });
           }
-          el.appendChild(item);
+          if (tbody) tbody.appendChild(tr);
         });
+
+        el.innerHTML = "";
+        el.appendChild(table);
       }
 
       async function loadOwnersForGame(){
@@ -4409,7 +4578,10 @@
       }
 
       $("bRefresh").addEventListener("click", refreshBingo);
-      $("bOwnersRefresh").addEventListener("click", () => loadOwnersForGame());
+      const ownersRefresh = $("bOwnersRefreshIcon") || $("bOwnersRefresh");
+      if (ownersRefresh){
+        ownersRefresh.addEventListener("click", () => loadOwnersForGame());
+      }
 
       $("bAdvanceStage").addEventListener("click", async () => {
         try{

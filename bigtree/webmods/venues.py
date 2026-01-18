@@ -78,6 +78,7 @@ async def venues_update(req: web.Request) -> web.Response:
 
     currency_name = body.get("currency_name")
     background_image = body.get("background_image")
+    deck_id = body.get("deck_id")
     minimal_spend = body.get("minimal_spend")
 
     if currency_name is not None:
@@ -90,7 +91,16 @@ async def venues_update(req: web.Request) -> web.Response:
         except Exception:
             minimal_spend = None
 
-    ok = db.update_venue(int(membership.get("venue_id")), currency_name=currency_name, minimal_spend=minimal_spend, background_image=background_image)
+    if deck_id is not None:
+        deck_id = str(deck_id).strip() or None
+
+    ok = db.update_venue(
+        int(membership.get("venue_id")),
+        currency_name=currency_name,
+        minimal_spend=minimal_spend,
+        background_image=background_image,
+        deck_id=deck_id,
+    )
     if not ok:
         return web.json_response({"ok": False, "error": "update failed"}, status=500)
     membership = db.get_user_venue(int(user["id"]))
@@ -139,18 +149,40 @@ async def admin_venues_upsert(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "name required"}, status=400)
     currency_name = body.get("currency_name")
     background_image = body.get("background_image")
+    deck_id = body.get("deck_id")
     minimal_spend = body.get("minimal_spend")
+    admin_discord_ids = body.get("admin_discord_ids")
     if currency_name is not None:
         currency_name = str(currency_name).strip() or None
     if background_image is not None:
         background_image = str(background_image).strip() or None
+    if deck_id is not None:
+        deck_id = str(deck_id).strip() or None
     if minimal_spend is not None:
         try:
             minimal_spend = int(minimal_spend)
         except Exception:
             minimal_spend = None
     db = get_database()
-    venue = db.upsert_venue(name, currency_name=currency_name, minimal_spend=minimal_spend, background_image=background_image)
+    metadata = {}
+    if admin_discord_ids is not None:
+        # Accept a CSV string or list of ids.
+        if isinstance(admin_discord_ids, str):
+            ids = [x.strip() for x in admin_discord_ids.split(",") if x.strip()]
+        elif isinstance(admin_discord_ids, list):
+            ids = [str(x).strip() for x in admin_discord_ids if str(x).strip()]
+        else:
+            ids = []
+        metadata["admin_discord_ids"] = ids
+
+    venue = db.upsert_venue(
+        name,
+        currency_name=currency_name,
+        minimal_spend=minimal_spend,
+        background_image=background_image,
+        deck_id=deck_id,
+        metadata=metadata,
+    )
     if not venue:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     return web.json_response({"ok": True, "venue": venue})
