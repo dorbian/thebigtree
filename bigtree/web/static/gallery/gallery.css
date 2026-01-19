@@ -21,6 +21,16 @@
     background-repeat:no-repeat;
     background-size:cover;
     background-attachment:fixed;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  main{
+    position:relative;
+    z-index:1;
+    flex:1;
+    overflow:hidden;
   }
   body::before{
     content:"";
@@ -60,6 +70,136 @@
     gap:10px;
     align-items:center;
   }
+
+  /* --- Instagram-like gallery layout --- */
+  .layout{
+    display:grid;
+    grid-template-columns: 220px 1fr 360px;
+    gap:18px;
+    padding:18px;
+    height:100%;
+    width:100%;
+  }
+  @media (max-width: 980px){
+    .layout{
+      grid-template-columns: 1fr;
+      height:auto;
+    }
+    .sidebar{order:1}
+    .feed{order:2; max-height:none}
+    .details{order:3}
+  }
+  .sidebar{
+    background:rgba(16,26,21,.65);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:14px;
+    height:calc(100vh - 110px);
+    position:sticky;
+    top:92px;
+    overflow:auto;
+  }
+  .sidebar-group{display:flex; flex-direction:column; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .sidebar-group:last-child{border-bottom:none}
+  .sidebar-primary{
+    width:100%;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(107,212,162,.16);
+    color:var(--text);
+    cursor:pointer;
+    font-family:inherit;
+    font-weight:600;
+  }
+  .sidebar-link{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(12,21,17,.55);
+    color:var(--text);
+    text-decoration:none;
+  }
+  .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
+  .feed{
+    height:calc(100vh - 110px);
+    overflow-y:auto;
+    padding-right:6px;
+    scroll-snap-type:y proximity;
+  }
+  .post{
+    background:rgba(16,26,21,.55);
+    border:1px solid var(--line);
+    border-radius:22px;
+    margin-bottom:18px;
+    overflow:hidden;
+    scroll-snap-align:start;
+    position:relative;
+  }
+  .post-media{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,.18);
+  }
+  .post-media img{
+    width:100%;
+    height:auto;
+    max-height:78vh;
+    object-fit:contain;
+    display:block;
+  }
+  .post.inspiration{
+    padding:26px 22px;
+    min-height:160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+  .post.inspiration .inspiration-text{
+    font-size:1.15rem;
+    line-height:1.6;
+    color:rgba(231,242,234,.92);
+  }
+  .details{
+    height:calc(100vh - 110px);
+    position:sticky;
+    top:92px;
+    overflow:auto;
+  }
+  .details-card{
+    background:rgba(16,26,21,.65);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:14px;
+  }
+  .details-card .detail-title{font-size:1.1rem; font-weight:700; margin-bottom:6px}
+  .details-card .detail-artist{color:var(--muted); margin-bottom:12px}
+  .details-card .detail-origin{color:rgba(231,242,234,.7); margin-top:12px}
+
+  .details-card .detail-links{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top:10px;
+  }
+  .details-card .detail-links a{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    text-decoration:none;
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(12,21,17,.55);
+  }
+  .details-card .detail-links a:hover{border-color:rgba(214,178,110,.35)}
   .join-game{
     padding:8px 14px;
     border-radius:999px;

@@ -1,4 +1,6 @@
-﻿const grid = document.getElementById("grid");
+﻿const grid = document.getElementById("feed");
+  const headerSubtitle = document.getElementById("headerSubtitle");
+  const headerContext = document.getElementById("headerContext");
   const artistModal = document.getElementById("artistModal");
   const artistName = document.getElementById("artistName");
   const artistLinks = document.getElementById("artistLinks");
@@ -17,11 +19,14 @@
   const postGameBanner = document.getElementById("postGameBanner");
   const postGameTitle = document.getElementById("postGameTitle");
   const postGameDismiss = document.getElementById("postGameDismiss");
+  const postGameBody = document.getElementById("postGameBody");
   const joinGameBtn = document.getElementById("joinGameBtn");
   const walletUser = document.getElementById("walletUser");
   const walletLogin = document.getElementById("walletLogin");
   const returnPrompt = document.getElementById("returnPrompt");
   const returnClose = document.getElementById("returnClose");
+  const returnTitle = document.getElementById("returnTitle");
+  const returnBody = document.getElementById("returnBody");
   const artistFlavor = document.getElementById("artistFlavor");
   const toast = document.getElementById("toast");
   const suggestions = document.getElementById("suggestions");
@@ -41,7 +46,7 @@
   const CARD_MIN_WIDTH = 220;
   const CARD_HEIGHT = 380;
   const VIRTUAL_BUFFER_ROWS = 2;
-  const USE_VIRTUAL = true;
+  const USE_VIRTUAL = false;
   const PAGE_SIZE = 20;
   let gallerySeed = null;
   let galleryTotal = 0;
@@ -63,26 +68,9 @@
     event: {label: "Event"},
     tarot: {label: "Tarot"}
   };
-  const DIVIDER_LINES = [
-    "Not all offerings are loud. Some wait to be found.",
-    "The Forest keeps what is given in quiet places.",
-    "Each ritual leaves a trace, each trace a memory.",
-    "Leave what you can. The forest will hold it.",
-    "Some offerings are for the living. Some for the lost.",
-    "A quiet hand can change a whole gathering.",
-    "The canopy remembers the ones who returned.",
-    "We do not rush the roots.",
-    "Every light leaves a shadow of gratitude.",
-    "The hush between steps is part of the rite.",
-    "Even small gifts keep the grove alive.",
-    "Offerings speak when words fall away.",
-    "The trail you took is still warm.",
-    "Let the leaves decide what stays.",
-    "A single spark can keep the night kind.",
-    "The Forest hums with what you left behind.",
-    "Some stories are carried by quiet hands.",
-    "A breath, a bow, a candle, a promise."
-  ];
+  // Inspirational copy is managed from the database (gallery system config).
+  // If none is provided, no inspiration cards are injected.
+  const DIVIDER_LINES = [];
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
   let currentDetailIndex = -1;
@@ -128,7 +116,7 @@
     const token = window.localStorage.getItem(WALLET_TOKEN_KEY);
     if (!token){
       walletUser.style.display = "none";
-      walletLogin.style.display = "inline-flex";
+      walletLogin.style.display = "block";
       return;
     }
     try{
@@ -137,15 +125,12 @@
       if (!res.ok || !data.ok){
         throw new Error("invalid");
       }
-      const label = walletUser.querySelector("span");
-      if (label){
-        label.textContent = data.user?.xiv_username || "Wallet";
-      }
-      walletUser.style.display = "inline-flex";
+      walletUser.textContent = data.user?.xiv_username || "Wallet";
+      walletUser.style.display = "flex";
       walletLogin.style.display = "none";
     }catch(err){
       walletUser.style.display = "none";
-      walletLogin.style.display = "inline-flex";
+      walletLogin.style.display = "flex";
     }
   }
 
@@ -199,6 +184,45 @@
     }, 2000);
   }
 
+  function renderDetailPanel(data){
+    if (!data) return;
+    if (detailTitle) detailTitle.textContent = data.title || "";
+    if (detailArtist) detailArtist.textContent = data.artist ? `Offered by ${data.artist}` : "";
+    if (detailLinks){
+      const links = data.artist_links || {};
+      const ordered = LINK_ORDER.filter(key => links[key]);
+      const extras = Object.keys(links)
+        .filter(key => !LINK_ORDER.includes(key))
+        .filter(key => links[key]);
+      const keys = ordered.concat(extras);
+      const linkItems = keys.map((key) => {
+        const url = links[key];
+        if (!url) return "";
+        const label = LINK_LABELS[key] || key;
+        const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
+        return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
+      }).filter(Boolean);
+      // Always show direct media links if available.
+      if (data.url){
+        linkItems.unshift(`<a href="${data.url}" target="_blank" rel="noreferrer">${DEFAULT_LINK_ICON}<span>Open image</span></a>`);
+      }
+      if (!linkItems.length){
+        detailLinks.innerHTML = "<span class='muted'>No external links shared.</span>";
+      }else{
+        detailLinks.innerHTML = linkItems.join("");
+      }
+    }
+    if (detailOrigin) detailOrigin.textContent = data.origin || "";
+    if (detailActions){
+      detailActions.innerHTML = (data.actions || []).map((action) => {
+        return `<button class="reaction" data-reaction="${action.id}" data-item="${encodeURIComponent(data.item_id)}">${action.label} <span class="reaction-count">${action.count}</span></button>`;
+      }).join("");
+    }
+    if (detailTags){
+      detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
+    }
+  }
+
   function openImageModal(data){
     imageModalImg.onerror = null;
     imageModalImg.src = data.url;
@@ -214,31 +238,7 @@
       imageModalImg.dataset.fallback = "";
     }
     imageInfo.textContent = data.info || "";
-    if (detailTitle) detailTitle.textContent = data.title || "";
-    if (detailArtist) detailArtist.textContent = data.artist ? `Offered by ${data.artist}` : "";
-    if (detailLinks){
-      const links = data.artist_links || {};
-      const keys = Object.keys(links).filter((key) => links[key]);
-      if (!keys.length){
-        detailLinks.innerHTML = "<span class='muted'>No external links shared.</span>";
-      }else{
-        detailLinks.innerHTML = keys.map((key) => {
-          const url = links[key];
-          const label = LINK_LABELS[key] || key;
-          const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
-          return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
-        }).join("");
-      }
-    }
-    if (detailOrigin) detailOrigin.textContent = data.origin || "";
-    if (detailActions){
-      detailActions.innerHTML = (data.actions || []).map((action) => {
-        return `<button class="reaction" data-reaction="${action.id}" data-item="${encodeURIComponent(data.item_id)}">${action.label} <span class="reaction-count">${action.count}</span></button>`;
-      }).join("");
-    }
-    if (detailTags){
-      detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
-    }
+    renderDetailPanel(data);
     if (detailWatermark){
       detailWatermark.textContent = data.artist || "";
     }
@@ -256,15 +256,7 @@
     imageModal.setAttribute("aria-hidden", "true");
     imageModalImg.src = "";
     imageInfo.textContent = "";
-    if (detailTitle) detailTitle.textContent = "";
-    if (detailArtist) detailArtist.textContent = "";
-    if (detailOrigin) detailOrigin.textContent = "";
-    if (detailActions) detailActions.innerHTML = "";
-    if (detailTags) detailTags.innerHTML = "";
-    if (detailLinks) detailLinks.innerHTML = "";
     if (detailWatermark) detailWatermark.textContent = "";
-    if (detailLinks) detailLinks.innerHTML = "";
-    currentDetailIndex = -1;
     updateDetailNav();
   }
 
@@ -319,18 +311,33 @@
   function applyGallerySettings(settings){
     const cfg = settings || {};
     gallerySettings = cfg;
-    const columns = parseInt(cfg.columns || 0, 10);
-    if (columns > 0 && grid){
-      grid.style.setProperty("--gallery-columns", String(columns));
-    }else if (grid){
-      grid.style.removeProperty("--gallery-columns");
-    }
+    // Layout is feed-based; columns are ignored here.
     inspirationLines = normalizeInspirationLines(cfg.inspiration_texts || cfg.flair_text);
-    if (!inspirationLines.length){
-      inspirationLines = [...DIVIDER_LINES];
-    }
     const every = parseInt(cfg.inspiration_every || 0, 10);
     inspirationEvery = every > 0 ? every : 12;
+
+    // All inspirational / flavor copy can be overridden from the database.
+    if (headerSubtitle && cfg.header_subtitle){
+      headerSubtitle.textContent = String(cfg.header_subtitle);
+    }
+    if (headerContext && cfg.header_context){
+      headerContext.textContent = String(cfg.header_context);
+    }
+    if (postGameTitle && cfg.post_game_title){
+      postGameTitle.textContent = String(cfg.post_game_title);
+    }
+    if (postGameBody && cfg.post_game_body){
+      postGameBody.textContent = String(cfg.post_game_body);
+    }
+    if (returnTitle && cfg.return_title){
+      returnTitle.textContent = String(cfg.return_title);
+    }
+    if (returnBody && cfg.return_body){
+      returnBody.textContent = String(cfg.return_body);
+    }
+    if (suggestionsTitle && cfg.suggestions_title){
+      suggestionsTitle.textContent = String(cfg.suggestions_title);
+    }
   }
 
   async function loadBatch(offset){
@@ -431,34 +438,18 @@
     if (event.target === imageModal) closeImageModal();
   });
   imageModal.addEventListener("mousemove", showImageInfo);
+  // Mobile: tapping the image opens the zoom modal.
   grid.addEventListener("touchstart", (event) => {
     const target = event.target;
-    if (target.closest && target.closest(".reaction, .view-btn, .artist-link")) return;
-    const card = target.closest ? target.closest(".card") : null;
-    if (!card) return;
-    const payload = card.getAttribute("data-full");
+    const post = target.closest ? target.closest(".post") : null;
+    if (!post) return;
+    const payload = post.getAttribute("data-full");
     if (!payload) return;
-    if (card.classList.contains("tap-focus")){
-      try{
-        const parsed = JSON.parse(decodeURIComponent(payload));
-        openImageModal(parsed);
-      }catch (err){}
-      return;
-    }
-    document.querySelectorAll(".card.tap-focus").forEach((el) => el.classList.remove("tap-focus"));
-    card.classList.add("tap-focus");
-    if (card.dataset.tapTimeout){
-      clearTimeout(Number(card.dataset.tapTimeout));
-    }
-    const timeoutId = setTimeout(() => {
-      card.classList.remove("tap-focus");
-    }, 2500);
-    card.dataset.tapTimeout = String(timeoutId);
+    try{
+      const parsed = JSON.parse(decodeURIComponent(payload));
+      openImageModal(parsed);
+    }catch (err){}
   }, {passive: true});
-  document.addEventListener("click", (event) => {
-    if (event.target.closest && event.target.closest(".card")) return;
-    document.querySelectorAll(".card.tap-focus").forEach((el) => el.classList.remove("tap-focus"));
-  });
   if (postGameDismiss){
     postGameDismiss.addEventListener("click", () => {
       sessionStorage.setItem(SESSION_BANNER_KEY, "1");
@@ -494,19 +485,11 @@
   }
   grid.addEventListener("click", (event) => {
     const target = event.target;
-    if (target.tagName === "IMG" && target.getAttribute("data-full")){
+    // Clicking a post opens the zoom modal.
+    const post = target.closest ? target.closest(".post") : null;
+    if (post && post.getAttribute("data-full")){
       event.preventDefault();
-      const payload = target.getAttribute("data-full");
-      if (!payload) return;
-      try{
-        const parsed = JSON.parse(decodeURIComponent(payload));
-        openImageModal(parsed);
-      }catch (err){}
-      return;
-    }
-    if (target.classList && target.classList.contains("view-btn")){
-      event.preventDefault();
-      const payload = target.getAttribute("data-full");
+      const payload = post.getAttribute("data-full");
       if (!payload) return;
       try{
         const parsed = JSON.parse(decodeURIComponent(payload));
@@ -536,16 +519,6 @@
         openArtistModal("Forest", {});
       }
       return;
-    }
-    const card = target.closest ? target.closest(".card") : null;
-    if (card && card.getAttribute("data-full")){
-      event.preventDefault();
-      const payload = card.getAttribute("data-full");
-      if (!payload) return;
-      try{
-        const parsed = JSON.parse(decodeURIComponent(payload));
-        openImageModal(parsed);
-      }catch (err){}
     }
   });
   window.addEventListener("keydown", (event) => {
@@ -577,26 +550,12 @@
         match.reactions = data.reactions || {};
       }
       showToast("The Forest has received your offering.");
-      const reactionButton = grid.querySelector(`.reaction[data-item="${encodeURIComponent(itemId)}"][data-reaction="${reactionId}"]`);
-      if (reactionButton){
-        const count = Number((data.reactions || {})[reactionId] || 0);
-        const countNode = reactionButton.querySelector(".reaction-count");
-        if (countNode){
-          countNode.textContent = String(count);
-        }else{
-          reactionButton.innerHTML = `<span>${getReactionLabel(reactionId)}</span> <span class="reaction-count">${count}</span>`;
+      // Refresh the right-side panel counts for the active item.
+      if (currentDetailIndex >= 0){
+        const current = galleryItems[currentDetailIndex];
+        if (current && getItemKey(current) === itemId){
+          renderDetailPanel(buildDetailPayload(current));
         }
-        if (detailActions){
-          const detailButton = detailActions.querySelector(`.reaction[data-item="${encodeURIComponent(itemId)}"][data-reaction="${reactionId}"]`);
-          if (detailButton){
-            const detailCount = detailButton.querySelector(".reaction-count");
-            if (detailCount){
-              detailCount.textContent = String(count);
-            }
-          }
-        }
-      }else if (!USE_VIRTUAL){
-        renderGrid();
       }
     }catch(err){}
   }
@@ -675,96 +634,35 @@
     renderGrid();
   }
 
-  function buildCardHtml(item){
+  function buildCardHtml(item, index = 0){
     if (isTextOnlyItem(item)){
-      const text = escapeHtml(item.title || item.text || "Inspiration");
-      return `
-        <div class="card text-only">
-          <div class="card-body text-only-body">
-            <div class="text-only-title">${text}</div>
-          </div>
-        </div>
-      `;
+      return buildDividerHtml({text: item.title || item.text || ""});
     }
     const artist = item.artist || {};
     const artistName = artist.name || "Forest";
     const title = item.title || "Untitled Offering";
     const artistLinks = artist.links || {};
     const origin = (item.origin || "").trim() || getOrigin(item);
-    const type = getTypeBadge(item);
     const tags = getTags(item);
-    const infoText = [title, artistName, origin].filter(Boolean).join(" - ");
-    const artistPayload = encodeURIComponent(JSON.stringify({
-      name: artistName,
-      links: artistLinks
-    }));
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
-    const reactionRow = REACTIONS.map(reaction => {
-      const count = Number(baseCounts[reaction.id] || 0);
-      return `
-          <button class="reaction" data-reaction="${reaction.id}" data-item="${encodeURIComponent(itemKey)}" aria-label="${reaction.label}">
-            <span>${reaction.label}</span> <span class="reaction-count">${count}</span>
-          </button>
-        `;
-    }).join("");
-    const contextItems = [];
-    const rawType = (type || "").toLowerCase();
-    if (rawType.includes("contest")) contextItems.push(CONTEXT_LABELS.contest);
-    if (rawType.includes("artifact")) contextItems.push(CONTEXT_LABELS.artifact);
-    if (rawType.includes("tarot")) contextItems.push(CONTEXT_LABELS.tarot);
-    if (!contextItems.length && (item.event_name || item.event || item.rite)){
-      contextItems.push(CONTEXT_LABELS.event);
-    }
-    const contextRow = contextItems.map((entry) => {
-      return `<span class="context-pill" title="${entry.label}">${entry.label}</span>`;
-    }).join("");
-    const imgUrl = item.thumb_url || item.url;
-    const fallbackUrl = item.thumb_url ? (item.url || "") : (item.fallback_url || "");
+    const imgUrl = item.url || item.thumb_url || "";
+    const fallbackUrl = item.fallback_url || "";
     const fallbackAttr = fallbackUrl ? ` data-fallback="${fallbackUrl}"` : "";
-    const fullPayload = encodeURIComponent(JSON.stringify({
-      url: item.url,
-      fallback_url: item.fallback_url || "",
-      info: infoText,
-      title: title,
-      artist: artistName,
-      artist_links: artistLinks,
-      origin: origin,
-      item_id: itemKey,
-      actions: REACTIONS.map(reaction => ({
-        id: reaction.id,
-        label: reaction.label,
-        count: Number(baseCounts[reaction.id] || 0)
-      })),
-      tags: tags
-    }));
+
+    const payload = buildDetailPayload(item);
+    const fullPayload = encodeURIComponent(JSON.stringify(payload));
+
     const media = imgUrl
-      ? `<img src="${imgUrl}" alt="${title}" loading="lazy" decoding="async"${fallbackAttr} data-full="${fullPayload}" onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+      ? `<img src="${imgUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
-    const viewButton = item.url
-      ? `<button class="view-btn" data-full="${fullPayload}">View</button>`
-      : `<button class="view-btn" disabled>View</button>`;
-    const isActive = !activeArtistFilter || activeArtistFilter === artistName;
+
+    // Minimal post: image in the middle. All metadata + links live in the right panel.
     return `
-        <div class="card ${isActive ? "active" : ""}" data-artist="${artistName}" data-full="${fullPayload}">
-          <div class="card-media">
-            ${media}
-            <div class="card-watermark">${artistName}</div>
-          </div>
-          <div class="card-body">
-            <div class="artist-name">${artistName}</div>
-            <div class="work-title">${title}</div>
-            <div class="origin">${origin}</div>
-            ${contextRow ? `<div class="context-row">${contextRow}</div>` : ""}
-            ${tags.length ? `<div class="pill-row">${tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-            <a class="artist-link" href="#" data-artist="${artistPayload}">Offered by ${artistName}</a>
-            <div class="reaction-row">${reactionRow}</div>
-            <div class="card-actions">
-              ${viewButton}
-            </div>
-          </div>
-        </div>
-      `;
+      <article class="post" data-index="${index}" data-full="${fullPayload}" aria-label="${escapeHtml(title)}">
+        <div class="post-media">${media}</div>
+      </article>
+    `;
   }
 
   function scheduleVirtualRender(){
@@ -864,21 +762,67 @@
   }
 
   function buildDividerHtml(item){
-    return `<div class="divider-card">${item.title}</div>`;
+    const text = escapeHtml(item.text || item.title || "");
+    return `
+      <article class="post inspiration">
+        <div class="inspiration-text">${text}</div>
+      </article>
+    `;
   }
 
   function insertDividers(items){
     const out = [];
     const dividerEvery = inspirationEvery || 12;
     for (let i = 0; i < items.length; i += 1){
-      out.push(items[i]);
-      if ((i + 1) % dividerEvery === 0){
-        const pool = inspirationLines.length ? inspirationLines : DIVIDER_LINES;
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        out.push({_divider: true, title: pick});
+      out.push({kind: "item", item: items[i], index: i});
+      if (inspirationLines.length && (i + 1) % dividerEvery === 0){
+        const pick = inspirationLines[Math.floor(Math.random() * inspirationLines.length)];
+        if (pick){
+          out.push({kind: "divider", text: pick});
+        }
       }
     }
     return out;
+  }
+
+  let feedObserver = null;
+  function wireFeedObserver(){
+    if (!grid) return;
+    if (feedObserver){
+      try{ feedObserver.disconnect(); }catch(err){}
+      feedObserver = null;
+    }
+    const posts = Array.from(grid.querySelectorAll(".post[data-index]"));
+    if (!posts.length) return;
+    feedObserver = new IntersectionObserver((entries) => {
+      let best = null;
+      for (const entry of entries){
+        if (!entry.isIntersecting) continue;
+        if (!best || entry.intersectionRatio > best.intersectionRatio){
+          best = entry;
+        }
+      }
+      if (!best) return;
+      const idx = parseInt(best.target.getAttribute("data-index") || "-1", 10);
+      if (!Number.isFinite(idx) || idx < 0) return;
+      setActiveDetailIndex(idx);
+    }, {root: grid, threshold: [0.55, 0.75]});
+    posts.forEach((el) => feedObserver.observe(el));
+  }
+
+  function setActiveDetailIndex(index){
+    if (index < 0 || index >= galleryItems.length) return;
+    const item = galleryItems[index];
+    if (!item) return;
+    currentDetailIndex = index;
+    // Highlight active post
+    document.querySelectorAll(".post.active").forEach((el) => el.classList.remove("active"));
+    const active = grid.querySelector(`.post[data-index="${index}"]`);
+    if (active){
+      active.classList.add("active");
+    }
+    const payload = buildDetailPayload(item);
+    renderDetailPanel(payload);
   }
 
   function renderGrid(){
@@ -890,29 +834,40 @@
     }
     galleryRenderItems = insertDividers(items);
     grid.classList.toggle("filtering", !!activeArtistFilter);
-    if (USE_VIRTUAL){
-      scheduleVirtualRender();
-      if (!virtualListening){
-        virtualListening = true;
-        window.addEventListener("scroll", scheduleVirtualRender, {passive: true});
-        window.addEventListener("resize", scheduleVirtualRender);
-      }
-      return;
-    }
     grid.classList.remove("virtualized");
     grid.style.height = "";
-    grid.innerHTML = galleryRenderItems.map(item => (item && item._divider) ? buildDividerHtml(item) : buildCardHtml(item)).join("");
+    grid.innerHTML = galleryRenderItems.map((entry) => {
+      if (!entry) return "";
+      if (entry.kind === "divider") return buildDividerHtml(entry);
+      return buildCardHtml(entry.item, entry.index);
+    }).join("");
+    wireFeedObserver();
+    // Ensure the right panel shows something immediately.
+    if (currentDetailIndex < 0 && items.length){
+      setActiveDetailIndex(0);
+    }
     renderSuggestions();
   }
 
   function appendGrid(items){
     if (!Array.isArray(items) || !items.length) return;
     if (!grid.innerHTML){
-      grid.innerHTML = insertDividers(items).map(item => (item && item._divider) ? buildDividerHtml(item) : buildCardHtml(item)).join("");
+      const batch = insertDividers(items);
+      grid.innerHTML = batch.map((entry) => {
+        if (!entry) return "";
+        if (entry.kind === "divider") return buildDividerHtml(entry);
+        return buildCardHtml(entry.item, entry.index);
+      }).join("");
+      wireFeedObserver();
       return;
     }
     const batch = insertDividers(items);
-    grid.insertAdjacentHTML("beforeend", batch.map(item => (item && item._divider) ? buildDividerHtml(item) : buildCardHtml(item)).join(""));
+    grid.insertAdjacentHTML("beforeend", batch.map((entry) => {
+      if (!entry) return "";
+      if (entry.kind === "divider") return buildDividerHtml(entry);
+      return buildCardHtml(entry.item, entry.index);
+    }).join(""));
+    wireFeedObserver();
     renderSuggestions();
   }
 
@@ -970,11 +925,14 @@
       suggestions.setAttribute("aria-hidden", "true");
       return;
     }
-    const titleVariants = [
-      "The Forest suggests...",
-      "Other offerings you may feel drawn to..."
-    ];
-    if (suggestionsTitle){
+    const cfgTitle = gallerySettings && gallerySettings.suggestions_title ? String(gallerySettings.suggestions_title) : "";
+    if (suggestionsTitle && cfgTitle){
+      suggestionsTitle.textContent = cfgTitle;
+    }else if (suggestionsTitle){
+      const titleVariants = [
+        "The Forest suggests...",
+        "Other offerings you may feel drawn to..."
+      ];
       suggestionsTitle.textContent = titleVariants[Math.floor(Math.random() * titleVariants.length)];
     }
     let pool = [];

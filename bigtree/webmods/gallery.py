@@ -399,6 +399,14 @@ async def gallery_images(_req: web.Request):
         "columns": cfg.get("columns"),
         "inspiration_every": cfg.get("inspiration_every"),
         "inspiration_texts": cfg.get("inspiration_texts") or cfg.get("flair_text") or "",
+        # Optional UI copy overrides (so inspirational / flavor text can be managed in DB)
+        "header_subtitle": cfg.get("header_subtitle") or "",
+        "header_context": cfg.get("header_context") or "",
+        "suggestions_title": cfg.get("suggestions_title") or "",
+        "post_game_title": cfg.get("post_game_title") or "",
+        "post_game_body": cfg.get("post_game_body") or "",
+        "return_title": cfg.get("return_title") or "",
+        "return_body": cfg.get("return_body") or "",
     }
     resp = web.json_response({
         "ok": True,
