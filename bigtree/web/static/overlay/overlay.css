@@ -71,7 +71,7 @@
       }
       .login-card{
         width:min(480px,92vw);
-        background:rgba(10,16,28,.42);
+        background:rgba(10,16,28,.22);
         backdrop-filter: blur(6px);
         border:1px solid var(--line);
         border-radius:var(--radius);
