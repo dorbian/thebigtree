@@ -1005,3 +1005,40 @@
     setTimeout(showPrompt, 60000);
   }
 
+
+// --- Scroll redirect: page scroll drives middle feed ---
+document.addEventListener('wheel', (e) => {
+    const feed = document.querySelector('.gallery-feed');
+    if (!feed) return;
+    feed.scrollTop += e.deltaY;
+    e.preventDefault();
+}, { passive: false });
+
+// --- Sync right-side text with visible image ---
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const card = entry.target;
+        const meta = JSON.parse(card.dataset.meta || '{}');
+
+        const title = document.querySelector('#gallery-meta-title');
+        const body  = document.querySelector('#gallery-meta-body');
+        const links = document.querySelector('#gallery-meta-links');
+
+        if (title) title.textContent = meta.title || '';
+        if (body) body.textContent = meta.description || '';
+
+        if (links) {
+            links.innerHTML = '';
+            (meta.links || []).forEach(l => {
+                const a = document.createElement('a');
+                a.href = l.url;
+                a.textContent = l.label;
+                a.target = '_blank';
+                links.appendChild(a);
+            });
+        }
+    });
+}, { threshold: 0.6 });
+
+document.querySelectorAll('.gallery-item').forEach(el => observer.observe(el));
