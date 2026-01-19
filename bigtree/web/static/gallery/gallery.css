@@ -30,7 +30,9 @@
     position:relative;
     z-index:1;
     flex:1;
-    overflow:hidden;
+    /* Let the browser's page scrollbar drive the middle feed.
+       Sidebars stay sticky; the center column provides page height. */
+    overflow:visible;
   }
   body::before{
     content:"";
@@ -77,7 +79,8 @@
     grid-template-columns: 220px 1fr 360px;
     gap:18px;
     padding:18px;
-    height:100%;
+    /* Height is driven by content so the page can scroll naturally. */
+    min-height:calc(100vh - 110px);
     width:100%;
   }
   @media (max-width: 980px){
@@ -125,8 +128,9 @@
   }
   .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
   .feed{
-    height:calc(100vh - 110px);
-    overflow-y:auto;
+    /* The page scrolls; the feed itself should not create its own scrollbar. */
+    height:auto;
+    overflow:visible;
     padding-right:6px;
     scroll-snap-type:y proximity;
   }

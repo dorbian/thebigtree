@@ -74,6 +74,7 @@
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
   let currentDetailIndex = -1;
+  let scrollLinkedInit = false;
   const WALLET_TOKEN_KEY = "bigtree_user_token";
 
   const LINK_ORDER = ["instagram", "bluesky", "x", "artstation", "linktree", "website"];
@@ -370,6 +371,10 @@
           items: galleryItems
         });
         renderGrid();
+        if (!scrollLinkedInit){
+          scrollLinkedInit = true;
+          initScrollLinkedDetails();
+        }
       }else{
         galleryItems = galleryItems.concat(batch);
         if (USE_VIRTUAL){
@@ -405,6 +410,10 @@
       activeArtistFilter = null;
       if (filterRow) filterRow.style.display = "none";
       renderGrid();
+      if (!scrollLinkedInit){
+        scrollLinkedInit = true;
+        initScrollLinkedDetails();
+      }
       requestAnimationFrame(() => loadBatch(0));
       return;
     }
@@ -1005,40 +1014,66 @@
     setTimeout(showPrompt, 60000);
   }
 
+  // ------------------------------------------------------------
+  // Instagram-like behavior:
+  // - the browser scrollbar drives the page
+  // - as the user scrolls, the right panel updates to match
+  //   the most-visible post in the center column.
+  // ------------------------------------------------------------
+  function initScrollLinkedDetails(){
+    if (!grid) return;
 
-// --- Scroll redirect: page scroll drives middle feed ---
-document.addEventListener('wheel', (e) => {
-    const feed = document.querySelector('.gallery-feed');
-    if (!feed) return;
-    feed.scrollTop += e.deltaY;
-    e.preventDefault();
-}, { passive: false });
+    let lastItemId = null;
 
-// --- Sync right-side text with visible image ---
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (!entry.isIntersecting) return;
-        const card = entry.target;
-        const meta = JSON.parse(card.dataset.meta || '{}');
+    const readPayload = (postEl) => {
+      if (!postEl) return null;
+      const encoded = postEl.getAttribute("data-full") || "";
+      if (!encoded) return null;
+      try{
+        return JSON.parse(decodeURIComponent(encoded));
+      }catch(err){
+        return null;
+      }
+    };
 
-        const title = document.querySelector('#gallery-meta-title');
-        const body  = document.querySelector('#gallery-meta-body');
-        const links = document.querySelector('#gallery-meta-links');
+    const setActiveFromPost = (postEl) => {
+      const payload = readPayload(postEl);
+      if (!payload) return;
+      const id = payload.item_id || payload.url || "";
+      if (id && id === lastItemId) return;
+      lastItemId = id;
+      renderDetailPanel(payload);
+      if (detailWatermark) detailWatermark.textContent = payload.artist || "";
+    };
 
-        if (title) title.textContent = meta.title || '';
-        if (body) body.textContent = meta.description || '';
-
-        if (links) {
-            links.innerHTML = '';
-            (meta.links || []).forEach(l => {
-                const a = document.createElement('a');
-                a.href = l.url;
-                a.textContent = l.label;
-                a.target = '_blank';
-                links.appendChild(a);
-            });
+    const observer = new IntersectionObserver((entries) => {
+      // Pick the entry with the largest visible ratio.
+      let best = null;
+      for (const entry of entries){
+        if (!entry.isIntersecting) continue;
+        if (!best || entry.intersectionRatio > best.intersectionRatio){
+          best = entry;
         }
+      }
+      if (best) setActiveFromPost(best.target);
+    }, {
+      threshold: [0.15, 0.3, 0.45, 0.6, 0.75, 0.9]
     });
-}, { threshold: 0.6 });
 
-document.querySelectorAll('.gallery-item').forEach(el => observer.observe(el));
+    const observePosts = () => {
+      const posts = grid.querySelectorAll(".post[data-full]");
+      posts.forEach((post) => observer.observe(post));
+      // Initialize detail panel with the first post.
+      if (posts.length) setActiveFromPost(posts[0]);
+    };
+
+    observePosts();
+
+    // When the feed rerenders (paging/filter), re-observe.
+    const mo = new MutationObserver(() => {
+      // Disconnect and re-observe on next frame to avoid thrash.
+      observer.disconnect();
+      requestAnimationFrame(observePosts);
+    });
+    mo.observe(grid, {childList: true, subtree: true});
+  }
