@@ -36,8 +36,6 @@
       let dashboardStatsLoading = false;
       let dashboardLogsKind = "boot";
       let dashboardLogsLoading = false;
-      let xivUsers = [];
-      let xivUserMap = new Map();
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -125,13 +123,6 @@
 
       function getBase(){
         return window.location.origin;
-      }
-      const loginView = $("loginView");
-      if (loginView){
-        const adminBg = loginView.getAttribute("data-admin-bg");
-        if (adminBg){
-          loginView.style.setProperty("--admin-bg", `url("${adminBg}")`);
-        }
       }
 
       let librarySelectHandler = null;
@@ -2479,11 +2470,10 @@ This will block new games from being created in this event, but existing games c
         const canCardgames = hasScope("cardgames:admin") || canTarot;
         const canAdmin = hasScope("admin:web");
         const allowedPanels = new Set(["dashboard"]);
-          if (canBingo){
-            allowedPanels.add("bingo");
-            allowedPanels.add("media");
-            loadXivAuthUsers(true);
-          }
+        if (canBingo){
+          allowedPanels.add("bingo");
+          allowedPanels.add("media");
+        }
         if (canAdmin){
           allowedPanels.add("contests");
         }
@@ -4458,62 +4448,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         return {label: "No claim", cls: ""};
       }
 
-      function formatXivUserLabel(user){
-        if (!user) return "";
-        const name = user.xiv_username || user.name || "";
-        const world = user.world ? ` (${user.world})` : "";
-        return `${name}${world}`.trim();
-      }
-
-      function setXivAuthUsers(users){
-        xivUsers = Array.isArray(users) ? users : [];
-        xivUserMap = new Map();
-        xivUsers.forEach(u => {
-          if (!u || u.id === undefined || u.id === null) return;
-          const id = String(u.id);
-          xivUserMap.set(id, {
-            id,
-            xiv_username: u.xiv_username || "",
-            world: u.world || "",
-            label: formatXivUserLabel(u) || id
-          });
-        });
-        const select = $("bXivUserSelect");
-        if (select){
-          const current = select.value;
-          select.innerHTML = '<option value="">Select player</option>';
-          xivUserMap.forEach((user) => {
-            const opt = document.createElement("option");
-            opt.value = user.id;
-            opt.textContent = user.label;
-            select.appendChild(opt);
-          });
-          if (current && xivUserMap.has(String(current))){
-            select.value = current;
-          }
-        }
-      }
-
-      function getSelectedXivUser(){
-        const select = $("bXivUserSelect");
-        if (!select) return null;
-        const id = select.value || "";
-        if (!id) return null;
-        return xivUserMap.get(String(id)) || null;
-      }
-
-      async function loadXivAuthUsers(force = false){
-        if (!force && xivUsers.length){
-          return;
-        }
-        try{
-          const data = await jsonFetch("/bingo/xivauth/users?limit=1000", {method: "GET"});
-          setXivAuthUsers(data.users || []);
-        }catch(err){
-          setXivAuthUsers([]);
-        }
-      }
-
       function renderOwnersList(owners){
         const el = $("bOwners");
         const empty = $("bOwnersEmpty");
@@ -4525,68 +4459,58 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         if (empty) empty.style.display = "none";
         // Table layout: easiest to scan/scroll with large groups
         const table = document.createElement("table");
-          table.className = "owners-table";
-          table.innerHTML = `
-            <thead>
-              <tr>
-                <th style="text-align:left">Player</th>
-                <th style="width:90px">Cards</th>
-                <th style="width:180px">Claim</th>
-                <th style="width:200px">XivAuth</th>
-                <th style="width:220px;text-align:right">Actions</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          `;
-          const tbody = table.querySelector("tbody");
+        table.className = "owners-table";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th style="text-align:left">Player</th>
+              <th style="width:90px">Cards</th>
+              <th style="width:180px">Claim</th>
+              <th style="width:170px;text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const tbody = table.querySelector("tbody");
 
-          owners.forEach(o => {
-            const ownerName = o.owner_name || "";
-            const claim = getOwnerClaimStatus(ownerName);
-            const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
-            const ownerUserId = o.owner_user_id !== undefined && o.owner_user_id !== null
-              ? String(o.owner_user_id)
-              : "";
-            const linkedUser = ownerUserId ? xivUserMap.get(ownerUserId) : null;
-            const linkedLabel = linkedUser ? linkedUser.label : (ownerUserId ? `ID ${ownerUserId}` : "-");
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td><strong>${escapeHtml(ownerName)}</strong></td>
-              <td>${escapeHtml(o.cards)}</td>
-              <td><span class="${badgeClass}">${escapeHtml(claim.label)}</span></td>
-              <td><span class="owner-link">${escapeHtml(linkedLabel)}</span></td>
-              <td>
-                <div class="owner-actions">
-                  <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" aria-label="Copy player link">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg>
-                  </button>
-                  <button class="btn-ghost mini-btn owner-link-btn">Link</button>
-                  <button class="btn-ghost mini-btn owner-view-btn">Cards</button>
-                </div>
-              </td>
-            `;
-            const viewBtn = tr.querySelector(".owner-view-btn");
-            const copyBtn = tr.querySelector(".owner-copy-btn");
-            const linkBtn = tr.querySelector(".owner-link-btn");
-            if (viewBtn) viewBtn.setAttribute("data-owner", ownerName);
-            if (copyBtn) copyBtn.setAttribute("data-owner", ownerName);
-            if (linkBtn) linkBtn.setAttribute("data-owner", ownerName);
-            if (viewBtn){
-              viewBtn.addEventListener("click", () => {
-                const name = viewBtn.getAttribute("data-owner") || "";
-                if (!name) return;
-                const ownerInput = $("bOwner");
+        owners.forEach(o => {
+          const ownerName = o.owner_name || "";
+          const claim = getOwnerClaimStatus(ownerName);
+          const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><strong>${escapeHtml(ownerName)}</strong></td>
+            <td>${escapeHtml(o.cards)}</td>
+            <td><span class="${badgeClass}">${escapeHtml(claim.label)}</span></td>
+            <td>
+              <div class="owner-actions">
+                <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" aria-label="Copy player link">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg>
+                </button>
+                <button class="btn-ghost mini-btn owner-view-btn">Cards</button>
+              </div>
+            </td>
+          `;
+          const viewBtn = tr.querySelector(".owner-view-btn");
+          const copyBtn = tr.querySelector(".owner-copy-btn");
+          if (viewBtn) viewBtn.setAttribute("data-owner", ownerName);
+          if (copyBtn) copyBtn.setAttribute("data-owner", ownerName);
+          if (viewBtn){
+            viewBtn.addEventListener("click", () => {
+              const name = viewBtn.getAttribute("data-owner") || "";
+              if (!name) return;
+              const ownerInput = $("bOwner");
               if (ownerInput) ownerInput.value = name;
               updateBingoBuyState(currentGame, currentGame ? currentGame.called : []);
               loadOwnerCards(name);
               $("bOwnerModal").classList.add("show");
             });
           }
-            if (copyBtn){
-              copyBtn.addEventListener("click", async (ev) => {
-                ev.stopPropagation();
-                const name = copyBtn.getAttribute("data-owner") || "";
-                const gid = getGameId();
+          if (copyBtn){
+            copyBtn.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              const name = copyBtn.getAttribute("data-owner") || "";
+              const gid = getGameId();
               if (!gid || !name){
                 setBingoStatus("Select a game and player first.", "err");
                 return;
@@ -4598,39 +4522,12 @@ Games and events will keep their history, but this venue will be removed.`)) ret
                 await navigator.clipboard.writeText(url);
                 setBingoStatus("Copied player link.", "ok");
               }catch(err){
-                  setBingoStatus("Copy failed.", "err");
-                }
-              });
-            }
-            if (linkBtn){
-              linkBtn.addEventListener("click", async (ev) => {
-                ev.stopPropagation();
-                const name = linkBtn.getAttribute("data-owner") || "";
-                const gid = getGameId();
-                const selected = getSelectedXivUser();
-                if (!gid || !name){
-                  setBingoStatus("Select a game and player first.", "err");
-                  return;
-                }
-                if (!selected){
-                  setBingoStatus("Select a XivAuth player to link.", "err");
-                  return;
-                }
-                try{
-                  await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(name) + "/link-user", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({user_id: selected.id, xiv_username: selected.xiv_username})
-                  });
-                  setBingoStatus("Linked owner to XivAuth player.", "ok");
-                  loadOwnersForGame();
-                }catch(err){
-                  setBingoStatus("Link failed.", "err");
-                }
-              });
-            }
-            if (tbody) tbody.appendChild(tr);
-          });
+                setBingoStatus("Copy failed.", "err");
+              }
+            });
+          }
+          if (tbody) tbody.appendChild(tr);
+        });
 
         el.innerHTML = "";
         el.appendChild(table);
@@ -4646,7 +4543,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           return;
         }
         try{
-          await loadXivAuthUsers();
           const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners", {method:"GET"});
           renderOwnersList(data.owners || []);
         }catch(err){
@@ -5229,29 +5125,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           $("bPurchaseStatus").textContent = "Copy failed.";
         }
       });
-      const updatePlogonmasterBtn = $("updatePlogonmasterBtn");
-      if (updatePlogonmasterBtn){
-        updatePlogonmasterBtn.addEventListener("click", async () => {
-          updatePlogonmasterBtn.disabled = true;
-          updatePlogonmasterBtn.textContent = "Updating...";
-          try{
-            const resp = await fetch("/admin/update_with_leaf", {
-              method: "POST",
-              headers: {"Content-Type": "application/json"}
-            });
-            const data = await resp.json();
-            if (data.ok){
-              showToast("with.leaf updated successfully.", "ok");
-            }else{
-              showToast("Update failed: " + (data.error || "Unknown error"), "err");
-            }
-          }catch(err){
-            showToast("Update failed: " + err, "err");
-          }
-          updatePlogonmasterBtn.disabled = false;
-          updatePlogonmasterBtn.textContent = "Update Plugin Master";
-        });
-      }
 
       on("loginBtn", "click", () => {
         if (!apiKeyEl.value.trim()){
@@ -5502,10 +5375,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
       const ownersRefresh = $("bOwnersRefreshIcon") || $("bOwnersRefresh");
       if (ownersRefresh){
         ownersRefresh.addEventListener("click", () => loadOwnersForGame());
-      }
-      const xivRefresh = $("bXivUserRefresh");
-      if (xivRefresh){
-        xivRefresh.addEventListener("click", () => loadXivAuthUsers(true));
       }
 
       $("bAdvanceStage").addEventListener("click", async () => {
