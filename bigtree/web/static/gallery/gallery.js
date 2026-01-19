@@ -786,7 +786,7 @@
     for (let i = 0; i < items.length; i += 1){
       const globalIndex = startIndex + i;
       out.push({kind: "item", item: items[i], index: globalIndex});
-      if (inspirationLines.length && (globalIndex + 1) % dividerEvery === 0){
+      if (inspirationLines.length && (globalIndex + 1) % inspirationEvery === 0){
         const pick = inspirationLines[Math.floor(Math.random() * inspirationLines.length)];
         if (pick){
           out.push({kind: "divider", text: pick});
@@ -817,7 +817,7 @@
       const idx = parseInt(best.target.getAttribute("data-index") || "-1", 10);
       if (!Number.isFinite(idx) || idx < 0) return;
       setActiveDetailIndex(idx);
-    }, {root: grid, threshold: [0.55, 0.75]});
+    }, {root: null, rootMargin: '-40% 0px -40% 0px', threshold: [0.1, 0.25, 0.5, 0.75]});
     posts.forEach((el) => feedObserver.observe(el));
   }
 
