@@ -628,6 +628,77 @@ def get_owner_cards(
     rows.sort(key=lambda c: c.get("purchased_at", 0))  # oldest first
     return rows
 
+
+# -------- XIVAuth linking helpers --------
+
+def link_owner_to_user(game_id: str, owner_name: str, owner_user_id: int) -> Tuple[bool, str]:
+    """Associate all cards for an owner_name with a registered user id."""
+    owner_name = (owner_name or "").strip()
+    try:
+        owner_user_id = int(owner_user_id)
+    except Exception:
+        owner_user_id = 0
+    if not owner_name:
+        return False, "Owner name required."
+    if owner_user_id <= 0:
+        return False, "Valid owner_user_id required."
+
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found."
+
+    db = _open(game_id)
+    Card = Query()
+    rows = db.search((Card._type == "card") & (Card.game_id == game_id) & (Card.owner_name == owner_name))
+    if not rows:
+        return False, "No cards found for owner."
+
+    for card in rows:
+        card["owner_user_id"] = int(owner_user_id)
+        db.update(card, doc_ids=[card.doc_id])
+
+    return True, "OK"
+
+
+def get_owner_name_for_user(game_id: str, owner_user_id: int) -> Optional[str]:
+    """Return the most common owner_name used for a given registered user id."""
+    try:
+        owner_user_id = int(owner_user_id)
+    except Exception:
+        owner_user_id = 0
+    if owner_user_id <= 0:
+        return None
+
+    g = get_game(game_id)
+    if not g:
+        return None
+
+    db = _open(game_id)
+    Card = Query()
+    rows = db.search((Card._type == "card") & (Card.game_id == game_id) & (Card.owner_user_id == owner_user_id))
+    if not rows:
+        return None
+
+    counts: Dict[str, int] = {}
+    for card in rows:
+        nm = (card.get("owner_name") or "").strip()
+        if not nm:
+            continue
+        counts[nm] = counts.get(nm, 0) + 1
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
+def get_owner_token_for_user(game_id: str, owner_user_id: int, fallback_owner_name: Optional[str] = None) -> str:
+    """Create/return an owner token that matches the user's linked cards when possible."""
+    name = get_owner_name_for_user(game_id, owner_user_id)
+    if not name:
+        name = (fallback_owner_name or "").strip()
+    if not name:
+        raise ValueError("Owner name required.")
+    return get_owner_token(game_id, name)
+
 # -------- background handling --------
 def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     _ensure_dirs()
@@ -705,14 +776,40 @@ def list_owners(game_id: str) -> List[Dict[str, Any]]:
     db = _open(game_id)
     Card = Query()
     cards = db.search((Card._type == "card") & (Card.game_id == game_id))
+
     owners: Dict[str, Dict[str, Any]] = {}
     for c in cards:
         name = c.get("owner_name") or "Unknown"
-        entry = owners.setdefault(name, {"owner_name": name, "cards": 0, "last_purchase": 0})
+        entry = owners.setdefault(
+            name,
+            {
+                "owner_name": name,
+                "cards": 0,
+                "last_purchase": 0,
+                "_user_counts": {},
+            },
+        )
         entry["cards"] += 1
         entry["last_purchase"] = max(entry["last_purchase"], int(c.get("purchased_at") or 0))
-    out = list(owners.values())
-    out.sort(key=lambda x: (x["cards"], x["owner_name"]), reverse=True)
+        uid = c.get("owner_user_id")
+        if uid is not None:
+            try:
+                uid = int(uid)
+            except Exception:
+                uid = None
+        if uid:
+            entry["_user_counts"][uid] = entry["_user_counts"].get(uid, 0) + 1
+
+    out: List[Dict[str, Any]] = []
+    for entry in owners.values():
+        counts = entry.pop("_user_counts", {}) or {}
+        owner_user_id = None
+        if counts:
+            owner_user_id = max(counts.items(), key=lambda kv: kv[1])[0]
+        entry["owner_user_id"] = owner_user_id
+        out.append(entry)
+
+    out.sort(key=lambda x: (x.get("cards") or 0, x.get("owner_name") or ""), reverse=True)
     return out
 
 

@@ -52,7 +52,13 @@
       <h1>Game Management</h1>
       <p class="muted">Registered Characters (XIVAuth claims) and game history.</p>
     </div>
-    <button id="refreshBtn">Refresh</button>
+    <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; justify-content:flex-end;">
+      <label style="display:flex; flex-direction:column; gap:6px;">
+        <span class="muted" style="font-size:12px;">Admin API Key</span>
+        <input id="apiKeyInput" placeholder="paste API key" style="min-width:280px; padding:8px 10px; border-radius:8px; border:1px solid rgba(214,178,110,.25); background:rgba(0,0,0,.18); color:#e7f2ea;" />
+      </label>
+      <button id="refreshBtn">Refresh</button>
+    </div>
   </header>
 
   <section class="panel">
@@ -69,6 +75,28 @@
 
   <script>
     const refreshBtn = document.getElementById("refreshBtn");
+    const apiKeyInput = document.getElementById("apiKeyInput");
+
+    function getApiKey(){
+      const key = (apiKeyInput?.value || localStorage.getItem("forest_api_key") || "").trim();
+      if (apiKeyInput && key && apiKeyInput.value.trim() !== key){
+        apiKeyInput.value = key;
+      }
+      return key;
+    }
+
+    function saveApiKey(){
+      const key = (apiKeyInput?.value || "").trim();
+      if (key){
+        localStorage.setItem("forest_api_key", key);
+      }
+    }
+
+    if (apiKeyInput){
+      apiKeyInput.value = (localStorage.getItem("forest_api_key") || "").trim();
+      apiKeyInput.addEventListener("change", saveApiKey);
+      apiKeyInput.addEventListener("blur", saveApiKey);
+    }
     const gamesContainer = document.getElementById("gamesContainer");
     const claimsContainer = document.getElementById("claimsContainer");
     const errorMessage = document.getElementById("errorMessage");
@@ -76,7 +104,8 @@
     async function loadGames(){
       errorMessage.textContent = "Loading...";
       try{
-        const res = await fetch("/user-area/manage/games");
+        const key = getApiKey();
+        const res = await fetch("/user-area/manage/games", {headers: key ? {"X-API-Key": key} : {}});
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load games");
@@ -92,7 +121,8 @@
 
     async function loadClaims(){
       try{
-        const res = await fetch("/user-area/manage/claims?limit=2000");
+        const key = getApiKey();
+        const res = await fetch("/user-area/manage/claims?limit=2000", {headers: key ? {"X-API-Key": key} : {}});
         const data = await res.json();
         if(!res.ok || !data.ok){
           throw new Error(data.error || "Unable to load claims");

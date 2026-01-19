@@ -307,22 +307,83 @@ async def bingo_list_games(_req: web.Request):
     return web.json_response({"ok": True, "games": value})
 
 
+
+
+@route("GET", "/bingo/users", scopes=["bingo:admin"])
+async def bingo_list_users(_req: web.Request):
+    """List registered XIVAuth users for linking bingo owners."""
+    db = get_database()
+    users = db.list_users(limit=5000)
+    return web.json_response({"ok": True, "users": users})
 @route("GET", "/bingo/{game_id}/owners", scopes=["bingo:admin"])
 async def bingo_list_owners(req: web.Request):
     game_id = req.match_info["game_id"]
     try:
         owners = bingo.list_owners(game_id)
+        # Attach per-owner public token and XIVAuth info (if linked)
+        db = get_database()
+        users = db.list_users(limit=5000)
+        user_map = {int(u.get("id")): u for u in users if u.get("id") is not None}
         for o in owners:
             name = o.get("owner_name") or ""
-            if not name:
-                continue
+            uid = o.get("owner_user_id")
+            # token preference: user-linked (stable) -> name-based
             try:
-                o["token"] = bingo.get_owner_token(game_id, name)
+                if uid:
+                    o["token"] = bingo.get_owner_token_for_user(game_id, int(uid), fallback_owner_name=name)
+                elif name:
+                    o["token"] = bingo.get_owner_token(game_id, name)
             except Exception:
                 pass
+            # XIVAuth info
+            xiv = None
+            try:
+                if uid:
+                    xiv = user_map.get(int(uid))
+            except Exception:
+                xiv = None
+            if xiv:
+                o["xiv"] = {
+                    "user_id": xiv.get("id"),
+                    "xiv_username": xiv.get("xiv_username"),
+                    "world": xiv.get("world"),
+                    "xiv_id": xiv.get("xiv_id"),
+                }
+            else:
+                o["xiv"] = None
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400)
     return web.json_response({"ok": True, "owners": owners})
+
+
+@route("POST", "/bingo/{game_id}/owners/link", scopes=["bingo:admin"])
+async def bingo_link_owner(req: web.Request):
+    game_id = req.match_info["game_id"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    owner_name = (body.get("owner_name") or body.get("owner") or "").strip()
+    user_id = body.get("user_id") or body.get("owner_user_id") or body.get("id")
+    try:
+        user_id = int(user_id)
+    except Exception:
+        user_id = 0
+    if not owner_name:
+        return web.json_response({"ok": False, "error": "owner_name is required"}, status=400)
+    if user_id <= 0:
+        return web.json_response({"ok": False, "error": "user_id is required"}, status=400)
+
+    # validate user exists
+    db = get_database()
+    users = db.list_users(limit=5000)
+    if not any(int(u.get("id")) == user_id for u in users if u.get("id") is not None):
+        return web.json_response({"ok": False, "error": "user not found"}, status=404)
+
+    ok, msg = bingo.link_owner_to_user(game_id, owner_name, user_id)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True, "message": "OK"})
 
 @route("GET", "/bingo/{game_id}/owner/{owner}/token", scopes=["bingo:admin"])
 async def bingo_owner_token(req: web.Request):

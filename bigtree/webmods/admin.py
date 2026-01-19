@@ -648,3 +648,11 @@ async def update_with_leaf(req: web.Request):
         return web.json_response({"ok": True, "message": "Updated with.leaf"})
     except Exception as ex:
         return web.json_response({"ok": False, "error": str(ex)}, status=500)
+
+
+@route("GET", "/admin/discord-users", scopes=["admin:web"])
+async def admin_list_discord_users(_req: web.Request):
+    """List all Discord users that have ever used /auth (or were observed) for use in UI pickers."""
+    db = get_database()
+    users = db.list_discord_users(limit=5000)
+    return web.json_response({"ok": True, "users": users})

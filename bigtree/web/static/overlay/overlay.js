@@ -3420,6 +3420,70 @@ This will block new games from being created in this event, but existing games c
       let venueCache = [];
       let venueMediaCache = [];
       let venueDeckCache = [];
+      let venueDiscordUserCache = [];
+
+      function _discordUserLabel(u){
+        if (!u) return "";
+        const did = u.discord_id || "";
+        const dn = u.display_name || u.global_name || u.name || "";
+        const nm = u.name || "";
+        const best = dn || nm || String(did);
+        const tag = (dn && nm && dn !== nm) ? ` (@${nm})` : "";
+        return `${best}${tag} - ${did}`;
+      }
+
+      function renderVenueAdminsSelect(){
+        const sel = $("venueAdminsSelect");
+        if (!sel) return;
+        const curSel = new Set(Array.from(sel.selectedOptions || []).map(o => String(o.value || "")).filter(Boolean));
+        const opts = (venueDiscordUserCache || []).map(u => {
+          const id = String(u.discord_id || "");
+          if (!id) return "";
+          const label = _discordUserLabel(u);
+          return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+        }).filter(Boolean);
+        sel.innerHTML = opts.join("");
+        Array.from(sel.options).forEach(o => { if (curSel.has(String(o.value))) o.selected = true; });
+      }
+
+      function syncVenueAdminsFromSelect(){
+        const sel = $("venueAdminsSelect");
+        const input = $("venueAdmins");
+        if (!sel || !input) return;
+        const ids = Array.from(sel.selectedOptions || []).map(o => String(o.value || "").trim()).filter(Boolean);
+        input.value = ids.join(", ");
+      }
+
+      function applyVenueAdminsToSelect(ids){
+        const sel = $("venueAdminsSelect");
+        const input = $("venueAdmins");
+        if (input) input.value = (ids || []).join(", ");
+        if (!sel) return;
+        const set = new Set((ids || []).map(x => String(x).trim()).filter(Boolean));
+        Array.from(sel.options).forEach(o => { o.selected = set.has(String(o.value || "")); });
+      }
+
+      async function loadVenueDiscordUsers(){
+        if (!ensureScope("admin:web", "Admin web scope required.")) return;
+        try{
+          const data = await jsonFetch("/admin/discord-users", {method:"GET"});
+          venueDiscordUserCache = data.users || [];
+        }catch(_e){
+          venueDiscordUserCache = [];
+        }
+        renderVenueAdminsSelect();
+        filterVenueAdmins();
+      }
+
+      function filterVenueAdmins(){
+        const q = ($("venueAdminsFilter")?.value || "").trim().toLowerCase();
+        const sel = $("venueAdminsSelect");
+        if (!sel) return;
+        Array.from(sel.options).forEach(o => {
+          const txt = (o.textContent || "").toLowerCase();
+          o.hidden = !!q && !txt.includes(q);
+        });
+      }
 
       function showVenueModal(show){
         const modal = $("venueModal");
@@ -3513,6 +3577,12 @@ This will block new games from being created in this event, but existing games c
           $("venueAdmins").value = "";
         }
 
+        // Sync multi-select UI
+        let idsList = [];
+        const rawIds = $("venueAdmins").value || "";
+        idsList = rawIds.split(",").map(s => s.trim()).filter(Boolean);
+        applyVenueAdminsToSelect(idsList);
+
         const delBtn = $("venueDelete");
         if (delBtn){
           const canDelete = !!v && !!v.id;
@@ -3525,6 +3595,7 @@ This will block new games from being created in this event, but existing games c
         showVenueModal(true);
         setVenueStatus("Loading...", "");
         loadVenueDeps();
+        loadVenueDiscordUsers();
         loadVenuesForModal().then(() => {
           if (m.id){
             const id = Number(m.id);
@@ -3564,6 +3635,13 @@ This will block new games from being created in this event, but existing games c
         const id = parseInt($("venueSelect").value || "0", 10) || 0;
         const v = (venueCache || []).find(x => Number(x.id) === id) || null;
         setVenueFields(v);
+      });
+
+      on("venueAdminsSelect", "change", () => {
+        syncVenueAdminsFromSelect();
+      });
+      on("venueAdminsFilter", "input", () => {
+        filterVenueAdmins();
       });
       on("venueDelete", "click", async () => {
         if (!ensureScope("admin:web", "Admin web scope required.")) return;
@@ -4437,7 +4515,77 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         el.textContent = `Payload preview: channel_id=${channelId}${label}, created_by=${createdBy}`;
       }
 
-      function getOwnerClaimStatus(ownerName){
+      
+      // Bingo owner linking (XIVAuth)
+      let bingoUsersCache = [];
+      let bingoLinkOwnerName = "";
+
+      function showBingoOwnerLinkModal(show){
+        const modal = $("bOwnerLinkModal");
+        if (!modal) return;
+        modal.classList.toggle("show", !!show);
+      }
+
+      function renderBingoUserSelect(){
+        const sel = $("bOwnerLinkSelect");
+        if (!sel) return;
+        const q = ($("bOwnerLinkFilter")?.value || "").trim().toLowerCase();
+        const opts = (bingoUsersCache || []).map(u => {
+          const id = u.id;
+          if (!id) return "";
+          const label = `${u.xiv_username || "?"}${u.world ? " @ " + u.world : ""} (id:${id})`;
+          const hay = label.toLowerCase();
+          if (q && !hay.includes(q)) return "";
+          return `<option value="${escapeHtml(String(id))}">${escapeHtml(label)}</option>`;
+        }).filter(Boolean);
+        sel.innerHTML = opts.join("");
+      }
+
+      async function loadBingoUsers(){
+        try{
+          const data = await jsonFetch("/bingo/users", {method:"GET"});
+          bingoUsersCache = data.users || [];
+        }catch(_e){
+          bingoUsersCache = [];
+        }
+        renderBingoUserSelect();
+      }
+
+      function openBingoOwnerLinkModal(ownerName){
+        bingoLinkOwnerName = ownerName || "";
+        const label = $("bOwnerLinkOwner");
+        if (label) label.textContent = bingoLinkOwnerName || "-";
+        setStatusText("bOwnerLinkStatus", "Pick a user to link.", "");
+        showBingoOwnerLinkModal(true);
+        loadBingoUsers();
+      }
+
+      on("bOwnerLinkClose", "click", () => showBingoOwnerLinkModal(false));
+      on("bOwnerLinkModal", "click", (ev) => { if (ev.target === $("bOwnerLinkModal")) showBingoOwnerLinkModal(false); });
+      on("bOwnerLinkFilter", "input", () => renderBingoUserSelect());
+      on("bOwnerLinkSave", "click", async () => {
+        const gid = getGameId();
+        const sel = $("bOwnerLinkSelect");
+        const userId = sel ? (sel.value || "") : "";
+        if (!gid){ setStatusText("bOwnerLinkStatus", "Select a game first.", "err"); return; }
+        if (!bingoLinkOwnerName){ setStatusText("bOwnerLinkStatus", "Missing owner.", "err"); return; }
+        if (!userId){ setStatusText("bOwnerLinkStatus", "Pick a user.", "err"); return; }
+        setStatusText("bOwnerLinkStatus", "Linking...", "");
+        try{
+          await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owners/link", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({owner_name: bingoLinkOwnerName, user_id: parseInt(userId, 10)})
+          });
+          setStatusText("bOwnerLinkStatus", "Linked.", "ok");
+          showToast("Bingo owner linked.", "ok");
+          await loadOwnersForGame();
+          setTimeout(() => showBingoOwnerLinkModal(false), 250);
+        }catch(err){
+          setStatusText("bOwnerLinkStatus", err.message || String(err), "err");
+        }
+      });
+function getOwnerClaimStatus(ownerName){
         const claims = (currentGame && Array.isArray(currentGame.claims)) ? currentGame.claims : [];
         const pending = claims.some(c => c && c.owner_name === ownerName && c.pending);
         const denied = claims.some(c => c && c.owner_name === ownerName && c.denied);
@@ -4457,16 +4605,17 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           return;
         }
         if (empty) empty.style.display = "none";
-        // Table layout: easiest to scan/scroll with large groups
+
         const table = document.createElement("table");
         table.className = "owners-table";
         table.innerHTML = `
           <thead>
             <tr>
               <th style="text-align:left">Player</th>
+              <th style="text-align:left">XIVAuth</th>
               <th style="width:90px">Cards</th>
               <th style="width:180px">Claim</th>
-              <th style="width:170px;text-align:right">Actions</th>
+              <th style="width:230px;text-align:right">Actions</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -4477,9 +4626,14 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           const ownerName = o.owner_name || "";
           const claim = getOwnerClaimStatus(ownerName);
           const badgeClass = claim.cls ? `status-badge ${claim.cls}` : "status-badge";
+          const xiv = o.xiv || null;
+          const xivLabel = xiv && (xiv.xiv_username || xiv.world)
+            ? `${xiv.xiv_username || ""}${xiv.world ? " @ " + xiv.world : ""}`.trim()
+            : "-";
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td><strong>${escapeHtml(ownerName)}</strong></td>
+            <td class="muted">${escapeHtml(xivLabel)}</td>
             <td>${escapeHtml(o.cards)}</td>
             <td><span class="${badgeClass}">${escapeHtml(claim.label)}</span></td>
             <td>
@@ -4487,14 +4641,21 @@ Games and events will keep their history, but this venue will be removed.`)) ret
                 <button class="btn-ghost icon-action owner-copy-btn" title="Copy player link" aria-label="Copy player link">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H10V7h9v14z"/></svg>
                 </button>
+                <button class="btn-ghost icon-action owner-link-btn" title="Link to XIVAuth" aria-label="Link to XIVAuth">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.9 12a5 5 0 0 1 5-5h4v2h-4a3 3 0 1 0 0 6h4v2h-4a5 5 0 0 1-5-5zm7.1 1h2v-2h-2v2zm4-6h-4V5h4a5 5 0 0 1 0 10h-4v-2h4a3 3 0 1 0 0-6z"/></svg>
+                </button>
                 <button class="btn-ghost mini-btn owner-view-btn">Cards</button>
               </div>
             </td>
           `;
           const viewBtn = tr.querySelector(".owner-view-btn");
           const copyBtn = tr.querySelector(".owner-copy-btn");
+          const linkBtn = tr.querySelector(".owner-link-btn");
           if (viewBtn) viewBtn.setAttribute("data-owner", ownerName);
+          if (copyBtn) copyBtn.setAttribute("data-token", o.token || "");
           if (copyBtn) copyBtn.setAttribute("data-owner", ownerName);
+          if (linkBtn) linkBtn.setAttribute("data-owner", ownerName);
+
           if (viewBtn){
             viewBtn.addEventListener("click", () => {
               const name = viewBtn.getAttribute("data-owner") || "";
@@ -4506,26 +4667,45 @@ Games and events will keep their history, but this venue will be removed.`)) ret
               $("bOwnerModal").classList.add("show");
             });
           }
+
           if (copyBtn){
             copyBtn.addEventListener("click", async (ev) => {
               ev.stopPropagation();
-              const name = copyBtn.getAttribute("data-owner") || "";
               const gid = getGameId();
+              const tokenInline = copyBtn.getAttribute("data-token") || "";
+              const name = copyBtn.getAttribute("data-owner") || ownerName;
               if (!gid || !name){
                 setBingoStatus("Select a game and player first.", "err");
                 return;
               }
               try{
-                const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(name) + "/token", {method:"GET"});
+                let token = tokenInline;
+                if (!token){
+                  const data = await jsonFetch("/bingo/" + encodeURIComponent(gid) + "/owner/" + encodeURIComponent(name) + "/token", {method:"GET"});
+                  token = data.token || "";
+                }
                 const base = getBase();
-                const url = new URL("/bingo/owner?token=" + encodeURIComponent(data.token || ""), base).toString();
+                const url = new URL("/bingo/owner?token=" + encodeURIComponent(token || ""), base).toString();
                 await navigator.clipboard.writeText(url);
                 setBingoStatus("Copied player link.", "ok");
-              }catch(err){
+              }catch(_err){
                 setBingoStatus("Copy failed.", "err");
               }
             });
           }
+
+          if (linkBtn){
+            linkBtn.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              const name = linkBtn.getAttribute("data-owner") || "";
+              if (!name){
+                setBingoStatus("Missing owner name.", "err");
+                return;
+              }
+              openBingoOwnerLinkModal(name);
+            });
+          }
+
           if (tbody) tbody.appendChild(tr);
         });
 
@@ -4852,24 +5032,7 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           setGalleryChannelStatus(err.message, "err");
         }
       });
-      $("galleryFlairSave").addEventListener("click", async () => {
-        const flair = $("galleryFlairText")?.value || "";
-        setStatusText("galleryFlairStatus", "Saving...", "");
-        try{
-          await jsonFetch("/api/gallery/settings", {
-            method:"POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({flair_text: String(flair)})
-          }, true);
-          setStatusText("galleryFlairStatus", "Flair text saved.", "ok");
-        }catch(err){
-          setStatusText("galleryFlairStatus", err.message, "err");
-        }
-      });
-      $("galleryFlairClear").addEventListener("click", () => {
-        const el = $("galleryFlairText");
-        if (el) el.value = "";
-      });
+      // Flair text UI removed
       $("galleryLayoutSave").addEventListener("click", async () => {
         const columns = $("galleryColumns")?.value || "";
         const every = $("galleryInspirationEvery")?.value || "";

@@ -535,6 +535,8 @@
         padding:12px;
         background:rgba(6,10,18,.4);
         color:var(--muted);
+        max-height:60vh;
+        overflow:auto;
       }
       .dash-changelog h3,
       .dash-changelog h4,

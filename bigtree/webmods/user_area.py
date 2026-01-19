@@ -475,25 +475,43 @@ async def user_games(request: web.Request) -> web.Response:
         for game in games:
             if game.get("module") != "bingo":
                 continue
-            if game.get("join_code"):
+
+            game_id = str(game.get("game_id") or "").strip()
+            if not game_id:
                 continue
-            game_id = game.get("game_id") or ""
-            owner = user.get("xiv_username") or game.get("claimed_username") or ""
-            if not owner:
+
+            # Determine expected owner name (best effort)
+            owner_name = (user.get("xiv_username") or game.get("claimed_username") or "").strip()
+            if not owner_name:
                 players = game.get("players") or []
                 for player in players:
                     role = str(player.get("role") or "").lower()
                     if role in {"owner", "host", "dealer", "caller"}:
-                        owner = player.get("name") or ""
+                        owner_name = (player.get("name") or "").strip()
                         break
-            if not game_id or not owner:
-                continue
-            try:
-                token = bingo_mod.get_owner_token(str(game_id), str(owner))
-            except Exception:
-                token = ""
-            if token:
-                game["join_code"] = token
+
+            join_code = (game.get("join_code") or "").strip()
+            valid = False
+            if join_code:
+                try:
+                    info = bingo_mod.resolve_owner_token(join_code)
+                    valid = bool(info and str(info.get("game_id") or "") == game_id)
+                except Exception:
+                    valid = False
+
+            if not join_code or not valid:
+                try:
+                    token = bingo_mod.get_owner_token_for_user(game_id, int(user.get("id")), fallback_owner_name=owner_name)
+                except Exception:
+                    token = ""
+                if token:
+                    join_code = token
+                    game["join_code"] = join_code
+                    try:
+                        db.set_game_join_code(game_id, join_code)
+                    except Exception:
+                        pass
+
     return web.json_response({"ok": True, "games": games})
 
 
