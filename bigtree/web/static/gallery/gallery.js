@@ -188,6 +188,7 @@
 
   function renderDetailPanel(data){
     if (!data) return;
+    document.body.classList.add("details-ready");
     if (detailTitle) detailTitle.textContent = data.title || "";
     if (detailArtist) detailArtist.textContent = data.artist ? `Offered by ${data.artist}` : "";
     if (detailLinks){
@@ -372,7 +373,8 @@
           items: galleryItems
         });
         renderGrid();
-        if (!scrollLinkedInit){
+        if (galleryItems.length) { setActiveDetailIndex(0); }
+if (!scrollLinkedInit){
           scrollLinkedInit = true;
           initScrollLinkedDetails();
         }
@@ -670,7 +672,7 @@
     // Minimal post: image in the middle. All metadata + links live in the right panel.
     return `
       <article class="post" data-index="${index}" data-full="${fullPayload}" aria-label="${escapeHtml(title)}">
-        <div class="post-media">${media}</div>
+        <div class="post-media">${media}<div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div></div>
       </article>
     `;
   }

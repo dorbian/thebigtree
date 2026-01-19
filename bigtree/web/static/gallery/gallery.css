@@ -1085,3 +1085,33 @@
 .divider-card{
   margin: 10px 0 34px 0;
 }
+
+
+/* --- Artist watermark on each image --- */
+.post .post-media{ position: relative; }
+
+.artist-watermark{
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0,0,0,0.35);
+  color: rgba(255,255,255,0.92);
+  pointer-events: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Make details visible even before selecting (content will populate from first post). */
+.details-card{
+  opacity: 1;
+  transform: none;
+}
