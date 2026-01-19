@@ -720,8 +720,8 @@
           <td>${escapeHtml(title)}<div class="muted" style="font-size:12px;"><code>${escapeHtml(code)}</code></div>${eventLink}</td>
           <td><span class="status-chip">${escapeHtml(status)}</span></td>
           <td>${escapeHtml(venue)}</td>
-          <td>${escapeHtml(currency)}</td>
           <td>${escapeHtml(wallet)}</td>
+          <td>${escapeHtml(currency)}</td>
           <td>${escapeHtml(String(gamesCount))}</td>
         </tr>
       `;
@@ -748,9 +748,6 @@
         const currency = ev.currency_name || "-";
         const venue = ev.venue_name || "-";
         const usableText = walletEnabled ? (walletUsable ? "usable in new events" : "not usable in new events") : "-";
-        const walletBalanceText = walletEnabled
-          ? (currency !== "-" ? `${walletBalance ?? 0} ${currency}` : String(walletBalance ?? 0))
-          : "-";
         const historyRows = walletHistory.length ? `
           <table style="margin-top:12px;">
             <thead><tr><th>Time</th><th>Change</th><th>Balance</th><th>Reason</th></tr></thead>
@@ -798,8 +795,9 @@
             <div class="detail-item"><span>Event code</span>${escapeHtml(ev.event_code || "-")}</div>
             <div class="detail-item"><span>Status</span>${escapeHtml(status)}</div>
             <div class="detail-item"><span>Venue</span>${escapeHtml(venue)}</div>
+            <div class="detail-item"><span>Currency</span>${escapeHtml(currency)}</div>
             <div class="detail-item"><span>Wallet enabled</span>${walletEnabled ? "Yes" : "No"}</div>
-            <div class="detail-item"><span>Wallet balance</span>${escapeHtml(walletBalanceText)}</div>
+            <div class="detail-item"><span>Wallet balance</span>${walletEnabled ? escapeHtml(String(walletBalance ?? 0)) : "-"}</div>
             <div class="detail-item"><span>Wallet carry-over</span>${walletEnabled ? (data.carry_over ? "Yes" : "No") : "-"}</div>
             <div class="detail-item"><span>Usable later</span>${walletEnabled ? escapeHtml(usableText) : "-"}</div>
           </div>

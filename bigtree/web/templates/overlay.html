@@ -16,8 +16,8 @@
       }
       .login-screen{
         background:
-          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 60%),
-          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 60%),
+          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 40%),
+          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 40%),
           linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
           url("{ADMIN_BACKGROUND}");
         background-size: cover;
@@ -234,8 +234,8 @@
     <div class="login-screen" id="loginView">
       <div class="login-card">
         <div class="login-title">Forest Management</div>
-        <div class="login-sub">Enter your API key to manage the forest.</div>
-        <label for="apiKeyLogin">API key</label>
+        <div class="login-sub">Enter your /auth key to manage the forest.</div>
+        <label for="apiKeyLogin">Auth key</label>
         <input id="apiKeyLogin" placeholder="Paste /auth token">
         <button id="loginBtn">Login</button>
         <div class="status" id="loginStatus">Ready.</div>
@@ -258,9 +258,9 @@
 
           <div class="nav-block">
             <div class="nav-title">Home</div>
-            <div class="menu-item" id="menuDashboard" tabindex="0">
-              <span class="menu-label">Dashboard</span>
-            </div>
+            <div class="menu-item" id="menuDashboard" tabindex="0"><span class="menu-label">Dashboard</span></div>
+            <div class="menu-item" id="menuTarotDecks" tabindex="0"><span class="menu-label">Deck Editor</span></div>
+            <div class="menu-item" id="menuContests" tabindex="0"><span class="menu-label">Contests</span></div>
           </div>
 
           <div class="nav-block">
@@ -285,10 +285,9 @@
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Cardgames</div>
+            <div class="nav-title">Cards</div>
             <div class="menu-item" id="menuTarotLinks" tabindex="0"><span class="menu-label">Tarot Sessions</span></div>
             <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Cardgame Sessions</span></div>
-            <div class="menu-item" id="menuTarotDecks" tabindex="0"><span class="menu-label">Deck Editor</span></div>
           </div>
 
           <div class="nav-block">
@@ -298,13 +297,8 @@
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Discord</div>
-            <div class="menu-item" id="menuContests" tabindex="0"><span class="menu-label">Contests</span></div>
-          </div>
-
-          <div class="nav-block">
-            <div class="nav-title">Games</div>
-            <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">List</span></div>
+            <div class="nav-title">Archives</div>
+            <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">Games</span></div>
             <div class="menu-item" id="menuGamesEvents" tabindex="0"><span class="menu-label">Events</span></div>
           </div>
 
