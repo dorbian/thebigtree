@@ -53,7 +53,8 @@
   let galleryLoading = false;
   let gallerySettings = {};
   let inspirationLines = [];
-  let inspirationEvery = 12;
+  // Default: inject an inspiration card once every 5 images.
+  let inspirationEvery = 5;
   const GALLERY_CACHE_KEY = "forest_gallery_cache_v1";
   let activeArtistFilter = null;
   const REACTIONS = [
@@ -315,7 +316,7 @@
     // Layout is feed-based; columns are ignored here.
     inspirationLines = normalizeInspirationLines(cfg.inspiration_texts || cfg.flair_text);
     const every = parseInt(cfg.inspiration_every || 0, 10);
-    inspirationEvery = every > 0 ? every : 12;
+    inspirationEvery = every > 0 ? every : 5;
 
     // All inspirational / flavor copy can be overridden from the database.
     if (headerSubtitle && cfg.header_subtitle){
@@ -380,7 +381,7 @@
         if (USE_VIRTUAL){
           renderGrid();
         }else{
-          appendGrid(batch);
+          appendGrid(batch, offset);
         }
       }
       if (galleryItems.length < galleryTotal){
@@ -779,12 +780,13 @@
     `;
   }
 
-  function insertDividers(items){
+  function insertDividers(items, startIndex = 0){
     const out = [];
-    const dividerEvery = inspirationEvery || 12;
+    const dividerEvery = inspirationEvery || 5;
     for (let i = 0; i < items.length; i += 1){
-      out.push({kind: "item", item: items[i], index: i});
-      if (inspirationLines.length && (i + 1) % dividerEvery === 0){
+      const globalIndex = startIndex + i;
+      out.push({kind: "item", item: items[i], index: globalIndex});
+      if (inspirationLines.length && (globalIndex + 1) % dividerEvery === 0){
         const pick = inspirationLines[Math.floor(Math.random() * inspirationLines.length)];
         if (pick){
           out.push({kind: "divider", text: pick});
@@ -858,10 +860,11 @@
     renderSuggestions();
   }
 
-  function appendGrid(items){
+  function appendGrid(items, startIndex){
     if (!Array.isArray(items) || !items.length) return;
+    const baseIndex = Number.isFinite(startIndex) ? startIndex : Math.max(0, galleryItems.length - items.length);
     if (!grid.innerHTML){
-      const batch = insertDividers(items);
+      const batch = insertDividers(items, baseIndex);
       grid.innerHTML = batch.map((entry) => {
         if (!entry) return "";
         if (entry.kind === "divider") return buildDividerHtml(entry);
@@ -870,7 +873,7 @@
       wireFeedObserver();
       return;
     }
-    const batch = insertDividers(items);
+    const batch = insertDividers(items, baseIndex);
     grid.insertAdjacentHTML("beforeend", batch.map((entry) => {
       if (!entry) return "";
       if (entry.kind === "divider") return buildDividerHtml(entry);
@@ -1046,8 +1049,10 @@
       if (detailWatermark) detailWatermark.textContent = payload.artist || "";
     };
 
+    // Prefer the post that sits in the "center band" of the viewport.
+    // Using rootMargin keeps side panels stable and makes the active post
+    // switch predictably while scrolling.
     const observer = new IntersectionObserver((entries) => {
-      // Pick the entry with the largest visible ratio.
       let best = null;
       for (const entry of entries){
         if (!entry.isIntersecting) continue;
@@ -1057,7 +1062,9 @@
       }
       if (best) setActiveFromPost(best.target);
     }, {
-      threshold: [0.15, 0.3, 0.45, 0.6, 0.75, 0.9]
+      root: null,
+      rootMargin: "-35% 0px -35% 0px",
+      threshold: [0.01, 0.15, 0.3, 0.45, 0.6]
     });
 
     const observePosts = () => {
