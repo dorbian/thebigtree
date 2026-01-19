@@ -6,6 +6,7 @@ import random
 from typing import Any, Dict, Optional
 import bigtree
 import discord
+from bigtree.inc.database import get_database
 from bigtree.inc.logging import logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.modules import bingo as bingo
@@ -323,6 +324,34 @@ async def bingo_list_owners(req: web.Request):
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400)
     return web.json_response({"ok": True, "owners": owners})
+
+@route("GET", "/bingo/xivauth/users", scopes=["bingo:admin"])
+async def bingo_list_xivauth_users(req: web.Request):
+    db = get_database()
+    try:
+        limit = int(req.query.get("limit") or 1000)
+    except Exception:
+        limit = 1000
+    users = db.list_users(limit=limit)
+    return web.json_response({"ok": True, "users": users})
+
+@route("POST", "/bingo/{game_id}/owner/{owner}/link-user", scopes=["bingo:admin"])
+async def bingo_link_owner_user(req: web.Request):
+    game_id = req.match_info["game_id"]
+    owner = req.match_info["owner"]
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    owner_user_id = body.get("user_id")
+    new_owner_name = str(body.get("xiv_username") or body.get("user_name") or body.get("name") or "").strip() or None
+    try:
+        ok, msg, updated = bingo.link_owner_to_user(game_id, owner, owner_user_id, new_owner_name=new_owner_name)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=400)
+    return web.json_response({"ok": True, "updated": updated, "owner": new_owner_name or owner})
 
 @route("GET", "/bingo/{game_id}/owner/{owner}/token", scopes=["bingo:admin"])
 async def bingo_owner_token(req: web.Request):

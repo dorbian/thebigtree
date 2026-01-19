@@ -711,9 +711,62 @@ def list_owners(game_id: str) -> List[Dict[str, Any]]:
         entry = owners.setdefault(name, {"owner_name": name, "cards": 0, "last_purchase": 0})
         entry["cards"] += 1
         entry["last_purchase"] = max(entry["last_purchase"], int(c.get("purchased_at") or 0))
+        owner_id = c.get("owner_user_id")
+        if owner_id is not None:
+            if "owner_user_id" not in entry:
+                entry["owner_user_id"] = owner_id
+            elif entry.get("owner_user_id") != owner_id:
+                entry["owner_user_id"] = None
     out = list(owners.values())
     out.sort(key=lambda x: (x["cards"], x["owner_name"]), reverse=True)
     return out
+
+
+def _relink_owner_tokens(game_id: str, old_name: str, new_name: str) -> None:
+    if not old_name or not new_name or old_name == new_name:
+        return
+    idx = _read_index()
+    game_map = idx.setdefault("owner_keys", {}).get(str(game_id), {})
+    token = game_map.pop(old_name, None)
+    if token:
+        if new_name not in game_map:
+            game_map[new_name] = token
+        idx.setdefault("owner_tokens", {}).setdefault(token, {})["owner_name"] = new_name
+        idx["owner_keys"][str(game_id)] = game_map
+        _write_index(idx)
+
+
+def link_owner_to_user(
+    game_id: str,
+    owner_name: str,
+    owner_user_id: Optional[int],
+    new_owner_name: Optional[str] = None,
+) -> Tuple[bool, str, int]:
+    g = get_game(game_id)
+    if not g:
+        return False, "Game not found.", 0
+    owner_name = (owner_name or "").strip()
+    if not owner_name:
+        return False, "Owner name required.", 0
+    updated_name = (new_owner_name or "").strip() or owner_name
+    db = _open(game_id)
+    Card = Query()
+    rows = db.search((Card._type == "card") & (Card.game_id == game_id) & (Card.owner_name == owner_name))
+    if not rows:
+        return False, "Owner not found.", 0
+    count = 0
+    for card in rows:
+        if owner_user_id is not None:
+            try:
+                card["owner_user_id"] = int(owner_user_id)
+            except Exception:
+                card["owner_user_id"] = owner_user_id
+        if updated_name and updated_name != owner_name:
+            card["owner_name"] = updated_name
+        db.update(card, doc_ids=[card.doc_id])
+        count += 1
+    _relink_owner_tokens(game_id, owner_name, updated_name)
+    return True, "OK", count
 
 
 def update_game(game_id: str, **fields) -> Dict[str, Any]:

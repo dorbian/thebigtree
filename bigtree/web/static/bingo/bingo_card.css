@@ -1,0 +1,24 @@
+:root{
+  --bg:#0b1611;
+  --panel:#0f1e16;
+  --line:#1f3a2b;
+  --ink:#e8f7ef;
+  --muted:#9bb6a7;
+  --accent:#9de07d;
+  --accent-2:#3ccf8e;
+}
+body{
+  font-family:"Palatino Linotype","Book Antiqua",serif;
+  margin:0;
+  padding:16px;
+  background:var(--bg);
+  color:var(--ink);
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
+}
+.muted{opacity:.7}
+.bingo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+.cell{padding:10px 0;border-radius:8px;background:#0a1510;border:1px solid rgba(255,255,255,.06);cursor:pointer}
+.cell.marked{background:rgba(60,207,142,.2);border-color:rgba(60,207,142,.7);color:#d6ffe9}
+.called{font-size:12px;color:var(--muted);margin:10px 0;padding:8px;border:1px dashed rgba(255,255,255,.12);border-radius:10px}

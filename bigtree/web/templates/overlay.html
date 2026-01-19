@@ -6,232 +6,10 @@
     <title>Forest Management</title>
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="stylesheet" href="/static/overlay/overlay.css">
-    <style>
-      .dashboard-kpis-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-      .login-screen{
-        background:
-          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 80%),
-          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 80%),
-          linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
-          url("{ADMIN_BACKGROUND}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-      }
-      .dashboard-kpis {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-      .dashboard-kpis .stat-card {
-        flex: 1;
-        min-width: 160px;
-        padding: 14px 16px;
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, .02);
-      }
-      .dashboard-kpis .stat-value {
-        font-size: 2rem;
-        font-weight: 600;
-        line-height: 1.2;
-      }
-      .dashboard-kpis .stat-label {
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        margin-top: 6px;
-        color: rgba(231, 242, 234, .7);
-      }
-      .dashboard-admin-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .dashboard-admin-actions button,
-      .dashboard-admin-actions a {
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        border-radius: 12px;
-        padding: 10px 14px;
-        font-size: 0.9rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        text-decoration: none;
-      }
-      .dashboard-admin-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-bottom: 16px;
-      }
-      .dashboard-admin-card {
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 14px;
-        padding: 14px 14px 16px;
-        background: rgba(255, 255, 255, .02);
-      }
-      .dashboard-admin-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      .dashboard-admin-header svg {
-        width: 22px;
-        height: 22px;
-        fill: currentColor;
-        opacity: .8;
-      }
-      .dashboard-admin-title {
-        font-weight: 600;
-        letter-spacing: .02em;
-      }
-      .dashboard-admin-note {
-        margin: 6px 0 0;
-        color: rgba(231, 242, 234, .7);
-        font-size: 0.85rem;
-      }
-      .dashboard-logs {
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 14px;
-        padding: 14px;
-        margin-bottom: 16px;
-        background: rgba(255, 255, 255, .02);
-      }
-      .dashboard-logs-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .dashboard-logs-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .dashboard-logs-tabs{
-        display:flex;
-        flex-wrap:wrap;
-        gap:8px;
-        align-items:center;
-      }
-      .dashboard-logs-tab{
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        border-radius: 10px;
-        padding: 6px 10px;
-        font-size: 0.8rem;
-        cursor: pointer;
-      }
-      .dashboard-logs-tab.active {
-        border-color: rgba(107, 212, 162, .7);
-        color: #6bd4a2;
-      }
-      .dashboard-logs-refresh{
-        width:34px;
-        height:34px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        cursor:pointer;
-      }
-      .dashboard-logs-refresh svg{width:18px;height:18px;fill:currentColor;opacity:.9;}
-      .dashboard-logs-body {
-        margin-top: 10px;
-        padding: 12px;
-        border-radius: 12px;
-        background: rgba(7, 12, 10, .6);
-        max-height: 240px;
-        overflow: auto;
-        font-family: "JetBrains Mono", "Consolas", monospace;
-        font-size: 0.78rem;
-        white-space: pre-wrap;
-        line-height: 1.4;
-        color: rgba(231, 242, 234, .9);
-      }
-
-      .games-list-toolbar{
-        display:flex;
-        flex-wrap:wrap;
-        gap:10px;
-        align-items:flex-end;
-        margin: 10px 0 12px;
-      }
-      .games-list-toolbar label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:rgba(231,242,234,.75);}
-      .games-list-toolbar input,.games-list-toolbar select{
-        min-width: 180px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.15);
-        background: rgba(255,255,255,.03);
-        color:#e7f2ea;
-      }
-      .games-list-table{
-        width:100%;
-        border-collapse: collapse;
-        font-size: 0.86rem;
-      }
-      .games-list-table th,.games-list-table td{
-        padding: 8px 10px;
-        border-bottom: 1px solid rgba(255,255,255,.08);
-        vertical-align: top;
-      }
-      .games-list-table th{color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;}
-      .games-list-footer{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px;}
-      .games-list-pager{display:flex;gap:8px;align-items:center;}
-      .games-list-pager button{border: 1px solid rgba(255,255,255,.15);background: rgba(255,255,255,.03);color:#e7f2ea;border-radius:10px;padding:6px 10px;cursor:pointer;}
-      .games-list-muted{color:rgba(231,242,234,.7);font-size:0.86rem;}
-      .dashboard-admin-actions button svg {
-        width: 20px;
-        height: 20px;
-        fill: currentColor;
-      }
-      .dashboard-admin-actions button span {
-        white-space: nowrap;
-      }
-      .dashboard-stats-refresh {
-        margin-left: auto;
-        border: none;
-        background: none;
-        color: #6bd4a2;
-        font-size: 0.85rem;
-        cursor: pointer;
-        align-self: flex-start;
-      }
-
-      .section-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
-
-      /* Bingo owners list: compact + scrollable */
-      #bOwners{max-height:360px;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(0,0,0,.12);}
-      .owners-table{width:100%;border-collapse:collapse;font-size:0.88rem;}
-      .owners-table th,.owners-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:middle;}
-      .owners-table th{position:sticky;top:0;background:rgba(9,14,12,.95);backdrop-filter: blur(6px);color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;z-index:2;}
-      .owner-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
-      .owner-actions .icon-action{padding:6px;border-radius:10px;}
-      .owner-actions .icon-action svg{width:16px;height:16px;}
-      .owner-actions .mini-btn{padding:6px 10px;border-radius:10px;font-size:0.82rem;}
-    </style>
-  </head>
+</head>
   <body>
     <button class="overlay-exit" id="overlayExit">Exit overlay</button>
-    <div class="login-screen" id="loginView">
+    <div class="login-screen" id="loginView" data-admin-bg="{ADMIN_BACKGROUND}">
       <div class="login-card">
         <div class="login-title">Forest Management</div>
         <div class="login-sub">Enter your /auth key to manage the forest.</div>
@@ -602,9 +380,20 @@
             <div class="bingo-section">
               <div class="section-header-row">
                 <h3>Players &amp; Cards</h3>
-                <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
-                </button>
+                <div class="owner-tools">
+                  <div class="owner-xiv">
+                    <label for="bXivUserSelect">XivAuth</label>
+                    <select id="bXivUserSelect">
+                      <option value="">Select player</option>
+                    </select>
+                    <button class="btn-ghost icon-btn" id="bXivUserRefresh" title="Refresh XivAuth players" aria-label="Refresh XivAuth players">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
+                    </button>
+                  </div>
+                  <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
+                  </button>
+                </div>
               </div>
               <div class="empty-state" id="bOwnersEmpty">
                 <div class="muted">No players yet. Refresh to pull current owners.</div>
@@ -2360,43 +2149,6 @@
     </div>
     <div class="toast-stack" id="toastStack"></div>
     <script src="/static/overlay/overlay.js?v=20260117b" defer></script>
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      const btn = document.getElementById("updatePlogonmasterBtn");
-      if (btn) {
-        btn.addEventListener("click", async function() {
-          btn.disabled = true;
-          btn.textContent = "Updating...";
-          try {
-            const resp = await fetch("/admin/update_with_leaf", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              }
-            });
-            const data = await resp.json();
-            if (data.ok) {
-              showToast("with.leaf updated successfully.");
-            } else {
-              showToast("Update failed: " + (data.error || "Unknown error"));
-            }
-          } catch (err) {
-            showToast("Update failed: " + err);
-          }
-          btn.disabled = false;
-          btn.textContent = "Update Plugin Master";
-        });
-      }
-      function showToast(msg) {
-        const stack = document.getElementById("toastStack");
-        if (!stack) return;
-        const toast = document.createElement("div");
-        toast.className = "toast";
-        toast.textContent = msg;
-        stack.appendChild(toast);
-        setTimeout(() => { toast.remove(); }, 3500);
-      }
-    });
-    </script>
-  </body>
+</body>
 </html>
+

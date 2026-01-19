@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Wallet: treat bingo join codes that match the game id as owner links for player pages.
+- Overlay: add XivAuth selector + link action to bingo owners list and surface linked users.
+- Frontend: move wallet and bingo card/owner scripts/styles into static assets.
+- Overlay: separate sidebar/content scrolling for large admin panels.
 - Wallet: show event wallet balances as amount + currency and clean up the event list columns.
 - Wallet: improve bingo player links by falling back to the owner name when tokens are missing.
 - Gallery: render text-only inspiration entries without images, artists, or watermarks.
