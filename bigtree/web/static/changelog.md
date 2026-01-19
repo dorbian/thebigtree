@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Wallet: show event wallet balances as amount + currency and clean up the event list columns.
+- Wallet: improve bingo player links by falling back to the owner name when tokens are missing.
+- Gallery: render text-only inspiration entries without images, artists, or watermarks.
 - Wallet: refine game list fields (paid amount, title-first, date-only), add bingo player links, and improve event return links.
 - Events: add public event games listing and show wallet balance + open tables on the event page.
 - Gallery: add configurable layout/inspiration settings and randomize inspiration text.

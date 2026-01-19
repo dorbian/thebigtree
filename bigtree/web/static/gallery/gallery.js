@@ -638,6 +638,22 @@
     return [];
   }
 
+  function isTextOnlyItem(item){
+    if (!item) return false;
+    const hasMedia = !!(item.url || item.thumb_url || item.fallback_url);
+    if (hasMedia) return false;
+    const title = String(item.title || item.text || "").trim();
+    if (!title) return false;
+    const artist = item.artist || {};
+    const hasArtist = !!(artist.name || artist.id || artist.handle);
+    if (hasArtist) return false;
+    const rawType = String(item.type || item.origin_type || item.kind || item.category || "").toLowerCase();
+    if (rawType.includes("inspiration") || rawType.includes("flair") || rawType.includes("text")){
+      return true;
+    }
+    return true;
+  }
+
   function escapeHtml(value){
     if (!value) return "";
     return String(value)
@@ -660,6 +676,16 @@
   }
 
   function buildCardHtml(item){
+    if (isTextOnlyItem(item)){
+      const text = escapeHtml(item.title || item.text || "Inspiration");
+      return `
+        <div class="card text-only">
+          <div class="card-body text-only-body">
+            <div class="text-only-title">${text}</div>
+          </div>
+        </div>
+      `;
+    }
     const artist = item.artist || {};
     const artistName = artist.name || "Forest";
     const title = item.title || "Untitled Offering";

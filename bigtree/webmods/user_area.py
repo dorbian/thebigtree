@@ -467,6 +467,33 @@ async def user_games(request: web.Request) -> web.Response:
     db = get_database()
     include_all = str(request.query.get("all") or "").strip().lower() in {"1", "true", "yes"}
     games = db.list_user_games(user["id"], only_active=not include_all)
+    try:
+        from bigtree.modules import bingo as bingo_mod
+    except Exception:
+        bingo_mod = None
+    if bingo_mod:
+        for game in games:
+            if game.get("module") != "bingo":
+                continue
+            if game.get("join_code"):
+                continue
+            game_id = game.get("game_id") or ""
+            owner = user.get("xiv_username") or game.get("claimed_username") or ""
+            if not owner:
+                players = game.get("players") or []
+                for player in players:
+                    role = str(player.get("role") or "").lower()
+                    if role in {"owner", "host", "dealer", "caller"}:
+                        owner = player.get("name") or ""
+                        break
+            if not game_id or not owner:
+                continue
+            try:
+                token = bingo_mod.get_owner_token(str(game_id), str(owner))
+            except Exception:
+                token = ""
+            if token:
+                game["join_code"] = token
     return web.json_response({"ok": True, "games": games})
 
 

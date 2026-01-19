@@ -406,14 +406,17 @@
       return {"Authorization": `Bearer ${token}`};
     }
 
+    let currentUserName = "";
     function setUserHeader(user){
       if(user && user.xiv_username){
+        currentUserName = user.xiv_username;
         userName.textContent = user.xiv_username;
         userName.style.display = "inline-flex";
         loginLink.style.display = "none";
         logoutBtn.style.display = "inline-flex";
         headerClaim.style.display = "flex";
       }else{
+        currentUserName = "";
         userName.textContent = "";
         userName.style.display = "none";
         loginLink.style.display = "inline-flex";
@@ -537,7 +540,16 @@
           return `/bingo/owner?token=${encodeURIComponent(game.join_code)}`;
         }
         const gid = game.game_id ? String(game.game_id) : "";
-        const owner = game.claimed_username ? String(game.claimed_username) : "";
+        let owner = game.claimed_username ? String(game.claimed_username) : (currentUserName || "");
+        if (!owner && Array.isArray(game.players)){
+          const match = game.players.find(p => {
+            const role = String((p || {}).role || "").toLowerCase();
+            return role === "owner" || role === "host" || role === "dealer" || role === "caller";
+          });
+          if (match && match.name){
+            owner = String(match.name);
+          }
+        }
         if(gid && owner){
           return `/bingo/owner?game=${encodeURIComponent(gid)}&owner=${encodeURIComponent(owner)}`;
         }
@@ -680,7 +692,6 @@
               <th>Event</th>
               <th>Status</th>
               <th>Venue</th>
-              <th>Currency</th>
               <th>Wallet</th>
               <th>Games</th>
             </tr>
@@ -698,7 +709,8 @@
       const status = ev.status || "-";
       const venue = ev.venue_name || "-";
       const currency = ev.currency_name || "-";
-      const wallet = ev.wallet_enabled ? `${ev.wallet_balance ?? 0}` : "-";
+      const walletAmount = ev.wallet_enabled ? `${ev.wallet_balance ?? 0}` : "-";
+      const wallet = (walletAmount !== "-" && currency !== "-") ? `${walletAmount} ${currency}` : walletAmount;
       const gamesCount = ev.games_count ?? 0;
       const eventLink = status === "active" && code
         ? `<div style="margin-top:6px;"><a href="/events/${encodeURIComponent(code)}" target="_blank" rel="noreferrer">Open event</a></div>`
@@ -736,6 +748,9 @@
         const currency = ev.currency_name || "-";
         const venue = ev.venue_name || "-";
         const usableText = walletEnabled ? (walletUsable ? "usable in new events" : "not usable in new events") : "-";
+        const walletBalanceText = walletEnabled
+          ? (currency !== "-" ? `${walletBalance ?? 0} ${currency}` : String(walletBalance ?? 0))
+          : "-";
         const historyRows = walletHistory.length ? `
           <table style="margin-top:12px;">
             <thead><tr><th>Time</th><th>Change</th><th>Balance</th><th>Reason</th></tr></thead>
@@ -783,9 +798,8 @@
             <div class="detail-item"><span>Event code</span>${escapeHtml(ev.event_code || "-")}</div>
             <div class="detail-item"><span>Status</span>${escapeHtml(status)}</div>
             <div class="detail-item"><span>Venue</span>${escapeHtml(venue)}</div>
-            <div class="detail-item"><span>Currency</span>${escapeHtml(currency)}</div>
             <div class="detail-item"><span>Wallet enabled</span>${walletEnabled ? "Yes" : "No"}</div>
-            <div class="detail-item"><span>Wallet balance</span>${walletEnabled ? escapeHtml(String(walletBalance ?? 0)) : "-"}</div>
+            <div class="detail-item"><span>Wallet balance</span>${escapeHtml(walletBalanceText)}</div>
             <div class="detail-item"><span>Wallet carry-over</span>${walletEnabled ? (data.carry_over ? "Yes" : "No") : "-"}</div>
             <div class="detail-item"><span>Usable later</span>${walletEnabled ? escapeHtml(usableText) : "-"}</div>
           </div>

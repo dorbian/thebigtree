@@ -193,6 +193,23 @@
     margin:0 0 20px;
     width:100%;
   }
+  .card.text-only{
+    justify-content:center;
+    min-height:220px;
+  }
+  .card.text-only .text-only-body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:20px;
+    min-height:180px;
+  }
+  .card.text-only .text-only-title{
+    font-size:18px;
+    line-height:1.5;
+    color:var(--accent);
+  }
   .grid.virtualized .card{
     height:var(--card-height, 380px);
   }
