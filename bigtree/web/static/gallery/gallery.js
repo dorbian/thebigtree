@@ -1,4 +1,4 @@
-﻿const grid = document.getElementById("feed");
+const grid = document.getElementById("feed");
   const headerSubtitle = document.getElementById("headerSubtitle");
   const headerContext = document.getElementById("headerContext");
   const artistModal = document.getElementById("artistModal");
@@ -53,8 +53,8 @@
   let galleryLoading = false;
   let gallerySettings = {};
   let inspirationLines = [];
-  // Default: inject an inspiration card once every 5 images.
-  let inspirationEvery = 5;
+  // Default: inject an inspiration card once every ~7 images.
+  let inspirationEvery = 7;
   const GALLERY_CACHE_KEY = "forest_gallery_cache_v1";
   let activeArtistFilter = null;
   const REACTIONS = [
@@ -297,7 +297,6 @@
       localStorage.setItem(GALLERY_CACHE_KEY, JSON.stringify(payload));
     }catch(err){}
   }
-
   function normalizeInspirationLines(raw){
     if (Array.isArray(raw)){
       return raw.map(line => String(line || "").trim()).filter(Boolean);
@@ -311,13 +310,30 @@
     return [];
   }
 
+  // Artist can be returned as an object (preferred) or a string (legacy / manual entries).
+  // Normalize so the UI always shows a name + links without crashing.
+  function normalizeArtist(item){
+    const raw = item ? item.artist : null;
+    if (!raw) return {name: "Forest", links: {}};
+    if (typeof raw === "string"){
+      const name = raw.trim() || "Forest";
+      return {name, links: {}};
+    }
+    if (typeof raw === "object"){
+      const name = String(raw.name || raw.artist || raw.display_name || "Forest").trim() || "Forest";
+      const links = (raw.links && typeof raw.links === "object") ? raw.links : {};
+      return {name, links};
+    }
+    return {name: "Forest", links: {}};
+  }
+
   function applyGallerySettings(settings){
     const cfg = settings || {};
     gallerySettings = cfg;
     // Layout is feed-based; columns are ignored here.
     inspirationLines = normalizeInspirationLines(cfg.inspiration_texts || cfg.flair_text);
     const every = parseInt(cfg.inspiration_every || 0, 10);
-    inspirationEvery = every > 0 ? every : 5;
+    inspirationEvery = every > 0 ? every : 7;
 
     // All inspirational / flavor copy can be overridden from the database.
     if (headerSubtitle && cfg.header_subtitle){
@@ -501,6 +517,11 @@ if (!scrollLinkedInit){
     const post = target.closest ? target.closest(".post") : null;
     if (post && post.getAttribute("data-full")){
       event.preventDefault();
+      // Also sync the right-hand detail panel when a post is clicked (even if the modal is used).
+      const idx = parseInt(post.getAttribute("data-index") || "-1", 10);
+      if (Number.isFinite(idx) && idx >= 0){
+        setActiveDetailIndex(idx);
+      }
       const payload = post.getAttribute("data-full");
       if (!payload) return;
       try{
@@ -650,7 +671,7 @@ if (!scrollLinkedInit){
     if (isTextOnlyItem(item)){
       return buildDividerHtml({text: item.title || item.text || ""});
     }
-    const artist = item.artist || {};
+    const artist = normalizeArtist(item);
     const artistName = artist.name || "Forest";
     const title = item.title || "Untitled Offering";
     const artistLinks = artist.links || {};
@@ -658,15 +679,21 @@ if (!scrollLinkedInit){
     const tags = getTags(item);
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
-    const imgUrl = item.url || item.thumb_url || "";
-    const fallbackUrl = item.fallback_url || "";
+    // Prefer thumbs for speed, but always fall back to the full image if thumbs are missing or 404.
+    const primaryUrl = item.thumb_url || item.url || "";
+    let fallbackUrl = "";
+    if (item.thumb_url && item.url && item.thumb_url !== item.url){
+      fallbackUrl = item.url;
+    }else if (item.fallback_url){
+      fallbackUrl = item.fallback_url;
+    }
     const fallbackAttr = fallbackUrl ? ` data-fallback="${fallbackUrl}"` : "";
 
     const payload = buildDetailPayload(item);
     const fullPayload = encodeURIComponent(JSON.stringify(payload));
 
-    const media = imgUrl
-      ? `<img src="${imgUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+    const media = primaryUrl
+      ? `<img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
 
     // Minimal post: image in the middle. All metadata + links live in the right panel.
@@ -784,7 +811,7 @@ if (!scrollLinkedInit){
 
   function insertDividers(items, startIndex = 0){
     const out = [];
-    const dividerEvery = inspirationEvery || 5;
+    const dividerEvery = inspirationEvery || 7;
     for (let i = 0; i < items.length; i += 1){
       const globalIndex = startIndex + i;
       out.push({kind: "item", item: items[i], index: globalIndex});
@@ -886,14 +913,14 @@ if (!scrollLinkedInit){
   }
 
   function buildDetailPayload(item){
-    const artist = item.artist || {};
+    const artist = normalizeArtist(item);
     const artistName = artist.name || "Forest";
     const title = item.title || "Untitled Offering";
     const origin = (item.origin || "").trim() || getOrigin(item);
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
     return {
-      url: item.url,
+      url: item.url || item.thumb_url || "",
       fallback_url: item.fallback_url || "",
       info: [title, artistName, origin].filter(Boolean).join(" - "),
       title: title,

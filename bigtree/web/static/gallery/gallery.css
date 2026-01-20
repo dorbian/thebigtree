@@ -1,4 +1,4 @@
-﻿:root{
+:root{
     --bg:#0b1310;
     --panel:#101a15;
     --panel-2:#0c1511;
@@ -1043,7 +1043,12 @@
 .sidebar{
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 24px);
+  /* Lock the column to the viewport so bottom padding doesn't bleed outside */
+  height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding-bottom: 12px;
   position: sticky;
   top: 12px;
 }
@@ -1075,6 +1080,18 @@
   fill: currentColor;
   opacity: 0.9;
 }
+
+/* Right details panel: constrain height and prevent bottom padding overflow */
+.details{
+  box-sizing: border-box;
+  height: calc(100vh - 24px);
+  position: sticky;
+  top: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 12px;
+}
+
 
 /* More space between pictures */
 .post{
@@ -1114,4 +1131,15 @@
 .details-card{
   opacity: 1;
   transform: none;
+}
+
+
+/* Fix sticky column overflow (avoid bottom padding leaking outside viewport) */
+.details{
+  height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding-bottom: 12px;
+  top: 12px;
 }
