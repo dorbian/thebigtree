@@ -2223,33 +2223,6 @@ class Database:
         return out
 
     # ---------------- system config ----------------
-    def get_system_config(self, name: str) -> Optional[Dict[str, Any]]:
-        key = str(name or "").strip()
-        if not key:
-            return None
-        row = self._fetchone("SELECT name, payload FROM system_configs WHERE name = %s", (key,))
-        if not row:
-            return None
-        payload = row.get("payload") or {}
-        return payload if isinstance(payload, dict) else {}
-
-    def set_system_config(self, name: str, payload: Dict[str, Any]) -> None:
-        key = str(name or "").strip()
-        if not key:
-            return
-        if payload is None or not isinstance(payload, dict):
-            payload = {}
-        self._execute(
-            """
-            INSERT INTO system_configs (name, payload)
-            VALUES (%s, %s)
-            ON CONFLICT (name) DO UPDATE
-              SET payload = EXCLUDED.payload,
-                  updated_at = CURRENT_TIMESTAMP
-            """,
-            (key, Json(payload)),
-        )
-
     def get_auth_roles(self) -> Dict[str, List[str]]:
         payload = self.get_system_config("auth_roles") or {}
         roles = payload.get("role_scopes") if isinstance(payload.get("role_scopes"), dict) else payload
@@ -2275,7 +2248,7 @@ class Database:
                 clean[str(role)] = [str(s) for s in scopes if str(s)]
             else:
                 clean[str(role)] = []
-        self.set_system_config("auth_roles", {"role_scopes": clean})
+        self.update_system_config("auth_roles", {"role_scopes": clean})
 
     def get_gallery_settings(self) -> Dict[str, Any]:
         payload = self.get_system_config("gallery_settings") or {}
@@ -2283,7 +2256,7 @@ class Database:
 
     def update_gallery_settings(self, settings: Dict[str, Any]) -> None:
         settings = settings if isinstance(settings, dict) else {}
-        self.set_system_config("gallery_settings", settings)
+        self.update_system_config("gallery_settings", settings)
 
     # ---------------- gallery hidden ----------------
     def get_gallery_hidden_set(self) -> set[str]:

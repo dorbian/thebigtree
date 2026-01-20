@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Database: remove legacy system_configs payload access and use data column consistently.
 - Wallet: treat bingo join codes that match the game id as owner links for player pages.
 - Overlay: add XivAuth selector + link action to bingo owners list and surface linked users.
 - Frontend: move wallet and bingo card/owner scripts/styles into static assets.
