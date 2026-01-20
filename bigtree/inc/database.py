@@ -74,6 +74,8 @@ class Database:
             self._sync_tarot_decks()
             self._migrate_media_items()
             self._migrate_json_backups()
+            self._migrate_legacy_state_files()
+            self._migrate_legacy_contests()
             self._report_legacy_import_sources()
             self._initialized = True
 
@@ -318,6 +320,63 @@ class Database:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS legacy_imports (
+                source_key TEXT PRIMARY KEY,
+                imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS gallery_hidden (
+                item_id TEXT PRIMARY KEY,
+                hidden BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS gallery_reactions (
+                item_id TEXT PRIMARY KEY,
+                counts JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS gallery_calendar (
+                month INTEGER PRIMARY KEY,
+                image TEXT,
+                title TEXT,
+                artist_id TEXT,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS temp_links (
+                token TEXT PRIMARY KEY,
+                scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                role_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                created_by TEXT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMPTZ,
+                max_uses INTEGER NOT NULL DEFAULT 1,
+                used_count INTEGER NOT NULL DEFAULT 0,
+                used_at TIMESTAMPTZ,
+                used_by TEXT,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS web_tokens (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                user_name TEXT,
+                user_icon TEXT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMPTZ,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+            )
+            """,
+
             """
             CREATE TABLE IF NOT EXISTS media_items (
                 id SERIAL PRIMARY KEY,
@@ -2133,7 +2192,644 @@ class Database:
             )
         logger.info("[database] media migration complete (legacy_rows=%s, total=%s)", imported, self.count_media_items(include_hidden=True))
 
-    # ---------------- migrations ----------------
+    
+    # ---------------- legacy import tracking ----------------
+    def is_legacy_imported(self, source_key: str) -> bool:
+        key = str(source_key or "").strip()
+        if not key:
+            return False
+        row = self._fetchone("SELECT source_key FROM legacy_imports WHERE source_key = %s", (key,))
+        return bool(row)
+
+    def mark_legacy_imported(self, source_key: str) -> None:
+        key = str(source_key or "").strip()
+        if not key:
+            return
+        self._execute(
+            """
+            INSERT INTO legacy_imports (source_key)
+            VALUES (%s)
+            ON CONFLICT (source_key) DO UPDATE SET imported_at = CURRENT_TIMESTAMP
+            """,
+            (key,),
+        )
+
+    def get_legacy_imports(self) -> List[str]:
+        rows = self._execute("SELECT source_key FROM legacy_imports ORDER BY imported_at DESC", fetch=True) or []
+        out: List[str] = []
+        for r in rows:
+            if r and r.get("source_key"):
+                out.append(str(r.get("source_key")))
+        return out
+
+    # ---------------- system config ----------------
+    def get_system_config(self, name: str) -> Optional[Dict[str, Any]]:
+        key = str(name or "").strip()
+        if not key:
+            return None
+        row = self._fetchone("SELECT name, payload FROM system_configs WHERE name = %s", (key,))
+        if not row:
+            return None
+        payload = row.get("payload") or {}
+        return payload if isinstance(payload, dict) else {}
+
+    def set_system_config(self, name: str, payload: Dict[str, Any]) -> None:
+        key = str(name or "").strip()
+        if not key:
+            return
+        if payload is None or not isinstance(payload, dict):
+            payload = {}
+        self._execute(
+            """
+            INSERT INTO system_configs (name, payload)
+            VALUES (%s, %s)
+            ON CONFLICT (name) DO UPDATE
+              SET payload = EXCLUDED.payload,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (key, Json(payload)),
+        )
+
+    def get_auth_roles(self) -> Dict[str, List[str]]:
+        payload = self.get_system_config("auth_roles") or {}
+        roles = payload.get("role_scopes") if isinstance(payload.get("role_scopes"), dict) else payload
+        if not isinstance(roles, dict):
+            return {}
+        out: Dict[str, List[str]] = {}
+        for role, scopes in roles.items():
+            if not role:
+                continue
+            if isinstance(scopes, list):
+                out[str(role)] = [str(s) for s in scopes if str(s)]
+            else:
+                out[str(role)] = []
+        return out
+
+    def update_auth_roles(self, role_scopes: Dict[str, List[str]]) -> None:
+        role_scopes = role_scopes if isinstance(role_scopes, dict) else {}
+        clean: Dict[str, List[str]] = {}
+        for role, scopes in role_scopes.items():
+            if not role:
+                continue
+            if isinstance(scopes, list):
+                clean[str(role)] = [str(s) for s in scopes if str(s)]
+            else:
+                clean[str(role)] = []
+        self.set_system_config("auth_roles", {"role_scopes": clean})
+
+    def get_gallery_settings(self) -> Dict[str, Any]:
+        payload = self.get_system_config("gallery_settings") or {}
+        return payload if isinstance(payload, dict) else {}
+
+    def update_gallery_settings(self, settings: Dict[str, Any]) -> None:
+        settings = settings if isinstance(settings, dict) else {}
+        self.set_system_config("gallery_settings", settings)
+
+    # ---------------- gallery hidden ----------------
+    def get_gallery_hidden_set(self) -> set[str]:
+        rows = self._execute("SELECT item_id FROM gallery_hidden WHERE hidden = TRUE", fetch=True) or []
+        return {str(r.get("item_id")) for r in rows if r and r.get("item_id")}
+
+    def is_gallery_hidden(self, item_id: str) -> bool:
+        key = str(item_id or "").strip()
+        if not key:
+            return False
+        row = self._fetchone("SELECT hidden FROM gallery_hidden WHERE item_id = %s", (key,))
+        return bool(row and row.get("hidden") is True)
+
+    def set_gallery_hidden(self, item_id: str, hidden: bool) -> None:
+        key = str(item_id or "").strip()
+        if not key:
+            return
+        self._execute(
+            """
+            INSERT INTO gallery_hidden (item_id, hidden)
+            VALUES (%s, %s)
+            ON CONFLICT (item_id) DO UPDATE
+              SET hidden = EXCLUDED.hidden,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (key, bool(hidden)),
+        )
+        # Keep media_items.hidden in sync for media:* items.
+        if key.startswith("media:"):
+            filename = key.split("media:", 1)[1]
+            if filename:
+                self.set_media_hidden(filename, bool(hidden))
+
+    # ---------------- gallery reactions ----------------
+    def get_gallery_reactions_bulk(self, item_ids: List[str]) -> Dict[str, Dict[str, int]]:
+        if not item_ids:
+            return {}
+        keys = [str(i).strip() for i in item_ids if str(i).strip()]
+        if not keys:
+            return {}
+        rows = self._execute(
+            "SELECT item_id, counts FROM gallery_reactions WHERE item_id = ANY(%s)",
+            (keys,),
+            fetch=True,
+        ) or []
+        out: Dict[str, Dict[str, int]] = {}
+        for r in rows:
+            iid = str(r.get("item_id") or "")
+            counts = r.get("counts") or {}
+            if not isinstance(counts, dict):
+                counts = {}
+            out[iid] = {str(k): int(v or 0) for k, v in counts.items()}
+        # ensure every key present
+        for k in keys:
+            out.setdefault(k, {})
+        return out
+
+    def increment_gallery_reaction(self, item_id: str, reaction_id: str, amount: int = 1) -> Dict[str, int]:
+        iid = str(item_id or "").strip()
+        rid = str(reaction_id or "").strip().lower()
+        if not iid or not rid:
+            return {}
+        amount = max(1, int(amount or 1))
+        row = self._fetchone("SELECT counts FROM gallery_reactions WHERE item_id = %s", (iid,))
+        counts = row.get("counts") if row else {}
+        if not isinstance(counts, dict):
+            counts = {}
+        counts[rid] = int(counts.get(rid) or 0) + amount
+        self._execute(
+            """
+            INSERT INTO gallery_reactions (item_id, counts)
+            VALUES (%s, %s)
+            ON CONFLICT (item_id) DO UPDATE
+              SET counts = EXCLUDED.counts,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (iid, Json(counts)),
+        )
+        return {str(k): int(v or 0) for k, v in counts.items()}
+
+    # ---------------- gallery calendar ----------------
+    def list_gallery_calendar(self) -> List[Dict[str, Any]]:
+        rows = self._execute("SELECT month, image, title, artist_id, updated_at FROM gallery_calendar ORDER BY month ASC", fetch=True) or []
+        return [self._json_safe_dict(r) for r in rows]
+
+    def upsert_gallery_month(self, month: int, image: Optional[str], title: str = "", artist_id: Optional[str] = None) -> None:
+        try:
+            month = int(month)
+        except Exception:
+            return
+        if month < 1 or month > 12:
+            return
+        self._execute(
+            """
+            INSERT INTO gallery_calendar (month, image, title, artist_id)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (month) DO UPDATE
+              SET image = EXCLUDED.image,
+                  title = EXCLUDED.title,
+                  artist_id = EXCLUDED.artist_id,
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (month, image, title or "", artist_id),
+        )
+
+    def clear_gallery_month(self, month: int) -> None:
+        try:
+            month = int(month)
+        except Exception:
+            return
+        if month < 1 or month > 12:
+            return
+        self._execute("DELETE FROM gallery_calendar WHERE month = %s", (month,))
+
+    # ---------------- temp links ----------------
+    def issue_temp_link(
+        self,
+        scopes: List[str],
+        ttl_seconds: int,
+        role_ids: Optional[List[str]] = None,
+        created_by: Optional[str] = None,
+        max_uses: int = 1,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        token = secrets.token_urlsafe(24)
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=int(ttl_seconds))
+        role_ids = role_ids or []
+        max_uses = max(1, int(max_uses or 1))
+        metadata = metadata or {}
+        self._execute(
+            """
+            INSERT INTO temp_links (token, scopes, role_ids, created_by, created_at, expires_at, max_uses, used_count, metadata)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,0,%s)
+            """,
+            (token, Json(scopes or []), Json(role_ids), created_by, now, expires_at, max_uses, Json(metadata)),
+        )
+        return {
+            "token": token,
+            "scopes": scopes or [],
+            "role_ids": role_ids,
+            "created_by": created_by,
+            "created_at": int(now.timestamp()),
+            "expires_at": int(expires_at.timestamp()),
+            "max_uses": max_uses,
+            "used_count": 0,
+        }
+
+    def consume_temp_link(self, token: str, user_name: str) -> Optional[Dict[str, Any]]:
+        tok = str(token or "").strip()
+        if not tok:
+            return None
+        row = self._fetchone(
+            "SELECT token, scopes, role_ids, created_by, created_at, expires_at, max_uses, used_count FROM temp_links WHERE token = %s",
+            (tok,),
+        )
+        if not row:
+            return None
+        expires_at = row.get("expires_at")
+        if isinstance(expires_at, datetime) and expires_at <= datetime.utcnow():
+            return None
+        used_count = int(row.get("used_count") or 0)
+        max_uses = int(row.get("max_uses") or 1)
+        if used_count >= max_uses:
+            return None
+        used_count += 1
+        self._execute(
+            "UPDATE temp_links SET used_count=%s, used_at=CURRENT_TIMESTAMP, used_by=%s WHERE token=%s",
+            (used_count, user_name, tok),
+        )
+        return self._json_safe_dict(row)
+
+    def purge_expired_temp_links(self) -> int:
+        return int(self._execute("DELETE FROM temp_links WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP") or 0)
+
+    # ---------------- web tokens ----------------
+    def issue_web_token(
+        self,
+        user_id: int,
+        scopes: Optional[List[str]] = None,
+        ttl_seconds: int = 24 * 60 * 60,
+        user_name: Optional[str] = None,
+        user_icon: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        token = secrets.token_urlsafe(32)
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=int(ttl_seconds))
+        scopes = scopes or ["*"]
+        metadata = metadata or {}
+        self._execute(
+            """
+            INSERT INTO web_tokens (token, user_id, scopes, user_name, user_icon, created_at, expires_at, metadata)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (token, int(user_id), Json(scopes), user_name, user_icon, now, expires_at, Json(metadata)),
+        )
+        return {
+            "token": token,
+            "user_id": int(user_id),
+            "scopes": scopes,
+            "user_name": user_name,
+            "user_icon": user_icon,
+            "created_at": int(now.timestamp()),
+            "expires_at": int(expires_at.timestamp()),
+        }
+
+    def find_web_token(self, token: str) -> Optional[Dict[str, Any]]:
+        tok = str(token or "").strip()
+        if not tok:
+            return None
+        row = self._fetchone(
+            "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at FROM web_tokens WHERE token = %s",
+            (tok,),
+        )
+        if not row:
+            return None
+        expires_at = row.get("expires_at")
+        if isinstance(expires_at, datetime) and expires_at <= datetime.utcnow():
+            return None
+        return self._json_safe_dict(row)
+
+    def purge_expired_web_tokens(self) -> int:
+        return int(self._execute("DELETE FROM web_tokens WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP") or 0)
+
+    # ---------------- legacy migrations & reporting ----------------
+    def _data_dir(self) -> str:
+        base = None
+        try:
+            if self._settings:
+                base = self._settings.get("BOT.DATA_DIR", None)
+        except Exception:
+            base = None
+        if not base:
+            base = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
+        if not base:
+            base = os.getenv("BIGTREE_WORKDIR") or os.path.join(os.getcwd(), ".bigtree")
+        os.makedirs(base, exist_ok=True)
+        return base
+
+    def _migrate_legacy_state_files(self) -> None:
+        base = self._data_dir()
+        sources = {
+            "auth_roles.json": os.path.join(base, "auth_roles.json"),
+            "gallery_settings.json": os.path.join(base, "gallery_settings.json"),
+            "gallery_hidden.json": os.path.join(base, "gallery_hidden.json"),
+            "gallery_reactions.json": os.path.join(base, "gallery_reactions.json"),
+            "gallery_calendar.json": os.path.join(base, "gallery_calendar.json"),
+            "temp_links.json": os.path.join(base, "temp_links.json"),
+            "web_tokens.json": os.path.join(base, "web_tokens.json"),
+        }
+
+        # auth_roles.json
+        if os.path.exists(sources["auth_roles.json"]) and not self.is_legacy_imported("auth_roles.json"):
+            try:
+                raw = json.loads(open(sources["auth_roles.json"], "r", encoding="utf-8").read())
+                if isinstance(raw, dict):
+                    self.update_auth_roles(raw if all(isinstance(v, list) for v in raw.values()) else (raw.get("role_scopes") or {}))
+                    self.mark_legacy_imported("auth_roles.json")
+            except Exception:
+                pass
+
+        # gallery_settings.json (TinyDB style)
+        if os.path.exists(sources["gallery_settings.json"]) and not self.is_legacy_imported("gallery_settings.json"):
+            try:
+                raw = json.loads(open(sources["gallery_settings.json"], "r", encoding="utf-8").read())
+                settings_payload: Dict[str, Any] = {}
+                if isinstance(raw, dict) and "_default" in raw:
+                    table = raw.get("_default") or {}
+                    for _, row in (table.items() if isinstance(table, dict) else []):
+                        if isinstance(row, dict) and row.get("_type") == "settings":
+                            settings_payload = {k: v for k, v in row.items() if k not in ("_type", "updated_at")}
+                            break
+                elif isinstance(raw, dict):
+                    settings_payload = raw
+                if isinstance(settings_payload, dict) and settings_payload:
+                    self.update_gallery_settings(settings_payload)
+                    self.mark_legacy_imported("gallery_settings.json")
+            except Exception:
+                pass
+
+        # gallery_hidden.json (TinyDB style)
+        if os.path.exists(sources["gallery_hidden.json"]) and not self.is_legacy_imported("gallery_hidden.json"):
+            try:
+                raw = json.loads(open(sources["gallery_hidden.json"], "r", encoding="utf-8").read())
+                if isinstance(raw, dict) and "_default" in raw:
+                    table = raw.get("_default") or {}
+                    for _, row in (table.items() if isinstance(table, dict) else []):
+                        if not isinstance(row, dict):
+                            continue
+                        if row.get("_type") == "hidden" and row.get("item_id"):
+                            self.set_gallery_hidden(str(row.get("item_id")), bool(row.get("hidden") is True))
+                self.mark_legacy_imported("gallery_hidden.json")
+            except Exception:
+                pass
+
+        # gallery_reactions.json (TinyDB style)
+        if os.path.exists(sources["gallery_reactions.json"]) and not self.is_legacy_imported("gallery_reactions.json"):
+            try:
+                raw = json.loads(open(sources["gallery_reactions.json"], "r", encoding="utf-8").read())
+                if isinstance(raw, dict) and "_default" in raw:
+                    table = raw.get("_default") or {}
+                    for _, row in (table.items() if isinstance(table, dict) else []):
+                        if not isinstance(row, dict):
+                            continue
+                        if row.get("_type") == "reaction" and row.get("item_id"):
+                            counts = row.get("counts") or {}
+                            if isinstance(counts, dict):
+                                iid = str(row.get("item_id"))
+                                self._execute(
+                                    """
+                                    INSERT INTO gallery_reactions (item_id, counts)
+                                    VALUES (%s, %s)
+                                    ON CONFLICT (item_id) DO UPDATE SET counts = EXCLUDED.counts, updated_at=CURRENT_TIMESTAMP
+                                    """,
+                                    (iid, Json(counts)),
+                                )
+                self.mark_legacy_imported("gallery_reactions.json")
+            except Exception:
+                pass
+
+        # gallery_calendar.json (TinyDB style)
+        if os.path.exists(sources["gallery_calendar.json"]) and not self.is_legacy_imported("gallery_calendar.json"):
+            try:
+                raw = json.loads(open(sources["gallery_calendar.json"], "r", encoding="utf-8").read())
+                if isinstance(raw, dict) and "_default" in raw:
+                    table = raw.get("_default") or {}
+                    for _, row in (table.items() if isinstance(table, dict) else []):
+                        if not isinstance(row, dict):
+                            continue
+                        if row.get("_type") == "month":
+                            m = row.get("month")
+                            try:
+                                m = int(m)
+                            except Exception:
+                                continue
+                            self.upsert_gallery_month(m, row.get("image"), row.get("title") or "", row.get("artist_id"))
+                self.mark_legacy_imported("gallery_calendar.json")
+            except Exception:
+                pass
+
+        # temp_links.json
+        if os.path.exists(sources["temp_links.json"]) and not self.is_legacy_imported("temp_links.json"):
+            try:
+                raw = json.loads(open(sources["temp_links.json"], "r", encoding="utf-8").read())
+                links = raw.get("links") if isinstance(raw, dict) else []
+                if isinstance(links, list):
+                    for link in links:
+                        if not isinstance(link, dict):
+                            continue
+                        tok = str(link.get("token") or "").strip()
+                        if not tok:
+                            continue
+                        expires_at = datetime.utcfromtimestamp(int(link.get("expires_at") or 0)) if link.get("expires_at") else None
+                        created_at = datetime.utcfromtimestamp(int(link.get("created_at") or 0)) if link.get("created_at") else datetime.utcnow()
+                        self._execute(
+                            """
+                            INSERT INTO temp_links (token, scopes, role_ids, created_by, created_at, expires_at, max_uses, used_count, used_at, used_by, metadata)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            ON CONFLICT (token) DO NOTHING
+                            """,
+                            (
+                                tok,
+                                Json(link.get("scopes") or []),
+                                Json(link.get("role_ids") or []),
+                                link.get("created_by"),
+                                created_at,
+                                expires_at,
+                                int(link.get("max_uses") or 1),
+                                int(link.get("used_count") or 0),
+                                datetime.utcfromtimestamp(int(link.get("used_at") or 0)) if link.get("used_at") else None,
+                                link.get("used_by"),
+                                Json({"legacy": True}),
+                            ),
+                        )
+                self.mark_legacy_imported("temp_links.json")
+            except Exception:
+                pass
+
+        # web_tokens.json
+        if os.path.exists(sources["web_tokens.json"]) and not self.is_legacy_imported("web_tokens.json"):
+            try:
+                raw = json.loads(open(sources["web_tokens.json"], "r", encoding="utf-8").read())
+                tokens = raw.get("tokens") if isinstance(raw, dict) else []
+                if isinstance(tokens, list):
+                    for t in tokens:
+                        if not isinstance(t, dict):
+                            continue
+                        tok = str(t.get("token") or "").strip()
+                        if not tok:
+                            continue
+                        expires_at = datetime.utcfromtimestamp(int(t.get("expires_at") or 0)) if t.get("expires_at") else None
+                        created_at = datetime.utcfromtimestamp(int(t.get("created_at") or 0)) if t.get("created_at") else datetime.utcnow()
+                        self._execute(
+                            """
+                            INSERT INTO web_tokens (token, user_id, scopes, user_name, user_icon, created_at, expires_at, metadata)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                            ON CONFLICT (token) DO NOTHING
+                            """,
+                            (
+                                tok,
+                                int(t.get("user_id") or 0),
+                                Json(t.get("scopes") or []),
+                                t.get("user_name"),
+                                t.get("user_icon"),
+                                created_at,
+                                expires_at,
+                                Json({"legacy": True}),
+                            ),
+                        )
+                self.mark_legacy_imported("web_tokens.json")
+            except Exception:
+                pass
+
+    def _contest_dir(self) -> str:
+        try:
+            import bigtree as _bt
+        except Exception:
+            _bt = None
+        if _bt and getattr(_bt, "contest_dir", None):
+            return str(getattr(_bt, "contest_dir"))
+        try:
+            if self._settings:
+                v = self._settings.get("BOT.contest_dir", None)
+                if v:
+                    return str(v)
+        except Exception:
+            pass
+        base = self._data_dir()
+        # default to sibling "contest" next to data dir
+        return os.path.abspath(os.path.join(base, "..", "contest"))
+
+    def _migrate_legacy_contests(self) -> None:
+        contest_dir = self._contest_dir()
+        if not os.path.isdir(contest_dir):
+            return
+        try:
+            from bigtree.modules import media as media_mod
+        except Exception:
+            return
+        media_dir = media_mod.get_media_dir()
+        imported_any = 0
+        for name in os.listdir(contest_dir):
+            if not name.endswith(".json"):
+                continue
+            if name == "admin_clients.json":
+                continue
+            channel_id = os.path.splitext(name)[0]
+            key = f"contest:{channel_id}"
+            if self.is_legacy_imported(key):
+                continue
+            path = os.path.join(contest_dir, name)
+            try:
+                raw = json.loads(open(path, "r", encoding="utf-8").read())
+            except Exception:
+                continue
+            entries = []
+            if isinstance(raw, dict) and "_default" in raw and isinstance(raw["_default"], dict):
+                entries = list(raw["_default"].values())
+            elif isinstance(raw, dict) and "entries" in raw and isinstance(raw["entries"], list):
+                entries = raw["entries"]
+            if not entries:
+                self.mark_legacy_imported(key)
+                continue
+            for idx, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    continue
+                img = entry.get("filename") or entry.get("image") or entry.get("file") or entry.get("path")
+                img = str(img or "").strip()
+                if not img:
+                    continue
+                src = os.path.join(contest_dir, img)
+                if not os.path.exists(src):
+                    # maybe stored as url-like
+                    src = os.path.join(contest_dir, os.path.basename(img))
+                if not os.path.exists(src):
+                    continue
+                ext = os.path.splitext(src)[1].lower() or ".png"
+                new_name = f"contest_{channel_id}_{secrets.token_hex(8)}{ext}"
+                dst = os.path.join(media_dir, new_name)
+                try:
+                    import shutil
+                    shutil.copy2(src, dst)
+                except Exception:
+                    continue
+                try:
+                    from bigtree.modules import media as _mm
+                    try:
+                        _ = _mm.ensure_thumb(new_name)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                title = str(entry.get("title") or entry.get("name") or entry.get("caption") or f"Contest {channel_id} Entry {idx+1}")
+                meta = {"legacy_contest": True, "contest_channel_id": channel_id, "legacy_entry": entry}
+                self.upsert_media_item(
+                    media_id=new_name,
+                    filename=new_name,
+                    title=title,
+                    origin_type="contest",
+                    origin_label=str(channel_id),
+                    url=f"/media/{new_name}",
+                    thumb_url=f"/media/thumbs/{new_name}",
+                    hidden=False,
+                    kind="image",
+                    metadata=meta,
+                )
+                imported_any += 1
+            self.mark_legacy_imported(key)
+        if imported_any:
+            logger.info("[database] migrated contest entries into media storage (%s)", imported_any)
+
+    def _report_legacy_import_sources(self) -> None:
+        base = self._data_dir()
+        files = [
+            "auth_roles.json",
+            "gallery_calendar.json",
+            "gallery_hidden.json",
+            "gallery_reactions.json",
+            "gallery_settings.json",
+            "temp_links.json",
+            "web_tokens.json",
+        ]
+        logger.info("[database] legacy import report:")
+        for f in files:
+            path = os.path.join(base, f)
+            imported = self.is_legacy_imported(f)
+            exists = os.path.exists(path)
+            if imported:
+                logger.info("  - %s: IMPORTED%s (safe to delete)", f, "" if exists else " (missing on disk)")
+            else:
+                logger.info("  - %s: PENDING%s", f, "" if exists else " (missing on disk)")
+        # contests
+        cdir = self._contest_dir()
+        if os.path.isdir(cdir):
+            for name in sorted(os.listdir(cdir)):
+                if not name.endswith(".json") or name == "admin_clients.json":
+                    continue
+                cid = os.path.splitext(name)[0]
+                key = f"contest:{cid}"
+                if self.is_legacy_imported(key):
+                    logger.info("  - contest/%s: IMPORTED (safe to delete after verifying media)", name)
+                else:
+                    logger.info("  - contest/%s: PENDING", name)
+
+# ---------------- migrations ----------------
     def _migrate_json_backups(self):
         if self._json_imported and self._count_rows("games") > 0:
             return
@@ -2151,123 +2847,6 @@ class Database:
         except Exception as exc:  # pragma: no cover
             logger.warning("[database] cardgames migration failed: %s", exc)
         logger.info("[database] json migration complete (games=%s)", self._count_rows("games"))
-
-
-    def _report_legacy_import_sources(self) -> None:
-        """At boot, report which legacy JSON files appear fully imported and can be removed.
-
-        This is informational only; we never delete files automatically.
-        """
-        reports = []
-
-        # --- Bingo: per-game JSON files (legacy TinyDB exports)
-        try:
-            bingo_dir = self._resolve_bingo_dir()
-            db_dir = os.path.join(bingo_dir, "db")
-            if os.path.isdir(db_dir):
-                for name in sorted(os.listdir(db_dir)):
-                    if not name.lower().endswith(".json"):
-                        continue
-                    fpath = os.path.join(db_dir, name)
-                    game_id = None
-                    try:
-                        with open(fpath, "r", encoding="utf-8") as fh:
-                            data = json.load(fh)
-                        default = (data or {}).get("_default") or {}
-                        game_doc = next(
-                            (e for e in default.values() if isinstance(e, dict) and e.get("_type") == "game"),
-                            None,
-                        )
-                        if game_doc:
-                            game_id = game_doc.get("game_id") or name[:-5]
-                    except Exception:
-                        game_id = None
-
-                    if not game_id:
-                        continue
-
-                    exists = bool(
-                        self._fetchone(
-                            "SELECT 1 FROM games WHERE module = %s AND game_id = %s LIMIT 1",
-                            ("bingo", str(game_id)),
-                        )
-                    )
-                    reports.append(
-                        {
-                            "module": "bingo",
-                            "path": fpath,
-                            "imported": exists,
-                            "deletable": exists,
-                            "note": "safe to delete" if exists else "not yet imported",
-                        }
-                    )
-        except Exception as exc:  # pragma: no cover
-            logger.debug("[database] legacy bingo report failed: %s", exc)
-
-        # --- Tarot: single sessions file
-        try:
-            tarot_dir = self._resolve_tarot_dir()
-            tpath = os.path.join(tarot_dir, "tarot_sessions.json")
-            if os.path.exists(tpath):
-                session_ids = []
-                try:
-                    db = TinyDB(tpath)
-                    for entry in db.all():
-                        if not isinstance(entry, dict):
-                            continue
-                        if entry.get("_type") != "session":
-                            continue
-                        sid = entry.get("session_id") or entry.get("id") or entry.get("sessionId")
-                        if sid:
-                            session_ids.append(str(sid))
-                except Exception:
-                    session_ids = []
-
-                if session_ids:
-                    placeholders = ",".join(["%s"] * len(session_ids))
-                    rows = (
-                        self._execute(
-                            f"SELECT game_id FROM games WHERE module = %s AND game_id IN ({placeholders})",
-                            tuple(["tarot"] + session_ids),
-                            fetch=True,
-                        )
-                        or []
-                    )
-                    have = {str(r.get("game_id")) for r in rows if r and r.get("game_id") is not None}
-                    missing = [sid for sid in session_ids if sid not in have]
-                    all_imported = len(missing) == 0
-                    reports.append(
-                        {
-                            "module": "tarot",
-                            "path": tpath,
-                            "imported": all_imported,
-                            "deletable": all_imported,
-                            "note": "safe to delete" if all_imported else f"missing {len(missing)}/{len(session_ids)} sessions",
-                        }
-                    )
-                else:
-                    any_tarot = bool(self._fetchone("SELECT 1 FROM games WHERE module = %s LIMIT 1", ("tarot",)))
-                    reports.append(
-                        {
-                            "module": "tarot",
-                            "path": tpath,
-                            "imported": any_tarot,
-                            "deletable": any_tarot,
-                            "note": "empty file; safe to delete" if any_tarot else "file empty; no tarot rows found",
-                        }
-                    )
-        except Exception as exc:  # pragma: no cover
-            logger.debug("[database] legacy tarot report failed: %s", exc)
-
-        if not reports:
-            return
-
-        # Boot log: one line per file (human readable; safe to paste into ops notes).
-        logger.info("[database] legacy import report (you can delete files marked 'safe to delete')")
-        for rep in reports:
-            status = "IMPORTED" if rep.get("imported") else "PENDING"
-            note = rep.get("note") or ""
-            logger.info("[database] legacy %s %s :: %s (%s)", rep.get("module"), status, rep.get("path"), note)
 
     def _sync_tarot_decks(self):
         if self._decks_synced and self._count_rows("deck_files") > 0:

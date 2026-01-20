@@ -322,33 +322,45 @@ async def auth_roles(_req: web.Request):
             role_ids = bigtree.settings.get("BOT.elfministrator_role_ids", [], cast="json") or []
     except Exception:
         role_ids = []
-    role_scopes = {}
+
+    role_scopes: Dict[str, list[str]] = {}
     role_scopes_configured = False
+
+    # Source of truth: Postgres
     try:
-        if hasattr(bigtree, "settings") and bigtree.settings:
-            sec = bigtree.settings.section("BOT")
-            if isinstance(sec, dict) and "auth_role_scopes" in sec:
-                role_scopes_configured = True
-                role_scopes = sec.get("auth_role_scopes") or {}
-            else:
-                role_scopes = bigtree.settings.get("BOT.auth_role_scopes", {}, cast="json") or {}
+        db = get_database()
+        role_scopes = db.get_auth_roles() or {}
+        role_scopes = _normalize_role_scopes(role_scopes)
+        if role_scopes:
+            role_scopes_configured = True
     except Exception:
         role_scopes = {}
-    role_scopes = _normalize_role_scopes(role_scopes)
+
+    # Fallback: config value, then legacy file
     if not role_scopes:
-        role_scopes = _read_auth_roles_file()
-    if role_scopes:
-        role_scopes_configured = True
+        try:
+            if hasattr(bigtree, "settings") and bigtree.settings:
+                role_scopes = bigtree.settings.get("BOT.auth_role_scopes", {}, cast="json") or {}
+        except Exception:
+            role_scopes = {}
+        role_scopes = _normalize_role_scopes(role_scopes)
+        if not role_scopes:
+            role_scopes = _read_auth_roles_file()
+        if role_scopes:
+            role_scopes_configured = True
+
     if isinstance(role_ids, (str, int)):
         role_ids = [role_ids]
     role_ids = [str(r) for r in role_ids if str(r).strip()]
     auth_logger.info("[auth] roles list role_ids=%s role_scopes=%s", role_ids, list(role_scopes.keys()))
-    return web.json_response({
-        "ok": True,
-        "role_ids": role_ids,
-        "role_scopes": role_scopes,
-        "role_scopes_configured": role_scopes_configured,
-    })
+    return web.json_response(
+        {
+            "ok": True,
+            "role_ids": role_ids,
+            "role_scopes": role_scopes,
+            "role_scopes_configured": role_scopes_configured,
+        }
+    )
 
 @route("POST", "/api/auth/roles", scopes=["bingo:admin"])
 async def auth_roles_update(req: web.Request):
@@ -357,22 +369,40 @@ async def auth_roles_update(req: web.Request):
     except Exception:
         auth_logger.warning("[auth] roles update invalid json")
         return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+
     role_scopes = body.get("role_scopes", None)
     if role_scopes is not None:
         role_scopes = _normalize_role_scopes(role_scopes)
         role_ids = list(role_scopes.keys())
+
+        # Persist to Postgres (source of truth)
         try:
-            _update_role_scopes(role_scopes)
-            _update_role_ids(role_ids)
-            _write_auth_roles_file(role_scopes)
+            db = get_database()
+            db.update_auth_roles(role_scopes)
         except Exception as exc:
-            auth_logger.error("[auth] roles update failed err=%s", exc)
+            auth_logger.error("[auth] roles update failed (db) err=%s", exc)
+            # Fallback: store in legacy file so UI keeps working
             if _write_auth_roles_file(role_scopes):
                 auth_logger.info("[auth] roles update stored in auth_roles.json fallback")
                 return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes, "fallback": True})
             return web.json_response({"ok": False, "error": "save failed"}, status=500)
+
+        # Optional: keep config file in sync for backwards compatibility
+        try:
+            _update_role_scopes(role_scopes)
+            _update_role_ids(role_ids)
+        except Exception:
+            pass
+
+        # Legacy file is now optional, but we still write it to help upgrades
+        try:
+            _write_auth_roles_file(role_scopes)
+        except Exception:
+            pass
+
         auth_logger.info("[auth] roles updated scopes=%s", role_scopes)
         return web.json_response({"ok": True, "role_ids": role_ids, "role_scopes": role_scopes})
+
     role_ids = body.get("role_ids") or []
     if isinstance(role_ids, (str, int)):
         role_ids = [role_ids]

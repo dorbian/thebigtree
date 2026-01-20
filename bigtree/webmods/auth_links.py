@@ -12,6 +12,7 @@ from bigtree.inc.logging import auth_logger
 from bigtree.inc import web_tokens
 from bigtree.inc import temp_links
 from bigtree.inc import auth as auth_mod
+from bigtree.inc.database import get_database
 
 try:
     import jwt  # PyJWT (optional)
@@ -22,6 +23,16 @@ except Exception:  # pragma: no cover
 
 
 def _read_role_scopes() -> Dict[str, list[str]]:
+    # Source of truth: Postgres
+    try:
+        db = get_database()
+        roles = db.get_auth_roles() or {}
+        if isinstance(roles, dict) and roles:
+            return roles
+    except Exception:
+        pass
+
+    # Fallback: settings/config/file
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
             sec = bigtree.settings.section("BOT")
@@ -42,7 +53,6 @@ def _read_role_scopes() -> Dict[str, list[str]]:
     if not path:
         return role_scopes or {}
     return _read_auth_roles_file(path) or {}
-
 
 def _auth_roles_path() -> Path | None:
     try:

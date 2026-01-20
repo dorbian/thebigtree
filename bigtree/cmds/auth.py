@@ -74,27 +74,41 @@ def _parse_scope_list(raw) -> list[str]:
 
 
 def _get_role_scope_map() -> tuple[dict[int, list[str]], bool]:
+    # Highest priority: config setting override
     raw = _settings_get("BOT", "auth_role_scopes", None)
+
+    # Next: DB (source of truth)
+    if raw is None:
+        try:
+            db = get_database()
+            raw = db.get_auth_roles()
+        except Exception:
+            raw = None
+
+    # Finally: legacy file fallback
     if raw is None:
         raw = _load_auth_roles_file()
         if raw is None:
             return {}, False
+
     if isinstance(raw, str):
         raw = raw.strip()
         if not raw:
-            raw = _load_auth_roles_file()
-            if raw is None:
-                return {}, True
+            try:
+                db = get_database()
+                raw = db.get_auth_roles()
+            except Exception:
+                raw = _load_auth_roles_file()
         try:
             raw = json.loads(raw)
         except Exception:
-            raw = _load_auth_roles_file()
-            if raw is None:
-                return {}, True
+            pass
+
     if not isinstance(raw, dict):
         raw = _load_auth_roles_file()
         if raw is None:
             return {}, True
+
     mapping: dict[int, list[str]] = {}
     for rid, scopes in raw.items():
         try:
@@ -106,7 +120,6 @@ def _get_role_scope_map() -> tuple[dict[int, list[str]], bool]:
             scope_list = ["*"]
         mapping[role_id] = scope_list
     return mapping, True
-
 
 def _auth_roles_path() -> Path | None:
     base = _settings_get("BOT", "DATA_DIR", None) or getattr(bigtree, "datadir", None)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import secrets
 import time
@@ -9,6 +10,11 @@ try:
     import bigtree
 except Exception:
     bigtree = None
+
+try:
+    from bigtree.inc.database import get_database
+except Exception:
+    get_database = None  # type: ignore
 
 TOKEN_TTL_SECONDS = 24 * 60 * 60
 
@@ -66,6 +72,17 @@ def save_tokens(tokens: List[Dict[str, Any]]) -> None:
     _save_json(_token_path(), {"tokens": tokens})
 
 
+def _db_available() -> bool:
+    if not get_database:
+        return False
+    try:
+        db = get_database()
+        db.initialize()
+        return True
+    except Exception:
+        return False
+
+
 def issue_token(
     user_id: int,
     scopes: Optional[List[str]] = None,
@@ -73,12 +90,27 @@ def issue_token(
     user_name: Optional[str] = None,
     user_icon: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Issue a web token. DB-first; falls back to web_tokens.json."""
+    scopes = scopes or ["*"]
+    if _db_available():
+        try:
+            db = get_database()
+            return db.issue_web_token(
+                user_id=int(user_id),
+                scopes=scopes,
+                ttl_seconds=int(ttl_seconds),
+                user_name=user_name,
+                user_icon=user_icon,
+            )
+        except Exception:
+            pass
+
     token = secrets.token_urlsafe(32)
     now = int(time.time())
     doc = {
         "token": token,
         "user_id": int(user_id),
-        "scopes": scopes or ["*"],
+        "scopes": scopes,
         "created_at": now,
         "expires_at": now + int(ttl_seconds),
     }
@@ -95,12 +127,24 @@ def issue_token(
 def validate_token(token: str, needed_scopes: Set[str]) -> bool:
     if not token:
         return False
-    tokens = load_tokens()
-    for t in tokens:
+    if _db_available():
+        try:
+            db = get_database()
+            doc = db.find_web_token(token)
+            if not doc:
+                return False
+            scopes = set(doc.get("scopes") or [])
+            if "*" in scopes:
+                return True
+            if not needed_scopes:
+                return True
+            return any(scope in scopes for scope in needed_scopes)
+        except Exception:
+            pass
+
+    for t in load_tokens():
         if t.get("token") != token:
             continue
-        if "scopes" not in t:
-            return True
         scopes = set(t.get("scopes") or [])
         if "*" in scopes:
             return True
@@ -113,6 +157,12 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
 def find_token(token: str) -> Optional[Dict[str, Any]]:
     if not token:
         return None
+    if _db_available():
+        try:
+            db = get_database()
+            return db.find_web_token(token)
+        except Exception:
+            pass
     for doc in load_tokens():
         if doc.get("token") == token:
             return doc

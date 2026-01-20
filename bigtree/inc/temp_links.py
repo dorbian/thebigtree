@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import json
 import secrets
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,6 +11,11 @@ try:
     import bigtree
 except Exception:
     bigtree = None
+
+try:
+    from bigtree.inc.database import get_database
+except Exception:
+    get_database = None  # type: ignore
 
 LINK_TTL_SECONDS = 6 * 60 * 60
 
@@ -73,18 +80,49 @@ def save_links(links: List[Dict[str, Any]]) -> None:
     _save_json(_links_path(), {"links": links})
 
 
+def _db_available() -> bool:
+    if not get_database:
+        return False
+    try:
+        db = get_database()
+        db.initialize()
+        return True
+    except Exception:
+        return False
+
+
 def issue_link(
     scopes: List[str],
     ttl_seconds: int = LINK_TTL_SECONDS,
     role_ids: Optional[List[str]] = None,
     created_by: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Issue a one-time auth link.
+
+    DB-first; falls back to temp_links.json if DB is unavailable.
+    """
+    scopes = scopes or []
+    role_ids = role_ids or []
+    if _db_available():
+        try:
+            db = get_database()
+            return db.issue_temp_link(
+                scopes=scopes,
+                ttl_seconds=int(ttl_seconds),
+                role_ids=role_ids,
+                created_by=created_by,
+                max_uses=1,
+            )
+        except Exception:
+            pass
+
+    # JSON fallback
     token = secrets.token_urlsafe(24)
     now = int(time.time())
     doc = {
         "token": token,
-        "scopes": scopes or [],
-        "role_ids": role_ids or [],
+        "scopes": scopes,
+        "role_ids": role_ids,
         "created_at": now,
         "expires_at": now + int(ttl_seconds),
         "max_uses": 1,
@@ -99,8 +137,17 @@ def issue_link(
 
 
 def consume_link(token: str, user_name: str) -> Optional[Dict[str, Any]]:
+    """Consume a temp link (one time). DB-first; falls back to JSON."""
     if not token:
         return None
+    if _db_available():
+        try:
+            db = get_database()
+            return db.consume_temp_link(token, user_name)
+        except Exception:
+            pass
+
+    # JSON fallback
     links = load_links()
     updated: Optional[Dict[str, Any]] = None
     for link in links:

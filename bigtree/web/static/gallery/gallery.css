@@ -11,9 +11,6 @@
     --line:rgba(255,255,255,.08);
   }
   *{box-sizing:border-box}
-  html, body{
-    height:100%;
-  }
   body{
     margin:0;
     font-family:"Spectral","Georgia",serif;
@@ -27,8 +24,6 @@
     min-height:100vh;
     display:flex;
     flex-direction:column;
-    /* Avoid tiny "outside" scroll caused by sticky gutters / 100vw calculations. */
-    overflow:hidden;
   }
 
   main{
@@ -70,8 +65,7 @@
     /* 25% / 50% / 25% split, with sane min widths */
     grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr) minmax(260px, 1fr);
     gap:22px;
-    /* Extra right/bottom padding so nothing can scroll outside the viewport. */
-    padding:18px 28px 28px 18px;
+    padding:18px;
     height:100vh;
     min-height:0;
     overflow:hidden;
@@ -154,42 +148,28 @@
     overflow:auto;
     padding-right:6px;
     padding-bottom:22px;
-    /* One post per view: stronger snapping keeps a single card centered. */
-    scroll-snap-type:y mandatory;
-    scroll-padding:12px;
+    scroll-snap-type:y proximity;
   }
   .post{
     background:rgba(16,26,21,.55);
     border:1px solid var(--line);
     border-radius:22px;
-    /* Make each card occupy (almost) the entire feed viewport so only one is visible. */
-    height:calc(100% - 18px);
-    margin-bottom:18px;
+    margin-bottom:52px;
     overflow:hidden;
+    scroll-snap-align:start;
     position:relative;
-    display:flex;
-    flex-direction:column;
-    scroll-snap-align:center;
-    scroll-snap-stop:always;
   }
   .post-media{
     width:100%;
-    flex:1;
-    min-height:0;
     display:flex;
     align-items:center;
     justify-content:center;
     background:rgba(0,0,0,.18);
   }
   .post-media img{
-    /*
-      Maintain aspect ratio, allow the image to be as large as possible
-      inside the card without overflowing.
-    */
-    width:auto;
+    width:100%;
     height:auto;
-    max-width:100%;
-    max-height:100%;
+    max-height:78vh;
     object-fit:contain;
     display:block;
   }
@@ -1053,19 +1033,17 @@
   }
 
 
-/* --- Layout: full width, 20/60/20 (avoid 100vw to prevent horizontal scroll) --- */
+/* --- Layout: full width, 20/60/20 --- */
 .layout{
-  width: 100%;
+  width: 100vw;
   max-width: none;
   margin: 0;
-  padding: 18px 28px 28px 18px;
+  padding-left: 16px;
+  padding-right: 16px;
   display: grid;
   grid-template-columns: 20% 1fr 20%;
   gap: 16px;
   align-items: start;
-  box-sizing: border-box;
-  height: 100vh;
-  overflow: hidden;
 }
 
 /* Left sidebar should be a flex column so we can push icon links to bottom */
@@ -1088,10 +1066,9 @@
 
 .sidebar-bottom{
   display: flex;
-  flex-direction: row;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   padding-top: 10px;
-  align-items: center;
 }
 
 .sidebar-iconlink{
@@ -1102,21 +1079,6 @@
   height: 44px;
   border-radius: 12px;
   text-decoration: none;
-  background: rgba(16,26,21,.55);
-  border: 1px solid rgba(255,255,255,.10);
-  color: rgba(231,242,234,.92);
-  transition: transform .12s ease, border-color .12s ease, background .12s ease;
-}
-
-.sidebar-iconlink:hover{
-  transform: translateY(-1px);
-  border-color: rgba(107,212,162,.35);
-  background: rgba(16,26,21,.70);
-}
-
-.sidebar-iconlink:focus-visible{
-  outline: 2px solid rgba(107,212,162,.55);
-  outline-offset: 2px;
 }
 
 .sidebar-iconlink svg{
