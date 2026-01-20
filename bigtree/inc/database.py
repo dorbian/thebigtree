@@ -74,6 +74,7 @@ class Database:
             self._sync_tarot_decks()
             self._migrate_media_items()
             self._migrate_json_backups()
+            self._report_legacy_import_sources()
             self._initialized = True
 
     # ---------------- connection helpers ----------------
@@ -2150,6 +2151,123 @@ class Database:
         except Exception as exc:  # pragma: no cover
             logger.warning("[database] cardgames migration failed: %s", exc)
         logger.info("[database] json migration complete (games=%s)", self._count_rows("games"))
+
+
+    def _report_legacy_import_sources(self) -> None:
+        """At boot, report which legacy JSON files appear fully imported and can be removed.
+
+        This is informational only; we never delete files automatically.
+        """
+        reports = []
+
+        # --- Bingo: per-game JSON files (legacy TinyDB exports)
+        try:
+            bingo_dir = self._resolve_bingo_dir()
+            db_dir = os.path.join(bingo_dir, "db")
+            if os.path.isdir(db_dir):
+                for name in sorted(os.listdir(db_dir)):
+                    if not name.lower().endswith(".json"):
+                        continue
+                    fpath = os.path.join(db_dir, name)
+                    game_id = None
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as fh:
+                            data = json.load(fh)
+                        default = (data or {}).get("_default") or {}
+                        game_doc = next(
+                            (e for e in default.values() if isinstance(e, dict) and e.get("_type") == "game"),
+                            None,
+                        )
+                        if game_doc:
+                            game_id = game_doc.get("game_id") or name[:-5]
+                    except Exception:
+                        game_id = None
+
+                    if not game_id:
+                        continue
+
+                    exists = bool(
+                        self._fetchone(
+                            "SELECT 1 FROM games WHERE module = %s AND game_id = %s LIMIT 1",
+                            ("bingo", str(game_id)),
+                        )
+                    )
+                    reports.append(
+                        {
+                            "module": "bingo",
+                            "path": fpath,
+                            "imported": exists,
+                            "deletable": exists,
+                            "note": "safe to delete" if exists else "not yet imported",
+                        }
+                    )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("[database] legacy bingo report failed: %s", exc)
+
+        # --- Tarot: single sessions file
+        try:
+            tarot_dir = self._resolve_tarot_dir()
+            tpath = os.path.join(tarot_dir, "tarot_sessions.json")
+            if os.path.exists(tpath):
+                session_ids = []
+                try:
+                    db = TinyDB(tpath)
+                    for entry in db.all():
+                        if not isinstance(entry, dict):
+                            continue
+                        if entry.get("_type") != "session":
+                            continue
+                        sid = entry.get("session_id") or entry.get("id") or entry.get("sessionId")
+                        if sid:
+                            session_ids.append(str(sid))
+                except Exception:
+                    session_ids = []
+
+                if session_ids:
+                    placeholders = ",".join(["%s"] * len(session_ids))
+                    rows = (
+                        self._execute(
+                            f"SELECT game_id FROM games WHERE module = %s AND game_id IN ({placeholders})",
+                            tuple(["tarot"] + session_ids),
+                            fetch=True,
+                        )
+                        or []
+                    )
+                    have = {str(r.get("game_id")) for r in rows if r and r.get("game_id") is not None}
+                    missing = [sid for sid in session_ids if sid not in have]
+                    all_imported = len(missing) == 0
+                    reports.append(
+                        {
+                            "module": "tarot",
+                            "path": tpath,
+                            "imported": all_imported,
+                            "deletable": all_imported,
+                            "note": "safe to delete" if all_imported else f"missing {len(missing)}/{len(session_ids)} sessions",
+                        }
+                    )
+                else:
+                    any_tarot = bool(self._fetchone("SELECT 1 FROM games WHERE module = %s LIMIT 1", ("tarot",)))
+                    reports.append(
+                        {
+                            "module": "tarot",
+                            "path": tpath,
+                            "imported": any_tarot,
+                            "deletable": any_tarot,
+                            "note": "empty file; safe to delete" if any_tarot else "file empty; no tarot rows found",
+                        }
+                    )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("[database] legacy tarot report failed: %s", exc)
+
+        if not reports:
+            return
+
+        # Boot log: one line per file (human readable; safe to paste into ops notes).
+        logger.info("[database] legacy import report (you can delete files marked 'safe to delete')")
+        for rep in reports:
+            status = "IMPORTED" if rep.get("imported") else "PENDING"
+            note = rep.get("note") or ""
+            logger.info("[database] legacy %s %s :: %s (%s)", rep.get("module"), status, rep.get("path"), note)
 
     def _sync_tarot_decks(self):
         if self._decks_synced and self._count_rows("deck_files") > 0:
