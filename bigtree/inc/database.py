@@ -402,6 +402,12 @@ class Database:
         for stmt in statements:
             self._execute(stmt)
         with self._connect() as conn:
+            self._ensure_column(conn, "discord_users", "name", "TEXT")
+            self._ensure_column(conn, "discord_users", "display_name", "TEXT")
+            self._ensure_column(conn, "discord_users", "global_name", "TEXT")
+            self._ensure_column(conn, "discord_users", "metadata", "JSONB DEFAULT '{}'::jsonb")
+            self._ensure_column(conn, "discord_users", "created_at", "TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP")
+            self._ensure_column(conn, "discord_users", "updated_at", "TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP")
             self._ensure_column(conn, "games", "run_source", "TEXT DEFAULT 'api'")
             self._ensure_column(conn, "games", "claimed_by", "INTEGER")
             self._ensure_column(conn, "games", "claimed_at", "TIMESTAMPTZ")

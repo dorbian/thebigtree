@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Database: ensure discord_users columns exist before querying user names.
 - Overlay: show cardgames session-create status/errors when scopes are missing or the API fails.
 - Auth: resolve /api/auth/me tokens via DB-first lookup with web_tokens.json fallback.
 - Overlay: send auth token via storage fallback and Authorization header for API requests.
