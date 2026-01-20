@@ -212,6 +212,18 @@ def _load_deck_bundle(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict
         deck, cards = _normalize_deck_file_data(data)
         if deck and deck.get("deck_id") == deck_id:
             return deck, cards, path
+    # Fallback: decks may have been synced into Postgres (deck_files) in
+    # containerized deployments where the filesystem deck dir is empty.
+    try:
+        from bigtree.inc.database import get_database
+        row = get_database().get_deck_file(deck_id)
+        payload = row.get("payload") if isinstance(row, dict) else None
+        if payload:
+            deck, cards = _normalize_deck_file_data(payload)
+            if deck:
+                return deck, cards, None
+    except Exception:
+        pass
     return None, [], candidate
 
 def _save_deck_bundle(deck: Dict[str, Any], cards: List[Dict[str, Any]], path: str) -> None:
@@ -694,12 +706,30 @@ def create_deck(
 
 def list_decks() -> List[Dict[str, Any]]:
     _migrate_decks_to_files()
-    decks = []
-    for path in _list_deck_files():
-        data = _read_deck_file(path)
-        deck, _cards = _normalize_deck_file_data(data)
-        if deck:
-            decks.append(deck)
+    decks: List[Dict[str, Any]] = []
+
+    # Prefer Postgres-synced decks if available (deck editor in containers
+    # often does not have the filesystem deck directory mounted).
+    try:
+        from bigtree.inc.database import get_database
+        rows = get_database().list_deck_files(module="tarot", limit=500)
+        for row in rows or []:
+            payload = row.get("payload") if isinstance(row, dict) else None
+            if not payload:
+                continue
+            deck, _cards = _normalize_deck_file_data(payload)
+            if deck:
+                decks.append(deck)
+    except Exception:
+        pass
+
+    # Fallback to filesystem deck bundles.
+    if not decks:
+        for path in _list_deck_files():
+            data = _read_deck_file(path)
+            deck, _cards = _normalize_deck_file_data(data)
+            if deck:
+                decks.append(deck)
     if not decks:
         create_deck("elf-classic")
         return list_decks()

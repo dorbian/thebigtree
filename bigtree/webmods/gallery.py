@@ -12,9 +12,7 @@ from bigtree.inc.webserver import route
 from bigtree.inc.database import get_database
 from bigtree.modules import media as media_mod
 from bigtree.modules import artists as artist_mod
-from bigtree.modules import tarot as tarot_mod
 from bigtree.modules import gallery as gallery_mod
-from bigtree.modules import artists as artist_mod
 from bigtree.webmods import contest as contest_mod
 import random
 import time
@@ -171,59 +169,64 @@ def _item_id(source: str, identifier: str) -> str:
 def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     seen: set[str] = set()
-    hidden_set = gallery_mod.get_hidden_set()
-    hidden_decks = set(gallery_mod.get_hidden_decks())
+    hidden_set = set(gallery_mod.get_hidden_set() or [])
 
-    # NOTE:
-    # The media module stores metadata in a TinyDB JSON file. In practice, admins
-    # sometimes upload/copy images directly into the media directory.
-    # Previously, those images never appeared in the public gallery because we only
-    # enumerated the DB rows.
-    #
-    # To ensure *all* uploaded images show up, we:
-    # 1) enumerate DB media entries (preferred, richer metadata)
-    # 2) scan the media directory for image files that do not exist in the DB
-    #
-    # Files discovered via disk scan are treated as normal media items with
-    # minimal metadata.
+    # Ensure legacy media.json and filesystem-only uploads are migrated into Postgres.
+    db = get_database()
+    try:
+        db.initialize()
+    except Exception:
+        pass
 
-    db_media = list(media_mod.list_media() or [])
-    db_filenames: set[str] = set()
+    # Pull from Postgres as the source of truth.
+    # NOTE: we keep legacy reaction/hidden ids stable by still using the
+    # "media:<filename>" item_id shape.
+    rows = []
+    try:
+        rows = db.list_media_items(limit=5000, offset=0, include_hidden=True)
+    except Exception:
+        rows = []
 
-    for entry in db_media:
-        filename = entry.get("filename")
+    for row in rows:
+        filename = (row.get("filename") or row.get("media_id") or "").strip()
         if not filename:
             continue
-        db_filenames.add(filename)
-        if not os.path.exists(_media_path(filename)) and not entry.get("discord_url"):
-            continue
-        discord_url = entry.get("discord_url") or ""
-        url = discord_url or f"/media/{filename}"
         item_id = _item_id("media", filename)
-        hidden = item_id in hidden_set
+        hidden = bool(row.get("hidden")) or (item_id in hidden_set)
         if not include_hidden and hidden:
             continue
-        seen.add(url)
+        url = (row.get("url") or "").strip() or f"/media/{filename}"
+        thumb_url = (row.get("thumb_url") or "").strip() or f"/media/thumbs/{filename}"
+        if url in seen:
+            continue
+        # Ensure thumb exists for disk-backed images.
+        try:
+            if url.startswith("/media/"):
+                _ = media_mod.ensure_thumb(filename)
+        except Exception:
+            pass
+        artist_name = (row.get("artist_name") or "").strip() or "Forest"
+        artist_links = row.get("artist_links") if isinstance(row.get("artist_links"), dict) else {}
         items.append({
             "item_id": item_id,
             "filename": filename,
-            "title": entry.get("title") or entry.get("original_name") or filename,
+            "title": row.get("title") or filename,
             "url": url,
-            "fallback_url": f"/media/{filename}" if discord_url else "",
-            "thumb_url": f"/media/thumbs/{filename}",
+            "fallback_url": f"/media/{filename}" if url != f"/media/{filename}" else "",
+            "thumb_url": thumb_url,
             "source": "media",
-            "type": entry.get("origin_type") or "Artifact",
-            "origin": entry.get("origin_label") or "",
-            "artist": _artist_payload(entry.get("artist_id")),
+            "type": row.get("origin_type") or "Artifact",
+            "origin": row.get("origin_label") or "",
+            "artist": {"artist_id": None, "name": artist_name, "links": artist_links},
             "reactions": {},
             "hidden": hidden,
         })
+        seen.add(url)
 
-    # Add filesystem-only media (files present on disk but not registered in DB).
-    # Keep ordering stable-ish by using file mtime (newest first), similar to DB sort.
+    # Opportunistic: if files exist in the media dir but have not been migrated yet,
+    # upsert them into Postgres so the feed remains complete.
     try:
         media_dir = media_mod.get_media_dir()
-        fs_candidates: List[tuple[float, str]] = []
         for name in os.listdir(media_dir):
             if name in ("media.json", "thumbs"):
                 continue
@@ -233,93 +236,47 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             ext = os.path.splitext(name)[1].lower()
             if ext not in _IMG_EXTS:
                 continue
-            if name in db_filenames:
-                continue
-            try:
-                mtime = os.path.getmtime(path)
-            except Exception:
-                mtime = 0.0
-            fs_candidates.append((mtime, name))
-
-        fs_candidates.sort(key=lambda t: t[0], reverse=True)
-        for _mtime, filename in fs_candidates:
-            url = f"/media/{filename}"
-            if url in seen:
-                continue
-            item_id = _item_id("media", filename)
+            item_id = _item_id("media", name)
             hidden = item_id in hidden_set
             if not include_hidden and hidden:
                 continue
-            # Attempt to generate a thumbnail for consistency.
-            _ = media_mod.ensure_thumb(filename)
+            url = f"/media/{name}"
+            if url in seen:
+                continue
+            try:
+                _ = media_mod.ensure_thumb(name)
+            except Exception:
+                pass
+            try:
+                db.upsert_media_item(
+                    media_id=name,
+                    filename=name,
+                    title=name,
+                    url=url,
+                    thumb_url=f"/media/thumbs/{name}",
+                    hidden=hidden,
+                    kind="image",
+                    metadata={"filesystem_only": True, "auto_migrated": True},
+                )
+            except Exception:
+                pass
             items.append({
                 "item_id": item_id,
-                "filename": filename,
-                "title": filename,
+                "filename": name,
+                "title": name,
                 "url": url,
                 "fallback_url": "",
-                "thumb_url": f"/media/thumbs/{filename}",
+                "thumb_url": f"/media/thumbs/{name}",
                 "source": "media",
                 "type": "Artifact",
                 "origin": "",
-                "artist": _artist_payload(None),
+                "artist": {"artist_id": None, "name": "Forest", "links": {}},
                 "reactions": {},
                 "hidden": hidden,
             })
             seen.add(url)
     except Exception:
-        # If the media directory is not accessible for some reason, just skip.
         pass
-
-    for deck in tarot_mod.list_decks():
-        deck_id = deck.get("deck_id") or "elf-classic"
-        if deck_id in hidden_decks:
-            continue
-        back = (deck.get("back_image") or "").strip()
-        if back:
-            url = _strip_query(back)
-            if url and url not in seen:
-                item_id = _item_id("tarot-back", deck_id)
-                hidden = item_id in hidden_set
-                if include_hidden or not hidden:
-                    thumb_url = _media_thumb_url(url)
-                    items.append({
-                        "item_id": item_id,
-                        "title": deck.get("name") or deck_id,
-                        "url": url,
-                        "thumb_url": thumb_url,
-                        "source": "tarot-back",
-                        "type": "Tarot",
-                        "artist": _artist_payload(deck.get("back_artist_id")),
-                        "reactions": {},
-                        "hidden": hidden,
-                    })
-                    seen.add(url)
-        for card in tarot_mod.list_cards(deck_id):
-            img = (card.get("image") or "").strip()
-            if not img:
-                continue
-            url = _strip_query(img)
-            if not url or url in seen:
-                continue
-            card_id = card.get("card_id") or card.get("name") or url
-            item_id = _item_id("tarot-card", f"{deck_id}:{card_id}")
-            hidden = item_id in hidden_set
-            if not include_hidden and hidden:
-                continue
-            thumb_url = _media_thumb_url(url)
-            items.append({
-                "item_id": item_id,
-                "title": card.get("name") or card.get("card_id") or "Card",
-                "url": url,
-                "thumb_url": thumb_url,
-                "source": "tarot-card",
-                "type": "Tarot",
-                "artist": _artist_payload(card.get("artist_id")),
-                "reactions": {},
-                "hidden": hidden,
-            })
-            seen.add(url)
 
     try:
         contests = contest_mod._list_contest_entries()
@@ -512,12 +469,23 @@ async def gallery_hidden_set(req: web.Request):
     hidden = bool(body.get("hidden"))
     if not item_id:
         return web.json_response({"ok": False, "error": "item_id required"}, status=400)
+    # Persist hidden flag in Postgres (source of truth). Keep legacy TinyDB
+    # hidden store only for backwards compatibility with old item ids.
+    media_id = item_id
+    if ":" in item_id:
+        media_id = item_id.split(":", 1)[1]
     try:
-        payload = gallery_mod.set_hidden(item_id, hidden)
+        get_database().set_media_hidden(media_id, hidden)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    try:
+        # Backwards-compat: still update the legacy hidden set so older cached
+        # reaction views behave.
+        gallery_mod.set_hidden(item_id, hidden)
+    except Exception:
+        pass
     invalidate_gallery_cache()
-    return web.json_response({"ok": True, "hidden": payload})
+    return web.json_response({"ok": True, "item_id": item_id, "hidden": hidden})
 
 @route("GET", "/api/gallery/settings", scopes=["tarot:admin", "admin:web"])
 async def gallery_settings_get(_req: web.Request):

@@ -72,6 +72,7 @@ class Database:
             self._ensure_tables()
             self._import_ini_configs()
             self._sync_tarot_decks()
+            self._migrate_media_items()
             self._migrate_json_backups()
             self._initialized = True
 
@@ -312,6 +313,27 @@ class Database:
             CREATE TABLE IF NOT EXISTS system_configs (
                 name TEXT PRIMARY KEY,
                 data JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS media_items (
+                id SERIAL PRIMARY KEY,
+                media_id TEXT UNIQUE NOT NULL,
+                filename TEXT,
+                title TEXT,
+                artist_name TEXT,
+                artist_links JSONB NOT NULL DEFAULT '{}'::jsonb,
+                inspiration_text TEXT,
+                origin_type TEXT,
+                origin_label TEXT,
+                url TEXT,
+                thumb_url TEXT,
+                tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                kind TEXT NOT NULL DEFAULT 'image',
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -1875,6 +1897,241 @@ class Database:
             (deck_id, payload.get("name") or deck_id, module, Json(metadata), Json(payload)),
         )
 
+    def list_deck_files(self, module: Optional[str] = None, limit: int = 500) -> List[Dict[str, Any]]:
+        """Return deck rows from Postgres. Payload is returned as a dict."""
+        limit = int(limit) if str(limit).isdigit() else 500
+        if limit < 1:
+            limit = 1
+        if limit > 2000:
+            limit = 2000
+        sql = "SELECT deck_id, name, module, metadata, payload, updated_at FROM deck_files"
+        params: List[Any] = []
+        if module:
+            sql += " WHERE module = %s"
+            params.append(module)
+        sql += " ORDER BY updated_at DESC LIMIT %s"
+        params.append(limit)
+        rows = self._execute(sql, tuple(params), fetch=True) or []
+        return [self._json_safe_dict(r) for r in rows]
+
+    def get_deck_file(self, deck_id: str) -> Optional[Dict[str, Any]]:
+        deck_id = (deck_id or "").strip()
+        if not deck_id:
+            return None
+        row = self._fetchone(
+            "SELECT deck_id, name, module, metadata, payload, updated_at FROM deck_files WHERE deck_id = %s",
+            (deck_id,),
+        )
+        return self._json_safe_dict(row) if row else None
+
+    def upsert_media_item(
+        self,
+        media_id: str,
+        filename: Optional[str] = None,
+        title: Optional[str] = None,
+        artist_name: Optional[str] = None,
+        artist_links: Optional[Dict[str, Any]] = None,
+        inspiration_text: Optional[str] = None,
+        origin_type: Optional[str] = None,
+        origin_label: Optional[str] = None,
+        url: Optional[str] = None,
+        thumb_url: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        hidden: bool = False,
+        kind: str = "image",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Insert/update a media item."""
+        if not media_id:
+            return
+        metadata = metadata or {}
+        artist_links = artist_links or {}
+        tags = tags or []
+        sql = """
+        INSERT INTO media_items (
+            media_id, filename, title, artist_name, artist_links, inspiration_text,
+            origin_type, origin_label, url, thumb_url, tags, hidden, kind, metadata
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (media_id) DO UPDATE
+          SET filename = COALESCE(EXCLUDED.filename, media_items.filename),
+              title = COALESCE(NULLIF(EXCLUDED.title, ''), media_items.title),
+              artist_name = COALESCE(NULLIF(EXCLUDED.artist_name, ''), media_items.artist_name),
+              artist_links = media_items.artist_links || EXCLUDED.artist_links,
+              inspiration_text = COALESCE(NULLIF(EXCLUDED.inspiration_text, ''), media_items.inspiration_text),
+              origin_type = COALESCE(NULLIF(EXCLUDED.origin_type, ''), media_items.origin_type),
+              origin_label = COALESCE(NULLIF(EXCLUDED.origin_label, ''), media_items.origin_label),
+              url = COALESCE(NULLIF(EXCLUDED.url, ''), media_items.url),
+              thumb_url = COALESCE(NULLIF(EXCLUDED.thumb_url, ''), media_items.thumb_url),
+              tags = CASE WHEN jsonb_array_length(EXCLUDED.tags) > 0 THEN EXCLUDED.tags ELSE media_items.tags END,
+              hidden = EXCLUDED.hidden,
+              kind = EXCLUDED.kind,
+              metadata = media_items.metadata || EXCLUDED.metadata,
+              updated_at = CURRENT_TIMESTAMP
+        """
+        self._execute(
+            sql,
+            (
+                media_id,
+                filename,
+                title or "",
+                artist_name or "",
+                Json(artist_links),
+                inspiration_text or "",
+                origin_type or "",
+                origin_label or "",
+                url or "",
+                thumb_url or "",
+                Json(tags),
+                bool(hidden),
+                (kind or "image"),
+                Json(metadata),
+            ),
+        )
+
+    def list_media_items(self, limit: int = 200, offset: int = 0, include_hidden: bool = False) -> List[Dict[str, Any]]:
+        limit = int(limit)
+        offset = int(offset)
+        if limit < 1:
+            limit = 1
+        if limit > 500:
+            limit = 500
+        if offset < 0:
+            offset = 0
+        sql = "SELECT * FROM media_items"
+        params: List[Any] = []
+        if not include_hidden:
+            sql += " WHERE hidden = FALSE"
+        sql += " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        rows = self._execute(sql, tuple(params), fetch=True) or []
+        return [self._json_safe_dict(r) for r in rows]
+
+    def count_media_items(self, include_hidden: bool = False) -> int:
+        if include_hidden:
+            row = self._fetchone("SELECT COUNT(*) AS value FROM media_items")
+        else:
+            row = self._fetchone("SELECT COUNT(*) AS value FROM media_items WHERE hidden = FALSE")
+        try:
+            return int(row.get("value") if row else 0)
+        except Exception:
+            return 0
+
+    def set_media_hidden(self, media_id: str, hidden: bool) -> bool:
+        media_id = (media_id or "").strip()
+        if not media_id:
+            return False
+        self._execute(
+            "UPDATE media_items SET hidden = %s, updated_at = CURRENT_TIMESTAMP WHERE media_id = %s",
+            (bool(hidden), media_id),
+        )
+        return True
+
+    def _migrate_media_items(self) -> None:
+        """Import legacy TinyDB media.json + filesystem-only files into Postgres.
+
+        TinyDB is kept only as a legacy import source.
+        """
+        try:
+            from bigtree.modules import media as media_mod
+        except Exception:
+            return
+        try:
+            from bigtree.modules import gallery as gallery_mod
+        except Exception:
+            gallery_mod = None
+
+        # Only run once per process start.
+        if getattr(self, "_media_migrated", False) and self.count_media_items(include_hidden=True) > 0:
+            return
+        self._media_migrated = True
+
+        hidden_set: set[str] = set()
+        try:
+            if gallery_mod:
+                hidden_set = set(gallery_mod.get_hidden_set() or [])
+        except Exception:
+            hidden_set = set()
+
+        media_dir = media_mod.get_media_dir()
+        # 1) Import legacy TinyDB rows
+        try:
+            legacy = list(media_mod.list_media() or [])
+        except Exception:
+            legacy = []
+
+        imported = 0
+        for entry in legacy:
+            filename = str(entry.get("filename") or "").strip()
+            if not filename:
+                continue
+            item_id = f"media:{filename}"
+            hidden = item_id in hidden_set
+            discord_url = (entry.get("discord_url") or "").strip()
+            url = discord_url or f"/media/{filename}"
+            thumb_url = f"/media/thumbs/{filename}"
+            artist_name = ""
+            artist_links: Dict[str, Any] = {}
+            # Keep artist_id mapping as metadata for now.
+            meta = {"legacy": True}
+            if entry.get("artist_id"):
+                meta["artist_id"] = entry.get("artist_id")
+            # Ensure thumbs exist for disk-backed images.
+            try:
+                _ = media_mod.ensure_thumb(filename)
+            except Exception:
+                pass
+            self.upsert_media_item(
+                media_id=filename,
+                filename=filename,
+                title=str(entry.get("title") or entry.get("original_name") or filename),
+                artist_name=artist_name,
+                artist_links=artist_links,
+                inspiration_text=str(entry.get("inspiration_text") or ""),
+                origin_type=str(entry.get("origin_type") or ""),
+                origin_label=str(entry.get("origin_label") or ""),
+                url=url,
+                thumb_url=thumb_url,
+                tags=entry.get("tags") if isinstance(entry.get("tags"), list) else [],
+                hidden=hidden,
+                kind="image",
+                metadata=meta,
+            )
+            imported += 1
+
+        # 2) Import filesystem-only images (present on disk but no DB row).
+        try:
+            names = sorted(os.listdir(media_dir))
+        except Exception:
+            names = []
+        for name in names:
+            if name in ("media.json", "thumbs"):
+                continue
+            path = os.path.join(media_dir, name)
+            if not os.path.isfile(path):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+                continue
+            # Upsert is idempotent; it will not overwrite existing richer rows.
+            item_id = f"media:{name}"
+            hidden = item_id in hidden_set
+            try:
+                _ = media_mod.ensure_thumb(name)
+            except Exception:
+                pass
+            self.upsert_media_item(
+                media_id=name,
+                filename=name,
+                title=name,
+                url=f"/media/{name}",
+                thumb_url=f"/media/thumbs/{name}",
+                hidden=hidden,
+                kind="image",
+                metadata={"filesystem_only": True},
+            )
+        logger.info("[database] media migration complete (legacy_rows=%s, total=%s)", imported, self.count_media_items(include_hidden=True))
+
     # ---------------- migrations ----------------
     def _migrate_json_backups(self):
         if self._json_imported and self._count_rows("games") > 0:
@@ -1935,6 +2192,92 @@ class Database:
             except Exception as exc:  # pragma: no cover
                 logger.warning("[database] tarot module deck sync failed: %s", exc)
         logger.info("[database] tarot deck sync complete (imported=%s)", imported)
+
+    def _migrate_media_items(self):
+        """Migrate media.json (TinyDB) and filesystem-only uploads into Postgres media_items.
+
+        TinyDB remains supported only as an import source.
+        """
+        # Always attempt a light sync; it's idempotent.
+        try:
+            from bigtree.modules import media as media_mod
+        except Exception:
+            return
+
+        imported = 0
+        media_dir = None
+        try:
+            media_dir = media_mod.get_media_dir()
+        except Exception:
+            media_dir = None
+
+        # 1) Import TinyDB records if the file exists.
+        try:
+            from tinydb import TinyDB, Query
+            path = os.path.join(media_dir, "media.json") if media_dir else None
+            if path and os.path.isfile(path):
+                db = TinyDB(path)
+                q = Query()
+                rows = db.search(q._type == "media")
+                for r in rows or []:
+                    filename = str(r.get("filename") or "").strip()
+                    if not filename:
+                        continue
+                    media_id = f"media:{filename}"
+                    title = str(r.get("title") or "").strip()
+                    origin_type = str(r.get("origin_type") or "").strip()
+                    origin_label = str(r.get("origin_label") or "").strip()
+                    # URLs are served from /media and /media/thumbs.
+                    url = f"/media/{filename}"
+                    thumb_url = f"/media/thumbs/{filename}"
+                    self.upsert_media_item(
+                        media_id=media_id,
+                        filename=filename,
+                        title=title,
+                        origin_type=origin_type,
+                        origin_label=origin_label,
+                        url=url,
+                        thumb_url=thumb_url,
+                        metadata={"source": "tinydb"},
+                    )
+                    imported += 1
+        except Exception as exc:  # pragma: no cover
+            logger.warning("[database] media tinydb import failed: %s", exc)
+
+        # 2) Import filesystem-only images as DB rows (so they stop being 'invisible').
+        if media_dir and os.path.isdir(media_dir):
+            try:
+                existing = set()
+                rows = self._execute("SELECT filename FROM media_items WHERE filename IS NOT NULL", fetch=True) or []
+                for row in rows:
+                    fn = (row or {}).get("filename")
+                    if fn:
+                        existing.add(fn)
+                for name in sorted(os.listdir(media_dir)):
+                    if name in ("media.json", "thumbs"):
+                        continue
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+                        continue
+                    if name in existing:
+                        continue
+                    media_id = f"media:{name}"
+                    url = f"/media/{name}"
+                    thumb_url = f"/media/thumbs/{name}"
+                    self.upsert_media_item(
+                        media_id=media_id,
+                        filename=name,
+                        title=os.path.splitext(name)[0],
+                        url=url,
+                        thumb_url=thumb_url,
+                        metadata={"source": "filesystem"},
+                    )
+                    imported += 1
+            except Exception as exc:  # pragma: no cover
+                logger.warning("[database] media filesystem import failed: %s", exc)
+
+        if imported:
+            logger.info("[database] media import complete (upserted=%s)", imported)
 
     def _migrate_bingo_games(self):
         bingo_dir = self._resolve_bingo_dir()
