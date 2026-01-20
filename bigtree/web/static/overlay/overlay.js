@@ -812,7 +812,9 @@ This will block new games from being created in this event, but existing games c
 
       function ensureCardgamesScope(msg){
         if (hasScope("cardgames:admin") || hasScope("tarot:admin")) return true;
-        setStatus(msg || "Cardgames access required.", "err");
+        const message = msg || "Cardgames access required.";
+        setStatus(message, "err");
+        setCardgameStatus(message, "err");
         return false;
       }
 
@@ -6112,6 +6114,7 @@ function getOwnerClaimStatus(ownerName){
 
         async function createCardgameSession(payload){
           if (!ensureCardgamesScope()) return;
+          setCardgameStatus("Creating session...", "");
           try{
             const data = await jsonFetch(`/api/cardgames/${payload.game_id}/sessions`, {
               method: "POST",
@@ -6126,7 +6129,13 @@ function getOwnerClaimStatus(ownerName){
                 draft: true
               })
             }, true);
+          if (!data || data.ok === false){
+            throw new Error((data && data.error) || "Failed to create session");
+          }
           const session = data.session || {};
+          if (!session.join_code){
+            throw new Error("Session created without a join code.");
+          }
           $("cgJoinCode").value = session.join_code || "";
           $("cgPriestessToken").value = session.priestess_token || "";
           $("cgJoinCode").dataset.sessionId = session.session_id || "";
