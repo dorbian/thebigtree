@@ -445,10 +445,15 @@ if (!scrollLinkedInit){
     await loadBatch(0);
   }
 
-  document.getElementById("artistClose").addEventListener("click", closeArtistModal);
-  artistModal.addEventListener("click", (event) => {
-    if (event.target === artistModal) closeArtistModal();
-  });
+  // Some pages/templates may not include the artist modal. Guard all bindings.
+  const artistCloseBtn = document.getElementById("artistClose");
+  if (artistCloseBtn) artistCloseBtn.addEventListener("click", closeArtistModal);
+
+  if (artistModal) {
+    artistModal.addEventListener("click", (event) => {
+      if (event.target === artistModal) closeArtistModal();
+    });
+  }
   if (artistFilterBtn){
     artistFilterBtn.addEventListener("click", () => {
       const name = artistFilterBtn.dataset.artist || "";
@@ -461,13 +466,19 @@ if (!scrollLinkedInit){
   if (filterClear){
     filterClear.addEventListener("click", () => applyArtistFilter(null));
   }
-  document.getElementById("imageClose").addEventListener("click", closeImageModal);
-  imageModal.addEventListener("click", (event) => {
-    if (event.target === imageModal) closeImageModal();
-  });
-  imageModal.addEventListener("mousemove", showImageInfo);
+  // Image modal may also be absent on some templates; guard bindings.
+  const imageCloseBtn = document.getElementById("imageClose");
+  if (imageCloseBtn) imageCloseBtn.addEventListener("click", closeImageModal);
+  if (imageModal) {
+    imageModal.addEventListener("click", (event) => {
+      if (event.target === imageModal) closeImageModal();
+    });
+  }
+  if (imageModal) {
+    imageModal.addEventListener("mousemove", showImageInfo);
+  }
   // Mobile: tapping the image opens the zoom modal.
-  grid.addEventListener("touchstart", (event) => {
+  if (grid) grid.addEventListener("touchstart", (event) => {
     const target = event.target;
     const post = target.closest ? target.closest(".post") : null;
     if (!post) return;
