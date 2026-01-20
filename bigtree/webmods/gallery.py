@@ -174,10 +174,27 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
     hidden_set = gallery_mod.get_hidden_set()
     hidden_decks = set(gallery_mod.get_hidden_decks())
 
-    for entry in media_mod.list_media():
+    # NOTE:
+    # The media module stores metadata in a TinyDB JSON file. In practice, admins
+    # sometimes upload/copy images directly into the media directory.
+    # Previously, those images never appeared in the public gallery because we only
+    # enumerated the DB rows.
+    #
+    # To ensure *all* uploaded images show up, we:
+    # 1) enumerate DB media entries (preferred, richer metadata)
+    # 2) scan the media directory for image files that do not exist in the DB
+    #
+    # Files discovered via disk scan are treated as normal media items with
+    # minimal metadata.
+
+    db_media = list(media_mod.list_media() or [])
+    db_filenames: set[str] = set()
+
+    for entry in db_media:
         filename = entry.get("filename")
         if not filename:
             continue
+        db_filenames.add(filename)
         if not os.path.exists(_media_path(filename)) and not entry.get("discord_url"):
             continue
         discord_url = entry.get("discord_url") or ""
@@ -201,6 +218,58 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "reactions": {},
             "hidden": hidden,
         })
+
+    # Add filesystem-only media (files present on disk but not registered in DB).
+    # Keep ordering stable-ish by using file mtime (newest first), similar to DB sort.
+    try:
+        media_dir = media_mod.get_media_dir()
+        fs_candidates: List[tuple[float, str]] = []
+        for name in os.listdir(media_dir):
+            if name in ("media.json", "thumbs"):
+                continue
+            path = os.path.join(media_dir, name)
+            if not os.path.isfile(path):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in _IMG_EXTS:
+                continue
+            if name in db_filenames:
+                continue
+            try:
+                mtime = os.path.getmtime(path)
+            except Exception:
+                mtime = 0.0
+            fs_candidates.append((mtime, name))
+
+        fs_candidates.sort(key=lambda t: t[0], reverse=True)
+        for _mtime, filename in fs_candidates:
+            url = f"/media/{filename}"
+            if url in seen:
+                continue
+            item_id = _item_id("media", filename)
+            hidden = item_id in hidden_set
+            if not include_hidden and hidden:
+                continue
+            # Attempt to generate a thumbnail for consistency.
+            _ = media_mod.ensure_thumb(filename)
+            items.append({
+                "item_id": item_id,
+                "filename": filename,
+                "title": filename,
+                "url": url,
+                "fallback_url": "",
+                "thumb_url": f"/media/thumbs/{filename}",
+                "source": "media",
+                "type": "Artifact",
+                "origin": "",
+                "artist": _artist_payload(None),
+                "reactions": {},
+                "hidden": hidden,
+            })
+            seen.add(url)
+    except Exception:
+        # If the media directory is not accessible for some reason, just skip.
+        pass
 
     for deck in tarot_mod.list_decks():
         deck_id = deck.get("deck_id") or "elf-classic"
@@ -395,10 +464,18 @@ async def gallery_images(_req: web.Request):
     else:
         items = [items[idx] for idx in indices]
     cfg = get_database().get_system_config("gallery") or {}
+    # Backwards compat: earlier configs used singular keys.
+    inspiration_cfg = (
+        cfg.get("inspiration_texts")
+        or cfg.get("inspiration_text")
+        or cfg.get("inspirational_text")
+        or cfg.get("flair_text")
+        or ""
+    )
     settings = {
         "columns": cfg.get("columns"),
         "inspiration_every": cfg.get("inspiration_every"),
-        "inspiration_texts": cfg.get("inspiration_texts") or cfg.get("flair_text") or "",
+        "inspiration_texts": inspiration_cfg,
         # Optional UI copy overrides (so inspirational / flavor text can be managed in DB)
         "header_subtitle": cfg.get("header_subtitle") or "",
         "header_context": cfg.get("header_context") or "",

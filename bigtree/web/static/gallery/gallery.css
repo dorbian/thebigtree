@@ -66,7 +66,9 @@
     grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr) minmax(260px, 1fr);
     gap:22px;
     padding:18px;
-    min-height:100vh;
+    height:100vh;
+    min-height:0;
+    overflow:hidden;
     width:100%;
     max-width:1600px;
     margin:0 auto;
@@ -89,6 +91,8 @@
     position:sticky;
     top:18px;
     overflow:auto;
+    box-sizing:border-box;
+    padding-bottom:22px;
   }
   .sidebar-brand{
     padding:8px 8px 14px 8px;
@@ -139,10 +143,11 @@
   }
   .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
   .feed{
-    /* The page scrolls; the feed itself should not create its own scrollbar. */
-    height:auto;
-    overflow:visible;
+    /* The feed scrolls; side columns remain in place. */
+    height:calc(100vh - 36px);
+    overflow:auto;
     padding-right:6px;
+    padding-bottom:22px;
     scroll-snap-type:y proximity;
   }
   .post{
@@ -186,6 +191,8 @@
     position:sticky;
     top:18px;
     overflow:auto;
+    box-sizing:border-box;
+    padding-bottom:22px;
   }
   .details-card{
     background:rgba(16,26,21,.65);

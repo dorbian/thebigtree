@@ -70,7 +70,17 @@ const grid = document.getElementById("feed");
     tarot: {label: "Tarot"}
   };
   // Inspirational copy is managed from the database (gallery system config).
-  // If none is provided, no inspiration cards are injected.
+  // If none is provided, we still inject a small set of default Forest lines so
+  // the feed keeps its intended rhythm (~7 images, then text, repeat).
+  const DEFAULT_FOREST_LINES = [
+    "The Forest listens in quiet gratitude.",
+    "Between branches, a small kindness takes root.",
+    "A memory drifts past like pollen in sunlight.",
+    "Rest your gaze here a moment — the path continues soon.",
+    "The trees remember every offering.",
+    "Softly now: breathe, and let wonder return.",
+    "Some treasures are meant to be found slowly."
+  ];
   const DIVIDER_LINES = [];
   const SESSION_BANNER_KEY = "forest_gallery_banner_dismissed";
   const SESSION_RETURN_KEY = "forest_gallery_return_prompt";
@@ -331,7 +341,10 @@ const grid = document.getElementById("feed");
     const cfg = settings || {};
     gallerySettings = cfg;
     // Layout is feed-based; columns are ignored here.
-    inspirationLines = normalizeInspirationLines(cfg.inspiration_texts || cfg.flair_text);
+    // Backwards compat: earlier configs used singular keys.
+    inspirationLines = normalizeInspirationLines(
+      cfg.inspiration_texts || cfg.inspiration_text || cfg.inspirational_text || cfg.flair_text
+    );
     const every = parseInt(cfg.inspiration_every || 0, 10);
     inspirationEvery = every > 0 ? every : 7;
 
@@ -362,6 +375,7 @@ const grid = document.getElementById("feed");
   async function loadBatch(offset){
     if (galleryLoading) return;
     galleryLoading = true;
+    let scheduleNextOffset = null;
     try{
       const seedParam = gallerySeed !== null ? `&seed=${gallerySeed}` : "";
       const res = await fetch(`/api/gallery/images?limit=${PAGE_SIZE}&offset=${offset}${seedParam}`);
@@ -389,7 +403,11 @@ const grid = document.getElementById("feed");
           items: galleryItems
         });
         renderGrid();
-        if (galleryItems.length) { setActiveDetailIndex(0); }
+        // Always populate the right-hand detail panel immediately.
+        // Use rAF so the DOM is guaranteed to exist before we query it.
+        if (galleryItems.length) {
+          requestAnimationFrame(() => setActiveDetailIndex(0));
+        }
 if (!scrollLinkedInit){
           scrollLinkedInit = true;
           initScrollLinkedDetails();
@@ -403,12 +421,7 @@ if (!scrollLinkedInit){
         }
       }
       if (galleryItems.length < galleryTotal){
-        const nextOffset = galleryItems.length;
-        if ("requestIdleCallback" in window){
-          requestIdleCallback(() => loadBatch(nextOffset));
-        }else{
-          setTimeout(() => loadBatch(nextOffset), 60);
-        }
+        scheduleNextOffset = galleryItems.length;
       }
     }catch(err){
       if (!galleryItems.length){
@@ -416,6 +429,10 @@ if (!scrollLinkedInit){
       }
     }finally{
       galleryLoading = false;
+      // Continue paging after the lock is released (reliable across browsers).
+      if (scheduleNextOffset !== null){
+        setTimeout(() => loadBatch(scheduleNextOffset), 0);
+      }
     }
   }
 
@@ -522,7 +539,7 @@ if (!scrollLinkedInit){
   if (imageNext){
     imageNext.addEventListener("click", () => navigateDetail(1));
   }
-  grid.addEventListener("click", (event) => {
+  if (grid) grid.addEventListener("click", (event) => {
     const target = event.target;
     // Clicking a post opens the zoom modal.
     const post = target.closest ? target.closest(".post") : null;
@@ -691,6 +708,7 @@ if (!scrollLinkedInit){
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
     // Prefer thumbs for speed, but always fall back to the full image if thumbs are missing or 404.
+    // NOTE: do not rely on inline onerror handlers (CSP can block them). We wire errors via JS.
     const primaryUrl = item.thumb_url || item.url || "";
     let fallbackUrl = "";
     if (item.thumb_url && item.url && item.thumb_url !== item.url){
@@ -704,7 +722,7 @@ if (!scrollLinkedInit){
     const fullPayload = encodeURIComponent(JSON.stringify(payload));
 
     const media = primaryUrl
-      ? `<img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}" />`
+      ? `<img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} />`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
 
     // Minimal post: image in the middle. All metadata + links live in the right panel.
@@ -713,6 +731,22 @@ if (!scrollLinkedInit){
         <div class="post-media">${media}<div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div></div>
       </article>
     `;
+  }
+
+  function wireImageFallbacks(scope){
+    const root = scope || document;
+    const imgs = Array.from(root.querySelectorAll("img[data-fallback]"));
+    imgs.forEach((img) => {
+      if (img.dataset.fallbackWired === "1") return;
+      img.dataset.fallbackWired = "1";
+      img.addEventListener("error", () => {
+        const fb = (img.dataset.fallback || "").trim();
+        if (!fb) return;
+        // Avoid loops.
+        if (img.currentSrc === fb || img.src === fb) return;
+        img.src = fb;
+      });
+    });
   }
 
   function scheduleVirtualRender(){
@@ -823,11 +857,12 @@ if (!scrollLinkedInit){
   function insertDividers(items, startIndex = 0){
     const out = [];
     const dividerEvery = inspirationEvery || 7;
+    const lines = (inspirationLines && inspirationLines.length) ? inspirationLines : DEFAULT_FOREST_LINES;
     for (let i = 0; i < items.length; i += 1){
       const globalIndex = startIndex + i;
       out.push({kind: "item", item: items[i], index: globalIndex});
-      if (inspirationLines.length && (globalIndex + 1) % inspirationEvery === 0){
-        const pick = inspirationLines[Math.floor(Math.random() * inspirationLines.length)];
+      if (lines.length && (globalIndex + 1) % dividerEvery === 0){
+        const pick = lines[Math.floor(Math.random() * lines.length)];
         if (pick){
           out.push({kind: "divider", text: pick});
         }
@@ -892,6 +927,7 @@ if (!scrollLinkedInit){
       if (entry.kind === "divider") return buildDividerHtml(entry);
       return buildCardHtml(entry.item, entry.index);
     }).join("");
+    wireImageFallbacks(grid);
     wireFeedObserver();
     // Ensure the right panel shows something immediately.
     if (currentDetailIndex < 0 && items.length){
@@ -910,6 +946,7 @@ if (!scrollLinkedInit){
         if (entry.kind === "divider") return buildDividerHtml(entry);
         return buildCardHtml(entry.item, entry.index);
       }).join("");
+      wireImageFallbacks(grid);
       wireFeedObserver();
       return;
     }
@@ -919,6 +956,7 @@ if (!scrollLinkedInit){
       if (entry.kind === "divider") return buildDividerHtml(entry);
       return buildCardHtml(entry.item, entry.index);
     }).join(""));
+    wireImageFallbacks(grid);
     wireFeedObserver();
     renderSuggestions();
   }
