@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Overlay: send auth token via storage fallback and Authorization header for API requests.
 - Overlay: guard missing overlay toggle elements when loading settings or clearing auth.
 - Database: remove legacy system_configs payload access and use data column consistently.
 - Wallet: treat bingo join codes that match the game id as owner links for player pages.

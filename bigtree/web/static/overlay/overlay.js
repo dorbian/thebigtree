@@ -2335,8 +2335,15 @@ This will block new games from being created in this event, but existing games c
         const options = opts || {};
         options.headers = options.headers || {};
         if (withKey){
-          const key = apiKeyEl ? apiKeyEl.value.trim() : "";
-          if (key) options.headers["X-API-Key"] = key;
+          const key = (apiKeyEl && apiKeyEl.value.trim()) ||
+            storage.getItem("bt_api_key") ||
+            (window.sessionStorage ? (window.sessionStorage.getItem("bt_api_key") || "") : "");
+          if (key){
+            options.headers["X-API-Key"] = key;
+            if (!options.headers["Authorization"]){
+              options.headers["Authorization"] = `Bearer ${key}`;
+            }
+          }
         }
         return fetch(url, options);
       }
