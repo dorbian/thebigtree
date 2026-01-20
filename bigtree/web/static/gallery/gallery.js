@@ -437,22 +437,9 @@ if (!scrollLinkedInit){
   }
 
   async function load(){
-    const cached = readCachedGallery();
-    if (cached && Array.isArray(cached.items) && cached.items.length){
-      galleryItems = cached.items;
-      gallerySeed = Number.isFinite(cached.seed) ? cached.seed : null;
-      galleryTotal = Number(cached.total) || 0;
-      preloadThumbnails(galleryItems);
-      activeArtistFilter = null;
-      if (filterRow) filterRow.style.display = "none";
-      renderGrid();
-      if (!scrollLinkedInit){
-        scrollLinkedInit = true;
-        initScrollLinkedDetails();
-      }
-      requestAnimationFrame(() => loadBatch(0));
-      return;
-    }
+    // Always fetch fresh data from the server.
+    // The server has its own cache invalidation when items are hidden/unhidden;
+    // using localStorage here can temporarily surface stale (now-hidden) cards.
     grid.innerHTML = Array.from({length: 4}).map(() => `<div class="skeleton-card"></div>`).join("");
     galleryItems = [];
     gallerySeed = null;
@@ -1140,9 +1127,12 @@ if (!scrollLinkedInit){
       }
       if (best) setActiveFromPost(best.target);
     }, {
-      root: null,
-      rootMargin: "-35% 0px -35% 0px",
-      threshold: [0.01, 0.15, 0.3, 0.45, 0.6]
+      // The center column (.feed) is the scroll container.
+      root: grid,
+      // Wider "center band" so the right panel updates as soon as a card
+      // approaches the center of the feed.
+      rootMargin: "-25% 0px -25% 0px",
+      threshold: [0.01, 0.12, 0.25, 0.4, 0.55]
     });
 
     const observePosts = () => {

@@ -11,6 +11,9 @@
     --line:rgba(255,255,255,.08);
   }
   *{box-sizing:border-box}
+  html, body{
+    height:100%;
+  }
   body{
     margin:0;
     font-family:"Spectral","Georgia",serif;
@@ -24,6 +27,8 @@
     min-height:100vh;
     display:flex;
     flex-direction:column;
+    /* Avoid tiny "outside" scroll caused by sticky gutters / 100vw calculations. */
+    overflow:hidden;
   }
 
   main{
@@ -65,7 +70,8 @@
     /* 25% / 50% / 25% split, with sane min widths */
     grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr) minmax(260px, 1fr);
     gap:22px;
-    padding:18px;
+    /* Extra right/bottom padding so nothing can scroll outside the viewport. */
+    padding:18px 28px 28px 18px;
     height:100vh;
     min-height:0;
     overflow:hidden;
@@ -167,8 +173,13 @@
     background:rgba(0,0,0,.18);
   }
   .post-media img{
-    width:100%;
+    /*
+      Preserve original aspect ratio and avoid upscaling.
+      (Stretching small images to 100% width makes them look blurry.)
+    */
+    width:auto;
     height:auto;
+    max-width:100%;
     max-height:78vh;
     object-fit:contain;
     display:block;
@@ -1033,17 +1044,19 @@
   }
 
 
-/* --- Layout: full width, 20/60/20 --- */
+/* --- Layout: full width, 20/60/20 (avoid 100vw to prevent horizontal scroll) --- */
 .layout{
-  width: 100vw;
+  width: 100%;
   max-width: none;
   margin: 0;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding: 18px 28px 28px 18px;
   display: grid;
   grid-template-columns: 20% 1fr 20%;
   gap: 16px;
   align-items: start;
+  box-sizing: border-box;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Left sidebar should be a flex column so we can push icon links to bottom */
@@ -1066,9 +1079,10 @@
 
 .sidebar-bottom{
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  gap: 12px;
   padding-top: 10px;
+  align-items: center;
 }
 
 .sidebar-iconlink{
@@ -1079,6 +1093,21 @@
   height: 44px;
   border-radius: 12px;
   text-decoration: none;
+  background: rgba(16,26,21,.55);
+  border: 1px solid rgba(255,255,255,.10);
+  color: rgba(231,242,234,.92);
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+
+.sidebar-iconlink:hover{
+  transform: translateY(-1px);
+  border-color: rgba(107,212,162,.35);
+  background: rgba(16,26,21,.70);
+}
+
+.sidebar-iconlink:focus-visible{
+  outline: 2px solid rgba(107,212,162,.55);
+  outline-offset: 2px;
 }
 
 .sidebar-iconlink svg{
