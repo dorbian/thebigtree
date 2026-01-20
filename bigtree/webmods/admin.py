@@ -37,10 +37,8 @@ def _extract_token(req: web.Request) -> str:
 def _find_web_token(token: str) -> Dict[str, Any]:
     if not token:
         return {}
-    for t in web_tokens.load_tokens():
-        if t.get("token") == token:
-            return t
-    return {}
+    doc = web_tokens.find_token(token)
+    return doc or {}
 
 def _split_scopes(raw: Any) -> list[str]:
     if not raw:
@@ -79,6 +77,7 @@ def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
         if not scopes_map:
             return True, ["*"], "api_key"
         return True, _split_scopes(scopes_map.get(token)), "api_key"
+    return False, [], "unknown"
 
 
 def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) -> list[str]:
@@ -102,8 +101,6 @@ def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) ->
         return lines
     except Exception:
         return []
-
-    return False, [], "unknown"
 
 @route("GET", "/api/auth/me")
 async def auth_me(req: web.Request):

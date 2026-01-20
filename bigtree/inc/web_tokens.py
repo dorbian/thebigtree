@@ -131,14 +131,13 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
         try:
             db = get_database()
             doc = db.find_web_token(token)
-            if not doc:
-                return False
-            scopes = set(doc.get("scopes") or [])
-            if "*" in scopes:
-                return True
-            if not needed_scopes:
-                return True
-            return any(scope in scopes for scope in needed_scopes)
+            if doc:
+                scopes = set(doc.get("scopes") or [])
+                if "*" in scopes:
+                    return True
+                if not needed_scopes:
+                    return True
+                return any(scope in scopes for scope in needed_scopes)
         except Exception:
             pass
 
@@ -160,7 +159,9 @@ def find_token(token: str) -> Optional[Dict[str, Any]]:
     if _db_available():
         try:
             db = get_database()
-            return db.find_web_token(token)
+            doc = db.find_web_token(token)
+            if doc:
+                return doc
         except Exception:
             pass
     for doc in load_tokens():

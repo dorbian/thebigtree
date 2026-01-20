@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Auth: resolve /api/auth/me tokens via DB-first lookup with web_tokens.json fallback.
 - Overlay: send auth token via storage fallback and Authorization header for API requests.
 - Overlay: guard missing overlay toggle elements when loading settings or clearing auth.
 - Database: remove legacy system_configs payload access and use data column consistently.
