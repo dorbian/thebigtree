@@ -408,7 +408,7 @@ const grid = document.getElementById("feed");
         if (galleryItems.length) {
           requestAnimationFrame(() => setActiveDetailIndex(0));
         }
-if (!scrollLinkedInit){
+        if (!scrollLinkedInit){
           scrollLinkedInit = true;
           initScrollLinkedDetails();
         }
@@ -440,17 +440,6 @@ if (!scrollLinkedInit){
     // Always fetch fresh data from the server.
     // The server has its own cache invalidation when items are hidden/unhidden;
     // using localStorage here can temporarily surface stale (now-hidden) cards.
-    grid.innerHTML = Array.from({length: 4}).map(() => `<div class="skeleton-card"></div>`).join("");
-    galleryItems = [];
-    gallerySeed = null;
-    galleryTotal = 0;
-    activeArtistFilter = null;
-    if (filterRow) filterRow.style.display = "none";
-    await loadBatch(0);
-  }
-      requestAnimationFrame(() => loadBatch(0));
-      return;
-    }
     grid.innerHTML = Array.from({length: 4}).map(() => `<div class="skeleton-card"></div>`).join("");
     galleryItems = [];
     gallerySeed = null;

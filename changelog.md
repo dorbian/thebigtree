@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Gallery: fix stray top-level return that broke gallery.js initialization.
 - Bingo: fix missing get_database import when searching owners during game creation.
 - Database: ensure discord_users columns exist before querying user names.
 - Overlay: show cardgames session-create status/errors when scopes are missing or the API fails.
