@@ -2276,9 +2276,13 @@ This will block new games from being created in this event, but existing games c
           const session = window.sessionStorage ? (window.sessionStorage.getItem("bt_api_key") || "") : "";
           apiKeyEl.value = saved || session;
         }
-        overlayToggle.checked = storage.getItem("bt_overlay") === "1";
-        if (overlayToggle.checked) document.body.classList.add("overlay");
-        overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+        if (overlayToggle){
+          overlayToggle.checked = storage.getItem("bt_overlay") === "1";
+          if (overlayToggle.checked) document.body.classList.add("overlay");
+        }
+        if (overlayToggleBtn && overlayToggle){
+          overlayToggleBtn.classList.toggle("active", overlayToggle.checked);
+        }
       }
 
       function applyTokenFromUrl(){
@@ -2365,15 +2369,21 @@ This will block new games from being created in this event, but existing games c
             window.sessionStorage.removeItem("bt_api_key");
           }
         }catch(err){}
-        document.getElementById("appView").classList.add("hidden");
-        document.getElementById("loginView").classList.remove("hidden");
+        const appView = document.getElementById("appView");
+        const loginView = document.getElementById("loginView");
+        if (appView) appView.classList.add("hidden");
+        if (loginView) loginView.classList.remove("hidden");
         if (loginStatusEl){
           loginStatusEl.textContent = message || "Logged out.";
           loginStatusEl.className = "status" + (kind ? " " + kind : "");
         }
-        overlayToggle.checked = false;
+        if (overlayToggle){
+          overlayToggle.checked = false;
+        }
         document.body.classList.remove("overlay");
-        overlayToggleBtn.classList.remove("active");
+        if (overlayToggleBtn){
+          overlayToggleBtn.classList.remove("active");
+        }
         const brandUser = $("brandUser");
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
