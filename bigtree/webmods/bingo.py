@@ -8,6 +8,7 @@ import bigtree
 import discord
 from bigtree.inc.logging import logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.database import get_database
 from bigtree.modules import bingo as bingo
 
 # ---------- Helpers ----------

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Bingo: fix missing get_database import when searching owners during game creation.
 - Database: ensure discord_users columns exist before querying user names.
 - Overlay: show cardgames session-create status/errors when scopes are missing or the API fails.
 - Auth: resolve /api/auth/me tokens via DB-first lookup with web_tokens.json fallback.
