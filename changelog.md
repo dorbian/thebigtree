@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Gallery: resolve artist names from legacy media metadata when artist_name is missing.
 - Gallery: fix stray top-level return that broke gallery.js initialization.
 - Bingo: fix missing get_database import when searching owners during game creation.
 - Database: ensure discord_users columns exist before querying user names.

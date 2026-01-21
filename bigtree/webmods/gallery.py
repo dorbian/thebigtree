@@ -205,8 +205,21 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                 _ = media_mod.ensure_thumb(filename)
         except Exception:
             pass
-        artist_name = (row.get("artist_name") or "").strip() or "Forest"
+        artist_name = (row.get("artist_name") or "").strip()
         artist_links = row.get("artist_links") if isinstance(row.get("artist_links"), dict) else {}
+        if not artist_name:
+            meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            artist_id = (meta.get("artist_id") or "").strip() if isinstance(meta, dict) else ""
+            if artist_id:
+                artist = artist_mod.get_artist(artist_id)
+                if artist:
+                    artist_name = (artist.get("name") or "").strip()
+                    if isinstance(artist.get("links"), dict) and artist.get("links"):
+                        artist_links = artist.get("links") or artist_links
+                if not artist_name:
+                    artist_name = artist_id
+        if not artist_name:
+            artist_name = "Forest"
         items.append({
             "item_id": item_id,
             "filename": filename,
