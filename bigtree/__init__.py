@@ -27,7 +27,7 @@ import bigtree.modules.contest as contesta
 import bigtree.modules.event as event
 from bigtree.inc.database import ensure_database, get_database
 from bigtree.inc.plogon import ensure_plogon_file, start_plogon_refresh_loop
-from bigtree.inc.updater import start_self_updater
+# from bigtree.inc.updater import start_self_updater
 
 # predefine boolean
 __initialized__ = False
@@ -83,7 +83,7 @@ def initialize():
         ensure_plogon_file()
         start_plogon_refresh_loop()
         # Optional self-updater (container pulls new source from GitHub + restarts)
-        start_self_updater(settings)
+        #start_self_updater(settings)
         # Bot basics
         bot_sec = settings["BOT"]
         default_contest_dir = str(workingdir.parent / "contest")
