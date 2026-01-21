@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Gallery: restyle sidebar icon links as buttons and tighten layout padding to avoid overflow.
 - Gallery: add modal voting panel, fix right-column layout, and theme scrollbars.
 - Updater: use logger instead of missing logging.print to avoid startup crash.
 - Media library: drive /api/media/list, uploads, and updates from Postgres instead of media.json.

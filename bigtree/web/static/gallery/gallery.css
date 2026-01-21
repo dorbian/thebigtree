@@ -1115,7 +1115,7 @@
   max-width: none;
   margin: 0;
   padding-left: 16px;
-  padding-right: 16px;
+  padding-right: 24px;
   display: grid;
   grid-template-columns: 20% 1fr 20%;
   gap: 16px;
@@ -1127,13 +1127,13 @@
   display: flex;
   flex-direction: column;
   /* Lock the column to the viewport so bottom padding doesn't bleed outside */
-  height: calc(100vh - 24px);
-  max-height: calc(100vh - 24px);
+  height: calc(100vh - 28px);
+  max-height: calc(100vh - 28px);
   overflow-y: auto;
   box-sizing: border-box;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   position: sticky;
-  top: 12px;
+  top: 14px;
 }
 
 .sidebar-spacer{
@@ -1145,16 +1145,23 @@
   flex-direction: column;
   gap: 10px;
   padding-top: 10px;
+  padding-bottom: 6px;
 }
 
 .sidebar-iconlink{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: auto;
+  min-height: 40px;
   border-radius: 12px;
   text-decoration: none;
+  border: 1px solid rgba(214,178,110,.35);
+  background: rgba(12,18,15,.7);
+  color: var(--neutral);
+  gap: 8px;
+  padding: 8px 14px;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
 }
 
 .sidebar-iconlink svg{
@@ -1163,16 +1170,26 @@
   fill: currentColor;
   opacity: 0.9;
 }
+.sidebar-iconlink span{
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.sidebar-iconlink:hover{
+  border-color: rgba(107,212,162,.55);
+  box-shadow: 0 10px 22px rgba(0,0,0,.25);
+  transform: translateY(-1px);
+}
 
 /* Right details panel: constrain height and prevent bottom padding overflow */
 .details{
   box-sizing: border-box;
-  height: calc(100vh - 24px);
+  height: calc(100vh - 28px);
   position: sticky;
-  top: 12px;
+  top: 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
 }
 
 
@@ -1218,12 +1235,12 @@
 
 /* Fix sticky column overflow (avoid bottom padding leaking outside viewport) */
   .details{
-    height: calc(100vh - 24px);
-    max-height: calc(100vh - 24px);
+    height: calc(100vh - 28px);
+    max-height: calc(100vh - 28px);
     overflow-y: auto;
     box-sizing: border-box;
-    padding-bottom: 12px;
-    top: 12px;
+    padding-bottom: 8px;
+    top: 14px;
   }
 
   /* Scrollbar styling to match the gallery palette */
