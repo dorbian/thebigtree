@@ -148,7 +148,8 @@
     overflow:auto;
     padding-right:6px;
     padding-bottom:22px;
-    scroll-snap-type:y proximity;
+    scroll-snap-type:y mandatory;
+    scroll-behavior:smooth;
   }
   .post{
     background:rgba(16,26,21,.55);
@@ -157,6 +158,7 @@
     margin-bottom:52px;
     overflow:hidden;
     scroll-snap-align:start;
+    scroll-snap-stop:always;
     position:relative;
   }
   .post-media{
@@ -166,8 +168,16 @@
     justify-content:center;
     background:rgba(0,0,0,.18);
   }
-  .post-media img{
-    width:100%;
+  /* Wrap the image so overlays (like the artist watermark) can pin to the
+     rendered image bounds rather than the full post container. */
+  .post-media .media-wrap{
+    position:relative;
+    display:inline-block;
+    max-width:100%;
+  }
+  .post-media .media-wrap img{
+    max-width:100%;
+    width:auto;
     height:auto;
     max-height:78vh;
     object-fit:contain;

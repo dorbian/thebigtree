@@ -694,12 +694,13 @@ const grid = document.getElementById("feed");
     const tags = getTags(item);
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
-    // Prefer thumbs for speed, but always fall back to the full image if thumbs are missing or 404.
+    // Use the original image for the feed. We are already paging / not loading the full
+    // gallery at once, so the full-size artwork can do it justice.
     // NOTE: do not rely on inline onerror handlers (CSP can block them). We wire errors via JS.
-    const primaryUrl = item.thumb_url || item.url || "";
+    const primaryUrl = item.url || item.thumb_url || "";
     let fallbackUrl = "";
-    if (item.thumb_url && item.url && item.thumb_url !== item.url){
-      fallbackUrl = item.url;
+    if (item.url && item.thumb_url && item.thumb_url !== item.url){
+      fallbackUrl = item.thumb_url;
     }else if (item.fallback_url){
       fallbackUrl = item.fallback_url;
     }
@@ -709,15 +710,58 @@ const grid = document.getElementById("feed");
     const fullPayload = encodeURIComponent(JSON.stringify(payload));
 
     const media = primaryUrl
-      ? `<img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} />`
+      ? `<div class="media-wrap"><img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} /><div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div></div>`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
 
     // Minimal post: image in the middle. All metadata + links live in the right panel.
     return `
       <article class="post" data-index="${index}" data-full="${fullPayload}" aria-label="${escapeHtml(title)}">
-        <div class="post-media">${media}<div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div></div>
+        <div class="post-media">${media}</div>
       </article>
     `;
+  }
+
+  // --- One wheel gesture = one post ---
+  // The feed is scroll-snapped, but trackpads can still "free scroll" between snaps.
+  // To match the desired feel (one scroll = one image), we treat each wheel gesture
+  // as a step to the next/previous post.
+  let oneScrollWired = false;
+  let oneScrollLocked = false;
+  function wireOneScrollPerPost(){
+    if (!grid || oneScrollWired) return;
+    oneScrollWired = true;
+    grid.addEventListener("wheel", (event) => {
+      // Let pinch-zoom and horizontal scrolling behave normally.
+      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      // If we have no posts yet, do nothing.
+      const posts = Array.from(grid.querySelectorAll(".post"));
+      if (!posts.length) return;
+
+      event.preventDefault();
+      if (oneScrollLocked) return;
+      oneScrollLocked = true;
+
+      const dir = event.deltaY > 0 ? 1 : -1;
+      // Find the first post that starts at or below the current scroll position.
+      const currentTop = grid.scrollTop;
+      let currentIndex = 0;
+      for (let i = 0; i < posts.length; i++){
+        const t = posts[i].offsetTop;
+        if (t >= currentTop - 2){
+          currentIndex = i;
+          break;
+        }
+      }
+      const nextIndex = Math.max(0, Math.min(posts.length - 1, currentIndex + dir));
+      const target = posts[nextIndex];
+      if (target){
+        grid.scrollTo({top: target.offsetTop, behavior: "smooth"});
+      }
+      // Unlock after a short cooldown so a single wheel "tick" doesn't advance multiple items.
+      window.setTimeout(() => {
+        oneScrollLocked = false;
+      }, 420);
+    }, {passive: false});
   }
 
   function wireImageFallbacks(scope){
@@ -915,6 +959,7 @@ const grid = document.getElementById("feed");
       return buildCardHtml(entry.item, entry.index);
     }).join("");
     wireImageFallbacks(grid);
+    wireOneScrollPerPost();
     wireFeedObserver();
     // Ensure the right panel shows something immediately.
     if (currentDetailIndex < 0 && items.length){
@@ -934,6 +979,7 @@ const grid = document.getElementById("feed");
         return buildCardHtml(entry.item, entry.index);
       }).join("");
       wireImageFallbacks(grid);
+      wireOneScrollPerPost();
       wireFeedObserver();
       return;
     }
@@ -944,6 +990,7 @@ const grid = document.getElementById("feed");
       return buildCardHtml(entry.item, entry.index);
     }).join(""));
     wireImageFallbacks(grid);
+    wireOneScrollPerPost();
     wireFeedObserver();
     renderSuggestions();
   }
@@ -1038,7 +1085,8 @@ const grid = document.getElementById("feed");
     suggestionsGrid.innerHTML = picks.map((item) => {
       const title = item.title || "Untitled Offering";
       const artistName = item.artist && item.artist.name ? item.artist.name : "Forest";
-      const imgUrl = item.thumb_url || item.url || "";
+      // Use full image here as well so the suggestions showcase the actual artwork.
+      const imgUrl = item.url || item.thumb_url || "";
       return `
         <div class="suggestions-card">
           ${imgUrl ? `<img src="${imgUrl}" alt="${title}" loading="lazy" decoding="async">` : ""}

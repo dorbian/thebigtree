@@ -43,10 +43,15 @@ ENV PYTHONUNBUFFERED=1 \
     BIGTREE__BOT__contest_dir=/data/contest \
     BIGTREE__BOT__DATA_DIR=/data \
     BIGTREE__WEB__listen_host=0.0.0.0 \
-    BIGTREE__WEB__listen_port=8443
+    BIGTREE__WEB__listen_port=8443 \
+    BIGTREE__UPDATER__enabled=1 \
+    BIGTREE__UPDATER__repo=dorbian/thebigtree \
+    BIGTREE__UPDATER__branch=main \
+    BIGTREE__UPDATER__check_interval_seconds=300 \
+    BIGTREE__UPDATER__restart_mode=exit
 
 VOLUME ["/data"]
 
 EXPOSE 8443
 
-CMD ["python", "thebigtree.py"]
+CMD ["python", "bigtree_runner.py"]
