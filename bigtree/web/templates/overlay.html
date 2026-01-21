@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Forest Management</title>
+    <title>Elfministration</title>
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="stylesheet" href="/static/overlay/overlay.css">
     <style>
@@ -19,7 +19,8 @@
           radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 80%),
           radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 80%),
           linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
-          url("{ADMIN_BACKGROUND}");
+          url("{ADMIN_BACKGROUND}"),
+          url("/static/images/adminlogin.png");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -230,10 +231,10 @@
     </style>
   </head>
   <body>
-    <button class="overlay-exit" id="overlayExit">Exit overlay</button>
+    <button class="overlay-exit" id="overlayExit">Exit elfministration</button>
     <div class="login-screen" id="loginView">
       <div class="login-card">
-        <div class="login-title">Forest Management</div>
+        <div class="login-title">Elfministration</div>
         <div class="login-sub">Enter your /auth key to manage the forest.</div>
         <input id="apiKeyLogin" placeholder="Paste /auth token">
         <button id="loginBtn">Login</button>
@@ -244,7 +245,7 @@
       <aside class="sidebar">
         <div class="sidebar-body">
           <div class="nav-block">
-            <div class="brand">Forest Management</div>
+            <div class="brand">Elfministration</div>
             <div class="brand-user hidden" id="brandUser">
               <img id="brandUserIcon" alt="" class="hidden">
               <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
@@ -702,7 +703,7 @@
 
         <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
           <h2>Tarot Sessions</h2>
-          <p>Open the player, priestess, or overlay view.</p>
+          <p>Open the player, priestess, or elfministration view.</p>
           <div class="row">
             <div>
               <label for="tSessionSelect">Existing sessions</label>
@@ -742,7 +743,7 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenOverlay">Open overlay</button>
+              <button id="tOpenOverlay">Open elfministration</button>
             </div>
             <div>
               <label>&nbsp;</label>

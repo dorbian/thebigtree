@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Overlay: use adminlogin.png for the login background and rename UI labels to Elfministration.
 - Gallery: tighten sidebar width and make left actions use natural button sizing.
 - Gallery: restyle sidebar icon links as buttons and tighten layout padding to avoid overflow.
 - Gallery: add modal voting panel, fix right-column layout, and theme scrollbars.
