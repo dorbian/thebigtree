@@ -541,7 +541,9 @@ const grid = document.getElementById("feed");
       const target = event.target;
       const button = target.closest ? target.closest(".reaction") : null;
       if (!button) return;
+      // Prevent reactions from triggering any surrounding click handlers (like opening the image modal).
       event.preventDefault();
+      event.stopPropagation();
       const reactionId = button.getAttribute("data-reaction");
       const itemKey = button.getAttribute("data-item");
       if (!reactionId || !itemKey) return;
@@ -557,6 +559,18 @@ const grid = document.getElementById("feed");
   }
   if (grid) grid.addEventListener("click", (event) => {
     const target = event.target;
+    // Reactions must win over the post click target; otherwise clicking a reaction opens the image.
+    const reactionButton = target.closest ? target.closest(".reaction") : null;
+    if (reactionButton){
+      event.preventDefault();
+      event.stopPropagation();
+      const reactionId = reactionButton.getAttribute("data-reaction");
+      const itemKey = reactionButton.getAttribute("data-item");
+      if (!reactionId || !itemKey) return;
+      const decodedKey = decodeURIComponent(itemKey);
+      postReaction(decodedKey, reactionId);
+      return;
+    }
     // Clicking a post opens the zoom modal.
     const post = target.closest ? target.closest(".post") : null;
     if (post && post.getAttribute("data-full")){
@@ -572,16 +586,6 @@ const grid = document.getElementById("feed");
         const parsed = JSON.parse(decodeURIComponent(payload));
         openImageModal(parsed);
       }catch (err){}
-      return;
-    }
-    const reactionButton = target.closest ? target.closest(".reaction") : null;
-    if (reactionButton){
-      event.preventDefault();
-      const reactionId = reactionButton.getAttribute("data-reaction");
-      const itemKey = reactionButton.getAttribute("data-item");
-      if (!reactionId || !itemKey) return;
-      const decodedKey = decodeURIComponent(itemKey);
-      postReaction(decodedKey, reactionId);
       return;
     }
     const artistLink = target.closest ? target.closest(".artist-link") : null;
