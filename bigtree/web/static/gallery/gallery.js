@@ -784,16 +784,19 @@ const grid = document.getElementById("feed");
     grid.addEventListener("wheel", (event) => {
       // Let pinch-zoom and horizontal scrolling behave normally.
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+      // If the feed isn't actually scrollable yet (or no content is rendered),
+      // do not capture wheel events. This prevents the page from feeling "stuck"
+      // if a layout/regression makes the feed temporarily non-scrollable.
+      if (grid.scrollHeight <= grid.clientHeight + 1) return;
+
       // If we have no posts yet, do nothing.
       const posts = Array.from(grid.querySelectorAll(".post"));
       if (!posts.length) return;
 
-      event.preventDefault();
-      if (oneScrollLocked) return;
-      oneScrollLocked = true;
-
+      // Determine our current post index before preventing default, so we can
+      // gracefully fall back to native scrolling when we're already at an edge.
       const dir = event.deltaY > 0 ? 1 : -1;
-      // Find the first post that starts at or below the current scroll position.
       const currentTop = grid.scrollTop;
       let currentIndex = 0;
       for (let i = 0; i < posts.length; i++){
@@ -805,9 +808,16 @@ const grid = document.getElementById("feed");
       }
       const nextIndex = Math.max(0, Math.min(posts.length - 1, currentIndex + dir));
       const target = posts[nextIndex];
-      if (target){
-        grid.scrollTo({top: target.offsetTop, behavior: "smooth"});
-      }
+
+      // If we're already at the start/end, don't block the wheel; let the
+      // browser handle overscroll (or parent scroll if any).
+      if (!target || target.offsetTop === currentTop) return;
+
+      event.preventDefault();
+      if (oneScrollLocked) return;
+      oneScrollLocked = true;
+
+      grid.scrollTo({top: target.offsetTop, behavior: "smooth"});
       // Unlock after a short cooldown so a single wheel "tick" doesn't advance multiple items.
       window.setTimeout(() => {
         oneScrollLocked = false;
