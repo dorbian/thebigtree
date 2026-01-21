@@ -575,23 +575,6 @@ const grid = document.getElementById("feed");
   }
   if (grid) grid.addEventListener("click", (event) => {
     const target = event.target;
-    // Clicking a post opens the zoom modal.
-    const post = target.closest ? target.closest(".post") : null;
-    if (post && post.getAttribute("data-full")){
-      event.preventDefault();
-      // Also sync the right-hand detail panel when a post is clicked (even if the modal is used).
-      const idx = parseInt(post.getAttribute("data-index") || "-1", 10);
-      if (Number.isFinite(idx) && idx >= 0){
-        setActiveDetailIndex(idx);
-      }
-      const payload = post.getAttribute("data-full");
-      if (!payload) return;
-      try{
-        const parsed = JSON.parse(decodeURIComponent(payload));
-        openImageModal(parsed);
-      }catch (err){}
-      return;
-    }
     const reactionButton = target.closest ? target.closest(".reaction") : null;
     if (reactionButton){
       event.preventDefault();
@@ -613,6 +596,25 @@ const grid = document.getElementById("feed");
       }catch (err){
         openArtistModal("Forest", {});
       }
+      return;
+    }
+    // Clicking a post opens the zoom modal.
+    const post = target.closest ? target.closest(".post") : null;
+    if (post && post.getAttribute("data-full")){
+      event.preventDefault();
+      // Also sync the right-hand detail panel when a post is clicked.
+      const idx = parseInt(post.getAttribute("data-index") || "-1", 10);
+      if (Number.isFinite(idx) && idx >= 0){
+        setActiveDetailIndex(idx);
+      }
+      const clickedImage = target.closest ? target.closest(".media-wrap img") : null;
+      if (!clickedImage) return;
+      const payload = post.getAttribute("data-full");
+      if (!payload) return;
+      try{
+        const parsed = JSON.parse(decodeURIComponent(payload));
+        openImageModal(parsed);
+      }catch (err){}
       return;
     }
   });

@@ -63,12 +63,11 @@
   .layout{
     display:grid;
     /* 25% / 50% / 25% split, with sane min widths */
-    grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr) minmax(260px, 1fr);
+    grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) minmax(240px, 1fr);
     gap:22px;
     padding:18px;
-    height:100vh;
-    min-height:0;
-    overflow:hidden;
+    min-height:100vh;
+    overflow:visible;
     width:100%;
     max-width:1600px;
     margin:0 auto;
@@ -87,10 +86,9 @@
     border:1px solid var(--line);
     border-radius:18px;
     padding:14px;
-    height:calc(100vh - 36px);
     position:sticky;
     top:18px;
-    overflow:auto;
+    overflow:visible;
     box-sizing:border-box;
     padding-bottom:22px;
   }
@@ -119,6 +117,11 @@
   }
   .sidebar-group{display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
   .sidebar-group:last-child{border-bottom:none}
+  .sidebar-group.sidebar-bottom{
+    flex-direction:row;
+    flex-wrap:wrap;
+    gap:10px;
+  }
   .sidebar-primary{
     width:auto;
     padding:10px 12px;
@@ -146,9 +149,6 @@
   }
   .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
   .feed{
-    /* The feed scrolls; side columns remain in place. */
-    height:calc(100vh - 36px);
-    overflow:auto;
     padding-left:6px;
     padding-right:6px;
     padding-bottom:22px;
@@ -183,9 +183,10 @@
   /* Details should live on the artwork itself (top-right of the rendered image). */
   .post-media .media-details{
     position:absolute;
-    top:12px;
-    right:12px;
-    max-width:min(60%, 360px);
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    max-width:min(70%, 420px);
     padding:10px 12px;
     border-radius:14px;
     border:1px solid rgba(255,255,255,.10);
@@ -193,14 +194,12 @@
     box-shadow:0 14px 28px rgba(0,0,0,.35);
     backdrop-filter: blur(6px);
     opacity:.0;
-    transform:translateY(-6px);
-    transition:opacity .25s ease, transform .25s ease;
+    transition:opacity .25s ease;
     pointer-events:auto;
   }
   .post.active .post-media .media-details,
   .post:hover .post-media .media-details{
     opacity:1;
-    transform:translateY(0);
   }
   .media-details .md-title{
     font-size:14px;
@@ -255,10 +254,9 @@
     max-width:520px;
   }
   .details{
-    height:calc(100vh - 36px);
     position:sticky;
     top:18px;
-    overflow:auto;
+    overflow:visible;
     box-sizing:border-box;
     padding-bottom:22px;
   }
@@ -724,17 +722,16 @@
   }
   .image-modal.show-info .info{opacity:1}
   .image-modal .close{
-    position:absolute;
-    top:12px;
-    right:12px;
-    width:36px;
-    height:36px;
+    position:static;
+    width:32px;
+    height:32px;
     border-radius:999px;
     border:1px solid var(--line);
     background:rgba(12,18,15,.9);
     color:var(--text);
-    font-size:18px;
+    font-size:16px;
     cursor:pointer;
+    flex:0 0 auto;
   }
   .image-modal .nav{
     position:absolute;
@@ -875,11 +872,17 @@
   }
   .detail-card{
     display:grid;
-    grid-template-columns:minmax(240px, 1.2fr) minmax(220px, .8fr);
+    grid-template-columns:1fr;
     gap:18px;
-    align-items:center;
-    max-width:92vw;
+    align-items:stretch;
+    max-width:min(920px, 92vw);
     max-height:90vh;
+  }
+  .detail-head{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
   }
   .detail-media{
     position:relative;
@@ -887,7 +890,7 @@
   .detail-media img{
     width:100%;
     height:auto;
-    max-height:86vh;
+    max-height:70vh;
     border-radius:16px;
     box-shadow:0 20px 60px rgba(0,0,0,.5);
   }
@@ -913,8 +916,8 @@
     display:flex;
     flex-direction:column;
     gap:10px;
-    max-height:86vh;
-    overflow:auto;
+    max-height:none;
+    overflow:visible;
   }
   .detail-vote-title{
     font-size:12px;
@@ -1093,14 +1096,13 @@
 
 /* --- Layout: full width, 20/60/20 --- */
 .layout{
-  width: 100vw;
-  max-width: none;
-  margin: 0;
-  padding-left: 16px;
-  padding-right: 24px;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 18px;
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr minmax(260px, 320px);
-  gap: 16px;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 22px;
   align-items: start;
 }
 
@@ -1108,10 +1110,9 @@
 .sidebar{
   display: flex;
   flex-direction: column;
-  /* Lock the column to the viewport so bottom padding doesn't bleed outside */
-  height: calc(100vh - 28px);
-  max-height: calc(100vh - 28px);
-  overflow-y: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   box-sizing: border-box;
   padding-bottom: 8px;
   position: sticky;
@@ -1124,7 +1125,8 @@
 
 .sidebar-bottom{
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 10px;
   padding-top: 10px;
   padding-bottom: 6px;
@@ -1138,9 +1140,9 @@
   min-height: 40px;
   border-radius: 12px;
   text-decoration: none;
-  border: 1px solid rgba(214,178,110,.35);
+  border: 1px solid rgba(47,90,69,.9);
   background: rgba(12,18,15,.7);
-  color: var(--neutral);
+  color: #4f7b63;
   gap: 8px;
   padding: 8px 14px;
   transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
@@ -1158,19 +1160,18 @@
   text-transform: uppercase;
 }
 .sidebar-iconlink:hover{
-  border-color: rgba(107,212,162,.55);
+  border-color: rgba(63,120,90,.9);
   box-shadow: 0 10px 22px rgba(0,0,0,.25);
   transform: translateY(-1px);
+  color: #8dc3a7;
 }
 
 /* Right details panel: constrain height and prevent bottom padding overflow */
 .details{
   box-sizing: border-box;
-  height: calc(100vh - 28px);
   position: sticky;
   top: 14px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
   padding-bottom: 8px;
 }
 
@@ -1217,10 +1218,8 @@
 
 /* Fix sticky column overflow (avoid bottom padding leaking outside viewport) */
   .details{
-    height: calc(100vh - 28px);
-    max-height: calc(100vh - 28px);
-    overflow-y: auto;
     box-sizing: border-box;
+    overflow: visible;
     padding-bottom: 8px;
     top: 14px;
   }

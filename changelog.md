@@ -172,6 +172,8 @@
 - Replaced right-column suggestions with a configurable messages panel.
 - Added message title/body fields to gallery settings and overlay layout controls.
 - Removed cards-per-row control from gallery layout to keep layout feed-based.
+- Centered in-image details, aligned admin/discord buttons, and limited modal open to image clicks.
+- Adjusted modal layout to place details above the artwork.
 
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).
