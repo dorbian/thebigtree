@@ -785,40 +785,50 @@ const grid = document.getElementById("feed");
       // Let pinch-zoom and horizontal scrolling behave normally.
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
 
-      // If the feed isn't actually scrollable yet (or no content is rendered),
-      // do not capture wheel events. This prevents the page from feeling "stuck"
-      // if a layout/regression makes the feed temporarily non-scrollable.
-      if (grid.scrollHeight <= grid.clientHeight + 1) return;
+      // If the feed isn't actually scrollable, never hijack the wheel.
+      // (This prevents the "dead scroll" regression when layout/CSS changes.)
+      if (grid.scrollHeight <= grid.clientHeight + 2) return;
 
-      // If we have no posts yet, do nothing.
       const posts = Array.from(grid.querySelectorAll(".post"));
       if (!posts.length) return;
 
-      // Determine our current post index before preventing default, so we can
-      // gracefully fall back to native scrolling when we're already at an edge.
+      // If we're still in cooldown, don't block native scrolling.
+      if (oneScrollLocked) return;
+
       const dir = event.deltaY > 0 ? 1 : -1;
-      const currentTop = grid.scrollTop;
+
+      // Find the post whose center is closest to the viewport center.
+      const viewCenter = grid.scrollTop + (grid.clientHeight / 2);
       let currentIndex = 0;
+      let bestDist = Infinity;
       for (let i = 0; i < posts.length; i++){
-        const t = posts[i].offsetTop;
-        if (t >= currentTop - 2){
+        const p = posts[i];
+        const center = p.offsetTop + (p.offsetHeight / 2);
+        const dist = Math.abs(center - viewCenter);
+        if (dist < bestDist){
+          bestDist = dist;
           currentIndex = i;
-          break;
         }
       }
+
       const nextIndex = Math.max(0, Math.min(posts.length - 1, currentIndex + dir));
       const target = posts[nextIndex];
+      if (!target) return;
 
-      // If we're already at the start/end, don't block the wheel; let the
-      // browser handle overscroll (or parent scroll if any).
-      if (!target || target.offsetTop === currentTop) return;
+      // Center the target post in the feed.
+      const targetTop = Math.max(0, Math.round(target.offsetTop - (grid.clientHeight - target.offsetHeight) / 2));
+
+      // If we'd effectively do nothing (already at target), don't prevent default.
+      if (Math.abs(targetTop - grid.scrollTop) < 2) return;
+
+      // At scroll edges, don't swallow wheel events.
+      const atTop = grid.scrollTop <= 0;
+      const atBottom = (grid.scrollTop + grid.clientHeight) >= (grid.scrollHeight - 1);
+      if ((dir < 0 && atTop) || (dir > 0 && atBottom)) return;
 
       event.preventDefault();
-      if (oneScrollLocked) return;
       oneScrollLocked = true;
-
-      grid.scrollTo({top: target.offsetTop, behavior: "smooth"});
-      // Unlock after a short cooldown so a single wheel "tick" doesn't advance multiple items.
+      grid.scrollTo({top: targetTop, behavior: "smooth"});
       window.setTimeout(() => {
         oneScrollLocked = false;
       }, 420);
