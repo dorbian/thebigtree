@@ -2093,6 +2093,19 @@ class Database:
         )
         return True
 
+    def delete_media_item(self, filename: str) -> bool:
+        name = (filename or "").strip()
+        if not name:
+            return False
+        self._execute(
+            """
+            DELETE FROM media_items
+            WHERE filename = %s OR media_id = %s OR media_id = %s
+            """,
+            (name, name, f"media:{name}"),
+        )
+        return True
+
     def _migrate_media_items(self) -> None:
         """Import legacy TinyDB media.json + filesystem-only files into Postgres.
 

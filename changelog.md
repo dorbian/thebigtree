@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Media library: drive /api/media/list, uploads, and updates from Postgres instead of media.json.
 - Gallery: import artist names/links from legacy media.json into Postgres media_items.
 - Gallery: resolve artist names from legacy media metadata when artist_name is missing.
 - Gallery: fix stray top-level return that broke gallery.js initialization.

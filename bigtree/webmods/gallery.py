@@ -702,14 +702,25 @@ async def gallery_import_channel(req: web.Request):
                 if idx > 0 and base_title:
                     title = f"{base_title} ({idx + 1})"
                 title = title.strip() or filename
-                media_mod.add_media(
-                    save_name,
-                    original_name=filename,
-                    artist_id=artist_id,
+                artist_name = ""
+                artist_links: Dict[str, Any] = {}
+                if artist_id:
+                    artist = artist_mod.get_artist(artist_id)
+                    if artist:
+                        artist_name = str(artist.get("name") or "").strip()
+                        artist_links = artist.get("links") if isinstance(artist.get("links"), dict) else {}
+                db = get_database()
+                db.upsert_media_item(
+                    media_id=save_name,
+                    filename=save_name,
                     title=title,
-                    discord_url=discord_url,
+                    artist_name=artist_name,
+                    artist_links=artist_links,
                     origin_type=origin_type,
                     origin_label=origin_label,
+                    url=f"/media/{save_name}",
+                    thumb_url=f"/media/thumbs/{save_name}",
+                    metadata={"source": "discord", "artist_id": artist_id} if artist_id else {"source": "discord"},
                 )
                 imported += 1
     except Exception as exc:
@@ -761,15 +772,30 @@ async def gallery_media_update(req: web.Request):
     if not filename:
         return web.json_response({"ok": False, "error": "filename required"}, status=400)
     try:
-        media_mod.add_media(
-            filename,
-            title=title or None,
-            artist_id=artist_id,
-            origin_type=origin_type or None,
-            origin_label=origin_label or None,
-        )
         if artist_id and artist_name:
             artist_mod.upsert_artist(artist_id, artist_name, {})
+        resolved_name = artist_name
+        resolved_links: Dict[str, Any] = {}
+        if artist_id:
+            artist = artist_mod.get_artist(artist_id)
+            if artist:
+                resolved_name = resolved_name or str(artist.get("name") or "").strip()
+                links = artist.get("links") if isinstance(artist.get("links"), dict) else {}
+                if links:
+                    resolved_links = links
+        db = get_database()
+        db.upsert_media_item(
+            media_id=filename,
+            filename=filename,
+            title=title or None,
+            artist_name=resolved_name or "",
+            artist_links=resolved_links,
+            origin_type=origin_type or None,
+            origin_label=origin_label or None,
+            url=f"/media/{filename}",
+            thumb_url=f"/media/thumbs/{filename}",
+            metadata={"source": "update", "artist_id": artist_id} if artist_id else {"source": "update"},
+        )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     invalidate_gallery_cache()

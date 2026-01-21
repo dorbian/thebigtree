@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from aiohttp import web
 from bigtree.inc.webserver import route
+from bigtree.inc.database import get_database
 from bigtree.webmods import tarot_api
 from bigtree.modules import bingo as bingo_mod
 from bigtree.modules import tarot as tarot_mod
@@ -92,6 +93,16 @@ def _artist_info(artist_id: str | None) -> dict:
         "artist_links": artist.get("links") or {},
     }
 
+def _artist_payload_for_db(artist_id: str | None) -> tuple[str, dict]:
+    if not artist_id:
+        return "", {}
+    artist = artist_mod.get_artist(artist_id)
+    if not artist:
+        return "", {}
+    name = str(artist.get("name") or "").strip()
+    links = artist.get("links") if isinstance(artist.get("links"), dict) else {}
+    return name, links or {}
+
 def _media_item(
     filename: str,
     artist_id: str | None,
@@ -102,6 +113,8 @@ def _media_item(
     prefer_discord: bool = True,
     origin_type: str | None = None,
     origin_label: str | None = None,
+    artist_name: str | None = None,
+    artist_links: dict | None = None,
 ) -> dict:
     url = (discord_url if (prefer_discord and discord_url) else f"/media/{filename}")
     item_id = f"media:{filename}" if filename else ""
@@ -120,6 +133,10 @@ def _media_item(
         "used_in": used_in or [],
         "hidden": gallery_mod.is_hidden(item_id) if item_id else False,
     }
+    if artist_name:
+        item["artist_name"] = artist_name
+    if artist_links:
+        item["artist_links"] = artist_links
     item.update(_artist_info(artist_id))
     if artist_id and not item.get("artist_id"):
         item["artist_id"] = artist_id
@@ -263,13 +280,19 @@ async def upload_media(req: web.Request):
             f.write(data)
     except Exception:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
-    entry = media_mod.add_media(
-        filename,
-        original_name=filename_hint,
-        artist_id=artist_id,
+    db = get_database()
+    artist_name, artist_links = _artist_payload_for_db(artist_id)
+    db.upsert_media_item(
+        media_id=filename,
+        filename=filename,
         title=title,
+        artist_name=artist_name,
+        artist_links=artist_links,
         origin_type=origin_type,
         origin_label=origin_label,
+        url=f"/media/{filename}",
+        thumb_url=f"/media/thumbs/{filename}",
+        metadata={"source": "upload", "artist_id": artist_id} if artist_id else {"source": "upload"},
     )
     try:
         from bigtree.webmods import gallery as gallery_web
@@ -278,13 +301,15 @@ async def upload_media(req: web.Request):
         pass
     item = _media_item(
         filename,
-        entry.get("artist_id"),
-        entry.get("original_name") or "",
-        entry.get("title") or "",
-        discord_url=entry.get("discord_url") or None,
+        artist_id,
+        filename_hint or "",
+        title or "",
+        discord_url=None,
         prefer_discord=False,
-        origin_type=entry.get("origin_type") or "",
-        origin_label=entry.get("origin_label") or "",
+        origin_type=origin_type or "",
+        origin_label=origin_label or "",
+        artist_name=artist_name,
+        artist_links=artist_links,
     )
     return web.json_response({"ok": True, "item": item})
 
@@ -293,22 +318,35 @@ async def list_media(_req: web.Request):
     items: list[dict] = []
     seen: set[str] = set()
     usage_map = _build_usage_map()
-    for entry in media_mod.list_media():
-        filename = entry.get("filename")
+    db = get_database()
+    rows = db.list_media_items(limit=5000, offset=0, include_hidden=True)
+    for row in rows or []:
+        filename = row.get("filename") or row.get("media_id")
         if not filename or filename in seen:
             continue
         seen.add(filename)
+        url = (row.get("url") or "").strip() or f"/media/{filename}"
+        artist_name = (row.get("artist_name") or "").strip()
+        artist_links = row.get("artist_links") if isinstance(row.get("artist_links"), dict) else {}
+        meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        artist_id = (meta.get("artist_id") or "").strip() if isinstance(meta, dict) else ""
         items.append(_media_item(
             filename,
-            entry.get("artist_id"),
-            entry.get("original_name") or "",
-            entry.get("title") or "",
+            artist_id or None,
+            row.get("filename") or "",
+            row.get("title") or "",
             used_in=sorted(usage_map.get(filename, set())),
-            discord_url=entry.get("discord_url") or None,
+            discord_url=None,
             prefer_discord=False,
-            origin_type=entry.get("origin_type") or "",
-            origin_label=entry.get("origin_label") or "",
+            origin_type=row.get("origin_type") or "",
+            origin_label=row.get("origin_label") or "",
+            artist_name=artist_name,
+            artist_links=artist_links,
         ))
+        items[-1]["url"] = url
+        if url and url != f"/media/{filename}":
+            items[-1]["fallback_url"] = f"/media/{filename}"
+        items[-1]["hidden"] = bool(row.get("hidden"))
 
     for deck in tarot_mod.list_decks():
         back = (deck.get("back_image") or "").strip()
@@ -357,7 +395,10 @@ async def delete_media(req: web.Request):
             os.remove(path)
         except Exception:
             return web.json_response({"ok": False, "error": "delete failed"}, status=500)
-    media_mod.delete_media(filename)
+    try:
+        get_database().delete_media_item(filename)
+    except Exception:
+        pass
     tarot_mod.clear_image_references(f"/media/{filename}")
     try:
         from bigtree.webmods import gallery as gallery_web
