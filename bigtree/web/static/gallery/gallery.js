@@ -541,9 +541,7 @@ const grid = document.getElementById("feed");
       const target = event.target;
       const button = target.closest ? target.closest(".reaction") : null;
       if (!button) return;
-      // Prevent reactions from triggering any surrounding click handlers (like opening the image modal).
       event.preventDefault();
-      event.stopPropagation();
       const reactionId = button.getAttribute("data-reaction");
       const itemKey = button.getAttribute("data-item");
       if (!reactionId || !itemKey) return;
@@ -559,18 +557,6 @@ const grid = document.getElementById("feed");
   }
   if (grid) grid.addEventListener("click", (event) => {
     const target = event.target;
-    // Reactions must win over the post click target; otherwise clicking a reaction opens the image.
-    const reactionButton = target.closest ? target.closest(".reaction") : null;
-    if (reactionButton){
-      event.preventDefault();
-      event.stopPropagation();
-      const reactionId = reactionButton.getAttribute("data-reaction");
-      const itemKey = reactionButton.getAttribute("data-item");
-      if (!reactionId || !itemKey) return;
-      const decodedKey = decodeURIComponent(itemKey);
-      postReaction(decodedKey, reactionId);
-      return;
-    }
     // Clicking a post opens the zoom modal.
     const post = target.closest ? target.closest(".post") : null;
     if (post && post.getAttribute("data-full")){
@@ -586,6 +572,16 @@ const grid = document.getElementById("feed");
         const parsed = JSON.parse(decodeURIComponent(payload));
         openImageModal(parsed);
       }catch (err){}
+      return;
+    }
+    const reactionButton = target.closest ? target.closest(".reaction") : null;
+    if (reactionButton){
+      event.preventDefault();
+      const reactionId = reactionButton.getAttribute("data-reaction");
+      const itemKey = reactionButton.getAttribute("data-item");
+      if (!reactionId || !itemKey) return;
+      const decodedKey = decodeURIComponent(itemKey);
+      postReaction(decodedKey, reactionId);
       return;
     }
     const artistLink = target.closest ? target.closest(".artist-link") : null;
@@ -784,51 +780,31 @@ const grid = document.getElementById("feed");
     grid.addEventListener("wheel", (event) => {
       // Let pinch-zoom and horizontal scrolling behave normally.
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-
-      // If the feed isn't actually scrollable, never hijack the wheel.
-      // (This prevents the "dead scroll" regression when layout/CSS changes.)
-      if (grid.scrollHeight <= grid.clientHeight + 2) return;
-
+      // If we have no posts yet, do nothing.
       const posts = Array.from(grid.querySelectorAll(".post"));
       if (!posts.length) return;
 
-      // If we're still in cooldown, don't block native scrolling.
+      event.preventDefault();
       if (oneScrollLocked) return;
+      oneScrollLocked = true;
 
       const dir = event.deltaY > 0 ? 1 : -1;
-
-      // Find the post whose center is closest to the viewport center.
-      const viewCenter = grid.scrollTop + (grid.clientHeight / 2);
+      // Find the first post that starts at or below the current scroll position.
+      const currentTop = grid.scrollTop;
       let currentIndex = 0;
-      let bestDist = Infinity;
       for (let i = 0; i < posts.length; i++){
-        const p = posts[i];
-        const center = p.offsetTop + (p.offsetHeight / 2);
-        const dist = Math.abs(center - viewCenter);
-        if (dist < bestDist){
-          bestDist = dist;
+        const t = posts[i].offsetTop;
+        if (t >= currentTop - 2){
           currentIndex = i;
+          break;
         }
       }
-
       const nextIndex = Math.max(0, Math.min(posts.length - 1, currentIndex + dir));
       const target = posts[nextIndex];
-      if (!target) return;
-
-      // Center the target post in the feed.
-      const targetTop = Math.max(0, Math.round(target.offsetTop - (grid.clientHeight - target.offsetHeight) / 2));
-
-      // If we'd effectively do nothing (already at target), don't prevent default.
-      if (Math.abs(targetTop - grid.scrollTop) < 2) return;
-
-      // At scroll edges, don't swallow wheel events.
-      const atTop = grid.scrollTop <= 0;
-      const atBottom = (grid.scrollTop + grid.clientHeight) >= (grid.scrollHeight - 1);
-      if ((dir < 0 && atTop) || (dir > 0 && atBottom)) return;
-
-      event.preventDefault();
-      oneScrollLocked = true;
-      grid.scrollTo({top: targetTop, behavior: "smooth"});
+      if (target){
+        grid.scrollTo({top: target.offsetTop, behavior: "smooth"});
+      }
+      // Unlock after a short cooldown so a single wheel "tick" doesn't advance multiple items.
       window.setTimeout(() => {
         oneScrollLocked = false;
       }, 420);
