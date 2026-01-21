@@ -800,6 +800,8 @@ const grid = document.getElementById("feed");
     grid.addEventListener("wheel", (event) => {
       // Let pinch-zoom and horizontal scrolling behave normally.
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      // If the grid isn't scrollable, let the page handle scrolling.
+      if (grid.scrollHeight <= grid.clientHeight + 1) return;
       // If we have no posts yet, do nothing.
       const posts = Array.from(grid.querySelectorAll(".post"));
       if (!posts.length) return;

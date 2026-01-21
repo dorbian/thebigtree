@@ -176,16 +176,17 @@
      rendered image bounds rather than the full post container. */
   .post-media .media-wrap{
     position:relative;
-    display:inline-block;
+    display:block;
+    width:100%;
     max-width:100%;
   }
 
   /* Details should live on the artwork itself (top-right of the rendered image). */
   .post-media .media-details{
     position:absolute;
-    top:50%;
+    top:16px;
     left:50%;
-    transform:translate(-50%, -50%);
+    transform:translateX(-50%);
     max-width:min(70%, 420px);
     padding:10px 12px;
     border-radius:14px;
@@ -232,7 +233,7 @@
   .media-details .md-actions:empty{display:none;}
   .post-media .media-wrap img{
     max-width:100%;
-    width:auto;
+    width:100%;
     height:auto;
     max-height:78vh;
     object-fit:contain;

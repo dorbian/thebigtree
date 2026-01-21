@@ -174,6 +174,7 @@
 - Removed cards-per-row control from gallery layout to keep layout feed-based.
 - Centered in-image details, aligned admin/discord buttons, and limited modal open to image clicks.
 - Adjusted modal layout to place details above the artwork.
+- Restored gallery scroll behavior and resized images to fill the feed column.
 
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).
