@@ -65,7 +65,7 @@ class SelfUpdater:
             try:
                 self.check_and_update_once()
             except Exception as e:
-                loch.print(f"[updater] update check failed: {e}")
+                loch.logger.error("[updater] update check failed: %s", e)
 
             remaining = max(10, int(self.cfg.check_interval_seconds))
             while remaining > 0 and not self._stop.is_set():
@@ -79,7 +79,7 @@ class SelfUpdater:
 
         latest_commit = self._get_latest_commit_sha()
         if not latest_commit:
-            loch.print("[updater] unable to determine latest commit; skipping")
+            loch.logger.warning("[updater] unable to determine latest commit; skipping")
             return
 
         # First-run: if we don’t know what commit we’re running, pin state to latest,
@@ -90,7 +90,7 @@ class SelfUpdater:
             state["branch"] = self.cfg.branch
             state["last_checked_at"] = int(time.time())
             self._save_state(state)
-            loch.print(f"[updater] state initialized at commit {latest_commit}")
+            loch.logger.info("[updater] state initialized at commit %s", latest_commit)
             return
 
         if latest_commit == current_commit:
@@ -98,7 +98,7 @@ class SelfUpdater:
             self._save_state(state)
             return
 
-        loch.print(f"[updater] update available: {current_commit} -> {latest_commit}")
+        loch.logger.info("[updater] update available: %s -> %s", current_commit, latest_commit)
         self._perform_update(latest_commit, state)
 
     # ----------------------------
@@ -149,13 +149,13 @@ class SelfUpdater:
         try:
             resp = requests.get(url, headers=headers, timeout=15)
             if resp.status_code != 200:
-                loch.print(f"[updater] GitHub API returned {resp.status_code} for commit lookup")
+                loch.logger.warning("[updater] GitHub API returned %s for commit lookup", resp.status_code)
                 return None
             data = resp.json()
             sha = data.get("sha")
             return str(sha) if sha else None
         except Exception as e:
-            loch.print(f"[updater] GitHub commit lookup error: {e}")
+            loch.logger.error("[updater] GitHub commit lookup error: %s", e)
             return None
 
     def _download_repo_tarball(self, commit_sha: str) -> Path:
@@ -168,7 +168,7 @@ class SelfUpdater:
         extract_dir = td / "extract"
         extract_dir.mkdir(parents=True, exist_ok=True)
 
-        loch.print(f"[updater] downloading source tarball {commit_sha[:12]}…")
+        loch.logger.info("[updater] downloading source tarball %s", commit_sha[:12])
         with requests.get(url, headers=headers, stream=True, timeout=60) as r:
             r.raise_for_status()
             with open(tar_path, "wb") as f:
@@ -193,15 +193,15 @@ class SelfUpdater:
     def _install_requirements(self, new_root: Path) -> None:
         req = new_root / "requirements.txt"
         if not req.exists():
-            loch.print("[updater] no requirements.txt found in update; skipping dependency install")
+            loch.logger.info("[updater] no requirements.txt found in update; skipping dependency install")
             return
 
         uv = shutil.which("uv")
         if not uv:
-            loch.print("[updater] uv not found; skipping dependency install")
+            loch.logger.warning("[updater] uv not found; skipping dependency install")
             return
 
-        loch.print("[updater] installing updated requirements…")
+        loch.logger.info("[updater] installing updated requirements...")
         import subprocess
 
         try:
@@ -214,7 +214,7 @@ class SelfUpdater:
             )
         except subprocess.CalledProcessError as e:
             out = e.stdout or ""
-            loch.print(f"[updater] requirements install failed; continuing anyway. Output:\n{out}")
+            loch.logger.warning("[updater] requirements install failed; continuing anyway. Output:\n%s", out)
 
     # ----------------------------
     # Housekeeping
@@ -260,7 +260,7 @@ class SelfUpdater:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
         except Exception as e:
-            loch.print(f"[updater] failed to write state file {p}: {e}")
+            loch.logger.error("[updater] failed to write state file %s: %s", p, e)
 
     # ----------------------------
     # Restart
@@ -270,17 +270,17 @@ class SelfUpdater:
         mode = (self.cfg.restart_mode or "exit").strip().lower()
 
         if mode != "exec":
-            loch.print("[updater] update applied; exiting so container can restart")
+            loch.logger.info("[updater] update applied; exiting so container can restart")
             os._exit(75)
 
         try:
             # Exec into bundled launcher (it will select active_root)
             target = str(self.bundled_root / "bigtree_runner.py")
             argv = [sys.executable, target] + sys.argv[1:]
-            loch.print("[updater] update applied; exec into launcher")
+            loch.logger.info("[updater] update applied; exec into launcher")
             os.execv(sys.executable, argv)
         except Exception as e:
-            loch.print(f"[updater] exec restart failed: {e}; exiting")
+            loch.logger.error("[updater] exec restart failed: %s; exiting", e)
             os._exit(75)
 
 
@@ -320,9 +320,15 @@ def start_self_updater(settings: Any) -> None:
         if _updater_singleton is None:
             _updater_singleton = SelfUpdater(cfg, bundled_root)
             _updater_singleton.start()
-            loch.print(
-                f"[updater] enabled: repo={cfg.repo} branch={cfg.branch} interval={cfg.check_interval_seconds}s updates_dir={cfg.updates_dir} keep={cfg.keep_versions} restart={cfg.restart_mode}"
+            loch.logger.info(
+                "[updater] enabled: repo=%s branch=%s interval=%ss updates_dir=%s keep=%s restart=%s",
+                cfg.repo,
+                cfg.branch,
+                cfg.check_interval_seconds,
+                cfg.updates_dir,
+                cfg.keep_versions,
+                cfg.restart_mode,
             )
 
     except Exception as e:
-        loch.print(f"[updater] failed to start: {e}")
+        loch.logger.error("[updater] failed to start: %s", e)

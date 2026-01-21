@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Updater: use logger instead of missing logging.print to avoid startup crash.
 - Media library: drive /api/media/list, uploads, and updates from Postgres instead of media.json.
 - Gallery: import artist names/links from legacy media.json into Postgres media_items.
 - Gallery: resolve artist names from legacy media metadata when artist_name is missing.
