@@ -146,6 +146,7 @@
     /* The feed scrolls; side columns remain in place. */
     height:calc(100vh - 36px);
     overflow:auto;
+    padding-left:6px;
     padding-right:6px;
     padding-bottom:22px;
     scroll-snap-type:y mandatory;
@@ -175,6 +176,58 @@
     display:inline-block;
     max-width:100%;
   }
+
+  /* Details should live on the artwork itself (top-right of the rendered image). */
+  .post-media .media-details{
+    position:absolute;
+    top:12px;
+    right:12px;
+    max-width:min(60%, 360px);
+    padding:10px 12px;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(12,18,15,.70);
+    box-shadow:0 14px 28px rgba(0,0,0,.35);
+    backdrop-filter: blur(6px);
+    opacity:.0;
+    transform:translateY(-6px);
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:auto;
+  }
+  .post.active .post-media .media-details,
+  .post:hover .post-media .media-details{
+    opacity:1;
+    transform:translateY(0);
+  }
+  .media-details .md-title{
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.02em;
+    margin:0 0 4px 0;
+    color:var(--neutral);
+  }
+  .media-details .md-title:empty{display:none;}
+  .media-details .md-artist,
+  .media-details .md-origin{
+    font-size:12px;
+    color:rgba(231,242,234,.82);
+    margin:0;
+  }
+  .media-details .md-origin{color:var(--muted); margin-top:4px;}
+  .media-details .md-origin:empty{display:none;}
+  .media-details .md-artist a{
+    color:var(--accent);
+    text-decoration:none;
+    font-weight:600;
+  }
+  .media-details .md-artist:empty{display:none;}
+  .media-details .md-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:10px;
+  }
+  .media-details .md-actions:empty{display:none;}
   .post-media .media-wrap img{
     max-width:100%;
     width:auto;
@@ -185,16 +238,18 @@
   }
   .post.inspiration{
     padding:34px 26px;
-    min-height:190px;
+    /* Make inspirational text entries feel like a full post, not a tiny divider. */
+    min-height:min(78vh, 620px);
     display:flex;
     align-items:center;
     justify-content:center;
     text-align:center;
   }
   .post.inspiration .inspiration-text{
-    font-size:1.15rem;
+    font-size:1.25rem;
     line-height:1.6;
     color:rgba(231,242,234,.92);
+    max-width:520px;
   }
   .details{
     height:calc(100vh - 36px);
@@ -205,10 +260,8 @@
     padding-bottom:22px;
   }
   .details-card{
-    background:rgba(16,26,21,.65);
-    border:1px solid var(--line);
-    border-radius:18px;
-    padding:14px;
+    /* Details are rendered on the active image in the center feed. */
+    display:none;
   }
   .details-card .detail-title{font-size:1.1rem; font-weight:700; margin-bottom:6px}
   .details-card .detail-artist{color:var(--muted); margin-bottom:12px}
@@ -969,8 +1022,11 @@
   }
   .suggestions-grid{
     display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns:1fr;
     gap:14px;
+    /* Single column, no more than ~2 rows worth of suggestions visible. */
+    max-height:calc((180px + 14px) * 2);
+    overflow:hidden;
   }
   .suggestions-card{
     background:var(--panel);
@@ -1144,10 +1200,9 @@
   white-space: nowrap;
 }
 
-/* Make details visible even before selecting (content will populate from first post). */
+/* Legacy details sidebar is no longer used (details are overlaid on the active image). */
 .details-card{
-  opacity: 1;
-  transform: none;
+  display: none;
 }
 
 

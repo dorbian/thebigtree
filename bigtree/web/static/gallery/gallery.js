@@ -236,6 +236,35 @@ const grid = document.getElementById("feed");
     }
   }
 
+  function renderPostOverlay(postEl, item){
+    if (!postEl || !item) return;
+    const overlay = postEl.querySelector ? postEl.querySelector(".media-details") : null;
+    if (!overlay) return;
+    const payload = buildDetailPayload(item);
+
+    const title = payload.title || "";
+    const artistName = payload.artist || "";
+    const origin = payload.origin || "";
+    const itemId = payload.item_id || "";
+
+    const artistData = encodeURIComponent(JSON.stringify({
+      name: artistName || "Forest",
+      links: payload.artist_links || {}
+    }));
+
+    const actions = Array.isArray(payload.actions) ? payload.actions : [];
+    const actionsHtml = actions.map((action) => {
+      return `<button class="reaction" data-reaction="${action.id}" data-item="${encodeURIComponent(itemId)}">${action.label} <span class="reaction-count">${action.count}</span></button>`;
+    }).join("");
+
+    overlay.innerHTML = `
+      <div class="md-title">${escapeHtml(title)}</div>
+      <div class="md-artist">${artistName ? `Offered by <a href="#" class="artist-link" data-artist="${artistData}">${escapeHtml(artistName)}</a>` : ""}</div>
+      <div class="md-origin">${escapeHtml(origin)}</div>
+      <div class="md-actions">${actionsHtml}</div>
+    `;
+  }
+
   function openImageModal(data){
     imageModalImg.onerror = null;
     imageModalImg.src = data.url;
@@ -603,6 +632,10 @@ const grid = document.getElementById("feed");
         const current = galleryItems[currentDetailIndex];
         if (current && getItemKey(current) === itemId){
           renderDetailPanel(buildDetailPayload(current));
+          const active = grid ? grid.querySelector(`.post[data-index="${currentDetailIndex}"]`) : null;
+          if (active){
+            renderPostOverlay(active, current);
+          }
         }
       }
     }catch(err){}
@@ -688,9 +721,12 @@ const grid = document.getElementById("feed");
     }
     const artist = normalizeArtist(item);
     const artistName = artist.name || "Forest";
-    const title = item.title || "Untitled Offering";
+    const title = (item.title || "").trim();
+    const altTitle = title || "Forest offering";
     const artistLinks = artist.links || {};
-    const origin = (item.origin || "").trim() || getOrigin(item);
+    // Only show origin if we have any origin-ish metadata; otherwise keep empty.
+    const hasOriginBits = !!((item.origin || "").trim() || item.event_name || item.event || item.rite || item.contest || item.deck_id || item.tarot);
+    const origin = hasOriginBits ? ((item.origin || "").trim() || getOrigin(item)) : "";
     const tags = getTags(item);
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
@@ -709,13 +745,24 @@ const grid = document.getElementById("feed");
     const payload = buildDetailPayload(item);
     const fullPayload = encodeURIComponent(JSON.stringify(payload));
 
+    const overlayPayload = encodeURIComponent(JSON.stringify({name: artistName, links: artistLinks || {}}));
+
     const media = primaryUrl
-      ? `<div class="media-wrap"><img src="${primaryUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async"${fallbackAttr} /><div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div></div>`
+      ? `<div class="media-wrap">
+          <img src="${primaryUrl}" alt="${escapeHtml(altTitle)}" loading="lazy" decoding="async"${fallbackAttr} />
+          <div class="media-details">
+            <div class="md-title">${escapeHtml(title)}</div>
+            <div class="md-artist">${artistName ? `Offered by <a href=\"#\" class=\"artist-link\" data-artist=\"${overlayPayload}\">${escapeHtml(artistName)}</a>` : ""}</div>
+            <div class="md-origin">${escapeHtml(origin)}</div>
+            <div class="md-actions">${REACTIONS.map(r => `<button class=\"reaction\" data-reaction=\"${r.id}\" data-item=\"${encodeURIComponent(itemKey)}\">${r.label} <span class=\"reaction-count\">${Number(baseCounts[r.id] || 0)}</span></button>`).join("")}</div>
+          </div>
+          <div class="artist-watermark" aria-hidden="true">${escapeHtml(artistName)}</div>
+        </div>`
       : `<div class="muted" style="padding:18px;text-align:center">Offering image not available.</div>`;
 
     // Minimal post: image in the middle. All metadata + links live in the right panel.
     return `
-      <article class="post" data-index="${index}" data-full="${fullPayload}" aria-label="${escapeHtml(title)}">
+      <article class="post" data-index="${index}" data-full="${fullPayload}" aria-label="${escapeHtml(altTitle)}">
         <div class="post-media">${media}</div>
       </article>
     `;
@@ -937,9 +984,12 @@ const grid = document.getElementById("feed");
     const active = grid.querySelector(`.post[data-index="${index}"]`);
     if (active){
       active.classList.add("active");
+      // Ensure overlay content stays in sync (e.g. after reactions).
+      renderPostOverlay(active, item);
     }
-    const payload = buildDetailPayload(item);
-    renderDetailPanel(payload);
+    // Keep the legacy panel populated (even though it's hidden) so the modal view
+    // and any other code paths that rely on it remain stable.
+    renderDetailPanel(buildDetailPayload(item));
   }
 
   function renderGrid(){
@@ -998,8 +1048,9 @@ const grid = document.getElementById("feed");
   function buildDetailPayload(item){
     const artist = normalizeArtist(item);
     const artistName = artist.name || "Forest";
-    const title = item.title || "Untitled Offering";
-    const origin = (item.origin || "").trim() || getOrigin(item);
+    const title = String(item.title || "").trim();
+    const hasOriginBits = !!((item.origin || "").trim() || item.event_name || item.event || item.rite || item.contest || item.deck_id || item.tarot);
+    const origin = hasOriginBits ? ((item.origin || "").trim() || getOrigin(item)) : "";
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
     return {
@@ -1074,7 +1125,7 @@ const grid = document.getElementById("feed");
       pool = galleryItems.slice();
     }
     const picks = [];
-    const max = Math.min(6, pool.length);
+    const max = Math.min(2, pool.length);
     const used = new Set();
     while (picks.length < max && used.size < pool.length){
       const idx = Math.floor(Math.random() * pool.length);
@@ -1083,15 +1134,16 @@ const grid = document.getElementById("feed");
       picks.push(pool[idx]);
     }
     suggestionsGrid.innerHTML = picks.map((item) => {
-      const title = item.title || "Untitled Offering";
+      const title = String(item.title || "").trim();
       const artistName = item.artist && item.artist.name ? item.artist.name : "Forest";
       // Use full image here as well so the suggestions showcase the actual artwork.
       const imgUrl = item.url || item.thumb_url || "";
+      const safeTitle = escapeHtml(title);
       return `
         <div class="suggestions-card">
-          ${imgUrl ? `<img src="${imgUrl}" alt="${title}" loading="lazy" decoding="async">` : ""}
-          <div class="suggestions-title">${title}</div>
-          <div class="suggestions-artist">Offered by ${artistName}</div>
+          ${imgUrl ? `<img src="${imgUrl}" alt="${safeTitle || "Forest offering"}" loading="lazy" decoding="async">` : ""}
+          ${safeTitle ? `<div class="suggestions-title">${safeTitle}</div>` : ""}
+          <div class="suggestions-artist">Offered by ${escapeHtml(artistName)}</div>
         </div>
       `;
     }).join("");

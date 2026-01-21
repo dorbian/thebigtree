@@ -113,11 +113,18 @@ async def tarot_gallery_root(_req: web.Request):
     html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
     return web.Response(text=html, content_type="text/html")
 
+@route("GET", "/gallery", allow_public=True)
+async def gallery_page(_req: web.Request):
+    """Forest Gallery (canonical URL)."""
+    srv: DynamicWebServer | None = get_server()
+    html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Forest Gallery</h1>"
+    return web.Response(text=html, content_type="text/html")
+
+
 @route("GET", "/tarot/gallery", allow_public=True)
 async def tarot_gallery_page(_req: web.Request):
-    srv: DynamicWebServer | None = get_server()
-    html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
-    return web.Response(text=html, content_type="text/html")
+    """Backwards compatible redirect."""
+    raise web.HTTPPermanentRedirect("/gallery")
 
 @route("GET", "/tarot/calendar", allow_public=True)
 async def tarot_calendar_page(_req: web.Request):

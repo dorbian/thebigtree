@@ -193,7 +193,7 @@ async def join_session(req: web.Request):
     join_code = req.match_info["join_code"]
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
-        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/gallery"}, status=404)
     # Slots + crapslite place/charge bets during actions, not on join.
     if str(s.get("game_id") or "").lower() not in ("slots", "crapslite"):
         wallet_resp = await _ensure_wallet_balance(req, join_code, s)
@@ -209,7 +209,7 @@ async def join_session(req: web.Request):
     try:
         payload = await _run_blocking(cg.join_session, join_code, player_meta)
     except Exception as exc:
-        return web.json_response({"ok": False, "error": str(exc), "redirect": "/tarot/gallery"}, status=400)
+        return web.json_response({"ok": False, "error": str(exc), "redirect": "/gallery"}, status=400)
     return web.json_response({"ok": True, **payload})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/state", allow_public=True)
@@ -218,7 +218,7 @@ async def get_state(req: web.Request):
     view = _get_view(req)
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
-        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/gallery"}, status=404)
     token = req.headers.get("X-Cardgame-Token") or ""
     return web.json_response({"ok": True, "state": cg.get_state(s, view=view, token=token)})
 
@@ -228,7 +228,7 @@ async def stream_events(req: web.Request):
     view = _get_view(req)
     s = await _run_blocking(cg.get_session_by_join_code, join_code)
     if not s:
-        return web.json_response({"ok": False, "error": "not found", "redirect": "/tarot/gallery"}, status=404)
+        return web.json_response({"ok": False, "error": "not found", "redirect": "/gallery"}, status=404)
 
     resp = web.StreamResponse(
         status=200,
@@ -249,7 +249,7 @@ async def stream_events(req: web.Request):
             await asyncio.sleep(1.0)
             current = await _run_blocking(cg.get_session_by_id, session_id)
             if not current:
-                payload = {"type": "SESSION_GONE", "redirect": "/tarot/gallery"}
+                payload = {"type": "SESSION_GONE", "redirect": "/gallery"}
                 await resp.write(f"data: {json.dumps(payload)}\n\n".encode("utf-8"))
                 break
             events = await _run_blocking(cg.list_events, session_id, last_seq)
