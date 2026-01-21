@@ -54,4 +54,4 @@ VOLUME ["/data"]
 
 EXPOSE 8443
 
-CMD ["python", "bigtree_runner.py"]
+CMD ["python", "thebigtree.py"]
