@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Overlay: neutralize login background hue and reduce panel/card opacity.
 - Overlay: apply adminlogin.png background after login across the admin shell.
 - Overlay: rename UI labels to Elfministration.
 - Gallery: tighten sidebar width and make left actions use natural button sizing.
