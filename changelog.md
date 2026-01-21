@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Gallery: import artist names/links from legacy media.json into Postgres media_items.
 - Gallery: resolve artist names from legacy media metadata when artist_name is missing.
 - Gallery: fix stray top-level return that broke gallery.js initialization.
 - Bingo: fix missing get_database import when searching owners during game creation.

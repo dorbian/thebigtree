@@ -2879,6 +2879,10 @@ class Database:
             from bigtree.modules import media as media_mod
         except Exception:
             return
+        try:
+            from bigtree.modules import artists as artist_mod
+        except Exception:
+            artist_mod = None
 
         imported = 0
         media_dir = None
@@ -2903,6 +2907,19 @@ class Database:
                     title = str(r.get("title") or "").strip()
                     origin_type = str(r.get("origin_type") or "").strip()
                     origin_label = str(r.get("origin_label") or "").strip()
+                    artist_id = str(r.get("artist_id") or "").strip() or None
+                    artist_name = ""
+                    artist_links: Dict[str, Any] = {}
+                    if artist_id and artist_mod:
+                        try:
+                            artist = artist_mod.get_artist(artist_id)
+                        except Exception:
+                            artist = None
+                        if artist:
+                            artist_name = str(artist.get("name") or "").strip()
+                            links = artist.get("links") if isinstance(artist.get("links"), dict) else {}
+                            if links:
+                                artist_links = links
                     # URLs are served from /media and /media/thumbs.
                     url = f"/media/{filename}"
                     thumb_url = f"/media/thumbs/{filename}"
@@ -2910,11 +2927,13 @@ class Database:
                         media_id=media_id,
                         filename=filename,
                         title=title,
+                        artist_name=artist_name,
+                        artist_links=artist_links,
                         origin_type=origin_type,
                         origin_label=origin_label,
                         url=url,
                         thumb_url=thumb_url,
-                        metadata={"source": "tinydb"},
+                        metadata={"source": "tinydb", "artist_id": artist_id} if artist_id else {"source": "tinydb"},
                     )
                     imported += 1
         except Exception as exc:  # pragma: no cover
