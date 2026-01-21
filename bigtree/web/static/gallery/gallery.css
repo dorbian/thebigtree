@@ -1103,7 +1103,7 @@
   margin: 0 auto;
   padding: 18px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 4fr);
   gap: 22px;
   align-items: start;
 }
