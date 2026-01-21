@@ -65,8 +65,9 @@
     grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
     gap:22px;
     padding:18px;
-    min-height:100vh;
-    overflow:visible;
+    height:100vh;
+    min-height:0;
+    overflow:hidden;
     width:100%;
     max-width:1600px;
     margin:0 auto;
@@ -147,6 +148,8 @@
   }
   .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
   .feed{
+    height:calc(100vh - 36px);
+    overflow:auto;
     padding-left:6px;
     padding-right:6px;
     padding-bottom:22px;
@@ -233,7 +236,7 @@
     max-width:100%;
     width:100%;
     height:auto;
-    max-height:78vh;
+    max-height:86vh;
     object-fit:contain;
     display:block;
   }
