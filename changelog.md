@@ -175,6 +175,7 @@
 - Centered in-image details, aligned admin/discord buttons, and limited modal open to image clicks.
 - Adjusted modal layout to place details above the artwork.
 - Restored gallery scroll behavior and resized images to fill the feed column.
+- Moved gallery announcements into the left menu and switched to a two-column layout.
 
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).

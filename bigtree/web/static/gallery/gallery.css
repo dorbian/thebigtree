@@ -62,8 +62,7 @@
   /* --- Instagram-like gallery layout --- */
   .layout{
     display:grid;
-    /* 25% / 50% / 25% split, with sane min widths */
-    grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) minmax(240px, 1fr);
+    grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
     gap:22px;
     padding:18px;
     min-height:100vh;
@@ -79,7 +78,6 @@
     }
     .sidebar{order:1}
     .feed{order:2; max-height:none}
-    .details{order:3}
   }
   .sidebar{
     background:rgba(16,26,21,.65);
@@ -1023,7 +1021,7 @@
     margin-bottom:10px;
   }
   .messages{
-    margin-top:24px;
+    margin-top:18px;
     padding-top:18px;
     border-top:1px solid var(--line);
     display:none;
