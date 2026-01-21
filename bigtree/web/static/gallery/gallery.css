@@ -117,10 +117,10 @@
     font-size:.92rem;
     line-height:1.35;
   }
-  .sidebar-group{display:flex; flex-direction:column; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .sidebar-group{display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
   .sidebar-group:last-child{border-bottom:none}
   .sidebar-primary{
-    width:100%;
+    width:auto;
     padding:10px 12px;
     border-radius:12px;
     border:1px solid rgba(255,255,255,.12);
@@ -129,9 +129,10 @@
     cursor:pointer;
     font-family:inherit;
     font-weight:600;
+    align-self:flex-start;
   }
   .sidebar-link{
-    display:flex;
+    display:inline-flex;
     align-items:center;
     justify-content:space-between;
     padding:10px 12px;
@@ -140,6 +141,8 @@
     background:rgba(12,21,17,.55);
     color:var(--text);
     text-decoration:none;
+    width:auto;
+    align-self:flex-start;
   }
   .sidebar-link:hover{border-color:rgba(107,212,162,.35);}
   .feed{
@@ -1117,7 +1120,7 @@
   padding-left: 16px;
   padding-right: 24px;
   display: grid;
-  grid-template-columns: 20% 1fr 20%;
+  grid-template-columns: minmax(220px, 280px) 1fr minmax(260px, 320px);
   gap: 16px;
   align-items: start;
 }
