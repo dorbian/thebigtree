@@ -88,9 +88,9 @@
   }
   .badge-row{
     display:flex;
-    flex-wrap:wrap;
+    flex-direction:column;
     gap:10px;
-    align-items:center;
+    align-items:flex-start;
   }
   .badge{
     display:inline-flex;
@@ -110,10 +110,11 @@
     font-weight:700;
   }
   .panel{
-    border:1px solid var(--line);
+    border:1px solid rgba(233,226,210,.18);
     border-radius:14px;
     padding:10px 12px;
-    background:var(--panel);
+    background:rgba(10,16,18,.7);
+    box-shadow:var(--shadow);
   }
   .panel-title{
     font-size:12px;
@@ -123,8 +124,8 @@
     margin-bottom:6px;
   }
   .payouts{
-    display:grid;
-    grid-template-columns:repeat(3, minmax(120px, 1fr));
+    display:flex;
+    flex-direction:column;
     gap:8px;
     font-size:13px;
   }
@@ -357,15 +358,15 @@
 </div>
 <div class="topbar">
   <div class="badge-row">
-    <div class="badge">Pot <span id="potValue">-</span></div><br>
-    <div class="badge">Stage <span id="stageValue">-</span></div><br>
-    <div class="badge">Header <span id="headerValue">-</span></div><br>
+    <div class="badge">Pot <span id="potValue">-</span></div>
+    <div class="badge">Stage <span id="stageValue">-</span></div>
+    <div class="badge">Header <span id="headerValue">-</span></div>
   </div>
   <div class="panel" style="flex:1 1 280px">
     <div class="panel-title">Payouts</div>
     <div class="payouts">
-      <div>Single: <span id="payoutSingle">-</span></div><br>
-      <div>Double: <span id="payoutDouble">-</span></div><br>
+      <div>Single: <span id="payoutSingle">-</span></div>
+      <div>Double: <span id="payoutDouble">-</span></div>
       <div>Full: <span id="payoutFull">-</span></div>
     </div>
   </div>
