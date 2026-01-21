@@ -11,6 +11,12 @@ const grid = document.getElementById("feed");
   const imageModal = document.getElementById("imageModal");
   const imageModalImg = document.getElementById("imageModalImg");
   const imageInfo = document.getElementById("imageInfo");
+  const modalDetailTitle = document.getElementById("modalDetailTitle");
+  const modalDetailArtist = document.getElementById("modalDetailArtist");
+  const modalDetailLinks = document.getElementById("modalDetailLinks");
+  const modalDetailOrigin = document.getElementById("modalDetailOrigin");
+  const modalDetailActions = document.getElementById("modalDetailActions");
+  const modalDetailTags = document.getElementById("modalDetailTags");
   const detailTitle = document.getElementById("detailTitle");
   const detailArtist = document.getElementById("detailArtist");
   const detailOrigin = document.getElementById("detailOrigin");
@@ -199,41 +205,44 @@ const grid = document.getElementById("feed");
   function renderDetailPanel(data){
     if (!data) return;
     document.body.classList.add("details-ready");
-    if (detailTitle) detailTitle.textContent = data.title || "";
-    if (detailArtist) detailArtist.textContent = data.artist ? `Offered by ${data.artist}` : "";
-    if (detailLinks){
-      const links = data.artist_links || {};
-      const ordered = LINK_ORDER.filter(key => links[key]);
-      const extras = Object.keys(links)
-        .filter(key => !LINK_ORDER.includes(key))
-        .filter(key => links[key]);
-      const keys = ordered.concat(extras);
-      const linkItems = keys.map((key) => {
-        const url = links[key];
-        if (!url) return "";
-        const label = LINK_LABELS[key] || key;
-        const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
-        return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
-      }).filter(Boolean);
-      // Always show direct media links if available.
-      if (data.url){
-        linkItems.unshift(`<a href="${data.url}" target="_blank" rel="noreferrer">${DEFAULT_LINK_ICON}<span>Open image</span></a>`);
-      }
-      if (!linkItems.length){
-        detailLinks.innerHTML = "<span class='muted'>No external links shared.</span>";
-      }else{
-        detailLinks.innerHTML = linkItems.join("");
-      }
+    const title = data.title || "";
+    const artistLabel = data.artist ? `Offered by ${data.artist}` : "";
+    const origin = data.origin || "";
+    const links = data.artist_links || {};
+    const ordered = LINK_ORDER.filter(key => links[key]);
+    const extras = Object.keys(links)
+      .filter(key => !LINK_ORDER.includes(key))
+      .filter(key => links[key]);
+    const keys = ordered.concat(extras);
+    const linkItems = keys.map((key) => {
+      const url = links[key];
+      if (!url) return "";
+      const label = LINK_LABELS[key] || key;
+      const icon = LINK_ICONS[key] || DEFAULT_LINK_ICON;
+      return `<a href="${url}" target="_blank" rel="noreferrer">${icon}<span>${label}</span></a>`;
+    }).filter(Boolean);
+    if (data.url){
+      linkItems.unshift(`<a href="${data.url}" target="_blank" rel="noreferrer">${DEFAULT_LINK_ICON}<span>Open image</span></a>`);
     }
-    if (detailOrigin) detailOrigin.textContent = data.origin || "";
-    if (detailActions){
-      detailActions.innerHTML = (data.actions || []).map((action) => {
-        return `<button class="reaction" data-reaction="${action.id}" data-item="${encodeURIComponent(data.item_id)}">${action.label} <span class="reaction-count">${action.count}</span></button>`;
-      }).join("");
-    }
-    if (detailTags){
-      detailTags.innerHTML = (data.tags || []).map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
-    }
+    const linkHtml = linkItems.length ? linkItems.join("") : "<span class='muted'>No external links shared.</span>";
+    const actionsHtml = (data.actions || []).map((action) => {
+      return `<button class="reaction" data-reaction="${action.id}" data-item="${encodeURIComponent(data.item_id)}">${action.label} <span class="reaction-count">${action.count}</span></button>`;
+    }).join("");
+    const tagsHtml = (data.tags || []).map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
+
+    if (detailTitle) detailTitle.textContent = title;
+    if (detailArtist) detailArtist.textContent = artistLabel;
+    if (detailLinks) detailLinks.innerHTML = linkHtml;
+    if (detailOrigin) detailOrigin.textContent = origin;
+    if (detailActions) detailActions.innerHTML = actionsHtml;
+    if (detailTags) detailTags.innerHTML = tagsHtml;
+
+    if (modalDetailTitle) modalDetailTitle.textContent = title;
+    if (modalDetailArtist) modalDetailArtist.textContent = artistLabel;
+    if (modalDetailLinks) modalDetailLinks.innerHTML = linkHtml;
+    if (modalDetailOrigin) modalDetailOrigin.textContent = origin;
+    if (modalDetailActions) modalDetailActions.innerHTML = actionsHtml;
+    if (modalDetailTags) modalDetailTags.innerHTML = tagsHtml;
   }
 
   function renderPostOverlay(postEl, item){
@@ -536,8 +545,9 @@ const grid = document.getElementById("feed");
       returnPrompt.setAttribute("aria-hidden", "true");
     });
   }
-  if (detailActions){
-    detailActions.addEventListener("click", (event) => {
+  function bindReactionClicks(scopeEl){
+    if (!scopeEl) return;
+    scopeEl.addEventListener("click", (event) => {
       const target = event.target;
       const button = target.closest ? target.closest(".reaction") : null;
       if (!button) return;
@@ -549,6 +559,8 @@ const grid = document.getElementById("feed");
       postReaction(decodedKey, reactionId);
     });
   }
+  bindReactionClicks(detailActions);
+  bindReactionClicks(modalDetailActions);
   if (imagePrev){
     imagePrev.addEventListener("click", () => navigateDetail(-1));
   }

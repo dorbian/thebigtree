@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Gallery: add modal voting panel, fix right-column layout, and theme scrollbars.
 - Updater: use logger instead of missing logging.print to avoid startup crash.
 - Media library: drive /api/media/list, uploads, and updates from Postgres instead of media.json.
 - Gallery: import artist names/links from legacy media.json into Postgres media_items.
