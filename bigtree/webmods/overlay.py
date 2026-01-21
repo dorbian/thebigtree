@@ -4,8 +4,7 @@ from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.inc.database import get_database
 
 
-@route("GET", "/overlay", allow_public=True)
-async def overlay_page(_req: web.Request):
+def _render_overlay_page() -> str:
     srv: DynamicWebServer | None = get_server()
     admin_background = ""
     try:
@@ -17,5 +16,15 @@ async def overlay_page(_req: web.Request):
         admin_background = ""
     if not admin_background:
         admin_background = "/static/images/admin_background.png"
-    html = srv.render_template("overlay.html", {"ADMIN_BACKGROUND": admin_background}) if srv else "<h1>Overlay</h1>"
+    return srv.render_template("overlay.html", {"ADMIN_BACKGROUND": admin_background}) if srv else "<h1>Overlay</h1>"
+
+
+@route("GET", "/elfministration", allow_public=True)
+async def elfministration_page(_req: web.Request):
+    html = _render_overlay_page()
     return web.Response(text=html, content_type="text/html")
+
+
+@route("GET", "/overlay", allow_public=True)
+async def overlay_page(_req: web.Request):
+    raise web.HTTPFound("/elfministration")

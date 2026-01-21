@@ -154,12 +154,22 @@ async def tarot_back_file(req: web.Request):
 async def tarot_houses(_req: web.Request):
     return web.json_response({"ok": True, "houses": []})
 
-@route("GET", "/overlay/session/{join_code}", allow_public=True)
-async def tarot_overlay_page(req: web.Request):
-    join_code = req.match_info["join_code"]
+def _render_tarot_overlay_page(join_code: str) -> web.Response:
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("tarot_overlay.html", {"JOIN": join_code}) if srv else "<h1>Tarot Overlay</h1>"
     return web.Response(text=html, content_type="text/html")
+
+
+@route("GET", "/elfministration/session/{join_code}", allow_public=True)
+async def tarot_elfministration_page(req: web.Request):
+    join_code = req.match_info["join_code"]
+    return _render_tarot_overlay_page(join_code)
+
+
+@route("GET", "/overlay/session/{join_code}", allow_public=True)
+async def tarot_overlay_page(req: web.Request):
+    join_code = req.match_info["join_code"]
+    raise web.HTTPFound(f"/elfministration/session/{join_code}")
 
 # ---- Sessions ----
 @route("POST", "/api/tarot/sessions", scopes=["tarot:admin"])

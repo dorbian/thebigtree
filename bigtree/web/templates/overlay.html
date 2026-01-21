@@ -2133,20 +2133,16 @@
         </div>
         <div class="status" id="galleryChannelStatus">Pick a channel to use for uploads.</div>
         <div class="section-divider"></div>
+        <h3>Import Channel</h3>
         <div class="row">
           <div>
             <label>&nbsp;</label>
-            <button class="btn-ghost" id="galleryImportOpen">Import from Discord channel</button>
+            <button class="btn-ghost" id="galleryImportOpen">Pick channel</button>
           </div>
         </div>
         <div class="section-divider"></div>
-<div class="section-divider"></div>
         <h3>Gallery Layout</h3>
         <div class="row">
-          <div>
-            <label for="galleryColumns">Cards per row</label>
-            <input id="galleryColumns" type="number" min="1" max="8" placeholder="e.g. 5">
-          </div>
           <div>
             <label for="galleryInspirationEvery">Inspiration every N cards</label>
             <input id="galleryInspirationEvery" type="number" min="1" max="50" placeholder="e.g. 12">
@@ -2156,6 +2152,18 @@
           <div style="flex:1">
             <label for="galleryInspirationText">Inspiration text (one per line)</label>
             <textarea id="galleryInspirationText" rows="4" placeholder="Leave what you can. The forest will hold it.&#10;Some offerings are for the living."></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label for="galleryMessageTitle">Message title</label>
+            <input id="galleryMessageTitle" placeholder="Message from the Forest">
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label for="galleryMessageBody">Message body</label>
+            <textarea id="galleryMessageBody" rows="4" placeholder="Write the message that appears on the gallery right panel."></textarea>
           </div>
         </div>
         <div class="row">
@@ -2384,7 +2392,7 @@
       </div>
     </div>
     <div class="toast-stack" id="toastStack"></div>
-    <script src="/static/overlay/overlay.js?v=20260120a" defer></script>
+    <script src="/static/overlay/overlay.js?v=20260120b" defer></script>
     <script>
     document.addEventListener("DOMContentLoaded", function() {
       const btn = document.getElementById("updatePlogonmasterBtn");

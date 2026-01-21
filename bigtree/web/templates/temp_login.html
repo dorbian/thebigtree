@@ -116,8 +116,8 @@
             statusEl.textContent = "Access granted. Redirecting...";
             setTimeout(() => {
               const target = data.token
-                ? `/overlay?temp_token=${encodeURIComponent(data.token)}`
-                : (data.redirect || "/overlay");
+                ? `/elfministration?temp_token=${encodeURIComponent(data.token)}`
+                : (data.redirect || "/elfministration");
               window.location.href = target;
             }, 600);
           }catch(err){

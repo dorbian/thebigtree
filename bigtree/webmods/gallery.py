@@ -449,6 +449,8 @@ async def gallery_images(_req: web.Request):
         # Optional UI copy overrides (so inspirational / flavor text can be managed in DB)
         "header_subtitle": cfg.get("header_subtitle") or "",
         "header_context": cfg.get("header_context") or "",
+        "message_title": cfg.get("message_title") or "",
+        "message_body": cfg.get("message_body") or "",
         "suggestions_title": cfg.get("suggestions_title") or "",
         "post_game_title": cfg.get("post_game_title") or "",
         "post_game_body": cfg.get("post_game_body") or "",
@@ -512,6 +514,8 @@ async def gallery_settings_get(_req: web.Request):
         "columns": cfg.get("columns"),
         "inspiration_every": cfg.get("inspiration_every"),
         "inspiration_texts": cfg.get("inspiration_texts") or "",
+        "message_title": cfg.get("message_title") or "",
+        "message_body": cfg.get("message_body") or "",
     })
 
 @route("POST", "/api/gallery/settings", scopes=["tarot:admin", "admin:web"])
@@ -526,6 +530,8 @@ async def gallery_settings_set(req: web.Request):
     columns_present = "columns" in body
     inspiration_every_present = "inspiration_every" in body
     inspiration_texts_present = "inspiration_texts" in body
+    message_title_present = "message_title" in body
+    message_body_present = "message_body" in body
 
     payload = {"upload_channel_id": gallery_mod.get_upload_channel_id()}
     if channel_present:
@@ -554,7 +560,7 @@ async def gallery_settings_set(req: web.Request):
         cfg = db.get_system_config("gallery") or {}
         cfg["flair_text"] = str(body.get("flair_text") or "").strip()
         db.update_system_config("gallery", cfg)
-    if columns_present or inspiration_every_present or inspiration_texts_present:
+    if columns_present or inspiration_every_present or inspiration_texts_present or message_title_present or message_body_present:
         db = get_database()
         cfg = db.get_system_config("gallery") or {}
         if columns_present:
@@ -573,6 +579,10 @@ async def gallery_settings_set(req: web.Request):
                 cfg["inspiration_texts"] = [str(x).strip() for x in raw if str(x).strip()]
             else:
                 cfg["inspiration_texts"] = str(raw or "").strip()
+        if message_title_present:
+            cfg["message_title"] = str(body.get("message_title") or "").strip()
+        if message_body_present:
+            cfg["message_body"] = str(body.get("message_body") or "").strip()
         db.update_system_config("gallery", cfg)
 
     return web.json_response({
@@ -583,6 +593,8 @@ async def gallery_settings_set(req: web.Request):
         "columns": (get_database().get_system_config("gallery") or {}).get("columns"),
         "inspiration_every": (get_database().get_system_config("gallery") or {}).get("inspiration_every"),
         "inspiration_texts": (get_database().get_system_config("gallery") or {}).get("inspiration_texts") or "",
+        "message_title": (get_database().get_system_config("gallery") or {}).get("message_title") or "",
+        "message_body": (get_database().get_system_config("gallery") or {}).get("message_body") or "",
     })
 
 @route("POST", "/api/gallery/upload-channel", scopes=["tarot:admin"])

@@ -35,9 +35,9 @@ const grid = document.getElementById("feed");
   const returnBody = document.getElementById("returnBody");
   const artistFlavor = document.getElementById("artistFlavor");
   const toast = document.getElementById("toast");
-  const suggestions = document.getElementById("suggestions");
-  const suggestionsTitle = document.getElementById("suggestionsTitle");
-  const suggestionsGrid = document.getElementById("suggestionsGrid");
+  const messagesPanel = document.getElementById("messagesPanel");
+  const messagesTitle = document.getElementById("messagesTitle");
+  const messagesBody = document.getElementById("messagesBody");
   const imagePrev = document.getElementById("imagePrev");
   const imageNext = document.getElementById("imageNext");
   const detailLinks = document.getElementById("detailLinks");
@@ -405,8 +405,14 @@ const grid = document.getElementById("feed");
     if (returnBody && cfg.return_body){
       returnBody.textContent = String(cfg.return_body);
     }
-    if (suggestionsTitle && cfg.suggestions_title){
-      suggestionsTitle.textContent = String(cfg.suggestions_title);
+    const messageTitleRaw = String(cfg.message_title || cfg.messages_title || "").trim();
+    const messageBodyRaw = String(cfg.message_body || cfg.messages_body || "").trim();
+    if (messagesTitle) messagesTitle.textContent = messageTitleRaw || "Messages from the Forest";
+    if (messagesBody) messagesBody.textContent = messageBodyRaw;
+    if (messagesPanel){
+      const shouldShow = Boolean(messageTitleRaw || messageBodyRaw);
+      messagesPanel.classList.toggle("show", shouldShow);
+      messagesPanel.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
   }
 
@@ -1027,7 +1033,6 @@ const grid = document.getElementById("feed");
     if (currentDetailIndex < 0 && items.length){
       setActiveDetailIndex(0);
     }
-    renderSuggestions();
   }
 
   function appendGrid(items, startIndex){
@@ -1054,7 +1059,6 @@ const grid = document.getElementById("feed");
     wireImageFallbacks(grid);
     wireOneScrollPerPost();
     wireFeedObserver();
-    renderSuggestions();
   }
 
   function buildDetailPayload(item){
@@ -1103,64 +1107,6 @@ const grid = document.getElementById("feed");
     const nextIndex = currentDetailIndex + delta;
     if (nextIndex < 0 || nextIndex >= galleryItems.length) return;
     openDetailByIndex(nextIndex);
-  }
-
-  function renderSuggestions(){
-    if (!suggestions || !suggestionsGrid) return;
-    if (!galleryItems.length){
-      suggestions.classList.remove("show");
-      suggestions.setAttribute("aria-hidden", "true");
-      return;
-    }
-    const cfgTitle = gallerySettings && gallerySettings.suggestions_title ? String(gallerySettings.suggestions_title) : "";
-    if (suggestionsTitle && cfgTitle){
-      suggestionsTitle.textContent = cfgTitle;
-    }else if (suggestionsTitle){
-      const titleVariants = [
-        "The Forest suggests...",
-        "Other offerings you may feel drawn to..."
-      ];
-      suggestionsTitle.textContent = titleVariants[Math.floor(Math.random() * titleVariants.length)];
-    }
-    let pool = [];
-    if (activeArtistFilter){
-      pool = galleryItems.filter(item => (item.artist && item.artist.name) === activeArtistFilter);
-    }
-    if (!pool.length){
-      const anchor = galleryItems[0];
-      const anchorEvent = anchor && (anchor.event_name || anchor.event || anchor.rite || anchor.origin);
-      if (anchorEvent){
-        pool = galleryItems.filter(item => (item.event_name || item.event || item.rite || item.origin) === anchorEvent);
-      }
-    }
-    if (!pool.length){
-      pool = galleryItems.slice();
-    }
-    const picks = [];
-    const max = Math.min(2, pool.length);
-    const used = new Set();
-    while (picks.length < max && used.size < pool.length){
-      const idx = Math.floor(Math.random() * pool.length);
-      if (used.has(idx)) continue;
-      used.add(idx);
-      picks.push(pool[idx]);
-    }
-    suggestionsGrid.innerHTML = picks.map((item) => {
-      const title = String(item.title || "").trim();
-      const artistName = item.artist && item.artist.name ? item.artist.name : "Forest";
-      // Use full image here as well so the suggestions showcase the actual artwork.
-      const imgUrl = item.url || item.thumb_url || "";
-      const safeTitle = escapeHtml(title);
-      return `
-        <div class="suggestions-card">
-          ${imgUrl ? `<img src="${imgUrl}" alt="${safeTitle || "Forest offering"}" loading="lazy" decoding="async">` : ""}
-          ${safeTitle ? `<div class="suggestions-title">${safeTitle}</div>` : ""}
-          <div class="suggestions-artist">Offered by ${escapeHtml(artistName)}</div>
-        </div>
-      `;
-    }).join("");
-    suggestions.classList.add("show");
-    suggestions.setAttribute("aria-hidden", "false");
   }
 
   function maybeShowPostGameBanner(){

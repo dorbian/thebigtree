@@ -167,3 +167,15 @@
 - Guard overlay toggle bindings when controls are missing.
 ### Auth
 - Return resolved scopes from `/api/auth/me` for API keys and deny invalid tokens.
+## 2026-01-20
+### Gallery
+- Replaced right-column suggestions with a configurable messages panel.
+- Added message title/body fields to gallery settings and overlay layout controls.
+- Removed cards-per-row control from gallery layout to keep layout feed-based.
+
+### Overlay
+- Added elfministration routes (with redirects from legacy overlay routes).
+- Updated gallery import UI copy and button labeling.
+
+### UI
+- Switched all site typography to sans-serif for consistency across pages.

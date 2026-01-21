@@ -224,5 +224,5 @@ async def temp_login_submit(req: web.Request):
         "user_name": name,
         "expires_at": expires_at,
         "expires_in": max(0, expires_at - now),
-        "redirect": "/overlay",
+        "redirect": "/elfministration",
     })

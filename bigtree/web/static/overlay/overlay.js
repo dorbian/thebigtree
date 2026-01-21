@@ -4315,10 +4315,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           if (flairEl){
             flairEl.value = String(data.flair_text || "");
           }
-          const columnsEl = $("galleryColumns");
-          if (columnsEl){
-            columnsEl.value = data.columns ? String(data.columns) : "";
-          }
           const inspEveryEl = $("galleryInspirationEvery");
           if (inspEveryEl){
             inspEveryEl.value = data.inspiration_every ? String(data.inspiration_every) : "";
@@ -4330,6 +4326,14 @@ Games and events will keep their history, but this venue will be removed.`)) ret
             }else{
               inspTextEl.value = String(data.inspiration_texts || "");
             }
+          }
+          const messageTitleEl = $("galleryMessageTitle");
+          if (messageTitleEl){
+            messageTitleEl.value = String(data.message_title || "");
+          }
+          const messageBodyEl = $("galleryMessageBody");
+          if (messageBodyEl){
+            messageBodyEl.value = String(data.message_body || "");
           }
           setStatusText("galleryFlairStatus", "Ready.", "");
           setStatusText("galleryLayoutStatus", "Ready.", "");
@@ -5053,18 +5057,20 @@ function getOwnerClaimStatus(ownerName){
       });
       // Flair text UI removed
       $("galleryLayoutSave").addEventListener("click", async () => {
-        const columns = $("galleryColumns")?.value || "";
         const every = $("galleryInspirationEvery")?.value || "";
         const text = $("galleryInspirationText")?.value || "";
+        const messageTitle = $("galleryMessageTitle")?.value || "";
+        const messageBody = $("galleryMessageBody")?.value || "";
         setStatusText("galleryLayoutStatus", "Saving...", "");
         try{
           await jsonFetch("/api/gallery/settings", {
             method:"POST",
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify({
-              columns: columns ? parseInt(columns, 10) : null,
               inspiration_every: every ? parseInt(every, 10) : null,
-              inspiration_texts: String(text || "")
+              inspiration_texts: String(text || ""),
+              message_title: String(messageTitle || "").trim(),
+              message_body: String(messageBody || "").trim()
             })
           }, true);
           setStatusText("galleryLayoutStatus", "Layout saved.", "ok");
@@ -5795,7 +5801,7 @@ function getOwnerClaimStatus(ownerName){
 
       function getOverlayUrl(code){
         const base = getBase();
-        return new URL("/overlay/session/" + encodeURIComponent(code), base).toString();
+        return new URL("/elfministration/session/" + encodeURIComponent(code), base).toString();
       }
 
       function getPlayerUrl(code){
