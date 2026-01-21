@@ -431,21 +431,22 @@
               <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
             </div>
           </div>
-          <div class="dashboard-logs" id="dashboardPluginWrap">
-            <div class="dashboard-logs-header">
-              <div>
-                <strong>FFXIV plugin setup</strong>
-                <span class="muted">Point XIVLauncher to the Forest plugin repository.</span>
-              </div>
-              <div class="dashboard-logs-actions">
-                <a class="dashboard-admin-link" href="/with.leaf" target="_blank" rel="noreferrer">
-                  <span>Open with.leaf</span>
-                </a>
-              </div>
+          <div class="dashboard-admin-card dashboard-plugin-card" id="dashboardPluginWrap">
+            <div class="dashboard-admin-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm1.2-7.4-.9.9A2.8 2.8 0 0 0 13 13h-2v-.5a4 4 0 0 1 1.2-2.8l1.2-1.2A1.8 1.8 0 0 0 12 5.5a1.9 1.9 0 0 0-2 1.8H8a3.9 3.9 0 0 1 8-.3 3.6 3.6 0 0 1-1.8 2.6z"/>
+              </svg>
+              <div class="dashboard-admin-title">FFXIV plugin setup</div>
             </div>
-            <div class="dashboard-logs-body" style="margin-top:10px;">
-              XIVLauncher → Settings → Dalamud → Experimental → Custom Plugin Repositories
-              Add: https://rites.thebigtree.life/with.leaf
+            <div class="dashboard-admin-actions">
+              <a class="dashboard-admin-link" href="/with.leaf" target="_blank" rel="noreferrer">
+                <span>Open with.leaf</span>
+              </a>
+            </div>
+            <p class="dashboard-admin-note">Point XIVLauncher to the Forest plugin repository.</p>
+            <div class="dashboard-plugin-steps">
+              XIVLauncher → Settings → Dalamud → Experimental → Custom Plugin Repositories<br>
+              Add: <span class="cmd">https://rites.thebigtree.life/with.leaf</span>
             </div>
           </div>
           <div class="dashboard-logs" id="dashboardLogsWrap">

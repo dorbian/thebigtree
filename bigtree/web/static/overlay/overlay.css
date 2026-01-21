@@ -290,7 +290,7 @@
         position:relative;
       }
       .menu-game::before{
-        content:"•";
+        content:"â€¢";
         position:absolute;
         left:6px;
         color:rgba(155,182,167,.7);
@@ -435,6 +435,129 @@
       }
       .panel.dashboard{
         padding:24px;
+      }
+
+      /* Dashboard panel is a layout wrapper; keep it visually transparent. */
+      #dashboardPanel{
+        background:transparent;
+        border-color:transparent;
+        box-shadow:none;
+      }
+      #dashboardPanel:before{display:none;}
+
+      /* Dashboard admin cards */
+      .dashboard-admin-grid{
+        display:grid;
+        gap:16px;
+        margin-top:18px;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+      }
+      @media (max-width: 1200px){
+        .dashboard-admin-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
+      }
+      @media (max-width: 720px){
+        .dashboard-admin-grid{grid-template-columns:1fr;}
+      }
+
+      .dashboard-admin-card{
+        border:1px solid var(--line);
+        border-radius:14px;
+        padding:14px;
+        background:rgba(6,10,18,.6);
+        position:relative;
+        overflow:hidden;
+      }
+      .dashboard-admin-card:before{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(120deg, rgba(157,224,125,.10), transparent 45%);
+        pointer-events:none;
+      }
+      .dashboard-admin-header{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        margin-bottom:10px;
+        position:relative;
+        z-index:1;
+      }
+      .dashboard-admin-header svg{
+        width:22px;
+        height:22px;
+        opacity:.9;
+        fill:var(--accent);
+        flex:0 0 auto;
+      }
+      .dashboard-admin-title{
+        font-weight:700;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--accent-2);
+        font-size:13px;
+      }
+
+      .dashboard-admin-actions{
+        display:flex;
+        flex-wrap:wrap;
+        gap:10px;
+        margin:10px 0 8px;
+        position:relative;
+        z-index:1;
+      }
+      /* Cap individual actions at ~20 characters wide and center their labels. */
+      .dashboard-admin-actions > a,
+      .dashboard-admin-actions > button{
+        flex:1 1 20ch;
+        max-width:20ch;
+        text-align:center;
+        justify-content:center;
+      }
+      .dashboard-admin-actions > a span,
+      .dashboard-admin-actions > button span{
+        display:block;
+        text-align:center;
+        width:100%;
+      }
+
+      .dashboard-admin-link{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:8px 10px;
+        border-radius:12px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(8,12,16,.55);
+        color:var(--accent);
+        text-decoration:none;
+        font-weight:600;
+        min-height:34px;
+      }
+      .dashboard-admin-link:hover{filter:brightness(1.05)}
+
+      .dashboard-admin-note{
+        margin:0;
+        color:var(--muted);
+        font-size:12px;
+        line-height:1.4;
+        position:relative;
+        z-index:1;
+      }
+
+      .dashboard-plugin-card{
+        margin-top:16px;
+      }
+      .dashboard-plugin-steps{
+        margin-top:10px;
+        padding:10px;
+        border-radius:12px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(8,12,16,.55);
+        color:var(--muted);
+        font-size:12px;
+        line-height:1.5;
+        position:relative;
+        z-index:1;
       }
       .dashboard-readme{
         max-width:880px;
