@@ -696,7 +696,7 @@
   .image-modal{
     position:fixed;
     inset:0;
-    background:rgba(4,10,8,.9);
+    background:rgba(2,6,5,.94);
     display:none;
     align-items:center;
     justify-content:center;
@@ -920,6 +920,7 @@
     gap:10px;
     max-height:none;
     overflow:visible;
+    margin-top:10px;
   }
   .detail-vote-title{
     font-size:12px;
