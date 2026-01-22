@@ -68,6 +68,11 @@
     <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
     <button id="joinBtn" type="button">Join event</button>
   </div>
+  <div class="row" id="createGameRow" style="display:none;">
+    <button id="createBlackjackBtn" type="button">Create Blackjack table</button>
+    <button id="createSlotsBtn" type="button">Create Slots table</button>
+  </div>
+  <div class="muted" id="createGameStatus" style="margin-top:6px; font-size:12px;"></div>
 
   <div class="muted" style="margin-top:12px; font-size:13px;">
     Tip: if you just logged in, come back here and press "Join event".
@@ -200,6 +205,7 @@
           setStatus("Please login first (XIVAuth) using the Wallet button, then come back and join.");
           setWalletBalance(null, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
+          document.getElementById("createGameRow").style.display = "none";
         }else if (data.joined){
           let msg = "You are already joined.";
           if (ev.wallet_enabled && data.wallet_balance !== null && data.wallet_balance !== undefined){
@@ -209,6 +215,7 @@
           setStatus(msg);
           document.getElementById("joinBtn").textContent = "Joined";
           document.getElementById("joinBtn").disabled = true;
+          document.getElementById("createGameRow").style.display = "flex";
           try{
             const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
             renderGames((games && games.games) || [], enabledGames);
@@ -219,10 +226,12 @@
           setStatus("This event has ended. You can no longer join.");
           setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = true;
+          document.getElementById("createGameRow").style.display = "none";
         }else{
           setStatus("Ready to join.");
           setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
+          document.getElementById("createGameRow").style.display = "none";
         }
       }catch(err){
         setStatus(err.message || "Unable to load event.");
@@ -240,8 +249,30 @@
       }
     });
 
+    async function createGame(gameId){
+      const statusEl = document.getElementById("createGameStatus");
+      if (statusEl) statusEl.textContent = `Creating ${gameId} table...`;
+      try{
+        const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games/create`, {
+          method:"POST",
+          body: JSON.stringify({game_id: gameId}),
+        });
+        if (!data.ok) throw new Error(data.error || "unable to create");
+        if (data.join_url){
+          window.location.assign(data.join_url);
+          return;
+        }
+        if (statusEl) statusEl.textContent = "Table created.";
+        await load();
+      }catch(err){
+        if (statusEl) statusEl.textContent = err.message || "Unable to create table.";
+      }
+    }
+
+    document.getElementById("createBlackjackBtn").addEventListener("click", () => createGame("blackjack"));
+    document.getElementById("createSlotsBtn").addEventListener("click", () => createGame("slots"));
+
     load();
   </script>
 </body>
 </html>
-

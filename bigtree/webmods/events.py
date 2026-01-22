@@ -150,6 +150,100 @@ async def event_games(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "event": ev, "games": out})
 
 
+@route("POST", "/api/events/{code}/games/create", allow_public=True)
+async def event_game_create(req: web.Request) -> web.Response:
+    code = (req.match_info.get("code") or "").strip()
+    user = await _resolve_user(req)
+    if isinstance(user, web.Response):
+        return user
+    try:
+        payload = await req.json()
+    except Exception:
+        payload = {}
+    game_id = str(payload.get("game_id") or payload.get("game") or "").strip().lower()
+    if game_id not in {"blackjack", "slots"}:
+        return web.json_response({"ok": False, "error": "unsupported game"}, status=400)
+
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    if (ev.get("status") or "active") != "active":
+        return web.json_response({"ok": False, "error": "event ended"}, status=409)
+
+    enabled = ev.get("metadata") or {}
+    enabled_games = enabled.get("enabled_games") or enabled.get("games") or []
+    enabled_set = set()
+    if isinstance(enabled_games, str):
+        enabled_set = {g.strip().lower() for g in enabled_games.split(",") if g.strip()}
+    elif isinstance(enabled_games, list):
+        enabled_set = {str(g).strip().lower() for g in enabled_games if str(g).strip()}
+    if enabled_set and game_id not in enabled_set:
+        return web.json_response({"ok": False, "error": "game not enabled for this event"}, status=403)
+
+    user_id = int(user.get("id") or 0)
+    if not user_id:
+        return web.json_response({"ok": False, "error": "invalid user"}, status=401)
+    db.join_event(int(ev["id"]), user_id)
+
+    venue_id = ev.get("venue_id")
+    venue = db.get_venue(int(venue_id)) if venue_id else None
+    currency = ev.get("currency_name") or (venue.get("currency_name") if venue else None)
+    try:
+        pot = int((venue.get("minimal_spend") if venue else 0) or 0)
+    except Exception:
+        pot = 0
+    meta = ev.get("metadata") or {}
+    background_url = meta.get("background_url") or meta.get("background") or (venue.get("background_image") if venue else None)
+    deck_id = (venue.get("deck_id") if venue else None)
+
+    try:
+        session = cardgames_mod.create_session(
+            game_id,
+            pot=pot,
+            deck_id=deck_id,
+            background_url=background_url,
+            currency=currency,
+            status="created",
+        )
+        cardgames_mod.start_session(session.get("session_id"), session.get("priestess_token") or "")
+        session = cardgames_mod.get_session_by_id(session.get("session_id")) or session
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+
+    payload = dict(session or {})
+    metadata = {
+        "currency": currency or payload.get("currency"),
+        "pot": int(pot or payload.get("pot") or 0),
+        "event_code": ev.get("event_code"),
+        "single_player": True,
+        "join_code": payload.get("join_code"),
+    }
+    db.upsert_game(
+        game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
+        module="cardgames",
+        payload=payload,
+        title=payload.get("game_id"),
+        created_by=None,
+        venue_id=venue_id or None,
+        created_at=db._as_datetime(payload.get("created_at")),
+        ended_at=db._as_datetime(payload.get("updated_at")),
+        status=payload.get("status") or "live",
+        active=True,
+        metadata=metadata,
+        run_source="event",
+    )
+    db.add_user_game(user_id, str(payload.get("session_id") or payload.get("join_code") or ""), role="player")
+    try:
+        db._store_game_player(str(payload.get("session_id") or payload.get("join_code") or ""), user.get("xiv_username") or "Player", role="player")
+    except Exception:
+        pass
+
+    join_code = payload.get("join_code")
+    join_url = f"/cardgames/{game_id}/session/{join_code}" if join_code else ""
+    return web.json_response({"ok": True, "session": payload, "join_url": join_url})
+
+
 def _find_event_house_game(db, event_id: int, game_id: str):
     try:
         event_id = int(event_id)
