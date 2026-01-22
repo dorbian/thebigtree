@@ -1,5 +1,5 @@
 from __future__ import annotations
-from aiohttp import web
+from aiohttp import web, WSMsgType
 from typing import Dict, Any
 import asyncio
 import json
@@ -25,6 +25,63 @@ def _extract_admin_token(req: web.Request) -> str:
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
     return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+async def _send_ws_state(ws: web.WebSocketResponse, session: Dict[str, Any], view: str, token: str):
+    state = cg.get_state(session, view=view, token=token)
+    await ws.send_json({"type": "STATE", "state": state})
+
+@route("GET", "/ws/cardgames/{game_id}/sessions/{join_code}", allow_public=True)
+async def ws_stream(req: web.Request):
+    join_code = req.match_info["join_code"]
+    view = _get_view(req)
+    token = str(req.query.get("token") or "").strip()
+    ws = web.WebSocketResponse(heartbeat=30.0)
+    await ws.prepare(req)
+    session = await _run_blocking(cg.get_session_by_join_code, join_code)
+    if not session:
+        await ws.send_json({"type": "SESSION_GONE", "redirect": "/gallery"})
+        await ws.close()
+        return ws
+    session_id = session["session_id"]
+    last_seq = 0
+    last_seen = asyncio.get_event_loop().time()
+    await _send_ws_state(ws, session, view, token)
+
+    while not ws.closed:
+        now = asyncio.get_event_loop().time()
+        try:
+            msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+        except asyncio.TimeoutError:
+            msg = None
+        if msg is not None:
+            if msg.type == WSMsgType.TEXT:
+                last_seen = now
+                try:
+                    payload = json.loads(msg.data or "{}")
+                except Exception:
+                    payload = {}
+                if isinstance(payload, dict):
+                    if payload.get("type") == "auth":
+                        token = str(payload.get("token") or "").strip()
+                        await _send_ws_state(ws, session, view, token)
+                    elif payload.get("type") == "resume":
+                        await _send_ws_state(ws, session, view, token)
+            elif msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):
+                break
+        if now - last_seen > 300:
+            await ws.close(message=b"idle")
+            break
+        current = await _run_blocking(cg.get_session_by_id, session_id)
+        if not current:
+            await ws.send_json({"type": "SESSION_GONE", "redirect": "/gallery"})
+            await ws.close()
+            break
+        events = await _run_blocking(cg.list_events, session_id, last_seq)
+        if events:
+            last_seq = int(events[-1].get("seq", last_seq))
+            for ev in events:
+                await ws.send_json({"type": ev.get("type"), "data": ev.get("data"), "seq": ev.get("seq")})
+    return ws
 
 def _resolve_admin_user_id(req: web.Request) -> int | None:
     token = _extract_admin_token(req)
