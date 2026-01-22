@@ -121,6 +121,8 @@ async def auth_me(req: web.Request):
             venue = db.get_discord_venue(int(raw_id))
     except Exception:
         venue = None
+    if venue:
+        venue = to_jsonable(venue)
     return web.json_response({
         "ok": True,
         "user_name": doc.get("user_name") if doc else None,
