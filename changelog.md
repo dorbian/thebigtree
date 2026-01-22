@@ -183,6 +183,7 @@
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).
 - Updated gallery import UI copy and button labeling.
+- Simplified plugin setup with copyable link card in dashboard.
 
 ### UI
 - Switched all site typography to sans-serif for consistency across pages.

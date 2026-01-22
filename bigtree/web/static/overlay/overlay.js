@@ -3435,6 +3435,19 @@ This will block new games from being created in this event, but existing games c
       on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
       on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
+      on("pluginRepoCopy", "click", async () => {
+        const url = ($("pluginRepoUrl")?.textContent || "").trim();
+        if (!url){
+          showToast("No link to copy.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(url);
+          showToast("Copied link.", "ok");
+        }catch (err){
+          showToast("Copy failed.", "err");
+        }
+      });
       // Venue management (dashboard)
       let venueCache = [];
       let venueMediaCache = [];
