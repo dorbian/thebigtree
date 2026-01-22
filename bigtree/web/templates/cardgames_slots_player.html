@@ -134,7 +134,7 @@
     try{
       const bet = Math.max(1, parseInt(betInput.value || "0", 10) || 0);
       const n = nonce();
-      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/player-action`, {
+      const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({token: playerToken, action:"spin", payload:{bet, nonce:n}})
