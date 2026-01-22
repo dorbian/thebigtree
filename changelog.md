@@ -177,6 +177,7 @@
 - Restored gallery scroll behavior and resized images to fill the feed column.
 - Moved gallery announcements into the left menu and switched to a two-column layout.
 - Updated gallery modal to place details below the artwork and darken the overlay.
+- Styled modal details as a fixed-width gallery card under the image.
 
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).
