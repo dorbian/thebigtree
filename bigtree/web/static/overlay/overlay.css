@@ -394,6 +394,16 @@
         color:var(--muted);
         margin-top:-6px;
       }
+      .brand-user-text{
+        display:flex;
+        flex-direction:column;
+        gap:2px;
+      }
+      .brand-user-venue{
+        font-size:10px;
+        letter-spacing:.12em;
+        color:rgba(155,182,167,.75);
+      }
       .auth-temp-scopes{
         margin-top:6px;
         font-size:11px;

@@ -36,6 +36,8 @@
       let dashboardStatsLoading = false;
       let dashboardLogsKind = "boot";
       let dashboardLogsLoading = false;
+      let adminVenueId = null;
+      let adminVenueName = "";
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -496,6 +498,9 @@
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
         $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
+        if (isNew && !$("eventVenue").value && adminVenueId){
+          $("eventVenue").value = String(adminVenueId);
+        }
         $("eventCurrency").value = eventObj?.currency_name || "";
         // If the event does not override currency, default from the venue.
         if (!(eventObj?.currency_name) && (eventObj?.venue_id)){
@@ -2421,6 +2426,7 @@ This will block new games from being created in this event, but existing games c
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
+        const brandUserVenue = $("brandUserVenue");
         if (!brandUser || !brandUserName || !brandUserIcon || !brandUserFallback){
           return;
         }
@@ -2458,12 +2464,25 @@ This will block new games from being created in this event, but existing games c
             brandUserName.textContent = "";
             brandUser.classList.add("hidden");
           }
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
+          }
+          if (userId){
+            await ensureAdminVenue(data.venue || null);
+          }else{
+            setBrandVenue(null);
+          }
         }catch(err){
           brandUserName.textContent = "";
           brandUserIcon.src = "";
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
           brandUser.classList.add("hidden");
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
+          }
+          adminVenueId = null;
+          adminVenueName = "";
           authUserScopes = new Set();
           authUserIsElfmin = false;
           applyElfminVisibility();
@@ -2474,6 +2493,60 @@ This will block new games from being created in this event, but existing games c
           }
           updateBingoCreatePayload();
         }
+      }
+
+      function setBrandVenue(membership){
+        const brandUserVenue = $("brandUserVenue");
+        const name = membership ? (membership.name || membership.venue_name || "") : "";
+        if (brandUserVenue){
+          brandUserVenue.textContent = name || "";
+        }
+        adminVenueId = membership && membership.venue_id ? Number(membership.venue_id) : null;
+        adminVenueName = name || "";
+      }
+
+      async function loadAdminVenues(){
+        const select = $("adminVenueSelect");
+        if (!select) return [];
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const resp = await jsonFetch("/admin/venues/list", {method:"GET"}, true);
+          const venues = resp.venues || [];
+          select.innerHTML = `<option value="">Select a venue</option>`;
+          venues.forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = String(v.id ?? v.venue_id ?? "");
+            opt.textContent = v.name || `Venue ${opt.value}`;
+            select.appendChild(opt);
+          });
+          return venues;
+        }catch(err){
+          select.innerHTML = `<option value="">No venues available</option>`;
+          return [];
+        }
+      }
+
+      async function ensureAdminVenue(initialMembership){
+        const modal = $("adminVenueModal");
+        if (!modal) return;
+        let membership = initialMembership || null;
+        if (!membership){
+          try{
+            const resp = await jsonFetch("/admin/venue/me", {method:"GET"}, true);
+            membership = resp.membership || null;
+          }catch(err){
+            membership = null;
+          }
+        }
+        if (membership && membership.venue_id){
+          setBrandVenue(membership);
+          modal.classList.remove("show");
+          return;
+        }
+        await loadAdminVenues();
+        setBrandVenue(null);
+        modal.classList.add("show");
+        setStatusText("adminVenueStatus", "Pick a venue to continue.", "");
       }
 
       async function initAuthenticatedSession(){
@@ -5280,7 +5353,7 @@ function getOwnerClaimStatus(ownerName){
         authTempCopy.addEventListener("click", async () => {
           const urlInput = $("authTempUrl");
           const url = urlInput ? urlInput.value.trim() : "";
-        if (!url){
+          if (!url){
           setAuthTempStatus("No link to copy.", "err");
           return;
         }
@@ -5292,6 +5365,51 @@ function getOwnerClaimStatus(ownerName){
         }
         });
       }
+      on("adminVenueAssign", "click", async () => {
+        const select = $("adminVenueSelect");
+        const id = parseInt(select?.value || "0", 10) || 0;
+        if (!id){
+          setStatusText("adminVenueStatus", "Pick a venue first.", "err");
+          return;
+        }
+        setStatusText("adminVenueStatus", "Saving...", "");
+        try{
+          const resp = await jsonFetch("/admin/venue/assign", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({venue_id: id})
+          }, true);
+          if (resp.membership){
+            setBrandVenue(resp.membership);
+          }
+          $("adminVenueModal")?.classList.remove("show");
+          setStatusText("adminVenueStatus", "Assigned.", "ok");
+        }catch(err){
+          setStatusText("adminVenueStatus", err.message || "Failed to assign venue.", "err");
+        }
+      });
+      on("adminVenueCreate", "click", async () => {
+        const name = ($("adminVenueCreateName")?.value || "").trim();
+        if (!name){
+          setStatusText("adminVenueStatus", "Enter a venue name.", "err");
+          return;
+        }
+        setStatusText("adminVenueStatus", "Creating...", "");
+        try{
+          const resp = await jsonFetch("/admin/venues/create", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({name})
+          }, true);
+          if (resp.membership){
+            setBrandVenue(resp.membership);
+          }
+          $("adminVenueModal")?.classList.remove("show");
+          setStatusText("adminVenueStatus", "Created.", "ok");
+        }catch(err){
+          setStatusText("adminVenueStatus", err.message || "Failed to create venue.", "err");
+        }
+      });
       $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;

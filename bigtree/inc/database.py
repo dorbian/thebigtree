@@ -959,6 +959,7 @@ class Database:
         venue_id: Optional[int] = None,
         currency_name: Optional[str] = None,
         wallet_enabled: Optional[bool] = None,
+        created_by: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         metadata = metadata or {}
@@ -998,7 +999,7 @@ class Database:
             venue_id=venue_id,
             currency_name=currency_name,
             wallet_enabled=bool(wallet_enabled),
-            created_by=None,
+            created_by=created_by,
             metadata=metadata,
         )
 
@@ -3217,6 +3218,12 @@ class Database:
         """
         if not discord_id:
             return None
+        try:
+            member = self.get_user_venue(int(discord_id))
+            if member and member.get("venue_id"):
+                return int(member.get("venue_id"))
+        except Exception:
+            pass
         try:
             did = str(int(discord_id))
         except Exception:

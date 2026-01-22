@@ -189,6 +189,7 @@
 - Moved log output and refresh into the logs modal, with log type selection on the card.
 - Softened panel backgrounds and reduced non-dashboard panel width.
 - Updated overlay button styling to match dashboard buttons across panels.
+- Require admin venue assignment on login and attach venues to events/games.
 
 ### UI
 - Switched all site typography to sans-serif for consistency across pages.

@@ -6,6 +6,7 @@ from aiohttp import web
 import bigtree
 from bigtree.inc.webserver import route, DynamicWebServer
 from bigtree.inc.database import get_database
+from bigtree.inc import web_tokens
 
 from bigtree.webmods.user_area import _resolve_user
 
@@ -187,7 +188,17 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         enabled_games = []
 
     db = get_database()
+    created_by = _resolve_admin_user_id(req)
     # Default currency from venue when not explicitly set on the event
+    if (not venue_id) and created_by:
+        membership = db.get_user_venue(int(created_by))
+        if membership and membership.get("venue_id"):
+            try:
+                venue_id = int(membership.get("venue_id") or 0)
+            except Exception:
+                venue_id = 0
+    if not venue_id and not event_id and not event_code:
+        return web.json_response({"ok": False, "error": "venue required"}, status=400)
     if (not currency_name) and venue_id:
         v = db.get_venue(int(venue_id))
         if v and v.get("currency_name"):
@@ -199,6 +210,7 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         venue_id=venue_id or None,
         currency_name=currency_name,
         wallet_enabled=wallet_enabled,
+        created_by=created_by,
         metadata={
             "carry_over": carry_over,
             "background_url": background_url or None,
@@ -320,3 +332,23 @@ async def admin_event_wallet_set(req: web.Request) -> web.Response:
     return web.json_response(
         {"ok": True, "event_id": event_id, "user_id": int(user_id), "balance": int(balance)}
     )
+# ---- Admin auth helpers (web token) ----
+def _extract_token(req: web.Request) -> str:
+    auth = req.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+
+def _resolve_admin_user_id(req: web.Request) -> Optional[int]:
+    token = _extract_token(req)
+    if not token:
+        return None
+    doc = web_tokens.find_token(token) or {}
+    raw = doc.get("user_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except Exception:
+        return None

@@ -6,6 +6,7 @@ import json
 from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
+from bigtree.inc import web_tokens
 from bigtree.modules import tarot
 from bigtree.webmods.user_area import _resolve_user
 
@@ -18,6 +19,25 @@ def _get_view(req: web.Request) -> str:
 
 def _get_token(req: web.Request, body: Dict[str, Any]) -> str:
     return (req.headers.get("X-Cardgame-Token") or str(body.get("token") or "")).strip()
+
+def _extract_admin_token(req: web.Request) -> str:
+    auth = req.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+def _resolve_admin_user_id(req: web.Request) -> int | None:
+    token = _extract_admin_token(req)
+    if not token:
+        return None
+    doc = web_tokens.find_token(token) or {}
+    raw = doc.get("user_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except Exception:
+        return None
 
 def _normalize_currency(value: Any) -> str:
     return str(value or "").strip().lower()
@@ -150,6 +170,8 @@ async def create_session(req: web.Request):
                 created_by = int(created_by) if created_by is not None else None
             except Exception:
                 created_by = None
+        if created_by is None:
+            created_by = _resolve_admin_user_id(req)
         payload = dict(s or {})
         status_val = payload.get("status") or "created"
         active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")

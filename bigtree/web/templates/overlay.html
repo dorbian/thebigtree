@@ -250,7 +250,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
                 <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
               </svg>
-              <span id="brandUserName"></span>
+              <div class="brand-user-text">
+                <span id="brandUserName"></span>
+                <span class="brand-user-venue" id="brandUserVenue"></span>
+              </div>
             </div>
           </div>
 
@@ -2298,6 +2301,23 @@
           <div class="muted">Link is single-use. The session lasts 6 hours after activation.</div>
         </div>
         <div class="status" id="authTempStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="adminVenueModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Select venue</div>
+        </div>
+        <div class="modal-content">
+          <label for="adminVenueSelect">Existing venues</label>
+          <select id="adminVenueSelect"></select>
+          <button class="btn-ghost" id="adminVenueAssign" type="button">Join venue</button>
+          <div class="section-divider"></div>
+          <label for="adminVenueCreateName">Create venue</label>
+          <input id="adminVenueCreateName" placeholder="Venue name">
+          <button id="adminVenueCreate" type="button">Create venue</button>
+          <div class="status" id="adminVenueStatus">Pick a venue to continue.</div>
+        </div>
       </div>
     </div>
     <div class="modal" id="systemConfigModal">
