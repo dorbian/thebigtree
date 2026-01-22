@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 from datetime import datetime
+import asyncio
 
 import bigtree
 from bigtree.inc.webserver import route, DynamicWebServer
@@ -380,8 +381,8 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
     if not ev:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     try:
-        _ensure_event_house_session(db, ev, "slots", created_by)
-        _ensure_event_house_session(db, ev, "blackjack", created_by)
+        await asyncio.to_thread(_ensure_event_house_session, db, ev, "slots", created_by)
+        await asyncio.to_thread(_ensure_event_house_session, db, ev, "blackjack", created_by)
     except Exception:
         pass
     return web.json_response({"ok": True, "event": ev})
@@ -403,7 +404,7 @@ async def admin_events_end(req: web.Request) -> web.Response:
     if not db.end_event(event_id):
         return web.json_response({"ok": False, "error": "event not found or already ended"}, status=404)
     try:
-        _close_event_house_sessions(db, int(event_id))
+        await asyncio.to_thread(_close_event_house_sessions, db, int(event_id))
     except Exception:
         pass
     return web.json_response({"ok": True})
