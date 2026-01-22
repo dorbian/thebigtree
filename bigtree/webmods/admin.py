@@ -118,7 +118,7 @@ async def auth_me(req: web.Request):
         db = get_database()
         raw_id = doc.get("user_id") if doc else None
         if raw_id is not None:
-            venue = db.get_user_venue(int(raw_id))
+            venue = db.get_discord_venue(int(raw_id))
     except Exception:
         venue = None
     return web.json_response({
@@ -145,7 +145,7 @@ async def admin_venue_me(req: web.Request) -> web.Response:
     if not doc or not doc.get("user_id"):
         return web.json_response({"ok": False, "error": "user_id required"}, status=400)
     db = get_database()
-    membership = db.get_user_venue(int(doc.get("user_id")))
+    membership = db.get_discord_venue(int(doc.get("user_id")))
     return web.json_response({"ok": True, "membership": membership})
 
 
@@ -169,8 +169,8 @@ async def admin_venue_assign(req: web.Request) -> web.Response:
     venue = db.get_venue(venue_id)
     if not venue:
         return web.json_response({"ok": False, "error": "venue not found"}, status=404)
-    db.set_user_venue(int(doc.get("user_id")), venue_id, role="admin")
-    membership = db.get_user_venue(int(doc.get("user_id")))
+    db.set_discord_venue(int(doc.get("user_id")), venue_id, role="admin")
+    membership = db.get_discord_venue(int(doc.get("user_id")))
     return web.json_response({"ok": True, "membership": membership})
 
 
@@ -192,8 +192,8 @@ async def admin_venues_create(req: web.Request) -> web.Response:
     venue = db.upsert_venue(name, metadata=metadata)
     if not venue:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
-    db.set_user_venue(int(doc.get("user_id")), int(venue.get("id")), role="admin")
-    membership = db.get_user_venue(int(doc.get("user_id")))
+    db.set_discord_venue(int(doc.get("user_id")), int(venue.get("id")), role="admin")
+    membership = db.get_discord_venue(int(doc.get("user_id")))
     return web.json_response({"ok": True, "venue": venue, "membership": membership})
 
 @route("GET", "/api/auth/permissions", allow_public=True)

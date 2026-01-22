@@ -272,6 +272,17 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS venue_admins (
+                id SERIAL PRIMARY KEY,
+                venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+                discord_id BIGINT NOT NULL UNIQUE,
+                role TEXT NOT NULL DEFAULT 'admin',
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS game_players (
                 id SERIAL PRIMARY KEY,
                 game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
@@ -1638,6 +1649,40 @@ class Database:
                   updated_at = CURRENT_TIMESTAMP
             """,
             (venue_id, user_id, role),
+        )
+        return True
+
+    def get_discord_venue(self, discord_id: int) -> Optional[Dict[str, Any]]:
+        if not discord_id:
+            return None
+        row = self._fetchone(
+            """
+            SELECT va.venue_id, va.role, va.metadata AS membership_metadata,
+                   v.id AS id, v.name, v.currency_name, v.minimal_spend, v.background_image, v.deck_id, v.metadata,
+                   v.created_at, v.updated_at
+            FROM venue_admins va
+            JOIN venues v ON v.id = va.venue_id
+            WHERE va.discord_id = %s
+            LIMIT 1
+            """,
+            (int(discord_id),),
+        )
+        return dict(row) if row else None
+
+    def set_discord_venue(self, discord_id: int, venue_id: int, role: str = "admin") -> bool:
+        if not discord_id or not venue_id:
+            return False
+        role = (role or "admin").strip() or "admin"
+        self._execute(
+            """
+            INSERT INTO venue_admins (venue_id, discord_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (discord_id) DO UPDATE
+              SET venue_id = EXCLUDED.venue_id,
+                  role = COALESCE(venue_admins.role, EXCLUDED.role),
+                  updated_at = CURRENT_TIMESTAMP
+            """,
+            (venue_id, int(discord_id), role),
         )
         return True
 
@@ -3219,7 +3264,7 @@ class Database:
         if not discord_id:
             return None
         try:
-            member = self.get_user_venue(int(discord_id))
+            member = self.get_discord_venue(int(discord_id))
             if member and member.get("venue_id"):
                 return int(member.get("venue_id"))
         except Exception:

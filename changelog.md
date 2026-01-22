@@ -38,6 +38,7 @@
 - Wallet: show active/past events alongside games and add event details modal.
 - Events: show registered players list in overlay event modal.
 - Overlay: support admin login background via `system_configs.overlay.admin_background`.
+- Venues: store Discord admin venue memberships separately to avoid integer overflow.
 - Gallery: escape origin/title/artist fields so flair text renders as text.
 - Dashboard: add Gallery admin card with media/calendar/flair actions.
 - Venues: add delete controls in the admin list and normalize refresh button size.

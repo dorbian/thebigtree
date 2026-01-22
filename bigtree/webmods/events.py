@@ -351,7 +351,7 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
     created_by = _resolve_admin_user_id(req)
     # Default currency from venue when not explicitly set on the event
     if (not venue_id) and created_by:
-        membership = db.get_user_venue(int(created_by))
+        membership = db.get_discord_venue(int(created_by))
         if membership and membership.get("venue_id"):
             try:
                 venue_id = int(membership.get("venue_id") or 0)
