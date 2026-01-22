@@ -447,18 +447,15 @@
               </div>
             </div>
           </div>
-          <div class="dashboard-logs" id="dashboardLogsWrap">
+          <div class="dashboard-logs dashboard-admin-card" id="dashboardLogsWrap">
             <div class="dashboard-logs-header">
               <div>
                 <strong>Logs</strong>
                 <span class="muted">Boot, auth, and upload activity.</span>
+                <span class="muted" id="dashboardLogsCurrent">Current: boot</span>
               </div>
               <div class="dashboard-logs-actions">
-                <div class="dashboard-logs-tabs">
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsBoot">Boot</button>
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsAuth">Auth</button>
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsUpload">Uploads</button>
-                </div>
+                <button type="button" class="btn-ghost" id="dashboardLogsSelect">Select log</button>
                 <button type="button" class="dashboard-logs-refresh" id="dashboardLogsRefresh" title="Refresh" aria-label="Refresh">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
@@ -1737,6 +1734,23 @@
               <button class="btn-ghost" id="eventGamesCancel" type="button">Cancel</button>
               <button id="eventGamesSave" type="button">Save</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="dashboardLogsModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Select log stream</div>
+          <button class="btn-ghost icon-btn" id="dashboardLogsClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="dash-blocks">
+            <button type="button" class="btn-ghost" id="dashboardLogsBoot">Boot logs</button>
+            <button type="button" class="btn-ghost" id="dashboardLogsAuth">Auth logs</button>
+            <button type="button" class="btn-ghost" id="dashboardLogsUpload">Upload logs</button>
           </div>
         </div>
       </div>

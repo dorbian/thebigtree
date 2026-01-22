@@ -225,6 +225,10 @@
           const safeKind = ["boot", "auth", "upload"].includes(kind) ? kind : "boot";
           const resp = await jsonFetch(`/admin/logs?kind=${safeKind}&lines=200`, {method: "GET"});
           dashboardLogsKind = resp.kind || safeKind;
+          const currentLabel = $("dashboardLogsCurrent");
+          if (currentLabel){
+            currentLabel.textContent = `Current: ${dashboardLogsKind}`;
+          }
           renderDashboardLogs(resp.entries || [], dashboardLogsKind);
         }catch(err){
           if (body){
@@ -3431,9 +3435,28 @@ This will block new games from being created in this event, but existing games c
       on("systemXivSave", "click", () => saveSystemConfig("xivauth"));
       on("systemOpenAISave", "click", () => saveSystemConfig("openai"));
       on("dashboardStatsRefresh", "click", () => loadDashboardStats(true));
-      on("dashboardLogsBoot", "click", () => loadDashboardLogs("boot", true));
-      on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
-      on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
+      on("dashboardLogsSelect", "click", () => $("dashboardLogsModal")?.classList.add("show"));
+      on("dashboardLogsClose", "click", () => $("dashboardLogsModal")?.classList.remove("show"));
+      on("dashboardLogsModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "dashboardLogsModal"){
+          ev.currentTarget.classList.remove("show");
+        }
+      });
+      on("dashboardLogsBoot", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: boot";
+        $("dashboardLogsModal")?.classList.remove("show");
+        loadDashboardLogs("boot", true);
+      });
+      on("dashboardLogsAuth", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: auth";
+        $("dashboardLogsModal")?.classList.remove("show");
+        loadDashboardLogs("auth", true);
+      });
+      on("dashboardLogsUpload", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: upload";
+        $("dashboardLogsModal")?.classList.remove("show");
+        loadDashboardLogs("upload", true);
+      });
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
       on("pluginRepoCopy", "click", async () => {
         const url = ($("pluginRepoUrl")?.textContent || "").trim();

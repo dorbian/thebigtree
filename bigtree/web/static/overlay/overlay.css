@@ -499,6 +499,7 @@
 
       .dashboard-admin-actions{
         display:flex;
+        flex-direction:column;
         flex-wrap:wrap;
         gap:10px;
         margin:10px 0 8px;
@@ -508,8 +509,7 @@
       /* Cap individual actions at ~20 characters wide and center their labels. */
       .dashboard-admin-actions > a,
       .dashboard-admin-actions > button{
-        flex:1 1 20ch;
-        max-width:20ch;
+        width:100%;
         text-align:center;
         justify-content:center;
       }
@@ -546,6 +546,10 @@
 
       .dashboard-plugin-card{
         margin-top:16px;
+        border:1px solid rgba(255,255,255,.12);
+        border-radius:12px;
+        padding:12px;
+        background:rgba(8,12,16,.55);
       }
       .dashboard-plugin-instruction{
         color:var(--muted);
