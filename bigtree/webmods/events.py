@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from aiohttp import web
+from datetime import datetime
 
 import bigtree
 from bigtree.inc.webserver import route, DynamicWebServer
 from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
+from bigtree.modules import cardgames as cardgames_mod
 
 from bigtree.webmods.user_area import _resolve_user
 
@@ -116,7 +118,13 @@ async def event_games(req: web.Request) -> web.Response:
             payload = {}
         game_type = str(payload.get("game_id") or payload.get("gameId") or module or "game").lower()
         if enabled_set:
-            if module not in enabled_set and game_type not in enabled_set:
+            always_open = False
+            meta = g.get("metadata") or {}
+            try:
+                always_open = bool(meta.get("always_open"))
+            except Exception:
+                always_open = False
+            if not always_open and module not in enabled_set and game_type not in enabled_set:
                 continue
         join_code = g.get("join_code")
         join_url = ""
@@ -139,6 +147,158 @@ async def event_games(req: web.Request) -> web.Response:
             "active": bool(g.get("active")),
         })
     return web.json_response({"ok": True, "event": ev, "games": out})
+
+
+def _find_event_house_game(db, event_id: int, game_id: str):
+    try:
+        event_id = int(event_id)
+    except Exception:
+        return None
+    row = db._fetchone(
+        """
+        SELECT *
+        FROM games
+        WHERE event_id = %s
+          AND module = 'cardgames'
+          AND lower(payload->>'game_id') = lower(%s)
+          AND (metadata->>'always_open') = 'true'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (event_id, str(game_id)),
+    )
+    if not row:
+        return None
+    game = db._format_game_row(dict(row))
+    db._attach_game_summary(game)
+    return game
+
+
+def _ensure_event_house_session(db, ev: dict, game_id: str, created_by: int | None):
+    if not ev or (ev.get("status") or "active") != "active":
+        return None
+    event_id = int(ev.get("id") or 0)
+    if not event_id:
+        return None
+    venue_id = ev.get("venue_id")
+    venue = db.get_venue(int(venue_id)) if venue_id else None
+    currency = ev.get("currency_name") or (venue.get("currency_name") if venue else None)
+    try:
+        pot = int((venue.get("minimal_spend") if venue else 0) or 0)
+    except Exception:
+        pot = 0
+    meta = ev.get("metadata") or {}
+    background_url = meta.get("background_url") or meta.get("background") or (venue.get("background_image") if venue else None)
+    deck_id = (venue.get("deck_id") if venue else None)
+
+    existing = _find_event_house_game(db, event_id, game_id)
+    session = None
+    if existing:
+        payload = existing.get("payload") or {}
+        session_id = payload.get("session_id")
+        join_code = payload.get("join_code")
+        if session_id:
+            session = cardgames_mod.get_session_by_id(str(session_id))
+        if not session and join_code:
+            session = cardgames_mod.get_session_by_join_code(str(join_code))
+        if session and session.get("status") != "live":
+            try:
+                cardgames_mod.start_session(session.get("session_id"), session.get("priestess_token") or "")
+                session = cardgames_mod.get_session_by_id(session.get("session_id")) or session
+            except Exception:
+                pass
+        if not session:
+            existing = None
+
+    if not existing:
+        session = cardgames_mod.create_session(
+            game_id,
+            pot=pot,
+            deck_id=deck_id,
+            background_url=background_url,
+            currency=currency,
+            status="created",
+        )
+        try:
+            cardgames_mod.start_session(session.get("session_id"), session.get("priestess_token") or "")
+            session = cardgames_mod.get_session_by_id(session.get("session_id")) or session
+        except Exception:
+            pass
+
+    if not session:
+        return None
+
+    payload = dict(session or {})
+    metadata = {
+        "currency": currency or payload.get("currency"),
+        "pot": int(pot or payload.get("pot") or 0),
+        "event_code": ev.get("event_code"),
+        "always_open": True,
+        "single_player": True,
+        "join_code": payload.get("join_code"),
+    }
+    db.upsert_game(
+        game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
+        module="cardgames",
+        payload=payload,
+        title=payload.get("game_id"),
+        created_by=created_by or ev.get("created_by"),
+        venue_id=venue_id or None,
+        created_at=db._as_datetime(payload.get("created_at")),
+        ended_at=db._as_datetime(payload.get("updated_at")),
+        status=payload.get("status") or "live",
+        active=True,
+        metadata=metadata,
+        run_source="event",
+    )
+    return payload
+
+
+def _close_event_house_sessions(db, event_id: int):
+    if not event_id:
+        return
+    rows = db._execute(
+        """
+        SELECT *
+        FROM games
+        WHERE event_id = %s
+          AND module = 'cardgames'
+          AND (metadata->>'always_open') = 'true'
+        """,
+        (int(event_id),),
+        fetch=True,
+    ) or []
+    for row in rows:
+        game = db._format_game_row(dict(row))
+        payload = game.get("payload") or {}
+        session_id = payload.get("session_id")
+        join_code = payload.get("join_code")
+        session = None
+        if session_id:
+            session = cardgames_mod.get_session_by_id(str(session_id))
+        if not session and join_code:
+            session = cardgames_mod.get_session_by_join_code(str(join_code))
+        if session and session.get("status") != "finished":
+            try:
+                cardgames_mod.finish_session(session.get("session_id"), session.get("priestess_token") or "")
+                session = cardgames_mod.get_session_by_id(session.get("session_id")) or session
+            except Exception:
+                pass
+        payload = dict(session or payload)
+        db.upsert_game(
+            game_id=str(payload.get("session_id") or payload.get("join_code") or game.get("game_id") or ""),
+            module="cardgames",
+            payload=payload,
+            title=payload.get("game_id") or game.get("title"),
+            created_by=game.get("created_by"),
+            venue_id=game.get("venue_id"),
+            created_at=db._as_datetime(payload.get("created_at")) or db._as_datetime(game.get("created_at")),
+            ended_at=datetime.utcnow(),
+            status=payload.get("status") or "ended",
+            active=False,
+            metadata=game.get("metadata") or {},
+            run_source="event",
+        )
 
 
 # ---------------- admin/host management ----------------
@@ -219,6 +379,11 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
     )
     if not ev:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
+    try:
+        _ensure_event_house_session(db, ev, "slots", created_by)
+        _ensure_event_house_session(db, ev, "blackjack", created_by)
+    except Exception:
+        pass
     return web.json_response({"ok": True, "event": ev})
 
 
@@ -237,6 +402,10 @@ async def admin_events_end(req: web.Request) -> web.Response:
     db = get_database()
     if not db.end_event(event_id):
         return web.json_response({"ok": False, "error": "event not found or already ended"}, status=404)
+    try:
+        _close_event_house_sessions(db, int(event_id))
+    except Exception:
+        pass
     return web.json_response({"ok": True})
 
 

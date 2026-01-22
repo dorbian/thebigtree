@@ -190,6 +190,7 @@
 - Softened panel backgrounds and reduced non-dashboard panel width.
 - Updated overlay button styling to match dashboard buttons across panels.
 - Require admin venue assignment on login and attach venues to events/games.
+- Auto-create always-open slots/blackjack sessions for active events and close them when events end.
 
 ### UI
 - Switched all site typography to sans-serif for consistency across pages.
