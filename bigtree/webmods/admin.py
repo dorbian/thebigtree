@@ -148,6 +148,8 @@ async def admin_venue_me(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "user_id required"}, status=400)
     db = get_database()
     membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
     return web.json_response({"ok": True, "membership": membership})
 
 
@@ -173,6 +175,8 @@ async def admin_venue_assign(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "venue not found"}, status=404)
     db.set_discord_venue(int(doc.get("user_id")), venue_id, role="admin")
     membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
     return web.json_response({"ok": True, "membership": membership})
 
 
@@ -196,6 +200,8 @@ async def admin_venues_create(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     db.set_discord_venue(int(doc.get("user_id")), int(venue.get("id")), role="admin")
     membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
     return web.json_response({"ok": True, "venue": venue, "membership": membership})
 
 @route("GET", "/api/auth/permissions", allow_public=True)
