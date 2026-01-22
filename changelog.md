@@ -178,6 +178,7 @@
 - Moved gallery announcements into the left menu and switched to a two-column layout.
 - Updated gallery modal to place details below the artwork and darken the overlay.
 - Styled modal details as a fixed-width gallery card under the image.
+- Locked modal details to the selected image and refreshed vote counts in-modal.
 
 ### Overlay
 - Added elfministration routes (with redirects from legacy overlay routes).

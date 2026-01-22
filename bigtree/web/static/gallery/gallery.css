@@ -734,6 +734,11 @@
     font-size:16px;
     cursor:pointer;
     flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+    padding:0;
   }
   .image-modal .nav{
     position:absolute;
@@ -915,8 +920,8 @@
   .detail-body{
     width:15vw;
     min-width:180px;
-    background:#f7f3ea;
-    border:3px double #cbbfa8;
+    background:#eee8dc;
+    border:3px double #c2b59c;
     border-radius:16px;
     padding:16px;
     display:flex;
@@ -954,8 +959,8 @@
     color:#2f6f52;
   }
   .detail-body .close{
-    background:#fffdf7;
-    border-color:#cbbfa8;
+    background:#f3eee4;
+    border-color:#c2b59c;
     color:#2b3a32;
   }
   .detail-vote-title{
