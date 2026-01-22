@@ -4,7 +4,6 @@ import json
 import os
 import secrets
 import string
-import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, date
@@ -197,6 +196,39 @@ class Database:
                 claimed_at TIMESTAMPTZ
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS cardgame_sessions (
+                session_id TEXT PRIMARY KEY,
+                join_code TEXT UNIQUE NOT NULL,
+                priestess_token TEXT,
+                player_token TEXT,
+                game_id TEXT NOT NULL,
+                deck_id TEXT,
+                background_url TEXT,
+                background_artist_id TEXT,
+                background_artist_name TEXT,
+                currency TEXT,
+                status TEXT NOT NULL DEFAULT 'created',
+                pot BIGINT NOT NULL DEFAULT 0,
+                winnings BIGINT NOT NULL DEFAULT 0,
+                state JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS cardgame_events (
+                id BIGSERIAL PRIMARY KEY,
+                session_id TEXT NOT NULL REFERENCES cardgame_sessions(session_id) ON DELETE CASCADE,
+                ts TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                type TEXT NOT NULL,
+                data JSONB DEFAULT '{}'::jsonb
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_join_code ON cardgame_sessions(join_code)",
+            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_game_id ON cardgame_sessions(game_id)",
+            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_status ON cardgame_sessions(status)",
+            "CREATE INDEX IF NOT EXISTS idx_cardgame_events_session ON cardgame_events(session_id, id)",
             """
             CREATE TABLE IF NOT EXISTS venues (
                 id SERIAL PRIMARY KEY,
@@ -3129,52 +3161,7 @@ class Database:
                 self._store_game_player(session_id, player, role="player")
 
     def _migrate_cardgames(self):
-        card_dir = self._resolve_cardgames_dir()
-        db_path = os.path.join(card_dir, "cardgames.db")
-        if not os.path.exists(db_path):
-            logger.info("[database] cardgames db missing: %s", db_path)
-            return
-        logger.info("[database] importing cardgames sessions from %s", db_path)
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            for row in conn.execute("SELECT * FROM sessions"):
-                data = dict(row)
-                session_id = data.get("session_id") or data.get("game_id")
-                if not session_id:
-                    continue
-                status = data.get("status") or data.get("stage") or "unknown"
-                active = status.lower() not in ("finished", "ended", "complete", "closed")
-                created_at = self._as_datetime(data.get("created_at"))
-                ended_at = self._as_datetime(data.get("updated_at"))
-                payload = dict(row)
-                state_json = payload.get("state_json")
-                if isinstance(state_json, str):
-                    try:
-                        payload["state_json_parsed"] = json.loads(state_json)
-                    except Exception:
-                        pass
-                metadata = {
-                    "currency": data.get("currency"),
-                    "pot": data.get("pot"),
-                    "status": status,
-                }
-                self._store_game(
-                    game_id=session_id,
-                    module="cardgames",
-                    payload=payload,
-                    title=payload.get("game_id"),
-                    created_at=created_at,
-                    ended_at=ended_at,
-                    status=status,
-                    active=active,
-                    metadata=metadata,
-                    run_source="import",
-                )
-                for player in self._extract_cardgame_players(payload):
-                    self._store_game_player(session_id, player, role="player")
-        finally:
-            conn.close()
+        logger.info("[database] cardgames migration skipped (Postgres-only mode)")
 
     # ---------------- helpers ----------------
     def _store_game(

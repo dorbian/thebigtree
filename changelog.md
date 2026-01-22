@@ -39,6 +39,8 @@
 - Events: show registered players list in overlay event modal.
 - Overlay: support admin login background via `system_configs.overlay.admin_background`.
 - Venues: store Discord admin venue memberships separately to avoid integer overflow.
+- Cardgames: switch SQLite to WAL and reduce connect timeouts to prevent session-create stalls.
+- Cardgames: migrate session/event storage to Postgres and drop SQLite dependency.
 - Gallery: escape origin/title/artist fields so flair text renders as text.
 - Dashboard: add Gallery admin card with media/calendar/flair actions.
 - Venues: add delete controls in the admin list and normalize refresh button size.

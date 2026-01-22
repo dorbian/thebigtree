@@ -2365,9 +2365,27 @@ This will block new games from being created in this event, but existing games c
           handleUnauthorized();
           throw new Error("Unauthorized");
         }
-        const data = await res.json().catch(() => ({}));
+        const contentType = (res.headers.get("content-type") || "").toLowerCase();
+        const text = await res.text();
+        let data = {};
+        if (contentType.includes("application/json")){
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            data = {};
+          }
+        }else{
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            data = {};
+          }
+        }
         if (!res.ok){
-          throw new Error(data.error || "Request failed");
+          throw new Error((data && data.error) || "Request failed");
+        }
+        if (!contentType.includes("application/json") && !text.trim().startsWith("{")){
+          throw new Error("Unexpected response from API. Check gateway/proxy routing.");
         }
         return data;
       }
