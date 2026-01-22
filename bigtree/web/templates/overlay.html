@@ -453,10 +453,10 @@
               </div>
               <p class="dashboard-admin-note">Boot, auth, and upload activity. <span id="dashboardLogsCurrent">Current: boot</span></p>
               <div class="dashboard-admin-actions">
-                <button type="button" class="btn-ghost" id="dashboardLogsSelect"><span>Select log</span></button>
-                <button type="button" class="btn-ghost" id="dashboardLogsRefresh"><span>Refresh</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsBoot"><span>Boot logs</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsAuth"><span>Auth logs</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsUpload"><span>Upload logs</span></button>
               </div>
-              <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
             </div>
           </div>
         </section>
@@ -1733,19 +1733,18 @@
       </div>
     </div>
     <div class="modal" id="dashboardLogsModal">
-      <div class="modal-card">
+      <div class="modal-card modal-card--wide">
         <div class="modal-header">
-          <div class="modal-title">Select log stream</div>
+          <div class="modal-title">Logs</div>
           <button class="btn-ghost icon-btn" id="dashboardLogsClose" title="Close" aria-label="Close">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
           </button>
         </div>
         <div class="modal-body">
-          <div class="dash-blocks">
-            <button type="button" class="btn-ghost" id="dashboardLogsBoot">Boot logs</button>
-            <button type="button" class="btn-ghost" id="dashboardLogsAuth">Auth logs</button>
-            <button type="button" class="btn-ghost" id="dashboardLogsUpload">Upload logs</button>
+          <div class="row" style="justify-content:flex-end; margin-bottom:10px;">
+            <button type="button" class="btn-ghost" id="dashboardLogsRefresh">Refresh</button>
           </div>
+          <div class="dash-changelog" id="dashboardLogsBody">Pick a log stream.</div>
         </div>
       </div>
     </div>

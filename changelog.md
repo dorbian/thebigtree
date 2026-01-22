@@ -186,6 +186,9 @@
 - Simplified plugin setup with copyable link card in dashboard.
 - Stacked dashboard action buttons vertically and moved log selection into a modal card.
 - Matched plugin setup and logs panels to the dashboard card grid.
+- Moved log output and refresh into the logs modal, with log type selection on the card.
+- Softened panel backgrounds and reduced non-dashboard panel width.
+- Updated overlay button styling to match dashboard buttons across panels.
 
 ### UI
 - Switched all site typography to sans-serif for consistency across pages.

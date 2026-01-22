@@ -424,7 +424,7 @@
         gap:18px;
       }
       .panel{
-        background:rgba(10,16,28,.72);
+        background:rgba(8,12,16,.6);
         border:1px solid var(--line);
         border-radius:var(--radius);
         padding:18px 18px 16px;
@@ -432,6 +432,11 @@
         position:relative;
         overflow:hidden;
         animation:rise .6s ease both;
+      }
+      .panel:not(.dashboard){
+        max-width:1200px;
+        margin-left:auto;
+        margin-right:auto;
       }
       .panel.dashboard{
         padding:24px;
@@ -738,7 +743,7 @@
         content:"";
         position:absolute;
         inset:0;
-        background:linear-gradient(120deg, rgba(157,224,125,.12), transparent 45%);
+        background:linear-gradient(120deg, rgba(157,224,125,.05), transparent 45%);
         pointer-events:none;
       }
       .panel h2{
@@ -1282,17 +1287,21 @@
       textarea{min-height:70px;resize:vertical}
       button{
         cursor:pointer;
-        background:linear-gradient(135deg, rgba(157,224,125,.9), rgba(60,207,142,.75));
-        color:#0a1510;
-        border:none;
-        font-weight:700;
-        letter-spacing:.04em;
-        transition:transform .12s ease, box-shadow .12s ease;
+        background:rgba(255,255,255,.03);
+        color:var(--ink);
+        border:1px solid rgba(255,255,255,.15);
+        font-weight:600;
+        letter-spacing:.02em;
+        transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
       }
-      button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(0,0,0,.25)}
+      button:hover{
+        transform:translateY(-1px);
+        box-shadow:0 8px 18px rgba(0,0,0,.25);
+        border-color:rgba(107,212,162,.5);
+      }
       .btn-ghost{
-        background:transparent;
-        border:1px solid var(--line);
+        background:rgba(255,255,255,.02);
+        border:1px solid rgba(255,255,255,.15);
         color:var(--ink);
       }
       #bingoPanel input,

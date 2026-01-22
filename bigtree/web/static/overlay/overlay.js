@@ -3435,7 +3435,6 @@ This will block new games from being created in this event, but existing games c
       on("systemXivSave", "click", () => saveSystemConfig("xivauth"));
       on("systemOpenAISave", "click", () => saveSystemConfig("openai"));
       on("dashboardStatsRefresh", "click", () => loadDashboardStats(true));
-      on("dashboardLogsSelect", "click", () => $("dashboardLogsModal")?.classList.add("show"));
       on("dashboardLogsClose", "click", () => $("dashboardLogsModal")?.classList.remove("show"));
       on("dashboardLogsModal", "click", (ev) => {
         if (ev.target && ev.target.id === "dashboardLogsModal"){
@@ -3444,17 +3443,17 @@ This will block new games from being created in this event, but existing games c
       });
       on("dashboardLogsBoot", "click", () => {
         $("dashboardLogsCurrent").textContent = "Current: boot";
-        $("dashboardLogsModal")?.classList.remove("show");
+        $("dashboardLogsModal")?.classList.add("show");
         loadDashboardLogs("boot", true);
       });
       on("dashboardLogsAuth", "click", () => {
         $("dashboardLogsCurrent").textContent = "Current: auth";
-        $("dashboardLogsModal")?.classList.remove("show");
+        $("dashboardLogsModal")?.classList.add("show");
         loadDashboardLogs("auth", true);
       });
       on("dashboardLogsUpload", "click", () => {
         $("dashboardLogsCurrent").textContent = "Current: upload";
-        $("dashboardLogsModal")?.classList.remove("show");
+        $("dashboardLogsModal")?.classList.add("show");
         loadDashboardLogs("upload", true);
       });
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
