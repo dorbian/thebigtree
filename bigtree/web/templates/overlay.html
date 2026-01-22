@@ -430,40 +430,35 @@
               </div>
               <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
             </div>
-          </div>
-          <div class="dashboard-admin-card">
-            <div class="dashboard-admin-header">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm1.2-7.4-.9.9A2.8 2.8 0 0 0 13 13h-2v-.5a4 4 0 0 1 1.2-2.8l1.2-1.2A1.8 1.8 0 0 0 12 5.5a1.9 1.9 0 0 0-2 1.8H8a3.9 3.9 0 0 1 8-.3 3.6 3.6 0 0 1-1.8 2.6z"/>
-              </svg>
-              <div class="dashboard-admin-title">FFXIV plugin setup</div>
-            </div>
-            <p class="dashboard-admin-note">Point XIVLauncher to the Forest plugin repository.</p>
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm1.2-7.4-.9.9A2.8 2.8 0 0 0 13 13h-2v-.5a4 4 0 0 1 1.2-2.8l1.2-1.2A1.8 1.8 0 0 0 12 5.5a1.9 1.9 0 0 0-2 1.8H8a3.9 3.9 0 0 1 8-.3 3.6 3.6 0 0 1-1.8 2.6z"/>
+                </svg>
+                <div class="dashboard-admin-title">FFXIV plugin setup</div>
+              </div>
             <div class="dashboard-plugin-card">
-              <div class="dashboard-plugin-instruction">XIVLauncher -> Settings -> Dalamud -> Experimental -> Custom Plugin Repositories</div>
+              <p class="dashboard-admin-note">Add the Forest to XIVLauncher.
+              <div class="dashboard-plugin-instruction">XIVLauncher -> Settings<br> Dalamud -> Experimental <br> Custom Plugin Repositories</div>
               <div class="dashboard-plugin-row">
                 <div class="dashboard-plugin-url" id="pluginRepoUrl">https://rites.thebigtree.life/with.leaf</div>
                 <button class="btn-ghost" id="pluginRepoCopy" type="button">Copy link</button>
               </div>
             </div>
-          </div>
-          <div class="dashboard-logs dashboard-admin-card" id="dashboardLogsWrap">
-            <div class="dashboard-logs-header">
-              <div>
-                <strong>Logs</strong>
-                <span class="muted">Boot, auth, and upload activity.</span>
-                <span class="muted" id="dashboardLogsCurrent">Current: boot</span>
+            <div class="dashboard-logs dashboard-admin-card" id="dashboardLogsWrap">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 4h16v4H4V4zm0 6h16v10H4V10zm3 3v4h2v-4H7zm4 0v4h2v-4h-2zm4 0v4h2v-4h-2z"/>
+                </svg>
+                <div class="dashboard-admin-title">Logs</div>
               </div>
-              <div class="dashboard-logs-actions">
-                <button type="button" class="btn-ghost" id="dashboardLogsSelect">Select log</button>
-                <button type="button" class="dashboard-logs-refresh" id="dashboardLogsRefresh" title="Refresh" aria-label="Refresh">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                  </svg>
-                </button>
+              <p class="dashboard-admin-note">Boot, auth, and upload activity. <span id="dashboardLogsCurrent">Current: boot</span></p>
+              <div class="dashboard-admin-actions">
+                <button type="button" class="btn-ghost" id="dashboardLogsSelect"><span>Select log</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsRefresh"><span>Refresh</span></button>
               </div>
+              <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
             </div>
-            <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
           </div>
         </section>
 

@@ -544,26 +544,21 @@
         z-index:1;
       }
 
-      .dashboard-plugin-card{
-        margin-top:16px;
-        border:1px solid rgba(255,255,255,.12);
-        border-radius:12px;
-        padding:12px;
-        background:rgba(8,12,16,.55);
-      }
       .dashboard-plugin-instruction{
         color:var(--muted);
         font-size:12px;
         line-height:1.5;
-        margin-bottom:10px;
+        margin-top:8px;
       }
       .dashboard-plugin-row{
         display:flex;
         align-items:center;
         gap:10px;
         flex-wrap:wrap;
+        margin-top:10px;
       }
       .dashboard-plugin-url{
+        flex:1 1 260px;
         padding:8px 10px;
         border-radius:12px;
         border:1px solid rgba(255,255,255,.12);
