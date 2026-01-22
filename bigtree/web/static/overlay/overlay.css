@@ -787,6 +787,7 @@
       #tarotDecksPanel{
         padding:16px;
         font-size:12px;
+        max-width:1600px;
       }
       #tarotDecksPanel h2{
         font-size:17px;
@@ -1317,8 +1318,8 @@
       #bingoPanel input,
       #bingoPanel select,
       #bingoPanel button{
-        font-size:12px;
-        padding:6px 8px;
+        font-size:11px;
+        padding:5px 7px;
       }
       #bingoPanel .btn-ghost{
         font-weight:600;
@@ -1326,6 +1327,31 @@
       #bingoPanel{
         position:relative;
         overflow:hidden;
+      }
+      #bOwners{
+        max-height:720px;
+      }
+      .owners-table{
+        font-size:0.78rem;
+        line-height:1.3;
+      }
+      .owners-table th,
+      .owners-table td{
+        padding:4px 8px;
+      }
+      .owner-actions{
+        gap:6px;
+      }
+      .owner-actions .icon-action{
+        padding:4px;
+      }
+      .owner-actions .icon-action svg{
+        width:14px;
+        height:14px;
+      }
+      .owner-actions .mini-btn{
+        padding:4px 8px;
+        font-size:0.76rem;
       }
       #bingoPanel::before{
         content:"";

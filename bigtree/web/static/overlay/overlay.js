@@ -3180,6 +3180,14 @@ This will block new games from being created in this event, but existing games c
           updateMediaUploadDropDisplay(mediaUploadFile);
           updateMediaUploadState();
         }else if (which === "cardgameSessions"){
+          const defaults = getCardgameDefaults();
+          if (defaults){
+            setCardgameDefaults(defaults);
+          }else{
+            if ($("cgGameSelect") && !$("cgGameSelect").value) $("cgGameSelect").value = "blackjack";
+            if ($("cgPot") && !$("cgPot").value) $("cgPot").value = 0;
+            if ($("cgCurrency") && !$("cgCurrency").value) $("cgCurrency").value = "gil";
+          }
           loadCardgameDecks();
           loadCardgameSessions();
         }else if (which === "gamesList"){
@@ -6235,7 +6243,7 @@ function getOwnerClaimStatus(ownerName){
             opt.value = s.join_code || "";
             const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
             const currency = s.currency || "gil";
-            opt.textContent = `${s.join_code || "-"} | ${s.game_id || "-"} | ${s.deck_id || "-"} | ${s.status || "-"} | pot ${s.pot || 0} ${currency} | ${created}`;
+            opt.textContent = `${s.game_id || "-"} | ${s.join_code || "-"} | ${s.deck_id || "-"} | ${s.status || "-"} | pot ${s.pot || 0} ${currency} | ${created}`;
             opt.dataset.token = s.priestess_token || "";
             opt.dataset.sessionId = s.session_id || "";
             opt.dataset.pot = s.pot || 0;
