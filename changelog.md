@@ -52,6 +52,7 @@
 - Wallet: remove join-key label and align user pill sizing with header actions.
 - Wallet: combine event wallet balance with currency, make history scrollable, and keep event games inside event details with player links.
 - Cardgames: hide artist panel when no card credits and avoid defaulting background credits to Forest.
+- Events: allow event-created blackjack sessions to restart rounds from the player view.
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
 - Backend: persist XIVAuth/OpenAI config in Postgres, import the INI defaults on first run, and expose a management API plus overlay UI to edit those settings.
 - Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.

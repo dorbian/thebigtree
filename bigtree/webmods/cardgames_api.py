@@ -28,6 +28,11 @@ def _extract_admin_token(req: web.Request) -> str:
 
 async def _send_ws_state(ws: web.WebSocketResponse, session: Dict[str, Any], view: str, token: str):
     state = cg.get_state(session, view=view, token=token)
+    try:
+        db = get_database()
+        state["session"]["event_autoplay"] = _get_event_autoplay(db, session)
+    except Exception:
+        pass
     await ws.send_json({"type": "STATE", "state": state})
 
 @route("GET", "/ws/cardgames/{game_id}/sessions/{join_code}", allow_public=True)
@@ -98,6 +103,35 @@ def _resolve_admin_user_id(req: web.Request) -> int | None:
 
 def _normalize_currency(value: Any) -> str:
     return str(value or "").strip().lower()
+
+def _get_event_autoplay(db, session: Dict[str, Any]) -> bool:
+    if not session:
+        return False
+    session_id = str(session.get("session_id") or "")
+    join_code = str(session.get("join_code") or "")
+    row = db._fetchone(
+        """
+        SELECT event_id, metadata
+        FROM games
+        WHERE module = 'cardgames'
+          AND (
+            lower(game_id) = lower(%s)
+            OR lower(payload->>'join_code') = lower(%s)
+            OR lower(payload->>'joinCode') = lower(%s)
+            OR lower(payload->>'join') = lower(%s)
+          )
+        LIMIT 1
+        """,
+        (session_id, join_code, join_code, join_code),
+    )
+    if not row:
+        return False
+    try:
+        event_id = int(row.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    meta = row.get("metadata") or {}
+    return bool(event_id > 0 and meta.get("always_open") and meta.get("single_player"))
 
 def _sync_game_record(db, payload: Dict[str, Any]) -> None:
     if not payload:
@@ -353,6 +387,7 @@ async def get_state(req: web.Request):
     state = cg.get_state(s, view=view, token=token)
     try:
         db = get_database()
+        state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
         ctx = db.get_game_wallet_context(join_code=s.get("join_code"), game_id=s.get("session_id"))
         wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
         wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
@@ -388,7 +423,13 @@ async def stream_events(req: web.Request):
     await resp.prepare(req)
     last_seq = 0
     token = req.headers.get("X-Cardgame-Token") or ""
-    initial = {"type": "STATE", "state": cg.get_state(s, view=view, token=token)}
+    initial_state = cg.get_state(s, view=view, token=token)
+    try:
+        db = get_database()
+        initial_state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
+    except Exception:
+        pass
+    initial = {"type": "STATE", "state": initial_state}
     await resp.write(f"data: {json.dumps(initial)}\n\n".encode("utf-8"))
     session_id = s["session_id"]
     try:
@@ -475,6 +516,20 @@ async def player_action(req: web.Request):
                     {"ok": False, "error": "no balance", "redirect": "/gallery", "balance": bal},
                     status=409,
                 )
+
+    if game_id == "blackjack" and action == "start_round":
+        db = get_database()
+        if not _get_event_autoplay(db, s0):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
+        state_status = ((s0.get("state") or {}).get("status") or "").strip().lower()
+        if state_status and state_status != "finished":
+            return web.json_response({"ok": False, "error": "round not finished"}, status=409)
+        try:
+            await _run_blocking(cg.restart_blackjack_session, s0.get("session_id"))
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        refreshed = await _run_blocking(cg.get_session_by_id, s0.get("session_id"))
+        return web.json_response({"ok": True, "state": cg.get_state(refreshed or s0, view="player", token=token)})
     # If we need to debit a bet, do so BEFORE the game reducer runs.
     if needs_wallet and user and game_id == "crapslite" and action == "bet":
         try:

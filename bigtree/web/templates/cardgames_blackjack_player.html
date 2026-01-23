@@ -68,6 +68,7 @@
       <button id="standBtn">Hold</button>
       <button id="doubleBtn">Double</button>
       <button id="splitBtn">Split</button>
+      <button id="restartBtn" style="display:none;">Play again</button>
     </div>
     <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
@@ -102,6 +103,7 @@
   const standBtn = document.getElementById("standBtn");
   const doubleBtn = document.getElementById("doubleBtn");
   const splitBtn = document.getElementById("splitBtn");
+  const restartBtn = document.getElementById("restartBtn");
   const userBox = document.getElementById("userBox");
   const userName = document.getElementById("userName");
   const assignBtn = document.getElementById("assignBtn");
@@ -367,6 +369,11 @@
     standBtn.disabled = !canAct;
     doubleBtn.disabled = !canDouble;
     splitBtn.disabled = !canSplit;
+    if (restartBtn){
+      const canRestart = stateStatus === "finished" && !!(state.session && state.session.event_autoplay);
+      restartBtn.style.display = canRestart ? "inline-flex" : "none";
+      restartBtn.disabled = !canRestart;
+    }
     const visibleCards = []
       .concat(...renderList)
       .concat((state.state && state.state.dealer_hand) || []);
@@ -380,6 +387,7 @@
   standBtn.addEventListener("click", () => postAction("stand"));
   doubleBtn.addEventListener("click", () => postAction("double"));
   splitBtn.addEventListener("click", () => postAction("split"));
+  if (restartBtn) restartBtn.addEventListener("click", () => postAction("start_round"));
   assignBtn?.addEventListener("click", assignSession);
 
   // If the session is already assigned, reflect that immediately.

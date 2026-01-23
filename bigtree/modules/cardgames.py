@@ -1092,6 +1092,21 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
     _add_event(session_id, "SESSION_STARTED", {})
     return s
 
+def restart_blackjack_session(session_id: str) -> Dict[str, Any]:
+    s = get_session_by_id(session_id)
+    if not s:
+        raise ValueError("not found")
+    if s.get("game_id") != "blackjack":
+        raise ValueError("invalid game")
+    state = _init_blackjack_state(s.get("deck_id"))
+    _start_blackjack(state)
+    s["status"] = "live"
+    s["state"] = state
+    s["winnings"] = 0
+    _update_session(session_id, s)
+    _add_event(session_id, "STATE_UPDATED", {"action": "start_round"})
+    return s
+
 def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
