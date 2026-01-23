@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 from datetime import datetime
+import secrets
 import asyncio
 
 import bigtree
@@ -13,16 +14,48 @@ from bigtree.modules import cardgames as cardgames_mod
 
 from bigtree.webmods.user_area import _resolve_user
 
+GUEST_TOKEN_HEADER = "X-Bigtree-User-Token"
+
+
+def _sanitize_event_code(code: str) -> str:
+    cleaned = (code or "").strip()
+    if cleaned:
+        cleaned = "".join([c for c in cleaned if (c.isalnum() or c in {"-", "_"})])
+    return cleaned
+
+
+def _event_guest_cookie_name(code: str) -> str:
+    return f"bt_event_guest_{code}"
+
+
+def _extract_user_token(request: web.Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return request.headers.get(GUEST_TOKEN_HEADER) or ""
+
+
+def _resolve_event_user(request: web.Request, code: str):
+    token = _extract_user_token(request)
+    db = get_database()
+    if token:
+        user = db.get_user_by_session(token)
+        if user:
+            return user, False
+    guest_cookie = request.cookies.get(_event_guest_cookie_name(code)) if code else None
+    if guest_cookie:
+        user = db.get_user_by_session(guest_cookie)
+        if user:
+            return user, True
+    return None, False
+
 
 # ---------------- public player flow ----------------
 
 
 @route("GET", "/events/{code}", allow_public=True)
 async def event_join_page(req: web.Request) -> web.Response:
-    code = (req.match_info.get("code") or "").strip()
-    # Prevent injection into the simple .format() template renderer.
-    if code:
-        code = "".join([c for c in code if (c.isalnum() or c in {"-", "_"})])
+    code = _sanitize_event_code(req.match_info.get("code") or "")
     settings = getattr(bigtree, "settings", None)
     base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
     html = DynamicWebServer.render_template(
@@ -37,16 +70,14 @@ async def event_join_page(req: web.Request) -> web.Response:
 
 @route("GET", "/api/events/{code}", allow_public=True)
 async def event_info(req: web.Request) -> web.Response:
-    code = (req.match_info.get("code") or "").strip()
+    code = _sanitize_event_code(req.match_info.get("code") or "")
     db = get_database()
     ev = db.get_event_by_code(code)
     if not ev:
         return web.json_response({"ok": False, "error": "event not found"}, status=404)
 
-    user = await _resolve_user(req)
-    user_id = None
-    if isinstance(user, dict):
-        user_id = int(user.get("id") or 0)
+    user, is_guest = _resolve_event_user(req, code)
+    user_id = int(user.get("id") or 0) if isinstance(user, dict) else None
 
     joined = False
     wallet_balance = None
@@ -74,16 +105,17 @@ async def event_info(req: web.Request) -> web.Response:
             "joined": joined,
             "wallet_balance": wallet_balance,
             "requires_login": not bool(user_id),
+            "is_guest": bool(is_guest),
         }
     )
 
 
 @route("POST", "/api/events/{code}/join", allow_public=True)
 async def event_join(req: web.Request) -> web.Response:
-    code = (req.match_info.get("code") or "").strip()
-    user = await _resolve_user(req)
-    if isinstance(user, web.Response):
-        return user
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    user, _is_guest = _resolve_event_user(req, code)
+    if not isinstance(user, dict):
+        return web.json_response({"ok": False, "error": "login required"}, status=401)
     db = get_database()
     ev = db.get_event_by_code(code)
     if not ev:
@@ -152,10 +184,10 @@ async def event_games(req: web.Request) -> web.Response:
 
 @route("POST", "/api/events/{code}/games/create", allow_public=True)
 async def event_game_create(req: web.Request) -> web.Response:
-    code = (req.match_info.get("code") or "").strip()
-    user = await _resolve_user(req)
-    if isinstance(user, web.Response):
-        return user
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    user, _is_guest = _resolve_event_user(req, code)
+    if not isinstance(user, dict):
+        return web.json_response({"ok": False, "error": "login required"}, status=401)
     try:
         payload = await req.json()
     except Exception:
@@ -242,6 +274,85 @@ async def event_game_create(req: web.Request) -> web.Response:
     join_code = payload.get("join_code")
     join_url = f"/cardgames/{game_id}/session/{join_code}" if join_code else ""
     return web.json_response({"ok": True, "session": payload, "join_url": join_url})
+
+
+@route("POST", "/api/events/{code}/guest", allow_public=True)
+async def event_guest_login(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    if not code:
+        return web.json_response({"ok": False, "error": "event code required"}, status=400)
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    if (ev.get("status") or "active") != "active":
+        return web.json_response({"ok": False, "error": "event ended"}, status=409)
+
+    existing = req.cookies.get(_event_guest_cookie_name(code))
+    if existing:
+        user = db.get_user_by_session(existing)
+        if user:
+            return web.json_response({"ok": True, "guest": True})
+
+    token_seed = secrets.token_hex(4)
+    guest_name = f"guest-{code}-{token_seed}"
+    meta = {"guest": True, "event_code": code}
+    user = db.upsert_user(guest_name, None, meta)
+    if not user:
+        return web.json_response({"ok": False, "error": "guest unavailable"}, status=500)
+    session_token = db.create_user_session(int(user["id"]), expires_in=86400)
+    resp = web.json_response({"ok": True, "guest": True})
+    resp.set_cookie(
+        _event_guest_cookie_name(code),
+        session_token,
+        max_age=86400,
+        httponly=True,
+        samesite="Lax",
+    )
+    return resp
+
+
+@route("POST", "/api/events/{code}/wallet/topup", allow_public=True)
+async def event_wallet_topup(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    user, is_guest = _resolve_event_user(req, code)
+    if not isinstance(user, dict):
+        return web.json_response({"ok": False, "error": "login required"}, status=401)
+    try:
+        payload = await req.json()
+    except Exception:
+        payload = {}
+    try:
+        amount = int(payload.get("amount") or 0)
+    except Exception:
+        amount = 0
+    if amount <= 0:
+        return web.json_response({"ok": False, "error": "amount required"}, status=400)
+    if amount > 1_000_000_000:
+        return web.json_response({"ok": False, "error": "amount too large"}, status=400)
+
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    if (ev.get("status") or "active") != "active":
+        return web.json_response({"ok": False, "error": "event ended"}, status=409)
+    if not bool(ev.get("wallet_enabled")):
+        return web.json_response({"ok": False, "error": "wallet disabled"}, status=409)
+
+    user_id = int(user.get("id") or 0)
+    db.join_event(int(ev["id"]), user_id)
+    ok, balance, status = db.apply_game_wallet_delta(
+        event_id=int(ev["id"]),
+        user_id=user_id,
+        delta=amount,
+        reason="guest_topup" if is_guest else "player_topup",
+        metadata={"source": "guest" if is_guest else "player"},
+        allow_negative=True,
+    )
+    if not ok:
+        return web.json_response({"ok": False, "error": status}, status=409)
+    return web.json_response({"ok": True, "balance": balance})
 
 
 def _find_event_house_game(db, event_id: int, game_id: str):

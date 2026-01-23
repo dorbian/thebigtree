@@ -76,6 +76,7 @@
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   let playerToken = window.localStorage.getItem(tokenKey) || "";
   let sessionId = "";
+  const USER_TOKEN_KEY = "bigtree_user_token";
 
   function sym(s){
     const map = {cherry:"🍒", lemon:"🍋", bar:"🟥", seven:"7️⃣", diamond:"💎"};
@@ -92,22 +93,15 @@
     }
   }
 
-  async function join(){
-    if(playerToken) return;
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST"});
-    const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
-    playerToken = data.player_token;
-    window.localStorage.setItem(tokenKey, playerToken);
+  function getUserToken(){
+    try{
+      return window.localStorage.getItem(USER_TOKEN_KEY) || "";
+    }catch(e){
+      return "";
+    }
   }
 
-  async function fetchState(){
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
-      headers: playerToken ? {"X-Cardgame-Token": playerToken} : {}
-    });
-    const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
-    const st = data.state;
+  function applyState(st){
     sessionId = st.session.session_id;
     const currency = st.session.currency || "gil";
     currencyLabel.textContent = currency;
@@ -129,14 +123,36 @@
     }
   }
 
+  async function join(){
+    if(playerToken) return;
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST"});
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
+    playerToken = data.player_token;
+    window.localStorage.setItem(tokenKey, playerToken);
+  }
+
+  async function fetchState(){
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
+      headers: playerToken ? {"X-Cardgame-Token": playerToken} : {}
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
+    applyState(data.state);
+  }
+
   async function spin(){
     spinBtn.disabled = true;
     try{
       const bet = Math.max(1, parseInt(betInput.value || "0", 10) || 0);
       const n = nonce();
+      const userToken = getUserToken();
       const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+        },
         body: JSON.stringify({token: playerToken, action:"spin", payload:{bet, nonce:n}})
       });
       const data = await res.json();
@@ -184,7 +200,7 @@
       try{
         const payload = JSON.parse(ev.data);
         if (payload.type === "STATE" && payload.state){
-          render(payload.state);
+          applyState(payload.state);
         }else if (payload.type === "SESSION_GONE" && payload.redirect){
           window.location.assign(payload.redirect);
         }else{

@@ -61,12 +61,18 @@
   <h1 id="eventTitle">Forest Event</h1>
   <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>...</div>
   <div class="status" id="eventWalletBalance">Wallet balance: -</div>
+  <div class="row" id="walletTopupRow" style="display:none;">
+    <label class="muted">Add to wallet</label>
+    <input id="walletTopupAmount" type="number" min="1" step="1" value="10" />
+    <button id="walletTopupBtn" type="button">Add balance</button>
+  </div>
 
   <div class="status" id="eventStatus">Loading...</div>
 
   <div class="row">
     <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
     <button id="joinBtn" type="button">Join event</button>
+    <button id="guestBtn" type="button" style="display:none;">Continue as guest</button>
   </div>
   <div class="row" id="createGameRow" style="display:none;">
     <button id="createBlackjackBtn" type="button">Create Blackjack table</button>
@@ -122,6 +128,11 @@
       const suffix = currency ? ` ${currency}` : "";
       el.textContent = `Wallet balance: ${balance}${suffix}`;
     }
+
+    const guestBtn = document.getElementById("guestBtn");
+    const walletTopupRow = document.getElementById("walletTopupRow");
+    const walletTopupAmount = document.getElementById("walletTopupAmount");
+    const walletTopupBtn = document.getElementById("walletTopupBtn");
 
     function renderGames(games, enabledGames){
       const list = document.getElementById("eventGames");
@@ -202,20 +213,24 @@
         document.getElementById("eventMeta").textContent = meta.join(" · ");
 
         if (data.requires_login){
-          setStatus("Please login first (XIVAuth) using the Wallet button, then come back and join.");
+          setStatus("Please login with XIVAuth, or continue as guest for this event.");
           setWalletBalance(null, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
           document.getElementById("createGameRow").style.display = "none";
+          if (walletTopupRow) walletTopupRow.style.display = "none";
+          if (guestBtn) guestBtn.style.display = "inline-flex";
         }else if (data.joined){
           let msg = "You are already joined.";
           if (ev.wallet_enabled && data.wallet_balance !== null && data.wallet_balance !== undefined){
             msg += ` Wallet balance: ${data.wallet_balance}`;
           }
           setWalletBalance(data.wallet_balance, ev.currency_name);
-          setStatus(msg);
+          setStatus(msg + (data.is_guest ? " (guest)" : ""));
           document.getElementById("joinBtn").textContent = "Joined";
           document.getElementById("joinBtn").disabled = true;
           document.getElementById("createGameRow").style.display = "flex";
+          if (walletTopupRow) walletTopupRow.style.display = (ev.wallet_enabled ? "flex" : "none");
+          if (guestBtn) guestBtn.style.display = "none";
           try{
             const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
             renderGames((games && games.games) || [], enabledGames);
@@ -227,11 +242,15 @@
           setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = true;
           document.getElementById("createGameRow").style.display = "none";
+          if (walletTopupRow) walletTopupRow.style.display = "none";
+          if (guestBtn) guestBtn.style.display = "none";
         }else{
           setStatus("Ready to join.");
           setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
           document.getElementById("createGameRow").style.display = "none";
+          if (walletTopupRow) walletTopupRow.style.display = "none";
+          if (guestBtn) guestBtn.style.display = "none";
         }
       }catch(err){
         setStatus(err.message || "Unable to load event.");
@@ -248,6 +267,40 @@
         setStatus(err.message || "Unable to join.");
       }
     });
+
+    if (guestBtn){
+      guestBtn.addEventListener("click", async () => {
+        try{
+          setStatus("Setting up guest access...");
+          const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/guest`, {method:"POST", body:"{}"});
+          if (!data.ok) throw new Error(data.error || "unable to start guest session");
+          await load();
+        }catch(err){
+          setStatus(err.message || "Unable to start guest session.");
+        }
+      });
+    }
+
+    if (walletTopupBtn){
+      walletTopupBtn.addEventListener("click", async () => {
+        const amount = parseInt(walletTopupAmount.value || "0", 10) || 0;
+        if (amount <= 0){
+          setStatus("Enter a valid amount.");
+          return;
+        }
+        try{
+          setStatus("Adding balance...");
+          const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/wallet/topup`, {
+            method:"POST",
+            body: JSON.stringify({amount}),
+          });
+          if (!data.ok) throw new Error(data.error || "unable to add balance");
+          await load();
+        }catch(err){
+          setStatus(err.message || "Unable to add balance.");
+        }
+      });
+    }
 
     async function createGame(gameId){
       const statusEl = document.getElementById("createGameStatus");
