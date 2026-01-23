@@ -27,6 +27,7 @@
       <div class="muted" id="statusLine">Joining session...</div>
     </div>
     <div class="muted">Join: <strong id="joinCode"></strong></div>
+    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
   </header>
   <main>
     <div class="panel">
@@ -86,6 +87,7 @@
     document.getElementById("r9"),
   ];
   const payoutLine = document.getElementById("payoutLine");
+  const walletBalance = document.getElementById("walletBalance");
 
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   let playerToken = window.localStorage.getItem(tokenKey) || "";
@@ -129,6 +131,15 @@
     totalWonEl.textContent = String(st.state?.total_won || 0);
 
     const ls = st.state?.last_spin;
+    if (walletBalance){
+      if (st.wallet_balance !== undefined && st.wallet_balance !== null){
+        const suffix = st.wallet_currency ? ` ${st.wallet_currency}` : "";
+        walletBalance.textContent = `Balance: ${st.wallet_balance}${suffix}`;
+        walletBalance.style.display = "inline-flex";
+      }else{
+        walletBalance.style.display = "none";
+      }
+    }
     if(ls && Array.isArray(ls.reels)){
       const list = ls.reels;
       reels.forEach((el, idx) => {
@@ -159,8 +170,12 @@
   }
 
   async function fetchState(){
+    const userToken = getUserToken();
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
-      headers: playerToken ? {"X-Cardgame-Token": playerToken} : {}
+      headers: {
+        ...(playerToken ? {"X-Cardgame-Token": playerToken} : {}),
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      }
     });
     const data = await res.json();
     if(data && data.redirect){

@@ -1171,15 +1171,33 @@
                       <option value="Gallery">Gallery</option>
                     </select>
                   </div>
-                  <div>
-                    <label for="mediaUploadOriginLabel">Origin label</label>
-                    <input id="mediaUploadOriginLabel" placeholder="Offered during...">
+                    <div>
+                      <label for="mediaUploadOriginLabel">Origin label</label>
+                      <input id="mediaUploadOriginLabel" placeholder="Offered during...">
+                    </div>
                   </div>
-                </div>
-                <div class="row">
-                  <div>
-                    <label>&nbsp;</label>
-                    <button id="mediaUploadUpload" disabled>Upload</button>
+                  <div class="row">
+                    <div>
+                      <label for="mediaUploadType">Media type</label>
+                      <select id="mediaUploadType">
+                        <option value="">(none)</option>
+                        <option value="playing_card">Playing cards</option>
+                        <option value="background">Backgrounds</option>
+                        <option value="gallery">Gallery</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="mediaUploadVenue">Venue</label>
+                      <select id="mediaUploadVenue">
+                        <option value="">All venues</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div>
+                      <label>&nbsp;</label>
+                      <button id="mediaUploadUpload" disabled>Upload</button>
                   </div>
                 </div>
                   <div class="status" id="mediaUploadStatus">Upload idle.</div>
@@ -1252,11 +1270,29 @@
                         <option value="Gallery">Gallery</option>
                       </select>
                     </div>
-                    <div>
-                      <label for="mediaEditOriginLabel">Origin label</label>
-                      <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                      <div>
+                        <label for="mediaEditOriginLabel">Origin label</label>
+                        <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                      </div>
                     </div>
-                  </div>
+                    <div class="row">
+                      <div>
+                        <label for="mediaEditType">Media type</label>
+                        <select id="mediaEditType">
+                          <option value="">(none)</option>
+                          <option value="playing_card">Playing cards</option>
+                          <option value="background">Backgrounds</option>
+                          <option value="gallery">Gallery</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label for="mediaEditVenue">Venue</label>
+                        <select id="mediaEditVenue">
+                          <option value="">All venues</option>
+                        </select>
+                      </div>
+                    </div>
                     <div class="row">
                       <div>
                         <label>&nbsp;</label>
@@ -1273,6 +1309,13 @@
                     <select id="mediaFilterArtist">
                       <option value="">All artists</option>
                     </select>
+                    <select id="mediaFilterType">
+                      <option value="">All types</option>
+                      <option value="playing_card">Playing cards</option>
+                      <option value="background">Backgrounds</option>
+                      <option value="gallery">Gallery</option>
+                      <option value="other">Other</option>
+                    </select>
                     <select id="mediaFilterOriginType">
                       <option value="">All origins</option>
                       <option value="Artifact">Artifact</option>
@@ -1281,6 +1324,9 @@
                       <option value="Tarot">Tarot</option>
                       <option value="Bingo">Bingo</option>
                       <option value="Gallery">Gallery</option>
+                    </select>
+                    <select id="mediaFilterVenue">
+                      <option value="">All venues</option>
                     </select>
                     <select id="mediaFilterLabel">
                       <option value="any">Any label</option>
@@ -1305,6 +1351,7 @@
                     <option value="old">Oldest first</option>
                     <option value="title">Title A-Z</option>
                     <option value="artist">Artist A-Z</option>
+                    <option value="gallery">Gallery</option>
                   </select>
                   <div class="media-selection" id="mediaSelectionIndicator">0 selected</div>
                 </div>
@@ -1580,16 +1627,46 @@
             <input id="venueMinBet" type="number" min="0" value="0">
           </div>
         </div>
-        <div class="row">
-          <div>
-            <label for="venueBackground">Game background</label>
-            <select id="venueBackground"></select>
+          <div class="row">
+            <div>
+              <label for="venueBackground">Game background</label>
+              <select id="venueBackground"></select>
+            </div>
+            <div>
+              <label for="venueDeck">Card deck</label>
+              <select id="venueDeck"></select>
+            </div>
           </div>
-          <div>
-            <label for="venueDeck">Card deck</label>
-            <select id="venueDeck"></select>
+          <div class="row">
+            <div style="flex:1">
+              <label>Per-game backgrounds</label>
+              <div class="muted" style="font-size:12px;margin-top:6px;">Optional overrides per game. Leave blank to use the venue default.</div>
+            </div>
           </div>
-        </div>
+          <div class="row">
+            <div>
+              <label for="venueBackgroundSlots">Slots</label>
+              <select id="venueBackgroundSlots"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundBlackjack">Blackjack</label>
+              <select id="venueBackgroundBlackjack"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundPoker">Poker</label>
+              <select id="venueBackgroundPoker"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="venueBackgroundHighlow">High/Low</label>
+              <select id="venueBackgroundHighlow"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundCrapslite">Crapslite</label>
+              <select id="venueBackgroundCrapslite"></select>
+            </div>
+          </div>
         <div class="row">
           <div style="flex:1">
             <label for="venueAdminsSelect">Admin Discord IDs</label>

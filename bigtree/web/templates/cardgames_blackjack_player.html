@@ -42,6 +42,7 @@
       <h1>Blackjack</h1>
       <div class="muted" id="statusLine">Waiting for session...</div>
     </div>
+    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
     <div class="user-box" id="userBox">
       <span id="userName"></span>
       <button id="assignBtn" type="button">Assign to me</button>
@@ -68,7 +69,7 @@
       <button id="doubleBtn">Double</button>
       <button id="splitBtn">Split</button>
     </div>
-    <div class="panel">
+    <div class="panel" id="artistPanel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -95,6 +96,7 @@
   const winValue = document.getElementById("winValue");
   const dealerHand = document.getElementById("dealerHand");
   const playerHands = document.getElementById("playerHands");
+  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
   const hitBtn = document.getElementById("hitBtn");
   const standBtn = document.getElementById("standBtn");
@@ -103,6 +105,7 @@
   const userBox = document.getElementById("userBox");
   const userName = document.getElementById("userName");
   const assignBtn = document.getElementById("assignBtn");
+  const walletBalance = document.getElementById("walletBalance");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   const userTokenKey = "bigtree_user_token";
   let playerToken = "";
@@ -227,8 +230,10 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
+      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
+    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
@@ -331,6 +336,15 @@
     if (currencyLabel) currencyLabel.textContent = currency;
     if (currencyLabelWin) currencyLabelWin.textContent = currency;
     statusLine.textContent = `Status: ${state.session.status}`;
+    if (walletBalance){
+      if (state.wallet_balance !== undefined && state.wallet_balance !== null){
+        const suffix = state.wallet_currency ? ` ${state.wallet_currency}` : "";
+        walletBalance.textContent = `Balance: ${state.wallet_balance}${suffix}`;
+        walletBalance.style.display = "inline-flex";
+      }else{
+        walletBalance.style.display = "none";
+      }
+    }
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
     const hands = (state.state && state.state.player_hands) || [];
@@ -390,7 +404,10 @@
   }
 
   async function loadState(){
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
+    const userToken = getUserToken();
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`, {
+      headers: userToken ? {"Authorization": `Bearer ${userToken}`} : {}
+    });
     const data = await res.json();
     if (data && data.ok && data.state){
       render(data.state);

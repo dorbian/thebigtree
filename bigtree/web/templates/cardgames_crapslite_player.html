@@ -29,6 +29,7 @@
       <div class="muted" id="statusLine">Connecting...</div>
     </div>
     <div class="pill"><span class="muted">Join:</span> <strong id="joinCode">{JOIN}</strong></div>
+    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
   </header>
 
   <main>
@@ -80,6 +81,7 @@
   const yourBets = document.getElementById("yourBets");
   const tableList = document.getElementById("tableList");
   const USER_TOKEN_KEY = "bigtree_user_token";
+  const walletBalance = document.getElementById("walletBalance");
 
   let playerToken = window.localStorage.getItem(tokenKey) || "";
 
@@ -112,7 +114,13 @@
   }
 
   async function fetchState(){
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {headers:{"X-Cardgame-Token": playerToken}});
+    const userToken = getUserToken();
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
+      headers:{
+        "X-Cardgame-Token": playerToken,
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      }
+    });
     const data = await res.json();
     if(data && data.redirect){
       window.location.assign(data.redirect);
@@ -120,6 +128,16 @@
     }
     if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
     const st = data.state || {};
+
+    if (walletBalance){
+      if (st.wallet_balance !== undefined && st.wallet_balance !== null){
+        const suffix = st.wallet_currency ? ` ${st.wallet_currency}` : "";
+        walletBalance.textContent = `Balance: ${st.wallet_balance}${suffix}`;
+        walletBalance.style.display = "inline-flex";
+      }else{
+        walletBalance.style.display = "none";
+      }
+    }
 
     bettingState.textContent = st.betting_open ? "OPEN" : "CLOSED";
     roundNo.textContent = st.round || 0;

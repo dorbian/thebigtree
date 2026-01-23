@@ -2,8 +2,8 @@
         --bg-1:#0b1611;
         --bg-2:#0e2419;
         --bg-3:#102c1d;
-        --panel:#0f1e16;
-        --panel-2:#0a1510;
+        --panel:rgba(10,14,15,.72);
+        --panel-2:rgba(7,10,11,.62);
         --ink:#e8f7ef;
         --muted:#9bb6a7;
         --accent:#9de07d;

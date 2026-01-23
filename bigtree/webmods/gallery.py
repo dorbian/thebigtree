@@ -779,6 +779,12 @@ async def gallery_media_update(req: web.Request):
     artist_name = str(body.get("artist_name") or "").strip()
     origin_type = str(body.get("origin_type") or "").strip()
     origin_label = str(body.get("origin_label") or "").strip()
+    media_type = str(body.get("media_type") or "").strip()
+    venue_id_raw = str(body.get("venue_id") or "").strip()
+    try:
+        venue_id = int(venue_id_raw) if venue_id_raw else None
+    except Exception:
+        venue_id = None
     if item_id and item_id.startswith("media:"):
         filename = item_id.split(":", 1)[1]
     if not filename:
@@ -796,6 +802,13 @@ async def gallery_media_update(req: web.Request):
                 if links:
                     resolved_links = links
         db = get_database()
+        metadata = {"source": "update"}
+        if artist_id:
+            metadata["artist_id"] = artist_id
+        if media_type:
+            metadata["media_type"] = media_type
+        if venue_id is not None:
+            metadata["venue_id"] = venue_id
         db.upsert_media_item(
             media_id=filename,
             filename=filename,
@@ -806,7 +819,7 @@ async def gallery_media_update(req: web.Request):
             origin_label=origin_label or None,
             url=f"/media/{filename}",
             thumb_url=f"/media/thumbs/{filename}",
-            metadata={"source": "update", "artist_id": artist_id} if artist_id else {"source": "update"},
+            metadata=metadata,
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)

@@ -59,6 +59,18 @@ def _join_wallet_amount(ev: dict) -> int:
         return 0
 
 
+def _venue_game_background(venue: dict | None, game_id: str) -> str | None:
+    if not venue:
+        return None
+    meta = venue.get("metadata") or {}
+    game_bgs = meta.get("game_backgrounds") if isinstance(meta, dict) else {}
+    if isinstance(game_bgs, dict):
+        bg = game_bgs.get(game_id) or game_bgs.get(str(game_id).lower())
+        if bg:
+            return str(bg).strip()
+    return None
+
+
 def _apply_join_wallet_credit(db, ev: dict, user_id: int, is_guest: bool) -> None:
     if not ev or not user_id:
         return
@@ -266,7 +278,8 @@ async def event_game_create(req: web.Request) -> web.Response:
     except Exception:
         pot = 0
     meta = ev.get("metadata") or {}
-    background_url = meta.get("background_url") or meta.get("background") or (venue.get("background_image") if venue else None)
+    venue_bg = _venue_game_background(venue, game_id)
+    background_url = meta.get("background_url") or meta.get("background") or venue_bg or (venue.get("background_image") if venue else None)
     deck_id = (venue.get("deck_id") if venue else None)
 
     try:
@@ -434,7 +447,8 @@ def _ensure_event_house_session(db, ev: dict, game_id: str, created_by: int | No
     except Exception:
         pot = 0
     meta = ev.get("metadata") or {}
-    background_url = meta.get("background_url") or meta.get("background") or (venue.get("background_image") if venue else None)
+    venue_bg = _venue_game_background(venue, game_id)
+    background_url = meta.get("background_url") or meta.get("background") or venue_bg or (venue.get("background_image") if venue else None)
     deck_id = (venue.get("deck_id") if venue else None)
 
     existing = _find_event_house_game(db, event_id, game_id)

@@ -50,6 +50,8 @@
 - Venues: add delete controls in the admin list and normalize refresh button size.
 - Games list: auto-trigger JSON migration when empty to repopulate.
 - Wallet: remove join-key label and align user pill sizing with header actions.
+- Wallet: combine event wallet balance with currency, make history scrollable, and keep event games inside event details with player links.
+- Cardgames: hide artist panel when no card credits and avoid defaulting background credits to Forest.
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
 - Backend: persist XIVAuth/OpenAI config in Postgres, import the INI defaults on first run, and expose a management API plus overlay UI to edit those settings.
 - Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.
@@ -208,3 +210,12 @@
 - Normalized cardgame player templates to ASCII-only symbols and text.
 - Redirect players to the gallery when wallet balances hit zero after actions.
 - Mark deleted cardgame sessions as inactive in the games table.
+### Media
+- Added media type and venue filtering for the admin media gallery.
+- Stored media type and venue metadata on upload/edit to support filtering.
+### Venues
+- Added per-game background overrides for venue defaults (slots/blackjack/poker/highlow/crapslite).
+### Events
+- Simplified event join page to show create/open per game and avoid duplicate wallet balance text.
+### Cardgames
+- Show wallet balance in player headers and include it in state polling.

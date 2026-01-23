@@ -350,7 +350,24 @@ async def get_state(req: web.Request):
     if not s:
         return web.json_response({"ok": False, "error": "not found", "redirect": "/gallery"}, status=404)
     token = req.headers.get("X-Cardgame-Token") or ""
-    return web.json_response({"ok": True, "state": cg.get_state(s, view=view, token=token)})
+    state = cg.get_state(s, view=view, token=token)
+    try:
+        db = get_database()
+        ctx = db.get_game_wallet_context(join_code=s.get("join_code"), game_id=s.get("session_id"))
+        wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
+        wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
+        needs_wallet = wallet_enabled and wallet_currency and wallet_currency != "gil"
+        if needs_wallet:
+            user = await _resolve_user(req)
+            if not isinstance(user, web.Response) and isinstance(user, dict):
+                event_id = int(ctx.get("event_id") or 0)
+                if event_id > 0:
+                    balance = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+                    state["wallet_balance"] = balance
+                    state["wallet_currency"] = wallet_currency
+    except Exception:
+        pass
+    return web.json_response({"ok": True, "state": state})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/stream", allow_public=True)
 async def stream_events(req: web.Request):

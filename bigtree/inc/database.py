@@ -2133,7 +2133,15 @@ class Database:
             ),
         )
 
-    def list_media_items(self, limit: int = 200, offset: int = 0, include_hidden: bool = False) -> List[Dict[str, Any]]:
+    def list_media_items(
+        self,
+        limit: int = 200,
+        offset: int = 0,
+        include_hidden: bool = False,
+        media_type: Optional[str] = None,
+        venue_id: Optional[int] = None,
+        origin_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         limit = int(limit)
         offset = int(offset)
         if limit < 1:
@@ -2144,8 +2152,20 @@ class Database:
             offset = 0
         sql = "SELECT * FROM media_items"
         params: List[Any] = []
+        filters: List[str] = []
         if not include_hidden:
-            sql += " WHERE hidden = FALSE"
+            filters.append("hidden = FALSE")
+        if media_type:
+            filters.append("LOWER(COALESCE(metadata->>'media_type', '')) = %s")
+            params.append(str(media_type).strip().lower())
+        if venue_id:
+            filters.append("metadata->>'venue_id' = %s")
+            params.append(str(venue_id))
+        if origin_type:
+            filters.append("origin_type = %s")
+            params.append(str(origin_type).strip())
+        if filters:
+            sql += " WHERE " + " AND ".join(filters)
         sql += " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         rows = self._execute(sql, tuple(params), fetch=True) or []

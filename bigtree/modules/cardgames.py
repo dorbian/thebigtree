@@ -1350,7 +1350,7 @@ def _background_artist_payload(artist_id: Optional[str], artist_name: Optional[s
     name = (artist_name or "").strip()
     if name:
         return {"artist_id": artist_id, "name": name, "links": {}}
-    return {"artist_id": None, "name": "Forest", "links": {}}
+    return {}
 
 def get_state(session: Dict[str, Any], view: str = "player", token: Optional[str] = None) -> Dict[str, Any]:
     state = session.get("state") or {}

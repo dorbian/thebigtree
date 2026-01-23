@@ -1157,7 +1157,7 @@ This will block new games from being created in this event, but existing games c
         editPanel.classList.toggle("active", tab === "edit");
       }
 
-      function updateMediaEditPanel(){
+        function updateMediaEditPanel(){
         const count = mediaSelected.size;
         const editBtn = $("mediaTabEditBtn");
         if (editBtn){
@@ -1208,6 +1208,8 @@ This will block new games from being created in this event, but existing games c
           $("mediaEditArtist").value = currentMediaEdit.artist_id || "";
           $("mediaEditOriginType").value = currentMediaEdit.origin_type || "Artifact";
           $("mediaEditOriginLabel").value = currentMediaEdit.origin_label || "";
+          $("mediaEditType").value = currentMediaEdit.media_type || "";
+          $("mediaEditVenue").value = currentMediaEdit.venue_id ? String(currentMediaEdit.venue_id) : "";
           $("mediaEditSave").disabled = false;
           $("mediaEditClear").disabled = false;
           $("mediaEditCopy").disabled = false;
@@ -1223,9 +1225,9 @@ This will block new games from being created in this event, but existing games c
         if (artistDisplay) artistDisplay.textContent = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "Forest";
         const originText = [currentMediaEdit.origin_type || "", currentMediaEdit.origin_label || ""].filter(Boolean).join(" - ");
         if (originDisplay) originDisplay.textContent = originText || "Unlabeled";
-        if (meta){
-          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nhidden: ${isHidden ? "yes" : "no"}`;
-        }
+          if (meta){
+            meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nmedia_type: ${currentMediaEdit.media_type || ""}\nvenue_id: ${currentMediaEdit.venue_id || ""}\nhidden: ${isHidden ? "yes" : "no"}`;
+          }
         const preview = $("mediaEditPreview");
         if (preview){
           const img = document.createElement("img");
@@ -1242,14 +1244,49 @@ This will block new games from being created in this event, but existing games c
           preview.innerHTML = "";
           preview.appendChild(img);
         }
-        setMediaEditStatus("Edit details and save.", "ok");
-      }
+          setMediaEditStatus("Edit details and save.", "ok");
+        }
 
-      async function loadMediaLibrary(){
-        const grid = $("mediaLibraryGrid");
-        if (!grid) return;
-        if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
-          setMediaLibraryStatus("Media access requires permission.", "err");
+        let mediaVenueCache = [];
+        async function ensureMediaVenueOptions(){
+          if (!hasScope("admin:web")) return;
+          if (!mediaVenueCache.length){
+            try{
+              const resp = await jsonFetch("/admin/venues", {method:"GET"});
+              mediaVenueCache = resp.venues || [];
+            }catch(err){
+              mediaVenueCache = [];
+            }
+          }
+          populateMediaVenueSelects(mediaVenueCache);
+        }
+
+        function populateMediaVenueSelects(venues){
+          const selects = ["mediaFilterVenue", "mediaUploadVenue", "mediaEditVenue"];
+          selects.forEach((id) => {
+            const el = $(id);
+            if (!el) return;
+            const current = el.value || "";
+            const opts = [`<option value=\"\">All venues</option>`]
+              .concat((venues || []).map(v => {
+                const vid = v.id ?? v.venue_id ?? "";
+                const name = v.name || `Venue ${vid}`;
+                return `<option value=\"${escapeHtml(String(vid))}\">${escapeHtml(name)}</option>`;
+              }));
+            el.innerHTML = opts.join("");
+            if (current && Array.from(el.options).some(o => o.value === current)){
+              el.value = current;
+            }else if (!current && adminVenueId){
+              el.value = String(adminVenueId);
+            }
+          });
+        }
+
+        async function loadMediaLibrary(){
+          const grid = $("mediaLibraryGrid");
+          if (!grid) return;
+          if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
+            setMediaLibraryStatus("Media access requires permission.", "err");
           grid.innerHTML = "";
           return;
         }
@@ -1261,7 +1298,15 @@ This will block new games from being created in this event, but existing games c
           grid.appendChild(skel);
         }
         try{
-          const res = await apiFetch("/api/media/list", {method: "GET"}, true);
+          const typeFilter = ($("mediaFilterType")?.value || "").trim();
+          const venueFilter = ($("mediaFilterVenue")?.value || "").trim();
+          const originFilter = ($("mediaFilterOriginType")?.value || "").trim();
+          const params = new URLSearchParams();
+          if (typeFilter) params.set("media_type", typeFilter);
+          if (venueFilter) params.set("venue_id", venueFilter);
+          if (originFilter) params.set("origin_type", originFilter);
+          const url = params.toString() ? `/api/media/list?${params.toString()}` : "/api/media/list";
+          const res = await apiFetch(url, {method: "GET"}, true);
           if (res.status === 401){
             handleUnauthorized();
             throw new Error("Unauthorized");
@@ -1274,12 +1319,12 @@ This will block new games from being created in this event, but existing games c
           }
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
-          mediaLibraryItems = data.items || [];
-          mediaSelected.clear();
-          mediaLastIndex = null;
-          currentMediaEdit = null;
-            applyMediaFilters();
-            showToast("Library loaded.", "ok");
+            mediaLibraryItems = data.items || [];
+            mediaSelected.clear();
+            mediaLastIndex = null;
+            currentMediaEdit = null;
+              applyMediaFilters();
+              showToast("Library loaded.", "ok");
         }catch(err){
           setMediaLibraryStatus(err.message, "err");
         }
@@ -1289,63 +1334,84 @@ This will block new games from being created in this event, but existing games c
         return item.name || item.filename || item.url || "";
       }
 
-        function applyMediaFilters(){
-          const searchEl = $("mediaToolbarSearch");
-          const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
-          const artistEl = $("mediaFilterArtist");
-          const originEl = $("mediaFilterOriginType");
-          const labelEl = $("mediaFilterLabel");
-          const artistFilter = (artistEl ? artistEl.value : "").trim();
-          const originFilter = (originEl ? originEl.value : "").trim();
-          const labelFilter = (labelEl ? labelEl.value : "any").trim();
-          const sortEl = $("mediaToolbarSort");
-          const sortMode = (sortEl ? sortEl.value : "new").trim();
-          let items = mediaLibraryItems.slice();
-          if (searchRaw){
-            items = items.filter(item => {
-              const hay = [
-                item.title,
-                item.artist_name,
-                item.artist_id,
-              item.origin_label,
-              item.origin_type,
-              item.name
-            ].filter(Boolean).join(" ").toLowerCase();
-            return hay.includes(searchRaw);
-          });
-        }
-        if (artistFilter){
-          items = items.filter(item => (item.artist_id || "") === artistFilter);
-        }
-        if (originFilter){
-          items = items.filter(item => (item.origin_type || "") === originFilter);
-        }
-        if (labelFilter === "has"){
-          items = items.filter(item => (item.origin_label || "").trim());
-        }else if (labelFilter === "none"){
-          items = items.filter(item => !(item.origin_label || "").trim());
-        }
-        if (sortMode === "old"){
-          items.reverse();
-        }else if (sortMode === "title"){
-          items.sort((a, b) => (a.title || a.name || "").localeCompare(b.title || b.name || ""));
-        }else if (sortMode === "artist"){
-          items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
-        }
-          mediaVisibleItems = items;
-          renderMediaGrid(items);
-          updateMediaFilterSummary({searchRaw, artistFilter, originFilter, labelFilter});
-          updateMediaLibraryStatus(items.length, mediaLibraryItems.length, {searchRaw, artistFilter, originFilter, labelFilter});
-        }
+          function applyMediaFilters(){
+            const searchEl = $("mediaToolbarSearch");
+            const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
+            const artistEl = $("mediaFilterArtist");
+            const typeEl = $("mediaFilterType");
+            const originEl = $("mediaFilterOriginType");
+            const venueEl = $("mediaFilterVenue");
+            const labelEl = $("mediaFilterLabel");
+            const artistFilter = (artistEl ? artistEl.value : "").trim();
+            const typeFilter = (typeEl ? typeEl.value : "").trim();
+            const originFilter = (originEl ? originEl.value : "").trim();
+            const venueFilter = (venueEl ? venueEl.value : "").trim();
+            const labelFilter = (labelEl ? labelEl.value : "any").trim();
+            const sortEl = $("mediaToolbarSort");
+            const sortMode = (sortEl ? sortEl.value : "new").trim();
+            let items = mediaLibraryItems.slice();
+            if (searchRaw){
+              items = items.filter(item => {
+                const hay = [
+                  item.title,
+                  item.artist_name,
+                  item.artist_id,
+                item.origin_label,
+                item.origin_type,
+                item.media_type,
+                item.venue_id,
+                item.name
+              ].filter(Boolean).join(" ").toLowerCase();
+              return hay.includes(searchRaw);
+            });
+          }
+          if (artistFilter){
+            items = items.filter(item => (item.artist_id || "") === artistFilter);
+          }
+          if (typeFilter){
+            items = items.filter(item => (item.media_type || "") === typeFilter);
+          }
+          if (originFilter){
+            items = items.filter(item => (item.origin_type || "") === originFilter);
+          }
+          if (venueFilter){
+            items = items.filter(item => String(item.venue_id || "") === String(venueFilter));
+          }
+          if (labelFilter === "has"){
+            items = items.filter(item => (item.origin_label || "").trim());
+          }else if (labelFilter === "none"){
+            items = items.filter(item => !(item.origin_label || "").trim());
+          }
+          if (sortMode === "old"){
+            items.reverse();
+          }else if (sortMode === "title"){
+            items.sort((a, b) => (a.title || a.name || "").localeCompare(b.title || b.name || ""));
+          }else if (sortMode === "artist"){
+            items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
+          }else if (sortMode === "gallery"){
+            items.sort((a, b) => {
+              const ga = (a.origin_label || "").toLowerCase();
+              const gb = (b.origin_label || "").toLowerCase();
+              if (ga !== gb) return ga.localeCompare(gb);
+              return (a.title || a.name || "").localeCompare(b.title || b.name || "");
+            });
+          }
+            mediaVisibleItems = items;
+            renderMediaGrid(items);
+            updateMediaFilterSummary({searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter});
+            updateMediaLibraryStatus(items.length, mediaLibraryItems.length, {searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter});
+          }
 
-        function countActiveMediaFilters({searchRaw, artistFilter, originFilter, labelFilter}){
-          let count = 0;
-          if (searchRaw) count += 1;
-          if (artistFilter) count += 1;
-          if (originFilter) count += 1;
-          if (labelFilter === "has" || labelFilter === "none") count += 1;
-          return count;
-        }
+          function countActiveMediaFilters({searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter}){
+            let count = 0;
+            if (searchRaw) count += 1;
+            if (artistFilter) count += 1;
+            if (typeFilter) count += 1;
+            if (originFilter) count += 1;
+            if (venueFilter) count += 1;
+            if (labelFilter === "has" || labelFilter === "none") count += 1;
+            return count;
+          }
 
         function updateMediaFilterSummary(ctx){
           const summary = $("mediaFiltersSummary");
@@ -3200,7 +3266,7 @@ This will block new games from being created in this event, but existing games c
           loadVenuesPanel(true);
         } else if (which === "media"){
           setMediaTab("upload");
-          loadMediaLibrary();
+          ensureMediaVenueOptions().then(() => loadMediaLibrary());
           loadTarotArtists();
           updateMediaUploadDropDisplay(mediaUploadFile);
           updateMediaUploadState();
@@ -3666,16 +3732,27 @@ This will block new games from being created in this event, but existing games c
       }
 
       function renderVenueBackgroundSelect(){
-        const sel = $("venueBackground");
-        if (!sel) return;
-        const cur = sel.value || "";
-        const opts = [`<option value="">(default)</option>`]
-          .concat((venueMediaCache || []).map(it => {
-            const label = it.title || it.name || it.filename || "Image";
-            return `<option value="${escapeHtml(it.url || "")}">${escapeHtml(label)}</option>`;
-          }));
-        sel.innerHTML = opts.join("");
-        if (cur) sel.value = cur;
+        const ids = [
+          "venueBackground",
+          "venueBackgroundSlots",
+          "venueBackgroundBlackjack",
+          "venueBackgroundPoker",
+          "venueBackgroundHighlow",
+          "venueBackgroundCrapslite"
+        ];
+        ids.forEach((id) => {
+          const sel = $(id);
+          if (!sel) return;
+          const cur = sel.value || "";
+          const defaultLabel = id === "venueBackground" ? "(default)" : "(use venue default)";
+          const opts = [`<option value="">${defaultLabel}</option>`]
+            .concat((venueMediaCache || []).map(it => {
+              const label = it.title || it.name || it.filename || "Image";
+              return `<option value="${escapeHtml(it.url || "")}">${escapeHtml(label)}</option>`;
+            }));
+          sel.innerHTML = opts.join("");
+          if (cur) sel.value = cur;
+        });
       }
 
       function renderVenueDeckSelect(){
@@ -3698,10 +3775,16 @@ This will block new games from being created in this event, but existing games c
         venueMediaCache = [];
         venueDeckCache = [];
         try{
-          const res = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          const res = await fetch("/api/media/list?media_type=background", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
           if (res.status === 401){ handleUnauthorized(); throw new Error("Unauthorized"); }
           const data = await res.json();
           if (data.ok) venueMediaCache = data.items || [];
+          if (data.ok && (!venueMediaCache || !venueMediaCache.length)){
+            const fallback = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+            if (fallback.status === 401){ handleUnauthorized(); throw new Error("Unauthorized"); }
+            const fallbackData = await fallback.json();
+            if (fallbackData.ok) venueMediaCache = fallbackData.items || [];
+          }
         }catch(_e){ venueMediaCache = []; }
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
@@ -3728,6 +3811,12 @@ This will block new games from being created in this event, but existing games c
         $("venueMinBet").value = String(v?.minimal_spend ?? 0);
         $("venueBackground").value = v?.background_image || "";
         $("venueDeck").value = v?.deck_id || "";
+        const gameBackgrounds = (v?.metadata && v.metadata.game_backgrounds) ? v.metadata.game_backgrounds : {};
+        $("venueBackgroundSlots").value = gameBackgrounds?.slots || "";
+        $("venueBackgroundBlackjack").value = gameBackgrounds?.blackjack || "";
+        $("venueBackgroundPoker").value = gameBackgrounds?.poker || "";
+        $("venueBackgroundHighlow").value = gameBackgrounds?.highlow || "";
+        $("venueBackgroundCrapslite").value = gameBackgrounds?.crapslite || "";
         const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
         if (Array.isArray(ids)){
           $("venueAdmins").value = ids.join(", ");
@@ -3837,6 +3926,13 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         const currency = $("venueCurrency").value.trim();
         const bg = $("venueBackground").value || "";
         const deck = $("venueDeck").value || "";
+        const game_backgrounds = {
+          slots: $("venueBackgroundSlots").value || "",
+          blackjack: $("venueBackgroundBlackjack").value || "",
+          poker: $("venueBackgroundPoker").value || "",
+          highlow: $("venueBackgroundHighlow").value || "",
+          crapslite: $("venueBackgroundCrapslite").value || "",
+        };
         if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
         if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
         if (!deck){ setVenueStatus("Card deck must be selected.", "err"); return; }
@@ -3847,6 +3943,7 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           background_image: bg || null,
           deck_id: deck || null,
           admin_discord_ids: $("venueAdmins").value || null,
+          game_backgrounds: game_backgrounds,
         };
         setVenueStatus("Saving...", "");
         try{
@@ -7099,9 +7196,17 @@ function getOwnerClaimStatus(ownerName){
       if (mediaFilterArtist){
         mediaFilterArtist.addEventListener("change", () => applyMediaFilters());
       }
+      const mediaFilterType = $("mediaFilterType");
+      if (mediaFilterType){
+        mediaFilterType.addEventListener("change", () => loadMediaLibrary());
+      }
       const mediaFilterOriginType = $("mediaFilterOriginType");
       if (mediaFilterOriginType){
         mediaFilterOriginType.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterVenue = $("mediaFilterVenue");
+      if (mediaFilterVenue){
+        mediaFilterVenue.addEventListener("change", () => loadMediaLibrary());
       }
       const mediaFilterLabel = $("mediaFilterLabel");
       if (mediaFilterLabel){
@@ -7111,18 +7216,22 @@ function getOwnerClaimStatus(ownerName){
       if (mediaToolbarSort){
         mediaToolbarSort.addEventListener("change", () => applyMediaFilters());
       }
-      const mediaFilterClear = $("mediaFilterClear");
-      if (mediaFilterClear){
-        mediaFilterClear.addEventListener("click", () => {
-          const artist = $("mediaFilterArtist");
-          const origin = $("mediaFilterOriginType");
-          const label = $("mediaFilterLabel");
-          if (artist) artist.value = "";
-          if (origin) origin.value = "";
-          if (label) label.value = "any";
-          applyMediaFilters();
-        });
-      }
+        const mediaFilterClear = $("mediaFilterClear");
+        if (mediaFilterClear){
+          mediaFilterClear.addEventListener("click", () => {
+            const artist = $("mediaFilterArtist");
+            const type = $("mediaFilterType");
+            const origin = $("mediaFilterOriginType");
+            const venue = $("mediaFilterVenue");
+            const label = $("mediaFilterLabel");
+            if (artist) artist.value = "";
+            if (type) type.value = "";
+            if (origin) origin.value = "";
+            if (venue) venue.value = "";
+            if (label) label.value = "any";
+            loadMediaLibrary();
+          });
+        }
       $("mediaBulkDelete").addEventListener("click", async () => {
         if (!hasScope("admin:web")){
           setMediaLibraryStatus("Delete requires admin access.", "err");
@@ -7272,12 +7381,12 @@ function getOwnerClaimStatus(ownerName){
         });
       }
 
-      $("mediaUploadUpload").addEventListener("click", async () => {
-        const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
-        if (!file){
-          setMediaUploadStatus("Select an image to upload.", "err");
-          return;
-        }
+        $("mediaUploadUpload").addEventListener("click", async () => {
+          const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
+          if (!file){
+            setMediaUploadStatus("Select an image to upload.", "err");
+            return;
+          }
         const title = $("mediaUploadTitleInput").value.trim();
         if (!title){
           setMediaUploadStatus("Enter a title before uploading.", "err");
@@ -7289,15 +7398,19 @@ function getOwnerClaimStatus(ownerName){
           const fd = new FormData();
           fd.append("file", file);
           fd.append("title", title);
-          const artistId = $("mediaUploadArtist").value.trim();
-          if (artistId) fd.append("artist_id", artistId);
-          const originType = $("mediaUploadOriginType").value.trim();
-          const originLabel = $("mediaUploadOriginLabel").value.trim();
-          if (originType) fd.append("origin_type", originType);
-          if (originLabel) fd.append("origin_label", originLabel);
-          const res = await fetch("/api/media/upload", {
-            method: "POST",
-            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            const artistId = $("mediaUploadArtist").value.trim();
+            if (artistId) fd.append("artist_id", artistId);
+            const originType = $("mediaUploadOriginType").value.trim();
+            const originLabel = $("mediaUploadOriginLabel").value.trim();
+            if (originType) fd.append("origin_type", originType);
+            if (originLabel) fd.append("origin_label", originLabel);
+            const mediaType = $("mediaUploadType").value.trim();
+            const venueId = $("mediaUploadVenue").value.trim();
+            if (mediaType) fd.append("media_type", mediaType);
+            if (venueId) fd.append("venue_id", venueId);
+            const res = await fetch("/api/media/upload", {
+              method: "POST",
+              headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
           const data = await res.json();
@@ -7332,29 +7445,33 @@ function getOwnerClaimStatus(ownerName){
         }
         const title = $("mediaEditTitle").value.trim();
         const artistId = $("mediaEditArtist").value.trim();
-        const artistName = $("mediaEditArtist").selectedOptions.length
-          ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
-          : "";
-        const originType = $("mediaEditOriginType").value.trim();
-        const originLabel = $("mediaEditOriginLabel").value.trim();
-        try{
-          $("mediaEditSave").disabled = true;
-          setMediaEditStatus("Saving...", "");
-          const res = await fetch("/api/gallery/media/update", {
+          const artistName = $("mediaEditArtist").selectedOptions.length
+            ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
+            : "";
+          const originType = $("mediaEditOriginType").value.trim();
+          const originLabel = $("mediaEditOriginLabel").value.trim();
+          const mediaType = $("mediaEditType").value.trim();
+          const venueId = $("mediaEditVenue").value.trim();
+          try{
+            $("mediaEditSave").disabled = true;
+            setMediaEditStatus("Saving...", "");
+            const res = await fetch("/api/gallery/media/update", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "X-API-Key": apiKeyEl.value.trim()
             },
-            body: JSON.stringify({
-              filename,
-              title,
-              artist_id: artistId,
-              artist_name: artistName,
-              origin_type: originType,
-              origin_label: originLabel
-            })
-          });
+              body: JSON.stringify({
+                filename,
+                title,
+                artist_id: artistId,
+                artist_name: artistName,
+                origin_type: originType,
+                origin_label: originLabel,
+                media_type: mediaType,
+                venue_id: venueId
+              })
+            });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.ok === false){
             throw new Error(data.error || "Save failed");
