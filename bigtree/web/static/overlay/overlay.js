@@ -523,6 +523,12 @@
           const meta = eventObj?.metadata || {};
           carryEl.checked = !!(meta.carry_over || meta.carryover);
         }
+        const joinWalletEl = $("eventJoinWalletAmount");
+        if (joinWalletEl){
+          const meta = eventObj?.metadata || {};
+          const raw = meta.join_wallet_amount ?? meta.join_wallet_bonus ?? 0;
+          joinWalletEl.value = String(raw || 0);
+        }
 
         // Event background + enabled minigames
         const meta = eventObj?.metadata || {};
@@ -649,6 +655,7 @@
           currency_name: $("eventCurrency")?.value?.trim() || "",
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
           carry_over: $("eventCarryOver")?.checked || false,
+          join_wallet_amount: $("eventJoinWalletAmount")?.value || "0",
           background_url: $("eventBackgroundUrl") ? $("eventBackgroundUrl").value.trim() : "",
           enabled_games: getEventEnabledGames(modal),
         };

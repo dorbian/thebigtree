@@ -44,6 +44,7 @@
 - Cardgames: switch host/player session updates to WebSockets with resume + idle timeout.
 - Events: allow guest users via per-event cookies for joining/creating tables without XIVAuth.
 - Events: add guest wallet top-ups for event-only balances.
+- Events: support join wallet credits configured at event creation.
 - Gallery: escape origin/title/artist fields so flair text renders as text.
 - Dashboard: add Gallery admin card with media/calendar/flair actions.
 - Venues: add delete controls in the admin list and normalize refresh button size.

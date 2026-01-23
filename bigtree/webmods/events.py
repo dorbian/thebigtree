@@ -50,6 +50,44 @@ def _resolve_event_user(request: web.Request, code: str):
     return None, False
 
 
+def _join_wallet_amount(ev: dict) -> int:
+    meta = ev.get("metadata") or {}
+    raw = meta.get("join_wallet_amount") or meta.get("join_wallet_bonus") or 0
+    try:
+        return max(0, int(raw or 0))
+    except Exception:
+        return 0
+
+
+def _apply_join_wallet_credit(db, ev: dict, user_id: int, is_guest: bool) -> None:
+    if not ev or not user_id:
+        return
+    if not bool(ev.get("wallet_enabled")):
+        return
+    amount = _join_wallet_amount(ev)
+    if amount <= 0:
+        return
+    exists = db._fetchone(
+        """
+        SELECT 1 AS ok
+        FROM event_wallet_history
+        WHERE event_id = %s AND user_id = %s AND reason = %s
+        LIMIT 1
+        """,
+        (int(ev["id"]), int(user_id), "join_credit"),
+    )
+    if exists:
+        return
+    db.apply_game_wallet_delta(
+        event_id=int(ev["id"]),
+        user_id=int(user_id),
+        delta=amount,
+        reason="join_credit",
+        metadata={"source": "guest" if is_guest else "player"},
+        allow_negative=True,
+    )
+
+
 # ---------------- public player flow ----------------
 
 
@@ -113,7 +151,7 @@ async def event_info(req: web.Request) -> web.Response:
 @route("POST", "/api/events/{code}/join", allow_public=True)
 async def event_join(req: web.Request) -> web.Response:
     code = _sanitize_event_code(req.match_info.get("code") or "")
-    user, _is_guest = _resolve_event_user(req, code)
+    user, is_guest = _resolve_event_user(req, code)
     if not isinstance(user, dict):
         return web.json_response({"ok": False, "error": "login required"}, status=401)
     db = get_database()
@@ -124,6 +162,7 @@ async def event_join(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "event ended"}, status=409)
 
     db.join_event(int(ev["id"]), int(user["id"]))
+    _apply_join_wallet_credit(db, ev, int(user["id"]), bool(is_guest))
     return web.json_response({"ok": True, "event": ev})
 
 
@@ -185,7 +224,7 @@ async def event_games(req: web.Request) -> web.Response:
 @route("POST", "/api/events/{code}/games/create", allow_public=True)
 async def event_game_create(req: web.Request) -> web.Response:
     code = _sanitize_event_code(req.match_info.get("code") or "")
-    user, _is_guest = _resolve_event_user(req, code)
+    user, is_guest = _resolve_event_user(req, code)
     if not isinstance(user, dict):
         return web.json_response({"ok": False, "error": "login required"}, status=401)
     try:
@@ -217,6 +256,7 @@ async def event_game_create(req: web.Request) -> web.Response:
     if not user_id:
         return web.json_response({"ok": False, "error": "invalid user"}, status=401)
     db.join_event(int(ev["id"]), user_id)
+    _apply_join_wallet_credit(db, ev, user_id, bool(is_guest))
 
     venue_id = ev.get("venue_id")
     venue = db.get_venue(int(venue_id)) if venue_id else None
@@ -569,6 +609,11 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
         v = db.get_venue(int(venue_id))
         if v and v.get("currency_name"):
             currency_name = str(v.get("currency_name"))
+    try:
+        join_wallet_amount = int(body.get("join_wallet_amount") or 0)
+    except Exception:
+        join_wallet_amount = 0
+
     ev = db.upsert_event(
         event_id=event_id or None,
         event_code=event_code,
@@ -581,6 +626,7 @@ async def admin_events_upsert(req: web.Request) -> web.Response:
             "carry_over": carry_over,
             "background_url": background_url or None,
             "enabled_games": enabled_games,
+            "join_wallet_amount": join_wallet_amount,
         },
     )
     if not ev:
