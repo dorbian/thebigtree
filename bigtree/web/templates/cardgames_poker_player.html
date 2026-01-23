@@ -391,13 +391,21 @@
     if (!sessionId) return;
     setBetButtons(false);
     betStatus.textContent = "Waiting for dealer...";
+    const userToken = getUserToken();
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
-      headers: {"Content-Type":"application/json"},
+      headers: {
+        "Content-Type":"application/json",
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      },
       body: JSON.stringify({token: playerToken, action, payload: amount ? {amount} : {}})
     });
     if (res){
       const data = await res.json().catch(() => ({}));
+      if (data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
       if (data && data.ok === false){
         betStatus.textContent = data.error || "Action failed.";
         setBetButtons(true);
@@ -415,7 +423,7 @@
     const stage = (state.state && state.state.stage) || "preflop";
     const live = state.session.status === "live" && (state.state && state.state.status) !== "finished";
 
-    const currency = (session.currency || "gil").trim() || "gil";
+    const currency = (state.session.currency || "gil").trim() || "gil";
     potValue.textContent = pot;
     commitValue.textContent = committed;
     winValue.textContent = pot;

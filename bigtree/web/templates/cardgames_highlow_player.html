@@ -287,13 +287,21 @@
     pendingAction = true;
     setButtonsState(false);
     decisionHint.textContent = "Waiting for the dealer...";
+    const userToken = getUserToken();
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
-      headers: {"Content-Type":"application/json"},
+      headers: {
+        "Content-Type":"application/json",
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      },
       body: JSON.stringify({token: playerToken, action, payload: {}})
     });
     if (res){
       const data = await res.json().catch(() => ({}));
+      if (data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
       if (data && data.ok === false){
         decisionHint.textContent = data.error || "Action failed.";
         pendingAction = false;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Craps‑lite</title>
+  <title>Crapslite</title>
   <link rel="icon" href="/icon.png" type="image/png">
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
@@ -25,8 +25,8 @@
 <body>
   <header>
     <div>
-      <h1>Craps‑lite</h1>
-      <div class="muted" id="statusLine">Connecting…</div>
+      <h1>Crapslite</h1>
+      <div class="muted" id="statusLine">Connecting...</div>
     </div>
     <div class="pill"><span class="muted">Join:</span> <strong id="joinCode">{JOIN}</strong></div>
   </header>
@@ -79,20 +79,32 @@
   const betBtn = document.getElementById("betBtn");
   const yourBets = document.getElementById("yourBets");
   const tableList = document.getElementById("tableList");
+  const USER_TOKEN_KEY = "bigtree_user_token";
 
   let playerToken = window.localStorage.getItem(tokenKey) || "";
 
+  function getUserToken(){
+    try{
+      return window.localStorage.getItem(USER_TOKEN_KEY) || "";
+    }catch(e){
+      return "";
+    }
+  }
+
   function randNonce(){
-    // 16 bytes random -> hex
     const a = new Uint8Array(16);
     crypto.getRandomValues(a);
-    return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join("");
   }
 
   async function join(){
     if(playerToken) return;
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({})});
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
     playerToken = data.player_token || "";
     if(!playerToken) throw new Error("no player token");
@@ -102,6 +114,10 @@
   async function fetchState(){
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {headers:{"X-Cardgame-Token": playerToken}});
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
     const st = data.state || {};
 
@@ -115,12 +131,10 @@
     const lr = st.last_resolution || null;
     outcomeLine.textContent = lr ? `Outcome: ${lr.outcome} (roll ${lr.roll_total})` : "Outcome: --";
 
-    // You
     const you = st.you || null;
     const bets = (you && Array.isArray(you.bets)) ? you.bets : [];
     yourBets.innerHTML = bets.length ? bets.map(b=>`<li>${b.amount}</li>`).join("") : "<li class='muted'>No bets yet.</li>";
 
-    // Table (names + totals only)
     const players = Array.isArray(st.players) ? st.players : [];
     if(!players.length){
       tableList.textContent = "No players yet.";
@@ -129,7 +143,7 @@
         const name = (p.name || "Player");
         const tb = (p.total_bet || 0);
         const tp = (p.total_payout || 0);
-        return `<div><strong>${name}</strong> — bet: ${tb} — payout: ${tp}</div>`;
+        return `<div><strong>${name}</strong> bet: ${tb} payout: ${tp}</div>`;
       }).join("");
     }
 
@@ -144,14 +158,22 @@
       return;
     }
     const nonce = randNonce();
+    const userToken = getUserToken();
     betBtn.disabled = true;
     try{
       const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/action`, {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+        },
         body:JSON.stringify({token: playerToken, action:"bet", payload:{amount: amt, nonce}})
       });
       const data = await res.json();
+      if(data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
       if(!res.ok || !data.ok) throw new Error(data.error || "bet failed");
       betAmount.value = "";
       await fetchState();
@@ -192,17 +214,8 @@
       }
       ws.send(JSON.stringify({type: "resume"}));
     };
-    ws.onmessage = (ev) => {
-      try{
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "STATE" && payload.state){
-          render(payload.state);
-        }else if (payload.type === "SESSION_GONE" && payload.redirect){
-          window.location.assign(payload.redirect);
-        }else{
-          fetchState();
-        }
-      }catch(err){}
+    ws.onmessage = () => {
+      fetchState();
     };
     ws.onclose = () => {
       if (document.hidden) return;

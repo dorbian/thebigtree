@@ -201,3 +201,10 @@
 
 ### UI
 - Switched all site typography to sans-serif for consistency across pages.
+## 2026-01-23
+### Cardgames
+- Rebuilt slots player view as a 3x3 grid and cleaned up corrupted markup.
+- Enforced wallet auth headers and redirect handling for player actions.
+- Normalized cardgame player templates to ASCII-only symbols and text.
+- Redirect players to the gallery when wallet balances hit zero after actions.
+- Mark deleted cardgame sessions as inactive in the games table.

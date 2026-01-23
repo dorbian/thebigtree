@@ -14,7 +14,7 @@
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
     button{padding:10px 14px;border-radius:999px;border:1px solid rgba(107,212,162,.4);background:#122019;color:#e7f2ea;cursor:pointer;font-weight:700}
     button[disabled]{opacity:.45;cursor:not-allowed}
-    .reels{display:flex;gap:10px;justify-content:center;margin-top:10px}
+    .reels{display:grid;grid-template-columns:repeat(3, 90px);gap:10px;justify-content:center;margin-top:10px}
     .reel{width:90px;height:90px;border-radius:14px;background:#0c1511;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
     .big{font-size:18px;font-weight:800}
     input{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c1511;color:#e7f2ea}
@@ -24,7 +24,7 @@
   <header>
     <div>
       <h1>Slots</h1>
-      <div class="muted" id="statusLine">Joining session…</div>
+      <div class="muted" id="statusLine">Joining session...</div>
     </div>
     <div class="muted">Join: <strong id="joinCode"></strong></div>
   </header>
@@ -43,13 +43,19 @@
         <input id="betInput" type="number" min="1" step="1" value="0" />
         <button id="spinBtn" type="button">Spin</button>
       </div>
-      <div class="reels">
-        <div class="reel" id="r1">—</div>
-        <div class="reel" id="r2">—</div>
-        <div class="reel" id="r3">—</div>
+      <div class="reels" id="reelGrid">
+        <div class="reel" id="r1">--</div>
+        <div class="reel" id="r2">--</div>
+        <div class="reel" id="r3">--</div>
+        <div class="reel" id="r4">--</div>
+        <div class="reel" id="r5">--</div>
+        <div class="reel" id="r6">--</div>
+        <div class="reel" id="r7">--</div>
+        <div class="reel" id="r8">--</div>
+        <div class="reel" id="r9">--</div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div class="big" id="payoutLine">Payout: —</div>
+        <div class="big" id="payoutLine">Payout: 0</div>
       </div>
       <div class="muted" style="text-align:center;margin-top:10px">No table chat. Just you, luck, and the reels.</div>
     </div>
@@ -68,9 +74,17 @@
   const currencyLabel2 = document.getElementById("currencyLabel2");
   const betInput = document.getElementById("betInput");
   const spinBtn = document.getElementById("spinBtn");
-  const r1 = document.getElementById("r1");
-  const r2 = document.getElementById("r2");
-  const r3 = document.getElementById("r3");
+  const reels = [
+    document.getElementById("r1"),
+    document.getElementById("r2"),
+    document.getElementById("r3"),
+    document.getElementById("r4"),
+    document.getElementById("r5"),
+    document.getElementById("r6"),
+    document.getElementById("r7"),
+    document.getElementById("r8"),
+    document.getElementById("r9"),
+  ];
   const payoutLine = document.getElementById("payoutLine");
 
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
@@ -79,15 +93,15 @@
   const USER_TOKEN_KEY = "bigtree_user_token";
 
   function sym(s){
-    const map = {cherry:"🍒", lemon:"🍋", bar:"🟥", seven:"7️⃣", diamond:"💎"};
-    return map[s] || s || "—";
+    const map = {cherry:"CH", lemon:"LE", bar:"BAR", seven:"777", diamond:"DIA"};
+    return map[s] || s || "--";
   }
 
   function nonce(){
     try{
       const arr = new Uint8Array(12);
       window.crypto.getRandomValues(arr);
-      return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+      return Array.from(arr).map(b => b.toString(16).padStart(2,"0")).join("");
     }catch(e){
       return String(Date.now()) + Math.random().toString(16).slice(2);
     }
@@ -116,10 +130,18 @@
 
     const ls = st.state?.last_spin;
     if(ls && Array.isArray(ls.reels)){
-      r1.textContent = sym(ls.reels[0]);
-      r2.textContent = sym(ls.reels[1]);
-      r3.textContent = sym(ls.reels[2]);
+      const list = ls.reels;
+      reels.forEach((el, idx) => {
+        if (!el) return;
+        el.textContent = sym(list[idx]);
+      });
       payoutLine.textContent = `Payout: ${ls.payout || 0} (${ls.multiplier || 0}x)`;
+    }else{
+      reels.forEach((el) => {
+        if (!el) return;
+        el.textContent = "--";
+      });
+      payoutLine.textContent = "Payout: 0";
     }
   }
 
@@ -127,6 +149,10 @@
     if(playerToken) return;
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST"});
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
     playerToken = data.player_token;
     window.localStorage.setItem(tokenKey, playerToken);
@@ -137,6 +163,10 @@
       headers: playerToken ? {"X-Cardgame-Token": playerToken} : {}
     });
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
     applyState(data.state);
   }
@@ -156,6 +186,10 @@
         body: JSON.stringify({token: playerToken, action:"spin", payload:{bet, nonce:n}})
       });
       const data = await res.json();
+      if(data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
       if(!res.ok || !data.ok) throw new Error(data.error || "spin failed");
       statusLine.textContent = "Spun.";
       await fetchState();

@@ -99,6 +99,57 @@ def _resolve_admin_user_id(req: web.Request) -> int | None:
 def _normalize_currency(value: Any) -> str:
     return str(value or "").strip().lower()
 
+def _sync_game_record(db, payload: Dict[str, Any]) -> None:
+    if not payload:
+        return
+    status_val = payload.get("status") or "created"
+    active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
+    metadata = {
+        "currency": payload.get("currency"),
+        "pot": payload.get("pot"),
+        "status": status_val,
+    }
+    db.upsert_game(
+        game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
+        module="cardgames",
+        payload=payload,
+        title=payload.get("game_id"),
+        created_by=None,
+        created_at=db._as_datetime(payload.get("created_at")),
+        ended_at=db._as_datetime(payload.get("updated_at")),
+        status=status_val,
+        active=active,
+        metadata=metadata,
+        run_source=payload.get("run_source") or "api",
+    )
+
+async def _finish_for_zero_balance(db, ctx: Dict[str, Any], user_id: int, session: Dict[str, Any]) -> bool:
+    if not ctx or not session:
+        return False
+    game_id = str(session.get("game_id") or "").strip().lower()
+    if game_id not in ("slots", "blackjack", "poker", "highlow"):
+        return False
+    try:
+        event_id = int(ctx.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    if event_id <= 0 or user_id <= 0:
+        return False
+    balance = db.get_event_wallet_balance(event_id, int(user_id))
+    if balance > 0:
+        return False
+    token = session.get("priestess_token") or ""
+    try:
+        await _run_blocking(cg.finish_session, session.get("session_id"), token)
+    except Exception:
+        return False
+    try:
+        updated = await _run_blocking(cg.get_session_by_id, session.get("session_id"))
+    except Exception:
+        updated = None
+    _sync_game_record(db, dict(updated or session))
+    return True
+
 async def _ensure_wallet_balance(req: web.Request, join_code: str, session: Dict[str, Any]) -> web.Response | Dict[str, Any] | None:
     db = get_database()
     ctx = db.get_game_wallet_context(join_code=join_code, game_id=session.get("session_id"))
@@ -388,11 +439,25 @@ async def player_action(req: web.Request):
 
     # For wallet-enabled sessions, these actions must have a logged-in user.
     user = None
-    if needs_wallet and game_id in ("slots", "crapslite") and action in ("spin", "bet"):
+    if needs_wallet and game_id in ("slots", "crapslite", "blackjack", "poker", "highlow"):
         u = await _resolve_user(req)
         if isinstance(u, web.Response):
             return u
         user = u
+    # If wallet is required and balance is empty, end single-player sessions early.
+    if needs_wallet and user and game_id in ("slots", "crapslite", "blackjack", "poker", "highlow"):
+        try:
+            event_id = int(ctx.get("event_id") or 0)
+        except Exception:
+            event_id = 0
+        if event_id > 0:
+            bal = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+            if bal <= 0:
+                await _finish_for_zero_balance(db, ctx, int(user.get("id") or 0), s0)
+                return web.json_response(
+                    {"ok": False, "error": "no balance", "redirect": "/gallery", "balance": bal},
+                    status=409,
+                )
     # If we need to debit a bet, do so BEFORE the game reducer runs.
     if needs_wallet and user and game_id == "crapslite" and action == "bet":
         try:
@@ -513,6 +578,26 @@ async def player_action(req: web.Request):
                     },
                     allow_negative=True,
                 )
+    if s and str(s.get("status") or "").lower() == "finished":
+        try:
+            _sync_game_record(db, dict(s))
+        except Exception:
+            pass
+    balance = None
+    if needs_wallet and user:
+        try:
+            event_id = int(ctx.get("event_id") or 0)
+        except Exception:
+            event_id = 0
+        if event_id > 0:
+            balance = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+    if balance is not None and balance <= 0:
+        try:
+            if game_id in ("slots", "blackjack", "poker", "highlow"):
+                await _finish_for_zero_balance(db, ctx, int(user.get("id") or 0), s or s0)
+        except Exception:
+            pass
+        return web.json_response({"ok": True, "session": s, "redirect": "/gallery", "balance": balance})
     return web.json_response({"ok": True, "session": s})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/host-action", allow_public=True)
@@ -530,6 +615,12 @@ async def host_action(req: web.Request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    if s and str(s.get("status") or "").lower() == "finished":
+        try:
+            db = get_database()
+            _sync_game_record(db, dict(s))
+        except Exception:
+            pass
     # If this was a crapslite roll, distribute payouts to all joined players.
     try:
         game_id = str((s or {}).get("game_id") or "").strip().lower()
@@ -690,10 +781,20 @@ async def delete_session(req: web.Request):
     except Exception:
         body = {}
     token = _get_token(req, body)
+    s0 = await _run_blocking(cg.get_session_by_id, session_id)
     try:
         await _run_blocking(cg.delete_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    try:
+        if s0:
+            db = get_database()
+            payload = dict(s0 or {})
+            payload["status"] = "deleted"
+            payload["updated_at"] = db.now()
+            _sync_game_record(db, payload)
+    except Exception:
+        pass
     return web.json_response({"ok": True})

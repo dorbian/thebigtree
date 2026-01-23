@@ -179,7 +179,7 @@
 
   function cardLabel(card){
     if (!card) return "?";
-    const suitMap = {spades:"♠", hearts:"♥", diamonds:"♦", clubs:"♣", hidden:"?"};
+    const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C", hidden:"?"};
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
@@ -297,12 +297,27 @@
   async function postAction(action, payload){
     await ensureToken();
     if (!sessionId) return;
-    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
+    const userToken = getUserToken();
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
-      headers: {"Content-Type":"application/json"},
+      headers: {
+        "Content-Type":"application/json",
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      },
       body: JSON.stringify({token: playerToken, action, payload: payload || {}})
     });
-    loadState();
+    if (res){
+      const data = await res.json().catch(() => ({}));
+      if (data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
+      if (!res.ok || data.ok === false){
+        statusLine.textContent = data.error || "Action failed.";
+        return;
+      }
+    }
+    await loadState();
   }
 
   function render(state){

@@ -2227,6 +2227,14 @@
         padding:18px;
         box-shadow:var(--shadow);
       }
+      .modal-content{
+        width:min(720px,92vw);
+        background:var(--panel);
+        border:1px solid var(--line);
+        border-radius:20px;
+        padding:18px;
+        box-shadow:var(--shadow);
+      }
       .modal-card--wide{
         width:min(1400px,92vw);
         height:90vh;

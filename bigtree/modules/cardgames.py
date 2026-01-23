@@ -688,20 +688,25 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
         ]
         population = [s for s, _w in symbols]
         weights = [w for _s, w in symbols]
-        reels = random.choices(population, weights=weights, k=3)
-
+        reels = random.choices(population, weights=weights, k=9)
+        paytable = {
+            "cherry": 2,
+            "lemon": 3,
+            "bar": 5,
+            "seven": 10,
+            "diamond": 15,
+        }
         payout_mult = 0
-        if reels[0] == reels[1] == reels[2]:
-            paytable = {
-                "cherry": 2,
-                "lemon": 3,
-                "bar": 5,
-                "seven": 10,
-                "diamond": 15,
-            }
-            payout_mult = int(paytable.get(reels[0], 0))
-        elif reels.count("cherry") == 2:
-            payout_mult = 1
+        row_results = []
+        for row in range(3):
+            line = reels[row * 3 : (row + 1) * 3]
+            line_mult = 0
+            if line[0] == line[1] == line[2]:
+                line_mult = int(paytable.get(line[0], 0))
+            elif line.count("cherry") == 2:
+                line_mult = 1
+            row_results.append({"line": line, "multiplier": line_mult})
+            payout_mult += line_mult
 
         nonce = str(payload.get("nonce") or "").strip() or _new_id()
         payout = bet * payout_mult
@@ -712,6 +717,7 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
             "bet": bet,
             "multiplier": payout_mult,
             "payout": payout,
+            "rows": row_results,
             "nonce": nonce,
             "ts": _now(),
         }
