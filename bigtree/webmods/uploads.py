@@ -263,6 +263,8 @@ async def upload_media(req: web.Request):
     origin_type = (fields.get("origin_type") or "").strip() or None
     origin_label = (fields.get("origin_label") or "").strip() or None
     media_type = (fields.get("media_type") or "").strip() or None
+    hidden_raw = (fields.get("hidden") or "").strip().lower()
+    hidden = hidden_raw in ("1", "true", "yes", "on")
     venue_id_raw = (fields.get("venue_id") or "").strip()
     try:
         venue_id = int(venue_id_raw) if venue_id_raw else None
@@ -311,6 +313,7 @@ async def upload_media(req: web.Request):
         origin_label=origin_label,
         url=f"/media/{filename}",
         thumb_url=f"/media/thumbs/{filename}",
+        hidden=hidden,
         metadata=metadata,
     )
     try:
@@ -332,6 +335,7 @@ async def upload_media(req: web.Request):
         media_type=media_type or "",
         venue_id=venue_id,
     )
+    item["hidden"] = hidden
     return web.json_response({"ok": True, "item": item})
 
 @route("GET", "/api/media/list", scopes=["tarot:admin", "bingo:admin", "admin:web"])

@@ -1171,11 +1171,15 @@
                       <option value="Gallery">Gallery</option>
                     </select>
                   </div>
-                    <div>
-                      <label for="mediaUploadOriginLabel">Origin label</label>
-                      <input id="mediaUploadOriginLabel" placeholder="Offered during...">
-                    </div>
+                  <div>
+                    <label for="mediaUploadOriginLabel">Origin label</label>
+                    <input id="mediaUploadOriginLabel" placeholder="Offered during...">
                   </div>
+                  <label class="checkbox-row">
+                    <input id="mediaUploadHidden" type="checkbox">
+                    <span>Hide from gallery</span>
+                  </label>
+                </div>
                   <div class="row">
                     <div>
                       <label for="mediaUploadType">Media type</label>
@@ -1571,6 +1575,10 @@
               <label for="uploadLibraryArtist">Artist</label>
               <select id="uploadLibraryArtist"></select>
             </div>
+            <label class="checkbox-row">
+              <input id="uploadLibraryHidden" type="checkbox">
+              <span>Hide from gallery</span>
+            </label>
             <button id="uploadLibraryUpload" disabled>Upload</button>
             <div class="status" id="uploadLibraryStatus">Ready.</div>
           </section>

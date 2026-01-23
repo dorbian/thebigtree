@@ -1287,6 +1287,19 @@
         color:var(--neutral-2);
         margin-bottom:4px;
       }
+      .checkbox-row{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        text-transform:none;
+        letter-spacing:0;
+        font-size:13px;
+        color:var(--ink);
+      }
+      .checkbox-row input{
+        width:auto;
+        margin:0;
+      }
       input, select, textarea, button{
         width:100%;
         border-radius:10px;

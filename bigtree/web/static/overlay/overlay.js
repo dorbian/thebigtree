@@ -7408,13 +7408,23 @@ function getOwnerClaimStatus(ownerName){
             const venueId = $("mediaUploadVenue").value.trim();
             if (mediaType) fd.append("media_type", mediaType);
             if (venueId) fd.append("venue_id", venueId);
+            if ($("mediaUploadHidden")?.checked) fd.append("hidden", "1");
             const res = await fetch("/api/media/upload", {
               method: "POST",
               headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
+          const text = await res.text();
+          let data = {};
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            const msg = (res.status === 401 || res.status === 403)
+              ? "Unauthorized. Check API key."
+              : "Upload failed (non-JSON response).";
+            throw new Error(msg);
+          }
+          if (!res.ok || data.ok === false) throw new Error(data.error || "Failed");
           $("mediaUploadFile").value = "";
           $("mediaUploadTitleInput").value = "";
           $("mediaUploadOriginLabel").value = "";
@@ -7587,13 +7597,23 @@ function getOwnerClaimStatus(ownerName){
           fd.append("title", title);
           const artistId = $("uploadLibraryArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
+          if ($("uploadLibraryHidden")?.checked) fd.append("hidden", "1");
           const res = await fetch("/api/media/upload", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
+          const text = await res.text();
+          let data = {};
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            const msg = (res.status === 401 || res.status === 403)
+              ? "Unauthorized. Check API key."
+              : "Upload failed (non-JSON response).";
+            throw new Error(msg);
+          }
+          if (!res.ok || data.ok === false) throw new Error(data.error || "Failed");
           $("uploadLibraryFile").value = "";
           $("uploadLibraryTitleInput").value = "";
           libraryUploadFile = null;
