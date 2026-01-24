@@ -800,6 +800,7 @@ def _session_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "pot": int(row.get("pot") or 0),
         "winnings": int(row.get("winnings") or 0),
         "state": state,
+        "is_single_player": bool(row.get("is_single_player")),
         "created_at": float(row.get("created_at") or 0),
         "updated_at": float(row.get("updated_at") or 0),
     }
@@ -827,6 +828,7 @@ def create_session(
     background_artist_name: Optional[str] = None,
     currency: Optional[str] = None,
     status: Optional[str] = None,
+    is_single_player: bool = False,
 ) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
@@ -851,13 +853,13 @@ def create_session(
             INSERT INTO cardgame_sessions (
                 session_id, join_code, priestess_token, player_token, game_id, deck_id,
                 background_url, background_artist_id, background_artist_name, currency,
-                status, pot, winnings, state, created_at, updated_at
+                status, pot, winnings, state, is_single_player, created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, to_timestamp(%s), to_timestamp(%s))
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, to_timestamp(%s), to_timestamp(%s))
             ON CONFLICT (join_code) DO NOTHING
             RETURNING session_id, join_code, priestess_token, player_token, game_id, deck_id,
                       background_url, background_artist_id, background_artist_name, currency,
-                      status, pot, winnings, state,
+                      status, pot, winnings, state, is_single_player,
                       EXTRACT(EPOCH FROM created_at) AS created_at,
                       EXTRACT(EPOCH FROM updated_at) AS updated_at
             """,
@@ -876,6 +878,7 @@ def create_session(
                 int(pot or 0),
                 0,
                 Json(state),
+                is_single_player,
                 now,
                 now,
             ),
@@ -893,7 +896,7 @@ def list_sessions(game_id: Optional[str] = None) -> List[Dict[str, Any]]:
             """
             SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
                    background_url, background_artist_id, background_artist_name, currency,
-                   status, pot, winnings, state,
+                   status, pot, winnings, state, is_single_player,
                    EXTRACT(EPOCH FROM created_at) AS created_at,
                    EXTRACT(EPOCH FROM updated_at) AS updated_at
             FROM cardgame_sessions
@@ -908,7 +911,7 @@ def list_sessions(game_id: Optional[str] = None) -> List[Dict[str, Any]]:
             """
             SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
                    background_url, background_artist_id, background_artist_name, currency,
-                   status, pot, winnings, state,
+                   status, pot, winnings, state, is_single_player,
                    EXTRACT(EPOCH FROM created_at) AS created_at,
                    EXTRACT(EPOCH FROM updated_at) AS updated_at
             FROM cardgame_sessions
@@ -926,7 +929,7 @@ def get_session_by_join_code(join_code: str) -> Optional[Dict[str, Any]]:
         """
         SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
                background_url, background_artist_id, background_artist_name, currency,
-               status, pot, winnings, state,
+               status, pot, winnings, state, is_single_player,
                EXTRACT(EPOCH FROM created_at) AS created_at,
                EXTRACT(EPOCH FROM updated_at) AS updated_at
         FROM cardgame_sessions
@@ -947,7 +950,7 @@ def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
         """
         SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
                background_url, background_artist_id, background_artist_name, currency,
-               status, pot, winnings, state,
+               status, pot, winnings, state, is_single_player,
                EXTRACT(EPOCH FROM created_at) AS created_at,
                EXTRACT(EPOCH FROM updated_at) AS updated_at
         FROM cardgame_sessions
@@ -1290,7 +1293,46 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     if not s:
         raise ValueError("not found")
     state = s.get("state") or {}
-    if s.get("game_id") == "crapslite":
+    game_id = s.get("game_id")
+    is_single_player = s.get("is_single_player", False)
+    
+    # For single-player blackjack sessions, allow hit/stand/double/split actions
+    if game_id == "blackjack" and is_single_player and action in ("hit", "stand", "double", "split"):
+        if token != s.get("player_token"):
+            raise PermissionError("unauthorized")
+        if s.get("status") != "live":
+            raise ValueError("session not live")
+        updated, err = _apply_action(game_id, state, action, payload or {})
+        if err:
+            raise ValueError(err)
+        s["state"] = updated
+        if updated.get("status") == "finished":
+            result = updated.get("result")
+            pot = int(s.get("pot") or 0)
+            winnings = 0
+            results = updated.get("hand_results") or []
+            multipliers = updated.get("hand_multipliers") or []
+            if not results and result:
+                results = [result]
+            for idx, hand_result in enumerate(results):
+                if hand_result not in ("win", "push"):
+                    continue
+                multiplier = 1
+                if idx < len(multipliers):
+                    try:
+                        multiplier = int(multipliers[idx] or 1)
+                    except Exception:
+                        multiplier = 1
+                if hand_result == "win":
+                    winnings += pot * max(1, multiplier)
+                else:
+                    winnings += int(pot * max(1, multiplier) / 2)
+            s["winnings"] = winnings
+        _update_session(session_id, s)
+        _add_event(session_id, "STATE_UPDATED", {"action": action})
+        return s
+    
+    if game_id == "crapslite":
         players = state.get("players") if isinstance(state, dict) else None
         if not isinstance(players, dict) or token not in players:
             raise PermissionError("unauthorized")
@@ -1300,28 +1342,28 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     else:
         if token != s.get("player_token"):
             raise PermissionError("unauthorized")
-    if s.get("game_id") == "highlow" and not state.get("base_pot"):
+    if game_id == "highlow" and not state.get("base_pot"):
         state["base_pot"] = int(s.get("pot") or 0)
     if s.get("status") != "live":
         raise ValueError("session not live")
-    updated, err = _apply_action(s["game_id"], state, action, payload or {})
+    updated, err = _apply_action(game_id, state, action, payload or {})
     if err:
         raise ValueError(err)
     s["state"] = updated
-    if s.get("game_id") == "highlow":
+    if game_id == "highlow":
         s["winnings"] = int(updated.get("winnings") or 0)
-    if s.get("game_id") == "poker":
+    if game_id == "poker":
         s["pot"] = int(updated.get("pot") or s.get("pot") or 0)
     if updated.get("status") == "finished":
         result = updated.get("result")
         pot = int(s.get("pot") or 0)
         winnings = 0
-        if s.get("game_id") == "poker":
+        if game_id == "poker":
             if result == "player":
                 winnings = pot
             elif result == "push":
                 winnings = int(pot / 2)
-        elif s.get("game_id") == "blackjack":
+        elif game_id == "blackjack":
             results = updated.get("hand_results") or []
             multipliers = updated.get("hand_multipliers") or []
             if not results and result:

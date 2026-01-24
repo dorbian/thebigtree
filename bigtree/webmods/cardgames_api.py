@@ -31,6 +31,7 @@ async def _send_ws_state(ws: web.WebSocketResponse, session: Dict[str, Any], vie
     try:
         db = get_database()
         state["session"]["event_autoplay"] = _get_event_autoplay(db, session)
+        state["session"]["is_single_player"] = session.get("is_single_player", False)
     except Exception:
         pass
     await ws.send_json({"type": "STATE", "state": state})
@@ -286,6 +287,7 @@ async def create_session(req: web.Request):
     background_artist_name = str(body.get("background_artist_name") or "").strip() or None
     currency = str(body.get("currency") or "").strip() or None
     status = str(body.get("status") or "").strip().lower()
+    is_single_player = bool(body.get("is_single_player", False))
     if not status and body.get("draft"):
         status = "draft"
     try:
@@ -299,6 +301,7 @@ async def create_session(req: web.Request):
             background_artist_name,
             currency,
             status or None,
+            is_single_player,
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
@@ -388,6 +391,7 @@ async def get_state(req: web.Request):
     try:
         db = get_database()
         state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
+        state["session"]["is_single_player"] = s.get("is_single_player", False)
         ctx = db.get_game_wallet_context(join_code=s.get("join_code"), game_id=s.get("session_id"))
         wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
         wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
@@ -427,6 +431,7 @@ async def stream_events(req: web.Request):
     try:
         db = get_database()
         initial_state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
+        initial_state["session"]["is_single_player"] = s.get("is_single_player", False)
     except Exception:
         pass
     initial = {"type": "STATE", "state": initial_state}
@@ -519,7 +524,8 @@ async def player_action(req: web.Request):
 
     if game_id == "blackjack" and action == "start_round":
         db = get_database()
-        if not _get_event_autoplay(db, s0):
+        # Allow start_round for single-player sessions or event autoplay sessions
+        if not (s0.get("is_single_player") or _get_event_autoplay(db, s0)):
             return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
         state_status = ((s0.get("state") or {}).get("status") or "").strip().lower()
         if state_status and state_status != "finished":
@@ -840,6 +846,8 @@ async def clone_session(req: web.Request):
             s.get("background_artist_id"),
             s.get("background_artist_name"),
             s.get("currency"),
+            None,
+            s.get("is_single_player", False),
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)

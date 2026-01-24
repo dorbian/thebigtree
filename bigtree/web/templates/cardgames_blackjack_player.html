@@ -362,15 +362,30 @@
     const live = (sessionStatus === "live" || stateStatus === "live") && stateStatus !== "finished";
     const hand = renderList[activeHand] || [];
     const handResult = results[activeHand];
-    const canAct = live && (!handResult || handResult === "pending");
+    const isSinglePlayer = !!(state.session && state.session.is_single_player);
+    const canAct = isSinglePlayer && live && (!handResult || handResult === "pending");
     const canDouble = canAct && hand.length === 2;
     const canSplit = canAct && renderList.length <= 1 && hand.length === 2 && hand[0] && hand[1] && hand[0].rank === hand[1].rank;
-    hitBtn.disabled = !canAct;
-    standBtn.disabled = !canAct;
-    doubleBtn.disabled = !canDouble;
-    splitBtn.disabled = !canSplit;
+    
+    // Hide action buttons in hosted mode (not single player)
+    if (isSinglePlayer) {
+      hitBtn.style.display = "inline-flex";
+      standBtn.style.display = "inline-flex";
+      doubleBtn.style.display = "inline-flex";
+      splitBtn.style.display = "inline-flex";
+      hitBtn.disabled = !canAct;
+      standBtn.disabled = !canAct;
+      doubleBtn.disabled = !canDouble;
+      splitBtn.disabled = !canSplit;
+    } else {
+      hitBtn.style.display = "none";
+      standBtn.style.display = "none";
+      doubleBtn.style.display = "none";
+      splitBtn.style.display = "none";
+    }
+    
     if (restartBtn){
-      const canRestart = stateStatus === "finished" && !!(state.session && state.session.event_autoplay);
+      const canRestart = isSinglePlayer && stateStatus === "finished" && !!(state.session && (state.session.event_autoplay || state.session.is_single_player));
       restartBtn.style.display = canRestart ? "inline-flex" : "none";
       restartBtn.disabled = !canRestart;
     }
@@ -379,7 +394,7 @@
       .concat((state.state && state.state.dealer_hand) || []);
     renderArtists(visibleCards);
     if (state.session.status === "finished"){
-      statusLine.textContent = "Status: finished (waiting for host)";
+      statusLine.textContent = isSinglePlayer ? "Status: finished" : "Status: finished (waiting for host)";
     }
   }
 

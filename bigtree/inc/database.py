@@ -212,6 +212,7 @@ class Database:
                 pot BIGINT NOT NULL DEFAULT 0,
                 winnings BIGINT NOT NULL DEFAULT 0,
                 state JSONB DEFAULT '{}'::jsonb,
+                is_single_player BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
