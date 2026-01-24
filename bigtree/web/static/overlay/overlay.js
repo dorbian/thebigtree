@@ -485,6 +485,48 @@
         return out;
       }
 
+      function showEventWalletModal(show){
+        const modal = $("eventWalletModal");
+        if (!modal) return;
+        modal.classList.toggle("show", !!show);
+        if (!show){
+          modal.dataset.player = "";
+        }
+      }
+
+      function openEventWalletModal(playerName, balance, currency){
+        const modal = $("eventWalletModal");
+        const status = $("eventWalletStatus");
+        const eventModal = $("eventModal");
+        if (!modal || !eventModal) return;
+        const walletEnabled = modal.dataset.wallet_enabled === "1" || eventModal.dataset.wallet_enabled === "1";
+        const eventId = parseInt(eventModal.dataset.event_id || modal.dataset.event_id || "0", 10) || 0;
+        if (!walletEnabled || !eventId){
+          if (status) status.textContent = "Save the event and enable wallets first.";
+          return;
+        }
+        modal.dataset.player = playerName || "";
+        modal.dataset.event_id = String(eventId);
+        modal.dataset.currency = currency || modal.dataset.currency || "";
+        const playerLabel = $("eventWalletPlayerLabel");
+        if (playerLabel) playerLabel.textContent = `Player: ${playerName || "-"}`;
+        const balanceLabel = $("eventWalletBalanceLabel");
+        const balanceText = currency ? `${balance || 0} ${currency}` : String(balance || 0);
+        if (balanceLabel) balanceLabel.textContent = `Balance: ${balanceText}`;
+        if (status) status.textContent = "Ready.";
+        const amt = $("eventWalletAmount");
+        if (amt){
+          amt.disabled = false;
+          amt.value = "";
+        }
+        const comment = $("eventWalletComment");
+        if (comment){
+          comment.disabled = false;
+          comment.value = "";
+        }
+        showEventWalletModal(true);
+      }
+
       function openEventModal(eventObj){
         const modal = $("eventModal");
         if (!modal) return;
@@ -493,6 +535,11 @@
         const isNew = !eventObj || !eventObj.id;
         modal.dataset.event_id = String(eventObj?.id || "");
         modal.dataset.event_code = String(eventObj?.event_code || "");
+        const walletModalRef = $("eventWalletModal");
+        if (walletModalRef){
+          walletModalRef.dataset.event_id = String(eventObj?.id || "");
+          walletModalRef.dataset.currency = eventObj?.currency_name || "";
+        }
         loadEventPlayers(eventObj?.id || 0);
         loadEventSummary(eventObj?.id || 0);
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
@@ -550,18 +597,27 @@
         );
         setEventGamesStatus(getEventEnabledGames(modal));
 
-        const walletUser = $("eventWalletUser");
         const walletAmount = $("eventWalletAmount");
         const walletSet = $("eventWalletSet");
         const walletStatus = $("eventWalletStatus");
         const walletComment = $("eventWalletComment");
         const walletEnabled = !!eventObj?.wallet_enabled;
-        if (walletUser) walletUser.disabled = !walletEnabled || isNew;
+        const walletModal = $("eventWalletModal");
+        if (walletModal){
+          walletModal.dataset.wallet_enabled = walletEnabled && !isNew ? "1" : "0";
+        }
+        modal.dataset.wallet_enabled = walletEnabled ? "1" : "0";
         if (walletAmount) walletAmount.disabled = !walletEnabled || isNew;
         if (walletComment) walletComment.disabled = !walletEnabled || isNew;
         if (walletSet) walletSet.disabled = !walletEnabled || isNew;
         if (walletStatus){
           walletStatus.textContent = walletEnabled ? "Ready." : "Wallet is disabled for this event.";
+        }
+        const playersNote = $("eventPlayersNote");
+        if (playersNote){
+          playersNote.textContent = (!walletEnabled || isNew)
+            ? "Save the event and enable wallets to manage balances."
+            : "Click a player to top up their wallet.";
         }
 
         const joinInfo = $("eventJoinInfo");
@@ -584,9 +640,10 @@
           const box = $("eventPlayersList");
           if (!box) return;
           const id = parseInt(String(eventId || "0"), 10) || 0;
+          const walletEnabled = $("eventModal")?.dataset?.wallet_enabled === "1";
+          const walletModalRef = $("eventWalletModal");
           if (!id){
             box.textContent = "Save the event to view registered players.";
-            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
             return;
           }
           box.textContent = "Loading players...";
@@ -596,27 +653,42 @@
               throw new Error(resp.error || "Unable to load players");
             }
             const players = resp.players || [];
+            const currency = resp.currency_name || resp.currency || resp.currencyName || walletModalRef?.dataset?.currency || "";
+            if (walletModalRef) walletModalRef.dataset.currency = currency || "";
             if (!players.length){
               box.textContent = "No players have joined yet.";
-              if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
               return;
             }
-            box.textContent = players
-              .map(p => (p && p.xiv_username ? String(p.xiv_username) : "Unknown"))
-              .join("\n");
-            const select = $("eventWalletUser");
-            if (select){
-              const options = ["<option value=\"\">Select player</option>"].concat(
-                players.map(p => {
-                  const name = String(p.xiv_username || "").trim();
-                  return name ? `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>` : "";
-                }).filter(Boolean)
-              );
-              select.innerHTML = options.join("");
+            const rows = players.map(p => {
+              const name = String(p?.xiv_username || p?.user || "").trim() || "Unknown";
+              const balanceRaw = p?.wallet_balance ?? p?.balance ?? p?.wallet ?? 0;
+              const balanceLabel = currency ? `${balanceRaw} ${currency}` : String(balanceRaw);
+              const btn = walletEnabled
+                ? `<button class="btn-ghost" type="button" data-topup="${escapeHtml(name)}" data-balance="${escapeHtml(String(balanceRaw))}" data-currency="${escapeHtml(currency)}">Top up</button>`
+                : "<span class=\"muted\" style=\"font-size:12px;\">Wallet disabled</span>";
+              return `
+                <div class="event-player-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid rgba(255,255,255,.08); border-radius:10px;">
+                  <div>
+                    <div style="font-weight:600;">${escapeHtml(name)}</div>
+                    <div class="muted" style="font-size:12px;">Wallet: ${escapeHtml(balanceLabel || "-")}</div>
+                  </div>
+                  ${btn}
+                </div>
+              `;
+            }).join("") || "<div class=\"muted\">No players have joined yet.</div>";
+            box.innerHTML = rows;
+            if (walletEnabled){
+              box.querySelectorAll("button[data-topup]").forEach(btn => {
+                btn.addEventListener("click", () => {
+                  const player = btn.dataset.topup || "";
+                  const bal = btn.dataset.balance || "-";
+                  const cur = btn.dataset.currency || currency || "";
+                  openEventWalletModal(player, bal, cur);
+                });
+              });
             }
           }catch(err){
             box.textContent = err.message || "Unable to load players.";
-            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
           }
         }
 
@@ -4137,15 +4209,29 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         setEventGamesStatus(enabled);
         showEventGamesModal(false);
       });
+      ["eventWalletModalClose", "eventWalletModalCancel"].forEach(id => {
+        on(id, "click", () => showEventWalletModal(false));
+      });
+      on("eventWalletModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "eventWalletModal"){
+          showEventWalletModal(false);
+        }
+      });
       on("eventWalletSet", "click", async () => {
         const modal = $("eventModal");
         const status = $("eventWalletStatus");
-        const eventId = parseInt(modal?.dataset?.event_id || "0", 10) || 0;
-        const user = $("eventWalletUser")?.value || "";
+        const walletModal = $("eventWalletModal");
+        const eventId = parseInt(walletModal?.dataset?.event_id || modal?.dataset?.event_id || "0", 10) || 0;
+        const user = walletModal?.dataset?.player || "";
+        const walletEnabled = walletModal?.dataset?.wallet_enabled === "1" || modal?.dataset?.wallet_enabled === "1";
         const amountRaw = $("eventWalletAmount")?.value || "0";
         const comment = $("eventWalletComment")?.value || "";
         const hostName = $("brandUserName")?.textContent?.trim() || "";
         const amount = parseInt(amountRaw, 10);
+        if (!walletEnabled){
+          if (status) status.textContent = "Wallet is disabled for this event.";
+          return;
+        }
         if (!eventId){
           if (status) status.textContent = "Save the event first.";
           return;
@@ -4180,6 +4266,9 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           if (status) status.textContent = `Wallet balance is now ${resp.balance}.`;
           const commentEl = $("eventWalletComment");
           if (commentEl) commentEl.value = "";
+          showEventWalletModal(false);
+          await loadEventPlayers(eventId);
+          await loadEventSummary(eventId);
         }catch(err){
           if (status) status.textContent = err.message || "Unable to set wallet balance.";
         }

@@ -1758,31 +1758,10 @@
 
           <div style="margin-top:12px;">
             <strong>Registered players</strong>
-            <div class="dashboard-logs-body" id="eventPlayersList" style="max-height:180px; margin-top:8px;">No players loaded.</div>
+            <div class="muted" id="eventPlayersNote" style="font-size:12px; margin-top:4px;">Save the event to see players and manage wallets.</div>
+            <div class="dashboard-logs-body" id="eventPlayersList" style="max-height:200px; margin-top:8px;">No players loaded.</div>
+            <div class="status" id="eventHouseTotal">House total: -</div>
           </div>
-          <div style="margin-top:12px;">
-            <strong>Wallet top-up</strong>
-            <div class="row" style="margin-top:8px; gap:10px; flex-wrap:wrap;">
-              <label style="min-width:200px;">
-                Player
-                <select id="eventWalletUser"><option value="">Select player</option></select>
-              </label>
-              <label style="min-width:160px;">
-                Amount to add
-                <input id="eventWalletAmount" type="number" step="1" placeholder="0">
-              </label>
-              <label style="min-width:220px; flex:1;">
-                Comment (required)
-                <input id="eventWalletComment" placeholder="Reason for the adjustment">
-              </label>
-              <div>
-                <label>&nbsp;</label>
-                <button id="eventWalletSet" type="button">Add balance</button>
-              </div>
-            </div>
-          <div class="status" id="eventWalletStatus">Ready.</div>
-          <div class="status" id="eventHouseTotal">House total: -</div>
-        </div>
 
           <div class="row" style="justify-content:space-between; margin-top:12px; flex-wrap:wrap; gap:10px;">
             <button class="btn-ghost danger-btn" id="eventEnd" type="button" style="display:none;">End event</button>
@@ -1793,6 +1772,36 @@
               </button>
               <button id="eventSave" type="button">Save</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="eventWalletModal">
+      <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+          <div class="modal-title" id="eventWalletModalTitle">Top up wallet</div>
+          <button class="btn-ghost icon-btn icon-btn--small" id="eventWalletModalClose" type="button" aria-label="Close" title="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12.01l-6.3-6.3-1.41 1.41 6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="eventWalletPlayerLabel">Player: -</div>
+          <div class="status" id="eventWalletBalanceLabel" style="margin-top:6px;">Balance: -</div>
+          <div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+            <label style="min-width:160px;">
+              Amount to add
+              <input id="eventWalletAmount" type="number" step="1" placeholder="0">
+            </label>
+            <label style="min-width:220px; flex:1;">
+              Comment (required)
+              <input id="eventWalletComment" placeholder="Reason for the adjustment">
+            </label>
+          </div>
+          <div class="status" id="eventWalletStatus" style="margin-top:10px;">Ready.</div>
+          <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button class="btn-ghost" id="eventWalletModalCancel" type="button">Cancel</button>
+            <button id="eventWalletSet" type="button">Add balance</button>
           </div>
         </div>
       </div>
