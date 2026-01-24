@@ -212,6 +212,7 @@ class Database:
                 pot BIGINT NOT NULL DEFAULT 0,
                 winnings BIGINT NOT NULL DEFAULT 0,
                 state JSONB DEFAULT '{}'::jsonb,
+                is_single_player BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -457,6 +458,7 @@ class Database:
             self._ensure_column(conn, "games", "venue_id", "INTEGER")
             self._ensure_column(conn, "games", "event_id", "INTEGER")
             self._ensure_column(conn, "venues", "deck_id", "TEXT")
+            self._ensure_column(conn, "cardgame_sessions", "is_single_player", "BOOLEAN DEFAULT FALSE")
         logger.debug("[database] schema ready")
 
     def _count_rows(self, table: str) -> int:

@@ -6271,6 +6271,7 @@ function getOwnerClaimStatus(ownerName){
 
       function setCardgameStatus(msg, kind){
         setStatusText("cgStatus", msg, kind);
+        setStatus(msg, kind);
       }
 
       function renderCardgameLinks(gameId, joinCode, token){
@@ -6391,14 +6392,18 @@ function getOwnerClaimStatus(ownerName){
       }
 
       function setCardgameBackgroundStatus(url){
-        const el = $("cgBackgroundStatus");
-        if (!el) return;
+        const previewEl = $("cgBackgroundPreview");
+        const imgEl = $("cgBackgroundPreviewImg");
+        if (!previewEl || !imgEl) return;
         const artistName = $("cgBackgroundUrl").dataset.artistName || "";
         if (!url){
-          el.textContent = "No background selected.";
+          previewEl.style.display = "none";
           return;
         }
-        el.textContent = artistName ? `Background selected - ${artistName}.` : "Background selected.";
+        imgEl.src = url;
+        imgEl.alt = artistName ? `Background by ${artistName}` : "Background preview";
+        imgEl.title = artistName ? `Background by ${artistName}` : "Background preview";
+        previewEl.style.display = "block";
       }
 
         async function createCardgameSession(payload){
@@ -6519,7 +6524,6 @@ function getOwnerClaimStatus(ownerName){
           if ($("cgDeckRefresh")){
             $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
           }
-        $("cgSessionRefresh").addEventListener("click", () => loadCardgameSessions());
         $("cgSessionSelect").addEventListener("change", (ev) => {
           const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
           const join = opt ? (opt.value || "") : "";
