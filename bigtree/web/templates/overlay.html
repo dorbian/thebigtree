@@ -803,7 +803,9 @@
               <button class="btn-ghost" id="cgOpenMedia">Open media library</button>
             </div>
           </div>
-          <div class="status" id="cgBackgroundStatus">No background selected.</div>
+          <div class="background-preview" id="cgBackgroundPreview" style="display:none; margin-top: 8px;">
+            <img id="cgBackgroundPreviewImg" src="" alt="Background preview" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);">
+          </div>
             <div class="row">
               <div>
                 <label>&nbsp;</label>
@@ -818,14 +820,6 @@
             <div>
               <label for="cgSessionSelect">Existing sessions</label>
               <select id="cgSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="cgSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
             </div>
           </div>
           <div class="row">
