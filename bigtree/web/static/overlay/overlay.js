@@ -425,20 +425,17 @@
         if (!url){
           el.textContent = "No background selected.";
           if (img) img.style.display = "none";
-        modal.dataset.venue_id = eventObj?.venue_id ? String(eventObj.venue_id) : "";
-        modal.dataset.currency_name = eventObj?.currency_name || "";
-        const venueDisplay = $("eventVenueDisplay");
-        if (venueDisplay){
-          const venueName = eventObj?.venue_name || eventObj?.venue || "Database-managed venue";
-          venueDisplay.textContent = `Venue: ${venueName}`;
+          if (empty) empty.style.display = "flex";
+          if (preview) preview.style.display = "flex";
+          return;
         }
-        const currencyDisplay = $("eventCurrencyDisplay");
-        if (currencyDisplay){
-          const currencyName = eventObj?.currency_name || "";
-          currencyDisplay.textContent = `Currency: ${currencyName || "(none)"}`;
+        if (img){
+          img.src = url;
+          img.style.display = "block";
         }
-          return [];
-        }
+        if (empty) empty.style.display = "none";
+        if (preview) preview.style.display = "flex";
+        el.textContent = artist ? `Selected (${artist})` : "Selected.";
       }
 
       function setEventGamesStatus(games){
