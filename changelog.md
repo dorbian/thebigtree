@@ -54,6 +54,7 @@
 - Cardgames: hide artist panel when no card credits and avoid defaulting background credits to Forest.
 - Events: allow event-created blackjack sessions to restart rounds from the player view.
 - Media: allow hidden-on-upload in the media library and improve upload error handling for non-JSON responses.
+- Uploads: increase server and gateway upload size limits to avoid 413 errors.
 - Backend: add Postgres persistence with JSON migration, deck import, and a first-pass user area backed by XivAuth login.
 - Backend: persist XIVAuth/OpenAI config in Postgres, import the INI defaults on first run, and expose a management API plus overlay UI to edit those settings.
 - Frontend: add wallet login trigger, user-area experience, and game-management view plus textual flair badges.
