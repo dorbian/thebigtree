@@ -385,7 +385,7 @@
     }
     
     if (restartBtn){
-      const canRestart = isSinglePlayer && stateStatus === "finished" && !!(state.session && (state.session.event_autoplay || state.session.is_single_player));
+      const canRestart = isSinglePlayer && stateStatus === "finished" && !!(state.session && state.session.event_autoplay);
       restartBtn.style.display = canRestart ? "inline-flex" : "none";
       restartBtn.disabled = !canRestart;
     }

@@ -846,7 +846,7 @@ async def clone_session(req: web.Request):
             s.get("background_artist_id"),
             s.get("background_artist_name"),
             s.get("currency"),
-            None,
+            None,  # status - use default "created"
             s.get("is_single_player", False),
         )
     except Exception as exc:
