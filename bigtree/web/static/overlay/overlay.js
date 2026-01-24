@@ -124,6 +124,10 @@
       };
 
       function getBase(){
+        // Use injected API_BASE_URL if available (dev mode with remote API)
+        if (window.API_BASE_URL){
+          return window.API_BASE_URL;
+        }
         return window.location.origin;
       }
 
@@ -422,7 +426,8 @@
         const img = $("eventBackgroundPreviewImg");
         const empty = $("eventBackgroundPreviewEmpty");
         const preview = $("eventBackgroundPreview");
-        const artist = $("eventBackgroundUrl")?.dataset?.artistName || "";
+        const modal = $("eventModal");
+        const artist = modal?.dataset?.artist_name || "";
         if (!el) return;
         if (!url){
           el.textContent = "No background selected.";
@@ -562,14 +567,11 @@
 
         // Event background + enabled minigames
         const meta = eventObj?.metadata || {};
-        const bgEl = $("eventBackgroundUrl");
-        if (bgEl){
-          const bg = String(meta.background_url || meta.background || "").trim();
-          bgEl.value = bg;
-          bgEl.dataset.artistId = meta.background_artist_id || meta.backgroundArtistId || "";
-          bgEl.dataset.artistName = meta.background_artist_name || meta.backgroundArtistName || "";
-          setEventBackgroundStatus(bg);
-        }
+        const bg = String(meta.background_url || meta.background || "").trim();
+        modal.dataset.background_url = bg;
+        modal.dataset.artist_id = meta.background_artist_id || meta.backgroundArtistId || "";
+        modal.dataset.artist_name = meta.background_artist_name || meta.backgroundArtistName || "";
+        setEventBackgroundStatus(bg);
         const enabled = Array.isArray(meta.enabled_games)
           ? meta.enabled_games
           : (Array.isArray(meta.enabledGames) ? meta.enabledGames : []);
@@ -711,7 +713,7 @@
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
           carry_over: $("eventCarryOver")?.checked || false,
           join_wallet_amount: $("eventJoinWalletAmount")?.value || "0",
-          background_url: $("eventBackgroundUrl") ? $("eventBackgroundUrl").value.trim() : "",
+          background_url: modal.dataset.background_url || "",
           enabled_games: getEventEnabledGames(modal),
         };
         const joinInfo = $("eventJoinInfo");
@@ -4134,19 +4136,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
       });
 
       // Event background helpers (uses media library selection)
-      on("eventUseSelectedMedia", "click", () => {
-        const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
-        if (!pick){
-          setStatusText("eventJoinInfo", "Select a media item first.", "err");
-          return;
-        }
-        const el = $("eventBackgroundUrl");
-        if (!el) return;
-        el.value = pick;
-        el.dataset.artistId = currentMediaEdit.artist_id || "";
-        el.dataset.artistName = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "";
-        setEventBackgroundStatus(pick);
-      });
       on("eventOpenMedia", "click", () => {
         librarySelectHandler = (item) => {
           const pick = item && (item.url || item.fallback_url || "");
@@ -4154,11 +4143,11 @@ Games and events will keep their history, but this venue will be removed.`)) ret
             setStatusText("eventJoinInfo", "Select a media item first.", "err");
             return;
           }
-          const el = $("eventBackgroundUrl");
-          if (!el) return;
-          el.value = pick;
-          el.dataset.artistId = item.artist_id || "";
-          el.dataset.artistName = item.artist_name || item.artist_id || "";
+          const modal = $("eventModal");
+          if (!modal) return;
+          modal.dataset.background_url = pick;
+          modal.dataset.artist_id = item.artist_id || "";
+          modal.dataset.artist_name = item.artist_name || item.artist_id || "";
           setEventBackgroundStatus(pick);
           showLibraryModal(false);
         };

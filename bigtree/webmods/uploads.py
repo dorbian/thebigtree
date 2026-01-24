@@ -10,7 +10,10 @@ from bigtree.modules import artists as artist_mod
 from bigtree.modules import media as media_mod
 from bigtree.modules import gallery as gallery_mod
 import uuid
-import imghdr
+try:
+    import imghdr
+except ModuleNotFoundError:
+    from bigtree.inc import imghdr_compat as imghdr
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 

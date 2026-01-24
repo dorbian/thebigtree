@@ -6,7 +6,10 @@ import logging
 from aiohttp import web
 import os
 import uuid
-import imghdr
+try:
+    import imghdr
+except ModuleNotFoundError:
+    from bigtree.inc import imghdr_compat as imghdr
 from pathlib import Path
 import bigtree
 import discord

@@ -1725,13 +1725,9 @@
               <input id="eventJoinWalletAmount" type="number" min="0" step="1" value="0" />
             </label>
 
-            <label>
-              Background image (optional)
-              <input id="eventBackgroundUrl" placeholder="/media/forest.png or https://..." />
-            </label>
-            <div style="display:flex; gap:8px; align-items:end;">
-              <button class="btn-ghost" id="eventUseSelectedMedia" type="button">Use selected media</button>
-              <button class="btn-ghost" id="eventOpenMedia" type="button">Open media library</button>
+            <div style="grid-column:1 / -1;">
+              <div style="font-weight:600; margin-bottom:8px;">Background image (optional)</div>
+              <button class="btn-ghost" id="eventOpenMedia" type="button" style="width:auto; padding:8px 12px;">Open media library</button>
             </div>
 
             <div id="eventBackgroundPreview" style="grid-column:1 / -1; display:flex; gap:12px; align-items:center; margin-top:6px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(0,0,0,.12);">
@@ -1748,7 +1744,7 @@
                   <div style="font-weight:600;">Enabled minigames</div>
                   <div class="muted" style="font-size:12px;">Controls what shows up on the public event page.</div>
                 </div>
-                <button class="btn-ghost" id="eventPickGames" type="button">Pick minigames</button>
+                <button class="btn-ghost" id="eventPickGames" type="button" style="width:auto; padding:8px 12px;">Pick minigames</button>
               </div>
               <div class="status" id="eventGamesStatus" style="margin-top:8px;">All games allowed (no filter).</div>
             </div>
