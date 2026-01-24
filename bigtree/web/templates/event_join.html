@@ -11,6 +11,7 @@
       margin:0;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
       background:linear-gradient(180deg,#07100c,#030906);
+      background-repeat: no-repeat;
       color:#e7f2ea;
       min-height:100vh;
       display:flex;
@@ -58,6 +59,13 @@
 </head>
 <body>
   <div class="card">
+  <div id="joinedHeader" style="display:none;">
+    <h1 id="joinedTitle"></h1>
+    <div class="status" id="joinedBalance" style="margin-bottom:12px;"></div>
+    <div class="row" style="margin-bottom:18px;">
+      <a class="btn" href="/user-area">Back to Wallet Area</a>
+    </div>
+  </div>
   <h1 id="eventTitle">Forest Event</h1>
   <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>...</div>
   <div class="status" id="eventWalletBalance" style="display:none;">Wallet balance: -</div>
@@ -70,10 +78,6 @@
     <button id="guestBtn" type="button" style="display:none;">Continue as guest</button>
   </div>
   <div class="muted" id="createGameStatus" style="margin-top:6px; font-size:12px;"></div>
-
-  <div class="muted" style="margin-top:12px; font-size:13px;">
-    Tip: if you just logged in, come back here and press "Join event".
-  </div>
   <div class="game-list" id="eventGames"></div>
 </div>
 
@@ -233,24 +237,39 @@
         meta.push(`Status: ${ev.status || "active"}`);
         document.getElementById("eventMeta").textContent = meta.join(" · ");
 
+        // Hide joined header by default
+        document.getElementById("joinedHeader").style.display = "none";
+
         if (data.requires_login){
           setStatus("Please login with XIVAuth, or continue as guest for this event.");
           setWalletBalance(null, ev.currency_name, false);
           document.getElementById("joinBtn").disabled = false;
           if (guestBtn) guestBtn.style.display = "inline-flex";
         }else if (data.joined){
-          const msg = "You are already joined.";
-          setWalletBalance(data.wallet_balance, ev.currency_name, !!ev.wallet_enabled);
-          setStatus(msg + (data.is_guest ? " (guest)" : ""));
-          document.getElementById("joinBtn").textContent = "Joined";
-          document.getElementById("joinBtn").disabled = true;
-          if (guestBtn) guestBtn.style.display = "none";
-          try{
-            const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
-            renderGames((games && games.games) || [], enabledGames, true);
-          }catch(err){
-            renderGames([], enabledGames, true);
-          }
+            // Show joined header
+            document.getElementById("joinedHeader").style.display = "block";
+            // Compose "VENUE presents: TITLE"
+            let venue = ev.venue_name ? ev.venue_name : "Venue";
+            let title = ev.title ? ev.title : `Event ${ev.event_code}`;
+            document.getElementById("joinedTitle").textContent = `${venue} presents: ${title}`;
+            // Show balance
+            let bal = (data.wallet_balance !== undefined && data.wallet_balance !== null) ? data.wallet_balance : "-";
+            let cur = ev.currency_name ? ev.currency_name : "";
+            document.getElementById("joinedBalance").textContent = `Wallet balance: ${bal}${cur ? ' ' + cur : ''}`;
+
+            // Hide default event title/meta/balance/status/buttons
+            document.getElementById("eventTitle").style.display = "none";
+            document.getElementById("eventMeta").style.display = "none";
+            document.getElementById("eventWalletBalance").style.display = "none";
+            document.getElementById("eventStatus").style.display = "none";
+            document.querySelectorAll(".row").forEach(r => r.style.display = "none");
+
+            try{
+              const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
+              renderGames((games && games.games) || [], enabledGames, true);
+            }catch(err){
+              renderGames([], enabledGames, true);
+            }
         }else if ((ev.status || "") === "ended"){
           setStatus("This event has ended. You can no longer join.");
           setWalletBalance(data.wallet_balance, ev.currency_name, !!ev.wallet_enabled);
