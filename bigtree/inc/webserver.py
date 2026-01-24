@@ -86,15 +86,15 @@ def _cfg():
 
 class DynamicWebServer:
     def __init__(self):
+        self._runner: Optional[web.AppRunner] = None
+        self._site: Optional[web.TCPSite] = None
+        self.ws_active: Set[web.WebSocketResponse] = set()
+        self._cfg = _cfg()
         # middlewares: CORS + (externalized) AUTH
         self.app = web.Application(
             middlewares=[self._cors_mw, auth_middleware()],
             client_max_size=int(self._cfg.get("client_max_size") or 32 * 1024 * 1024),
         )
-        self._runner: Optional[web.AppRunner] = None
-        self._site: Optional[web.TCPSite] = None
-        self.ws_active: Set[web.WebSocketResponse] = set()
-        self._cfg = _cfg()
 
         self.app["ws_active"] = self.ws_active
     def reload_runtime_config(self):
