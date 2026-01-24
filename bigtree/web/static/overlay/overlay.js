@@ -290,9 +290,7 @@
 
       function renderEventsVenues(){
         const select = $("eventsFilterVenue");
-        const modalSelect = $("eventVenue");
         const current = select ? (select.value || "") : "";
-        const modalCurrent = modalSelect ? (modalSelect.value || "") : "";
         const options = [`<option value="">All venues</option>`]
           .concat((eventsVenues || []).map(v => {
             const id = v.id ?? v.venue_id ?? "";
@@ -302,16 +300,6 @@
         if (select){
           select.innerHTML = options.join("");
           if (current) select.value = current;
-        }
-        if (modalSelect){
-          modalSelect.innerHTML = [`<option value="">None</option>`]
-            .concat((eventsVenues || []).map(v => {
-              const id = v.id ?? v.venue_id ?? "";
-              const name = v.name || `Venue ${id}`;
-              return `<option value="${String(id)}">${escapeHtml(name)}</option>`;
-            }))
-            .join("");
-          if (modalCurrent) modalSelect.value = modalCurrent;
         }
       }
 
@@ -425,26 +413,30 @@
         }catch(err){
           eventsCache = [];
         }
-        renderEventsList();
       }
 
       function setEventBackgroundStatus(url){
         const el = $("eventBackgroundStatus");
+        const img = $("eventBackgroundPreviewImg");
+        const empty = $("eventBackgroundPreviewEmpty");
+        const preview = $("eventBackgroundPreview");
+        const artist = $("eventBackgroundUrl")?.dataset?.artistName || "";
         if (!el) return;
         if (!url){
           el.textContent = "No background selected.";
-          return;
+          if (img) img.style.display = "none";
+        modal.dataset.venue_id = eventObj?.venue_id ? String(eventObj.venue_id) : "";
+        modal.dataset.currency_name = eventObj?.currency_name || "";
+        const venueDisplay = $("eventVenueDisplay");
+        if (venueDisplay){
+          const venueName = eventObj?.venue_name || eventObj?.venue || "Database-managed venue";
+          venueDisplay.textContent = `Venue: ${venueName}`;
         }
-        el.textContent = "Background selected.";
-      }
-
-      function getEventEnabledGames(modal){
-        const raw = (modal && modal.dataset && modal.dataset.enabled_games) ? String(modal.dataset.enabled_games) : "";
-        if (!raw) return [];
-        try{
-          const parsed = JSON.parse(raw);
-          return Array.isArray(parsed) ? parsed.map(x => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
-        }catch(_e){
+        const currencyDisplay = $("eventCurrencyDisplay");
+        if (currencyDisplay){
+          const currencyName = eventObj?.currency_name || "";
+          currencyDisplay.textContent = `Currency: ${currencyName || "(none)"}`;
+        }
           return [];
         }
       }
@@ -544,25 +536,17 @@
         loadEventSummary(eventObj?.id || 0);
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
-        $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
-        if (isNew && !$("eventVenue").value && adminVenueId){
-          $("eventVenue").value = String(adminVenueId);
+        modal.dataset.venue_id = eventObj?.venue_id ? String(eventObj.venue_id) : "";
+        modal.dataset.currency_name = eventObj?.currency_name || "";
+        const venueDisplay = $("eventVenueDisplay");
+        if (venueDisplay){
+          const venueName = eventObj?.venue_name || eventObj?.venue || "Database-managed venue";
+          venueDisplay.textContent = `Venue: ${venueName}`;
         }
-        $("eventCurrency").value = eventObj?.currency_name || "";
-        // If the event does not override currency, default from the venue.
-        if (!(eventObj?.currency_name) && (eventObj?.venue_id)){
-          const v = (eventsVenues || []).find(x => Number(x.id) === Number(eventObj.venue_id)) || null;
-          if (v && v.currency_name){
-            $("eventCurrency").value = String(v.currency_name);
-          }
-        }
-        // If currency not set on the event, default it from the selected venue
-        if (!$("eventCurrency").value){
-          const vid = parseInt($("eventVenue").value || "0", 10) || 0;
-          const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
-          if (v && v.currency_name){
-            $("eventCurrency").value = String(v.currency_name || "");
-          }
+        const currencyDisplay = $("eventCurrencyDisplay");
+        if (currencyDisplay){
+          const currencyName = eventObj?.currency_name || "";
+          currencyDisplay.textContent = `Currency: ${currencyName || "(none)"}`;
         }
         $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
         const carryEl = $("eventCarryOver");
@@ -723,8 +707,8 @@
           id: modal.dataset.event_id || "",
           event_code: modal.dataset.event_code || "",
           title: $("eventTitle")?.value?.trim() || "",
-          venue_id: $("eventVenue")?.value || "",
-          currency_name: $("eventCurrency")?.value?.trim() || "",
+          venue_id: modal.dataset.venue_id || "",
+          currency_name: modal.dataset.currency_name || "",
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
           carry_over: $("eventCarryOver")?.checked || false,
           join_wallet_amount: $("eventJoinWalletAmount")?.value || "0",
@@ -4273,18 +4257,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           if (status) status.textContent = err.message || "Unable to set wallet balance.";
         }
       });
-
-      on("eventVenue", "change", () => {
-        const currencyEl = $("eventCurrency");
-        if (!currencyEl) return;
-        if (currencyEl.value && currencyEl.value.trim()) return;
-        const vid = parseInt($("eventVenue")?.value || "0", 10) || 0;
-        const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
-        if (v && v.currency_name){
-          currencyEl.value = String(v.currency_name || "");
-        }
-      });
-
 
       on("dashboardChangelogToggle", "click", () => {
         const modal = $("changelogModal");

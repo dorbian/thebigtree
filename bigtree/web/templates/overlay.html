@@ -500,9 +500,9 @@
                 Venue
                 <select id="gamesFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label class="games-filter games-filter--checkbox">
-                <span style="display:block; margin-bottom:6px;">Include inactive</span>
-                <input id="gamesFilterInactive" type="checkbox" checked style="transform:translateY(2px);" />
+              <label class="games-filter games-filter--checkbox" style="display:flex; align-items:center; gap:8px;">
+                <input id="gamesFilterInactive" type="checkbox" checked />
+                <span>Include inactive</span>
               </label>
               <button class="btn-ghost games-filter-apply" id="gamesFilterApply" type="button">Apply</button>
             </div>
@@ -544,9 +544,9 @@
                 Venue
                 <select id="eventsFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label class="games-filter games-filter--checkbox" style="min-width:170px;">
-                <span style="display:block; margin-bottom:6px;">Include ended</span>
-                <input id="eventsFilterEnded" type="checkbox" checked style="transform:translateY(2px);" />
+              <label class="games-filter games-filter--checkbox" style="min-width:170px; display:flex; align-items:center; gap:8px;">
+                <input id="eventsFilterEnded" type="checkbox" checked />
+                <span>Include ended</span>
               </label>
               <button class="btn-ghost icon-btn icon-btn--small" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
@@ -1710,14 +1710,8 @@
               Title
               <input id="eventTitle" placeholder="e.g. Friday bingo night" />
             </label>
-            <label>
-              Venue
-              <select id="eventVenue"><option value="">None</option></select>
-            </label>
-            <label>
-              Currency name (optional)
-              <input id="eventCurrency" placeholder="e.g. Leaves" />
-            </label>
+            <div class="status" id="eventVenueDisplay">Venue: loading…</div>
+            <div class="status" id="eventCurrencyDisplay">Currency: loading…</div>
             <label style="display:flex; flex-direction:column; gap:6px;">
               <span>Wallet enabled</span>
               <input id="eventWalletEnabled" type="checkbox" />
@@ -1740,7 +1734,13 @@
               <button class="btn-ghost" id="eventOpenMedia" type="button">Open media library</button>
             </div>
 
-            <div class="status" id="eventBackgroundStatus" style="grid-column:1 / -1;">No background selected.</div>
+            <div id="eventBackgroundPreview" style="grid-column:1 / -1; display:flex; gap:12px; align-items:center; margin-top:6px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(0,0,0,.12);">
+              <div style="width:140px; height:90px; border-radius:10px; overflow:hidden; background:rgba(0,0,0,.2); display:flex; align-items:center; justify-content:center;">
+                <img id="eventBackgroundPreviewImg" src="" alt="Background preview" style="width:100%; height:100%; object-fit:cover; display:none;" />
+                <div id="eventBackgroundPreviewEmpty" class="muted" style="font-size:12px;">No image selected</div>
+              </div>
+              <div class="status" id="eventBackgroundStatus" style="margin:0;">No background selected.</div>
+            </div>
 
             <div style="grid-column:1 / -1;">
               <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
