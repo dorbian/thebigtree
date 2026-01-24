@@ -290,6 +290,7 @@ async def event_game_create(req: web.Request) -> web.Response:
             background_url=background_url,
             currency=currency,
             status="created",
+            is_single_player=True,
         )
         cardgames_mod.start_session(session.get("session_id"), session.get("priestess_token") or "")
         session = cardgames_mod.get_session_by_id(session.get("session_id")) or session
@@ -478,6 +479,7 @@ def _ensure_event_house_session(db, ev: dict, game_id: str, created_by: int | No
             background_url=background_url,
             currency=currency,
             status="created",
+            is_single_player=True,
         )
         try:
             cardgames_mod.start_session(session.get("session_id"), session.get("priestess_token") or "")
