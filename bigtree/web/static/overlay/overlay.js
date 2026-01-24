@@ -409,9 +409,11 @@
           const resp = await jsonFetch(`/admin/events?${params.toString()}`, {method: "GET"});
           if (resp.ok){
             eventsCache = resp.events || [];
+            renderEventsList();
           }
         }catch(err){
           eventsCache = [];
+          renderEventsList();
         }
       }
 
