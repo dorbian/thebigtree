@@ -802,9 +802,10 @@ async def event_dashboard_page(req: web.Request) -> web.Response:
     if not ev:
         return web.Response(text="Event not found", status=404)
     
-    from bigtree.inc.webserver import get_template_file
-    template = get_template_file("event_dashboard.html")
-    html = template.format(event_code=code)
+    html = DynamicWebServer.render_template(
+        "event_dashboard.html",
+        event_code=code,
+    )
     return web.Response(text=html, content_type="text/html")
 
 
