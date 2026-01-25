@@ -480,14 +480,24 @@ async def create_deck(req: web.Request):
     deck_id = str(body.get("deck_id") or body.get("id") or "elf-classic")
     name = body.get("name")
     theme = body.get("theme")
+    purpose = body.get("purpose")
     suits = body.get("suits") if isinstance(body.get("suits"), list) else None
-    deck = tar.create_deck(deck_id, name=name, theme=theme, suits=suits)
+    deck = tar.create_deck(deck_id, name=name, theme=theme, purpose=purpose, suits=suits)
     return web.json_response({"ok": True, "deck": deck})
 
 @route("GET", "/api/tarot/decks", scopes=["tarot:admin", "cardgames:admin"])
 async def list_decks(req: web.Request):
     decks = tar.list_decks()
     return web.json_response({"ok": True, "decks": decks})
+
+@route("GET", "/api/tarot/templates", scopes=["tarot:admin", "cardgames:admin"])
+async def list_template_cards(req: web.Request):
+    purpose = (req.query.get("purpose") or "tarot").strip().lower() or "tarot"
+    try:
+        cards = tar.list_template_cards(purpose)
+    except Exception:
+        return _json_error("invalid template purpose", status=400)
+    return web.json_response({"ok": True, "purpose": purpose, "cards": cards})
 
 @route("GET", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin", "cardgames:admin"])
 async def get_deck(req: web.Request):
@@ -515,8 +525,9 @@ async def update_deck(req: web.Request):
         body = {}
     name = body.get("name")
     theme = body.get("theme")
+    purpose = body.get("purpose")
     suits = body.get("suits") if isinstance(body.get("suits"), list) else None
-    deck = tar.update_deck(deck_id, name=name, theme=theme, suits=suits)
+    deck = tar.update_deck(deck_id, name=name, theme=theme, purpose=purpose, suits=suits)
     if not deck:
         return _json_error("not found", status=404)
     return web.json_response({"ok": True, "deck": deck})

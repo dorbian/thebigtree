@@ -38,6 +38,8 @@
 - Bingo/Cardgames: add event selection to creation and store event metadata on create.
 - Overlay: guard missing bingo refresh control binding.
 - Overlay: prevent deck editor horizontal overflow.
+- Tarot: add template card API with tarot/playing templates and deck purpose metadata.
+- Overlay: add deck purpose controls and template card picker for new card creation.
 - Bingo: upsert new games into the games list for the admin archive.
 - Overlay: move deck editor save button to the top deck controls row.
 - Wallet: classify active vs past games using status when available.

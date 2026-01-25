@@ -23,6 +23,8 @@
       let currentCard = null;
       let currentGame = null;
       let taSelectedCardId = "";
+      let taTemplateCache = {tarot: null, playing: null};
+      let taTemplatePurpose = "tarot";
       let lastCalledCount = 0;
       let lastCalloutNumber = null;
       let activeGameId = "";
@@ -30,6 +32,8 @@
       window.taArtists = [];
       let calendarData = [];
       let authUserScopes = new Set();
+      let previewScopesActive = false;
+      let previewScopes = new Set();
       let authUserIsElfmin = false;
       let authTokensCache = [];
       let dashboardStatsLoaded = false;
@@ -911,6 +915,9 @@ This will block new games from being created in this event, but existing games c
       }
 
       function hasScope(scope){
+        if (previewScopesActive){
+          return previewScopes.has("*") || previewScopes.has(scope);
+        }
         return authUserScopes.has("*") || authUserScopes.has(scope);
       }
 
@@ -2039,6 +2046,48 @@ This will block new games from being created in this event, but existing games c
         updateAuthTempScopesPreview(select.value || "");
       }
 
+      function renderAuthPreviewRoles(){
+        const select = $("authPreviewRole");
+        if (!select) return;
+        const keys = Object.keys(authRoleScopes || {});
+        select.innerHTML = "";
+        if (!keys.length){
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "No role scopes configured";
+          select.appendChild(opt);
+          updateAuthPreviewScopesPreview("");
+          return;
+        }
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "Select access profile";
+        select.appendChild(empty);
+        keys.forEach((id) => {
+          const role = (authRolesCache || []).find(r => String(r.id) === String(id));
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = role ? `${role.name} (${id})` : id;
+          select.appendChild(opt);
+        });
+        updateAuthPreviewScopesPreview(select.value || "");
+      }
+
+      function updateAuthPreviewScopesPreview(roleId){
+        const preview = $("authPreviewScopesPreview");
+        if (!preview) return;
+        const scopes = (authRoleScopes && roleId) ? (authRoleScopes[roleId] || []) : [];
+        if (!roleId){
+          preview.textContent = "Scopes: none";
+          return;
+        }
+        preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: (from role profile)";
+        const scopesEl = $("authPreviewScopes");
+        if (scopesEl && !scopesEl.value.trim() && scopes.length){
+          scopesEl.value = scopes.join(", ");
+        }
+      }
+
       function updateAuthTempScopesPreview(roleId){
         const preview = $("authTempScopesPreview");
         if (!preview) return;
@@ -2118,6 +2167,7 @@ This will block new games from being created in this event, but existing games c
           authRolesCache = roles;
           renderAuthRolesList(roles);
           renderAuthTempRoles();
+          renderAuthPreviewRoles();
           setAuthRolesStatus("Ready.", "ok");
         }catch(err){
           setAuthRolesStatus(err.message, "err");
@@ -4511,14 +4561,16 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "tarot");
+          const visibleDecks = filtered.length ? filtered : decks;
           select.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
           });
-          if (!decks.length){
+          if (!visibleDecks.length){
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "No decks found.";
@@ -5706,6 +5758,60 @@ function getOwnerClaimStatus(ownerName){
           setAuthRolesStatus(err.message, "err");
         }
       });
+      // Role preview interactions
+      const authPreviewRole = $("authPreviewRole");
+      if (authPreviewRole){
+        authPreviewRole.addEventListener("change", (ev) => {
+          updateAuthPreviewScopesPreview(ev.target.value || "");
+        });
+      }
+      const authPreviewStart = $("authPreviewStart");
+      if (authPreviewStart){
+        authPreviewStart.addEventListener("click", () => {
+          const roleEl = $("authPreviewRole");
+          const scopesEl = $("authPreviewScopes");
+          if (!roleEl || !scopesEl){
+            $("authPreviewStatus").textContent = "Preview UI not loaded.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          const roleId = (roleEl.value || "").trim();
+          const scopesRaw = (scopesEl.value || "").trim();
+          let scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+          if (!scopes.length && roleId && authRoleScopes && authRoleScopes[roleId]){
+            scopes = (authRoleScopes[roleId] || []).map(s => String(s).trim()).filter(Boolean);
+          }
+          if (!roleId && scopes.length === 0){
+            $("authPreviewStatus").textContent = "Select a role profile or provide scopes.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          if (roleId && scopes.length === 0){
+            $("authPreviewStatus").textContent = "Selected profile has no scopes. Add a scopes override.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          previewScopes = new Set(scopes);
+          previewScopesActive = true;
+          $("authPreviewStatus").textContent = `Preview on: ${scopes.join(", ")}`;
+          $("authPreviewStatus").className = "status ok";
+          // Trigger any UI gates to re-evaluate
+          // Example: reload venues/events list
+          loadEventsVenues(true);
+          loadGamesListVenues(true);
+        });
+      }
+      const authPreviewStop = $("authPreviewStop");
+      if (authPreviewStop){
+        authPreviewStop.addEventListener("click", () => {
+          previewScopesActive = false;
+          previewScopes = new Set();
+          $("authPreviewStatus").textContent = "Preview off.";
+          $("authPreviewStatus").className = "status";
+          loadEventsVenues(true);
+          loadGamesListVenues(true);
+        });
+      }
       $("bOwnerClose").addEventListener("click", () => {
         $("bOwnerModal").classList.remove("show");
       });
@@ -5817,6 +5923,7 @@ function getOwnerClaimStatus(ownerName){
           return;
         }
         const name = $("deckCreateName").value.trim();
+        const purpose = $("deckCreatePurpose").value || "tarot";
         const theme = $("deckCreateTheme").value || "classic";
         const seedChoice = $("deckCreateSeed").value || "none";
         const perHouse = Number($("deckCreatePerHouse").value || 0);
@@ -5836,6 +5943,7 @@ function getOwnerClaimStatus(ownerName){
             body: JSON.stringify({
               deck_id: id,
               name: name || undefined,
+              purpose,
               theme,
               suits: suits && suits.length ? suits : []
             })
@@ -6268,16 +6376,18 @@ function getOwnerClaimStatus(ownerName){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "tarot");
+          const visibleDecks = filtered.length ? filtered : decks;
           const modalSelect = $("sessionCreateDeck");
           modalSelect.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt2 = document.createElement("option");
             opt2.value = d.deck_id;
             opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             modalSelect.appendChild(opt2);
           });
           // Use venue deck if available, otherwise fallback to selectValue or first deck
-          const defaultDeck = selectValue || adminVenueDeckId || (decks[0] ? decks[0].deck_id : "elf-classic");
+          const defaultDeck = selectValue || adminVenueDeckId || (visibleDecks[0] ? visibleDecks[0].deck_id : "elf-classic");
           modalSelect.value = defaultDeck;
         }catch(err){
           setStatus(err.message, "err");
@@ -6467,16 +6577,18 @@ function getOwnerClaimStatus(ownerName){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "playing");
+          const visibleDecks = filtered.length ? filtered : decks;
           const modalSelect = $("casinoSessionCreateDeck");
           modalSelect.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             modalSelect.appendChild(opt);
           });
           // Use venue deck if available
-          const defaultDeck = adminVenueDeckId || (decks[0] ? decks[0].deck_id : "");
+          const defaultDeck = adminVenueDeckId || (visibleDecks[0] ? visibleDecks[0].deck_id : "");
           if (defaultDeck) modalSelect.value = defaultDeck;
         }catch(err){
           setStatus(err.message, "err");
@@ -6697,15 +6809,17 @@ function getOwnerClaimStatus(ownerName){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "playing");
+          const visibleDecks = filtered.length ? filtered : decks;
           select.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
           });
           const defaults = getCardgameDefaults();
-          const pick = selectValue || (defaults && defaults.deck_id) || (decks[0] ? decks[0].deck_id : "");
+          const pick = selectValue || (defaults && defaults.deck_id) || (visibleDecks[0] ? visibleDecks[0].deck_id : "");
           if (pick) select.value = pick;
         }catch(err){
           select.innerHTML = `<option value="">Failed to load</option>`;
@@ -7196,6 +7310,103 @@ function getOwnerClaimStatus(ownerName){
         }
       }
 
+      function taNormalizePurpose(purpose){
+        const value = String(purpose || "").trim().toLowerCase();
+        return value === "playing" ? "playing" : "tarot";
+      }
+
+      function filterDecksByPurpose(decks, purpose){
+        const target = taNormalizePurpose(purpose);
+        return (decks || []).filter(d => taNormalizePurpose(d && d.purpose) === target);
+      }
+
+      function taGetDeckPurpose(){
+        const deck = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : null;
+        return taNormalizePurpose(deck && deck.purpose);
+      }
+
+      async function taLoadTemplateOptions(){
+        const select = $("taCardTemplate");
+        if (!select) return;
+        const purpose = taGetDeckPurpose();
+        taTemplatePurpose = purpose;
+        let cards = taTemplateCache[purpose];
+        if (!cards){
+          try{
+            const data = await jsonFetch("/api/tarot/templates?purpose=" + encodeURIComponent(purpose), {method:"GET"}, true);
+            cards = Array.isArray(data.cards) ? data.cards : [];
+            taTemplateCache[purpose] = cards;
+          }catch(err){
+            select.innerHTML = "<option value=\"\">Failed to load templates</option>";
+            const hint = $("taCardTemplateHint");
+            if (hint) hint.textContent = "Template cards unavailable.";
+            return;
+          }
+        }
+        const current = select.value;
+        select.innerHTML = "";
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = purpose === "playing" ? "Pick a playing card..." : "Pick a tarot card...";
+        select.appendChild(empty);
+        cards.forEach(card => {
+          const opt = document.createElement("option");
+          const id = card.card_id || card.id || "";
+          opt.value = id;
+          const name = card.name || card.title || id || "Card";
+          const suit = card.suit || "";
+          const number = (card.number !== undefined && card.number !== null) ? card.number : "";
+          const suffix = (suit || number) ? ` (${[number, suit].filter(Boolean).join(" ")})` : "";
+          opt.textContent = name + suffix;
+          select.appendChild(opt);
+        });
+        select.value = current || "";
+        const hint = $("taCardTemplateHint");
+        if (hint){
+          hint.textContent = purpose === "playing"
+            ? "Pick a playing card to prefill this card."
+            : "Pick a tarot card to prefill this card.";
+        }
+      }
+
+      function taApplyTemplateCard(card){
+        if (!card) return;
+        const existing = window.taDeckData && window.taDeckData.cards
+          ? window.taDeckData.cards.find(c => c.card_id === (card.card_id || card.id))
+          : null;
+        if (existing){
+          taLoadCard(existing);
+          return;
+        }
+        taSuppressDirty = true;
+        taSelectedCardId = "";
+        $("taCardId").value = "";
+        $("taCardName").value = card.name || card.title || "";
+        $("taCardSuit").value = card.suit || "";
+        $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
+        $("taCardTags").value = (card.tags || []).join(", ");
+        $("taCardFlavor").value = card.flavor_text || "";
+        $("taCardUpright").value = card.upright || "";
+        $("taCardReversed").value = card.reversed || "";
+        $("taCardArtist").value = card.artist_id || "";
+        window.taUploadedImageUrl = card.image || "";
+        taRenderThemeWeights(card.themes || {}, card.suit || "");
+        taRenderSuitInfo(card.suit || "");
+        taRenderNumberInfo($("taCardNumber").value);
+        taApplySuitThemeDefaults(card.suit || "");
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: $("taCardNumber").value.trim(),
+          image: window.taUploadedImageUrl || "",
+          suit: $("taCardSuit").value.trim(),
+          upright: $("taCardUpright").value.trim(),
+          reversed: $("taCardReversed").value.trim()
+        });
+        taUpdateContext(null);
+        taSuppressDirty = false;
+        taSetDirty(true);
+      }
+
       function taRenderThemeWeights(weights, suitValue){
         const grid = $("taCardThemes");
         const hint = $("taCardThemesHint");
@@ -7403,6 +7614,10 @@ function getOwnerClaimStatus(ownerName){
         taRenderPreviews(card);
         taSyncCardSelection();
         taUpdateContext(card);
+        const templateSelect = $("taCardTemplate");
+        if (templateSelect){
+          templateSelect.value = card.card_id || "";
+        }
         taDirty = false;
         taSuppressDirty = false;
       }
@@ -8063,6 +8278,19 @@ function getOwnerClaimStatus(ownerName){
           }
         });
       });
+      const templateSelect = $("taCardTemplate");
+      if (templateSelect){
+        templateSelect.addEventListener("change", () => {
+          const pick = templateSelect.value;
+          if (!pick) return;
+          const purpose = taGetDeckPurpose();
+          const cards = taTemplateCache[purpose] || [];
+          const card = cards.find(c => (c.card_id || c.id) === pick);
+          if (card){
+            taApplyTemplateCard(card);
+          }
+        });
+      }
       $("taDeckList").addEventListener("click", (ev) => {
         const target = ev.target.closest(".list-card");
         if (!target || !target.dataset.cardId || !window.taDeckData) return;
@@ -8076,6 +8304,11 @@ function getOwnerClaimStatus(ownerName){
           const deck = $("taDeck").value.trim() || "elf-classic";
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
+          await taLoadTemplateOptions();
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
           taSetSuitDefinitions(data.deck && Array.isArray(data.deck.suits) ? data.deck.suits : []);
           taRenderPreviews(null);
           const deckName = (data.deck && (data.deck.name || data.deck.deck_id)) || deck;
@@ -8106,6 +8339,7 @@ function getOwnerClaimStatus(ownerName){
       $("taAddDeck").addEventListener("click", () => {
         $("deckCreateId").value = "";
         $("deckCreateName").value = "";
+        $("deckCreatePurpose").value = "tarot";
         $("deckCreateTheme").value = "classic";
         $("deckCreateSeed").value = "none";
         $("deckCreatePerHouse").value = "4";
@@ -8132,6 +8366,7 @@ function getOwnerClaimStatus(ownerName){
           }
           const deckData = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : {};
           $("deckEditName").value = deckData.name || "";
+          $("deckEditPurpose").value = deckData.purpose || "tarot";
           $("deckEditTheme").value = deckData.theme || "classic";
           const suits = Array.isArray(deckData.suits) ? deckData.suits : [];
           deckEditHadSuits = suits.length > 0;
@@ -8210,6 +8445,7 @@ function getOwnerClaimStatus(ownerName){
           return;
         }
         const name = $("deckEditName").value.trim();
+        const purpose = $("deckEditPurpose").value || "tarot";
         const theme = $("deckEditTheme").value || "classic";
         const backUrl = $("deckEditBackPick").dataset.backUrl || "";
         const artistId = $("deckEditBackPick").dataset.artistId || "";
@@ -8230,6 +8466,7 @@ function getOwnerClaimStatus(ownerName){
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
               name: name || undefined,
+              purpose,
               theme,
               suits: suits && suits.length ? suits : []
             })
@@ -8308,7 +8545,7 @@ function getOwnerClaimStatus(ownerName){
             themes: taGetCardThemeWeights(),
             artist_links: undefined
           };
-          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
+          const saved = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
@@ -8323,9 +8560,13 @@ function getOwnerClaimStatus(ownerName){
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
           $("taCardArtist").value = "";
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
           taRenderNumberInfo("");
           taSetCardThemeWeights({});
-          taSelectedCardId = body.card_id || "";
+          taSelectedCardId = (saved && saved.card && saved.card.card_id) ? saved.card.card_id : (body.card_id || "");
           taDirty = false;
           await loadTarotDeck();
           setTarotStatus("Saved", "ok");
@@ -8344,7 +8585,8 @@ function getOwnerClaimStatus(ownerName){
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
-            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            const purposeLabel = d.purpose ? ` • ${d.purpose}` : "";
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})${purposeLabel}` : `${d.deck_id}${purposeLabel}`;
             select.appendChild(opt);
           });
           select.value = selectValue || "elf-classic";

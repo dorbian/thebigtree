@@ -300,7 +300,7 @@
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Archives</div>
+            <div class="nav-title">Manage</div>
             <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">Games</span></div>
             <div class="menu-item" id="menuGamesEvents" tabindex="0"><span class="menu-label">Events</span></div>
           </div>
@@ -828,8 +828,15 @@
               <h4>Identity</h4>
               <div class="row">
                 <div>
+                  <label for="taCardTemplate">Template card</label>
+                  <select id="taCardTemplate"></select>
+                  <div class="muted" id="taCardTemplateHint">Pick a template card to prefill this card.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
                   <label for="taCardId">Card ID</label>
-                  <input id="taCardId" placeholder="candlecap_sprite">
+                  <input id="taCardId" placeholder="auto from name">
                 </div>
               </div>
               <div class="row">
@@ -1825,6 +1832,13 @@
             <input id="deckCreateName" placeholder="Elf Classic">
           </div>
           <div>
+            <label for="deckCreatePurpose">Deck purpose</label>
+            <select id="deckCreatePurpose">
+              <option value="tarot">Tarot</option>
+              <option value="playing">Playing cards</option>
+            </select>
+          </div>
+          <div>
             <label for="deckCreateTheme">Card theme</label>
             <select id="deckCreateTheme">
               <option value="classic">Classic</option>
@@ -1900,6 +1914,13 @@
           <div>
             <label for="deckEditName">Name</label>
             <input id="deckEditName" placeholder="Elf Classic">
+          </div>
+          <div>
+            <label for="deckEditPurpose">Deck purpose</label>
+            <select id="deckEditPurpose">
+              <option value="tarot">Tarot</option>
+              <option value="playing">Playing cards</option>
+            </select>
           </div>
           <div>
             <label for="deckEditTheme">Card theme</label>
@@ -2305,7 +2326,7 @@
       </div>
     </div>
     <div class="modal" id="authRolesModal">
-      <div class="modal-card">
+      <div class="modal-card modal-card--wide">
         <div class="modal-header">
           <div class="modal-title">Auth Roles</div>
           <button class="btn-ghost" id="authRolesClose">Close</button>
@@ -2330,6 +2351,30 @@
             <button id="authRolesSave">Save</button>
           </div>
         </div>
+        <div class="section-divider"></div>
+        <h3>Role Preview</h3>
+        <div class="row">
+          <div>
+            <label for="authPreviewRole">Access profile (role scope)</label>
+            <select id="authPreviewRole"></select>
+            <div class="muted" id="authPreviewScopesPreview">Scopes: none</div>
+          </div>
+          <div>
+            <label for="authPreviewScopes">Scopes override (optional, comma separated)</label>
+            <input id="authPreviewScopes" placeholder="bingo:admin, tarot:admin">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="authPreviewStart">Start preview</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="authPreviewStop">Stop preview</button>
+          </div>
+        </div>
+        <div class="status" id="authPreviewStatus">Preview off.</div>
         <div class="status" id="authRolesStatus">Ready.</div>
       </div>
     </div>
