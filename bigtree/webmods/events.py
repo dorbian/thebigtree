@@ -804,7 +804,9 @@ async def event_dashboard_page(req: web.Request) -> web.Response:
     
     html = DynamicWebServer.render_template(
         "event_dashboard.html",
-        event_code=code,
+        {
+            "event_code": code,
+        },
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -906,13 +908,21 @@ async def event_dashboard_games(req: web.Request) -> web.Response:
     # Format the games data
     formatted_games = []
     for game in (games or []):
+        created_at_val = game.get("created_at")
+        created_at_str = None
+        if created_at_val:
+            try:
+                created_at_str = created_at_val.isoformat() if hasattr(created_at_val, 'isoformat') else str(created_at_val)
+            except Exception:
+                created_at_str = None
+        
         formatted_games.append({
             "session_id": game.get("session_id"),
             "join_code": game.get("join_code"),
             "game_id": game.get("game_id"),
             "title": f"{game.get('game_id', 'Game')} ({game.get('join_code', 'N/A')})",
             "status": game.get("status"),
-            "created_at": game.get("created_at").isoformat() if game.get("created_at") else None,
+            "created_at": created_at_str,
             "pot": game.get("pot"),
             "currency": game.get("currency"),
         })
