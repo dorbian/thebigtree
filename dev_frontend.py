@@ -248,6 +248,7 @@ async def main():
     app.router.add_route('*', '/bingo/{path:.*}', proxy_api)
     app.router.add_route('*', '/discord/{path:.*}', proxy_api)
     app.router.add_route('*', '/contests/{path:.*}', proxy_api)
+    app.router.add_route('*', '/contests', proxy_api)
     app.router.add_route('*', '/auth/{path:.*}', proxy_api)
     app.router.add_route('*', '/user-area/{path:.*}', proxy_api)
     app.router.add_route('*', '/tarot/{path:.*}', proxy_api)

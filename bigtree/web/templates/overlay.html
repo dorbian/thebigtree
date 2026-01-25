@@ -783,14 +783,6 @@
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
-          <h2>Deck Editor</h2>
-          <div class="context-header">
-            <div>
-              <div class="context-path" id="taContextPath">Deck Editor / Forest / No card selected</div>
-              <div class="context-meta" id="taContextMeta">Pick a card to edit.</div>
-            </div>
-            <div class="context-meta" id="taContextDeck"></div>
-          </div>
           <div class="row">
             <div>
               <label for="taDeck">Deck</label>
@@ -815,6 +807,15 @@
                   </svg>
                 </button>
               </div>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="taSaveCard" class="btn-primary">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+                </svg>
+                Save card
+              </button>
             </div>
           </div>
           <div class="list" id="taDeckList">No deck loaded.</div>
@@ -931,17 +932,6 @@
             </div>
           </div>
 
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="taSaveCard" class="btn-primary">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
-                </svg>
-                Save card
-              </button>
-            </div>
-          </div>
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">

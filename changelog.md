@@ -34,8 +34,13 @@
 - Cardgames: guard missing deck select when applying session details.
 - Cardgames: allow open player/host when the game selector is missing.
 - Dev: proxy /cardgames routes in the frontend dev server.
+- Dev: proxy /contests root in the frontend dev server.
 - Bingo/Cardgames: add event selection to creation and store event metadata on create.
 - Overlay: guard missing bingo refresh control binding.
+- Overlay: prevent deck editor horizontal overflow.
+- Bingo: upsert new games into the games list for the admin archive.
+- Overlay: move deck editor save button to the top deck controls row.
+- Wallet: classify active vs past games using status when available.
 - Overlay: neutralize login background hue and reduce panel/card opacity.
 - Overlay: apply adminlogin.png background after login across the admin shell.
 - Overlay: rename UI labels to Elfministration.

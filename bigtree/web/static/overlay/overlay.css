@@ -827,6 +827,7 @@
         max-width:1800px;
         width:100%;
         grid-column:1 / -1;
+        overflow-x:hidden;
       }
       #tarotDecksPanel h2{
         font-size:17px;
@@ -839,6 +840,9 @@
       #tarotDecksPanel .row{
         gap:8px;
         margin-bottom:8px;
+      }
+      #tarotDecksPanel .inline-actions{
+        flex-wrap:wrap;
       }
       #tarotDecksPanel input,
       #tarotDecksPanel select,
