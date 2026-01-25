@@ -789,3 +789,134 @@ def _resolve_admin_user_id(req: web.Request) -> Optional[int]:
         return int(raw)
     except Exception:
         return None
+
+
+@route("GET", "/events/{code}/dashboard", allow_public=True)
+async def event_dashboard_page(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    if not code:
+        return web.Response(text="Invalid event code", status=400)
+    
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.Response(text="Event not found", status=404)
+    
+    from bigtree.inc.webserver import get_template_file
+    template = get_template_file("event_dashboard.html")
+    html = template.format(event_code=code)
+    return web.Response(text=html, content_type="text/html")
+
+
+@route("GET", "/api/events/{code}/dashboard/stats", allow_public=True)
+async def event_dashboard_stats(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    if not code:
+        return web.json_response({"ok": False, "error": "invalid event code"}, status=400)
+    
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    
+    event_id = int(ev["id"])
+    
+    # Count registered players
+    players_count = db._fetchone(
+        "SELECT COUNT(*) as count FROM event_players WHERE event_id = %s",
+        (event_id,)
+    )
+    players_count = players_count.get("count", 0) if players_count else 0
+    
+    # Count active games for this event
+    # Games are linked to events via metadata or can be filtered by join_code pattern
+    games_count = db._fetchone(
+        """
+        SELECT COUNT(*) as count 
+        FROM cardgame_sessions 
+        WHERE join_code LIKE %s 
+        AND status IN ('created', 'active', 'waiting')
+        """,
+        (f"{code}-%",)
+    )
+    games_count = games_count.get("count", 0) if games_count else 0
+    
+    return web.json_response({
+        "ok": True,
+        "stats": {
+            "players_count": players_count,
+            "games_count": games_count,
+        }
+    })
+
+
+@route("GET", "/api/events/{code}/dashboard/players", allow_public=True)
+async def event_dashboard_players(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    if not code:
+        return web.json_response({"ok": False, "error": "invalid event code"}, status=400)
+    
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    
+    event_id = int(ev["id"])
+    
+    players = db._fetchall(
+        """
+        SELECT ep.user_id, ep.role, ep.joined_at, u.xiv_username as name
+        FROM event_players ep
+        LEFT JOIN users u ON ep.user_id = u.id
+        WHERE ep.event_id = %s
+        ORDER BY ep.joined_at DESC
+        """,
+        (event_id,)
+    )
+    
+    return web.json_response({
+        "ok": True,
+        "players": players or []
+    })
+
+
+@route("GET", "/api/events/{code}/dashboard/games", allow_public=True)
+async def event_dashboard_games(req: web.Request) -> web.Response:
+    code = _sanitize_event_code(req.match_info.get("code") or "")
+    if not code:
+        return web.json_response({"ok": False, "error": "invalid event code"}, status=400)
+    
+    db = get_database()
+    ev = db.get_event_by_code(code)
+    if not ev:
+        return web.json_response({"ok": False, "error": "event not found"}, status=404)
+    
+    # Find games related to this event by join_code pattern
+    games = db._fetchall(
+        """
+        SELECT session_id, join_code, game_id, status, created_at, pot, currency
+        FROM cardgame_sessions 
+        WHERE join_code LIKE %s
+        ORDER BY created_at DESC
+        """,
+        (f"{code}-%",)
+    )
+    
+    # Format the games data
+    formatted_games = []
+    for game in (games or []):
+        formatted_games.append({
+            "session_id": game.get("session_id"),
+            "join_code": game.get("join_code"),
+            "game_id": game.get("game_id"),
+            "title": f"{game.get('game_id', 'Game')} ({game.get('join_code', 'N/A')})",
+            "status": game.get("status"),
+            "created_at": game.get("created_at").isoformat() if game.get("created_at") else None,
+            "pot": game.get("pot"),
+            "currency": game.get("currency"),
+        })
+    
+    return web.json_response({
+        "ok": True,
+        "games": formatted_games
+    })
