@@ -1626,6 +1626,17 @@
         grid-template-columns:repeat(2, minmax(260px, 1fr));
         gap:14px;
       }
+      .deck-editor-top{
+        display:grid;
+        grid-template-columns:repeat(2, minmax(260px, 1fr));
+        gap:14px;
+        margin-bottom:14px;
+      }
+      .deck-editor-panel{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
       .deck-editor-column{
         background:rgba(7,12,16,.5);
         border:1px solid rgba(31,58,43,.6);

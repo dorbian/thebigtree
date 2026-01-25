@@ -527,23 +527,27 @@
           <h2>Events</h2>
           <p class="muted">Create game events that players can join with XIVAuth. Events can be hosted by a venue and optionally use a dedicated wallet currency.</p>
           <div class="dash-section-body">
-            <div class="row events-toolbar">
-              <label class="events-search">
+            <div class="row events-toolbar" style="gap:12px; flex-wrap:wrap; align-items:flex-end;">
+              <label class="events-search" style="flex:1; min-width:200px; max-width:320px;">
                 Search
                 <input id="eventsFilterQuery" placeholder="event code or title..." />
               </label>
-              <label style="min-width:220px;">
+              <label style="flex:1; min-width:200px; max-width:280px;">
                 Venue
                 <select id="eventsFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label class="games-filter games-filter--checkbox" style="min-width:170px; display:flex; align-items:center; gap:8px;">
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-ghost icon-btn icon-btn--small" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+                </button>
+                <button id="eventsAdd" type="button">Add event</button>
+              </div>
+            </div>
+            <div style="margin-top:10px; margin-bottom:10px;">
+              <label class="games-filter games-filter--checkbox" style="display:flex; align-items:center; gap:8px;">
                 <input id="eventsFilterEnded" type="checkbox" checked />
                 <span>Include ended</span>
               </label>
-              <button class="btn-ghost icon-btn icon-btn--small" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
-              </button>
-              <button id="eventsAdd" type="button">Add event</button>
             </div>
             <div class="dashboard-logs-body" id="eventsListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
@@ -810,21 +814,25 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="taSaveCard" class="btn-primary">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
-                </svg>
-                Save card
-              </button>
+              <div class="inline-actions">
+                <button id="taNewCard" class="btn-ghost">
+                  New card
+                </button>
+                <button id="taSaveCard" class="btn-primary">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+                  </svg>
+                  Save card
+                </button>
+              </div>
             </div>
           </div>
-          <div class="list" id="taDeckList">No deck loaded.</div>
-          <div class="status" id="taDeckStatus">Pick a deck to begin.</div>
-
-          <div class="section-divider"></div>
-          <h3>Card Editor</h3>
-          <div class="deck-editor-grid">
-            <div class="deck-editor-column">
+          <div class="deck-editor-top">
+            <div class="deck-editor-panel">
+              <div class="list" id="taDeckList">No deck loaded.</div>
+              <div class="status" id="taDeckStatus">Pick a deck to begin.</div>
+            </div>
+            <div class="deck-editor-column" id="taIdentityPanel">
               <h4>Identity</h4>
               <div class="row">
                 <div>
@@ -836,7 +844,7 @@
               <div class="row">
                 <div>
                   <label for="taCardId">Card ID</label>
-                  <input id="taCardId" placeholder="auto from name">
+                  <input id="taCardId" placeholder="auto from name" readonly>
                 </div>
               </div>
               <div class="row">
@@ -874,27 +882,11 @@
                 </div>
               </div>
             </div>
-            <div class="deck-editor-column">
-              <h4>Meaning</h4>
-              <div class="row">
-                <div>
-                  <label for="taCardFlavor">Flavor text</label>
-                  <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="taCardUpright">Upright</label>
-                  <textarea id="taCardUpright"></textarea>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="taCardReversed">Reversed</label>
-                  <textarea id="taCardReversed"></textarea>
-                </div>
-              </div>
-            </div>
+          </div>
+
+          <div class="section-divider"></div>
+          <h3>Card Editor</h3>
+          <div class="deck-editor-grid">
             <div class="deck-editor-column">
               <h4>Meta</h4>
               <div class="row">
@@ -934,6 +926,27 @@
                     <div class="preview-card" id="taFrontPreview"><span class="preview-label">Front</span></div>
                     <div class="preview-card" id="taBackPreview"><span class="preview-label">Back</span></div>
                   </div>
+                </div>
+              </div>
+            </div>
+            <div class="deck-editor-column">
+              <h4>Meaning</h4>
+              <div class="row">
+                <div>
+                  <label for="taCardFlavor">Flavor text</label>
+                  <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardUpright">Upright</label>
+                  <textarea id="taCardUpright"></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardReversed">Reversed</label>
+                  <textarea id="taCardReversed"></textarea>
                 </div>
               </div>
             </div>

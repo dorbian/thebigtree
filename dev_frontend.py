@@ -62,6 +62,21 @@ async def serve_html(request):
         "Cache-Control": "no-store, max-age=0"
     })
 
+async def serve_event_dashboard(request):
+    """Serve the event dashboard HTML with injected event code."""
+    code = request.match_info.get("code", "")
+    html_file = Path(__file__).parent / "bigtree" / "web" / "templates" / "event_dashboard.html"
+    if not html_file.exists():
+        return web.Response(text="event_dashboard.html not found", status=404)
+    html_content = html_file.read_text(encoding="utf-8")
+    html_content = html_content.replace("{event_code}", code)
+    return web.Response(text=html_content, content_type="text/html", headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+        "Cache-Control": "no-store, max-age=0"
+    })
+
 async def serve_icon(_request):
     """Serve the app icon used by templates."""
     icon_path = Path(__file__).parent / "icon.png"
@@ -239,6 +254,7 @@ async def main():
     app.router.add_get('/', serve_html)
     app.router.add_get('/elfministration', serve_html)
     app.router.add_get('/icon.png', serve_icon)
+    app.router.add_get('/events/{code}/dashboard', serve_event_dashboard)
     app.router.add_static('/static', Path(__file__).parent / "bigtree" / "web" / "static")
     
     # API proxy routes with CORS

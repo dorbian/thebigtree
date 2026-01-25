@@ -38,6 +38,16 @@
 - Bingo/Cardgames: add event selection to creation and store event metadata on create.
 - Overlay: guard missing bingo refresh control binding.
 - Overlay: prevent deck editor horizontal overflow.
+- Overlay: reflow deck editor list + panels (list half width, identity right, meta left).
+- Overlay: add a new-card button and sync card id when selecting template cards.
+- Overlay: make card id read-only in the deck editor.
+- Overlay: open event dashboard when selecting an event in manage view.
+- Overlay: show event dashboard inside the iframe panel when selecting an event.
+- Overlay: return to the login screen when auth fails in the overlay.
+- Overlay: guard keydown handler against missing key values.
+- Events: fix dashboard template braces to avoid syntax errors in the browser.
+- Dev: serve local event dashboard HTML to avoid stale remote template syntax errors.
+- Events: fix dashboard queries to use database fetch helper.
 - Tarot: add template card API with tarot/playing templates and deck purpose metadata.
 - Overlay: add deck purpose controls and template card picker for new card creation.
 - Bingo: upsert new games into the games list for the admin archive.

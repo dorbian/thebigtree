@@ -410,7 +410,15 @@
           tr.addEventListener("click", () => {
             const code = tr.getAttribute("data-event-code") || "";
             const ev = (eventsCache || []).find(x => String(x.event_code || "") === String(code));
-            if (ev) openEventModal(ev);
+            if (!ev){
+              return;
+            }
+            if (ev.event_code){
+              const url = `/events/${encodeURIComponent(String(ev.event_code))}/dashboard`;
+              loadIframe(url);
+              return;
+            }
+            openEventModal(ev);
           });
         });
       }
@@ -2742,10 +2750,7 @@ This will block new games from being created in this event, but existing games c
             createdBy.value = "";
           }
           updateBingoCreatePayload();
-          if (loginStatusEl){
-            loginStatusEl.textContent = "Auth failed. Check your API key.";
-            loginStatusEl.className = "status err";
-          }
+          clearAuthSession("Auth failed. Check your API key.", "err");
         }
       }
 
@@ -6166,7 +6171,7 @@ function getOwnerClaimStatus(ownerName){
 
       document.addEventListener("keydown", (ev) => {
         if (ev.repeat) return;
-        if (ev.key.toLowerCase() !== "n") return;
+        if (!ev.key || ev.key.toLowerCase() !== "n") return;
         const target = ev.target;
         const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
         if (tag === "input" || tag === "textarea" || target.isContentEditable) return;
@@ -7380,7 +7385,7 @@ function getOwnerClaimStatus(ownerName){
         }
         taSuppressDirty = true;
         taSelectedCardId = "";
-        $("taCardId").value = "";
+        $("taCardId").value = card.card_id || card.id || "";
         $("taCardName").value = card.name || card.title || "";
         $("taCardSuit").value = card.suit || "";
         $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
@@ -8289,6 +8294,31 @@ function getOwnerClaimStatus(ownerName){
           if (card){
             taApplyTemplateCard(card);
           }
+        });
+      }
+      const newCardBtn = $("taNewCard");
+      if (newCardBtn){
+        newCardBtn.addEventListener("click", () => {
+          taSelectedCardId = "";
+          $("taCardId").value = "";
+          $("taCardName").value = "";
+          $("taCardSuit").value = "";
+          $("taCardNumber").value = "";
+          $("taCardTags").value = "";
+          $("taCardFlavor").value = "";
+          $("taCardUpright").value = "";
+          $("taCardReversed").value = "";
+          $("taCardArtist").value = "";
+          window.taUploadedImageUrl = "";
+          taRenderNumberInfo("");
+          taSetCardThemeWeights({});
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
+          taRenderPreviews(null);
+          taUpdateContext(null);
+          taSetDirty(false);
         });
       }
       $("taDeckList").addEventListener("click", (ev) => {

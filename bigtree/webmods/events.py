@@ -866,7 +866,7 @@ async def event_dashboard_players(req: web.Request) -> web.Response:
     
     event_id = int(ev["id"])
     
-    players = db._fetchall(
+    players = db._execute(
         """
         SELECT ep.user_id, ep.role, ep.joined_at, u.xiv_username as name
         FROM event_players ep
@@ -874,7 +874,8 @@ async def event_dashboard_players(req: web.Request) -> web.Response:
         WHERE ep.event_id = %s
         ORDER BY ep.joined_at DESC
         """,
-        (event_id,)
+        (event_id,),
+        fetch=True
     )
     
     return web.json_response({
@@ -895,14 +896,15 @@ async def event_dashboard_games(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "event not found"}, status=404)
     
     # Find games related to this event by join_code pattern
-    games = db._fetchall(
+    games = db._execute(
         """
         SELECT session_id, join_code, game_id, status, created_at, pot, currency
         FROM cardgame_sessions 
         WHERE join_code LIKE %s
         ORDER BY created_at DESC
         """,
-        (f"{code}-%",)
+        (f"{code}-%",),
+        fetch=True
     )
     
     # Format the games data
