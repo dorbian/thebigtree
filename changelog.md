@@ -1,6 +1,40 @@
 # Changelog
 
 ## Unreleased
+- Overlay: add a subtle tint overlay in overlay mode to reduce background vibrancy.
+- Overlay: darken admin background overlays on login and admin shell.
+- Overlay: guard cardgame session UI bindings when elements are absent and fix the missing brace.
+- Overlay: bust overlay CSS + admin background cache in local dev.
+- Overlay: drive admin background from a CSS variable for both login and app shell.
+- Overlay: split login vs. app-shell background URLs to keep the logged-in view on adminlogin.png.
+- Dev: disable caching for HTML/CSS/JS in the frontend dev server.
+- Overlay: let login screen use shared overlay variables for darkness.
+- Overlay: add an extra darkening layer over the logged-in shell background.
+- Overlay: set logged-in shell darkening layer to 50%.
+- Overlay: darken dashboard admin cards for readability.
+- Overlay: reduce transparency on dashboard KPI and admin cards.
+- Overlay: match dashboard card backgrounds to KPI opacity for readability.
+- Bingo: show the sessions list inside the bingo panel.
+- Dev: proxy binary API responses without UTF-8 decode errors.
+- Bingo: prefill create modal currency and background from venue defaults.
+- Bingo: simplify session overview list to title-only selections.
+- Bingo: hide bingo controls until a session is selected.
+- Bingo: move sessions list into its own panel and switch to details on selection.
+- Bingo: use normal-width buttons and route status messages to the sidebar.
+- Bingo: move buy cards controls to players header and remove admin tools panel.
+- Bingo: remove the inline status field from the bingo panel.
+- Bingo: tighten player list rows to single-line height.
+- Bingo: default to the sessions list on load when bingo access is available.
+- Bingo: remove the Advanced section from the bingo panel.
+- Bingo: remove visible Game ID and seed pot controls from the bingo panel.
+- Bingo: fall back to the sessions list when no game is selected on refresh.
+- Wallet: ensure the wallet/event background scales to the viewport.
+- Cardgames: open player/host views in the overlay iframe instead of new tabs.
+- Cardgames: guard missing cardgame form fields to avoid null errors.
+- Cardgames: guard missing deck select when applying session details.
+- Cardgames: allow open player/host when the game selector is missing.
+- Dev: proxy /cardgames routes in the frontend dev server.
+- Bingo/Cardgames: add event selection to creation and store event metadata on create.
 - Overlay: neutralize login background hue and reduce panel/card opacity.
 - Overlay: apply adminlogin.png background after login across the admin shell.
 - Overlay: rename UI labels to Elfministration.

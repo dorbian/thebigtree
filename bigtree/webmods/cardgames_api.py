@@ -286,6 +286,8 @@ async def create_session(req: web.Request):
     background_artist_id = str(body.get("background_artist_id") or "").strip() or None
     background_artist_name = str(body.get("background_artist_name") or "").strip() or None
     currency = str(body.get("currency") or "").strip() or None
+    event_id = int(body.get("event_id") or 0) or None
+    event_code = str(body.get("event_code") or "").strip() or None
     status = str(body.get("status") or "").strip().lower()
     is_single_player = bool(body.get("is_single_player", False))
     if not status and body.get("draft"):
@@ -318,6 +320,10 @@ async def create_session(req: web.Request):
         if created_by is None:
             created_by = _resolve_admin_user_id(req)
         payload = dict(s or {})
+        if event_id:
+            payload["event_id"] = event_id
+        if event_code:
+            payload["event_code"] = event_code
         status_val = payload.get("status") or "created"
         active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
         metadata = {
@@ -325,6 +331,10 @@ async def create_session(req: web.Request):
             "pot": payload.get("pot"),
             "status": status_val,
         }
+        if event_id:
+            metadata["event_id"] = event_id
+        if event_code:
+            metadata["event_code"] = event_code
         players = db._extract_cardgame_players(payload)
         db.upsert_game(
             game_id=str(payload.get("session_id") or payload.get("join_code") or ""),

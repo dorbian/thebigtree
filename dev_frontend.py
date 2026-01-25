@@ -39,7 +39,7 @@ async def serve_html(request):
     html_content = html_file.read_text(encoding='utf-8')
     
     # Replace template variable for admin background (serve locally from static)
-    admin_background = "/static/images/admin_background.png"
+    admin_background = "/static/images/admin_background.png?v=20260125a"
     html_content = html_content.replace("{ADMIN_BACKGROUND}", admin_background)
     
     # Inject API base URL pointing to LOCAL PROXY (not remote server)
@@ -58,8 +58,16 @@ async def serve_html(request):
     return web.Response(text=html_content, content_type="text/html", headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+        "Cache-Control": "no-store, max-age=0"
     })
+
+async def serve_icon(_request):
+    """Serve the app icon used by templates."""
+    icon_path = Path(__file__).parent / "icon.png"
+    if icon_path.is_file():
+        return web.FileResponse(icon_path)
+    return web.Response(status=404, text="icon not found")
 
 async def proxy_api(request):
     """Proxy API requests to the remote server."""
@@ -73,7 +81,7 @@ async def proxy_api(request):
     full_path = path  # Default: use path as-is
     
     # Determine which prefix to use based on the original request path
-    prefixes = ['api', 'admin', 'events', 'bingo', 'discord', 'contests', 'auth']
+    prefixes = ['api', 'admin', 'events', 'bingo', 'discord', 'contests', 'auth', 'user-area', 'tarot', 'gallery', 'overlay', 'venues', 'cardgames']
     for prefix in prefixes:
         if request.path.startswith(f'/{prefix}/'):
             full_path = f"{prefix}/{path}"
@@ -112,7 +120,7 @@ async def proxy_api(request):
                 data = await request.read()
             
             async with session.request(method, target_url, headers=headers, data=data, allow_redirects=False) as resp:
-                response_text = await resp.text()
+                content_type = resp.headers.get("Content-Type", "")
                 response_headers = {k: v for k, v in resp.headers.items() if k.lower() not in ['content-encoding', 'content-type']}
                 # Add CORS headers
                 response_headers['Access-Control-Allow-Origin'] = '*'
@@ -121,12 +129,25 @@ async def proxy_api(request):
                 
                 # Log response
                 if resp.status >= 400:
-                    logger.warning(f"   ❌ {resp.status}: {response_text[:200]}")
+                    if content_type.startswith("text/") or "json" in content_type:
+                        response_text = await resp.text()
+                        logger.warning(f"   ❌ {resp.status}: {response_text[:200]}")
+                    else:
+                        logger.warning(f"   ❌ {resp.status}: <binary {content_type or 'unknown'}>")
                 else:
                     logger.info(f"   ✓ {resp.status}")
-                
+
+                if content_type.startswith("text/") or "json" in content_type:
+                    response_text = await resp.text()
+                    return web.Response(
+                        text=response_text,
+                        status=resp.status,
+                        content_type=resp.content_type,
+                        headers=response_headers
+                    )
+                response_body = await resp.read()
                 return web.Response(
-                    text=response_text,
+                    body=response_body,
                     status=resp.status,
                     content_type=resp.content_type,
                     headers=response_headers
@@ -150,7 +171,10 @@ async def serve_static(request):
         return web.Response(text="Forbidden", status=403)
     
     if full_path.is_file():
-        return web.FileResponse(full_path)
+        headers = {}
+        if full_path.suffix.lower() in {".css", ".js", ".html"}:
+            headers["Cache-Control"] = "no-store, max-age=0"
+        return web.FileResponse(full_path, headers=headers)
     
     return web.Response(text="Not found", status=404)
 
@@ -158,11 +182,8 @@ async def proxy_image(request):
     """Proxy image requests to the remote server."""
     import aiohttp
     
-    # Get the full path that was requested
-    path = request.match_info.get('path', '')
-    
-    # Build target URL
-    target_url = f"{REMOTE_API_URL}/{path}"
+    # Preserve the full request path (including /media or /uploads)
+    target_url = f"{REMOTE_API_URL}{request.path}"
     if request.query_string:
         target_url += f"?{request.query_string}"
     
@@ -217,6 +238,7 @@ async def main():
     # Routes
     app.router.add_get('/', serve_html)
     app.router.add_get('/elfministration', serve_html)
+    app.router.add_get('/icon.png', serve_icon)
     app.router.add_static('/static', Path(__file__).parent / "bigtree" / "web" / "static")
     
     # API proxy routes with CORS
@@ -227,6 +249,12 @@ async def main():
     app.router.add_route('*', '/discord/{path:.*}', proxy_api)
     app.router.add_route('*', '/contests/{path:.*}', proxy_api)
     app.router.add_route('*', '/auth/{path:.*}', proxy_api)
+    app.router.add_route('*', '/user-area/{path:.*}', proxy_api)
+    app.router.add_route('*', '/tarot/{path:.*}', proxy_api)
+    app.router.add_route('*', '/gallery', proxy_api)
+    app.router.add_route('*', '/overlay/{path:.*}', proxy_api)
+    app.router.add_route('*', '/cardgames/{path:.*}', proxy_api)
+    app.router.add_route('*', '/venues/{path:.*}', proxy_api)
     app.router.add_route('*', '/media/{path:.*}', proxy_image)
     app.router.add_route('*', '/uploads/{path:.*}', proxy_image)
     

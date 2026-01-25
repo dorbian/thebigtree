@@ -38,6 +38,9 @@
       let dashboardLogsLoading = false;
       let adminVenueId = null;
       let adminVenueName = "";
+      let adminVenueDeckId = null;
+      let adminVenueCurrency = null;
+      let adminVenueGameBackgrounds = {};
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -171,6 +174,16 @@
         overlayLog("loadDashboardStats", {force, loading: dashboardStatsLoading, loaded: dashboardStatsLoaded});
         if (dashboardStatsLoading) return;
         if (dashboardStatsLoaded && !force){
+          return;
+        }
+        if (!hasScope("admin:web")){
+          overlayLog("loadDashboardStats skip: missing admin:web scope");
+          setStatValue("dashStatDiscord", "--");
+          setStatValue("dashStatPlayers", "--");
+          setStatValue("dashStatRegistered", "--");
+          setStatValue("dashStatGames", "--");
+          setStatValue("dashStatVenues", "--");
+          dashboardStatsLoaded = true;
           return;
         }
         dashboardStatsLoading = true;
@@ -418,6 +431,30 @@
         }catch(err){
           eventsCache = [];
           renderEventsList();
+        }
+      }
+
+      async function loadEventOptions(selectId){
+        const select = $(selectId);
+        if (!select) return;
+        select.innerHTML = `<option value="">No event</option>`;
+        try{
+          const resp = await jsonFetch("/admin/events?include_ended=0", {method: "GET"});
+          if (!resp.ok) throw new Error(resp.error || "Unable to load events");
+          const items = (resp.events || []).filter(ev => String(ev.status || "").toLowerCase() !== "ended");
+          items.forEach(ev => {
+            const id = ev.id ?? ev.event_id ?? "";
+            if (!id) return;
+            const opt = document.createElement("option");
+            const title = ev.title || ev.event_code || `Event ${id}`;
+            const status = ev.status ? ` (${ev.status})` : "";
+            opt.value = String(id);
+            opt.textContent = `${title}${status}`;
+            opt.dataset.code = ev.event_code || "";
+            select.appendChild(opt);
+          });
+        }catch(err){
+          select.innerHTML = `<option value="">No events available</option>`;
         }
       }
 
@@ -1966,7 +2003,7 @@ This will block new games from being created in this event, but existing games c
 
         const saved = getSavedPanel();
         const blocked =
-          (!canBingo && (saved === "bingo" || saved === "media")) ||
+          (!canBingo && (saved === "bingo" || saved === "bingoSessions" || saved === "media")) ||
           (!canAdmin && (saved === "contests")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
           (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots"));
@@ -2324,9 +2361,11 @@ This will block new games from being created in this event, but existing games c
 
       function setBingoStatus(msg, kind){
         const el = $("bingoStatus");
-        if (!el) return;
-        el.textContent = msg;
-        el.className = "status" + (kind ? " " + kind : "");
+        if (el){
+          el.textContent = msg;
+          el.className = "status" + (kind ? " " + kind : "");
+        }
+        setStatus(msg, kind);
       }
 
       let bingoHistory = [];
@@ -2521,7 +2560,17 @@ This will block new games from being created in this event, but existing games c
       }
 
       function handleUnauthorized(){
-        clearAuthSession("Unauthorized. Please log in again.", "err");
+        // Do not wipe stored tokens; just surface the error.
+        const msg = "Unauthorized. Check API key or scopes.";
+        if (loginStatusEl){
+          loginStatusEl.textContent = msg;
+          loginStatusEl.className = "status err";
+        }
+        if (statusEl){
+          statusEl.textContent = msg;
+          statusEl.className = "status-bar status err";
+        }
+        showToast(msg, "err");
       }
 
       function clearAuthSession(message, kind){
@@ -2631,6 +2680,9 @@ This will block new games from being created in this event, but existing games c
           }
           adminVenueId = null;
           adminVenueName = "";
+          adminVenueDeckId = null;
+          adminVenueCurrency = null;
+          adminVenueGameBackgrounds = {};
           authUserScopes = new Set();
           authUserIsElfmin = false;
           applyElfminVisibility();
@@ -2640,6 +2692,10 @@ This will block new games from being created in this event, but existing games c
             createdBy.value = "";
           }
           updateBingoCreatePayload();
+          if (loginStatusEl){
+            loginStatusEl.textContent = "Auth failed. Check your API key.";
+            loginStatusEl.className = "status err";
+          }
         }
       }
 
@@ -2651,6 +2707,9 @@ This will block new games from being created in this event, but existing games c
         }
         adminVenueId = membership && membership.venue_id ? Number(membership.venue_id) : null;
         adminVenueName = name || "";
+        adminVenueDeckId = membership && membership.deck_id ? String(membership.deck_id) : null;
+        adminVenueCurrency = membership && membership.currency_name ? String(membership.currency_name) : null;
+        adminVenueGameBackgrounds = (membership && membership.metadata && membership.metadata.game_backgrounds) ? membership.metadata.game_backgrounds : {};
       }
 
       async function loadAdminVenues(){
@@ -2716,6 +2775,7 @@ This will block new games from being created in this event, but existing games c
         const allowedPanels = new Set(["dashboard"]);
         if (canBingo){
           allowedPanels.add("bingo");
+          allowedPanels.add("bingoSessions");
           allowedPanels.add("media");
         }
         if (canAdmin){
@@ -2730,12 +2790,15 @@ This will block new games from being created in this event, but existing games c
           allowedPanels.add("craps");
           allowedPanels.add("slots");
         }
-        let nextPanel = saved || (canBingo ? "bingo" : "dashboard");
+        let nextPanel = saved || (canBingo ? "bingoSessions" : "dashboard");
+        if (nextPanel === "bingo" && !getGameId()){
+          nextPanel = "bingoSessions";
+        }
         if (!allowedPanels.has(nextPanel)){
           nextPanel = "dashboard";
         }
         if (!getSeenDashboard()){
-          showPanelOnce("dashboard");
+          showPanelOnce(canBingo ? "bingoSessions" : "dashboard");
           setSeenDashboard();
         } else {
           showPanel(nextPanel);
@@ -2953,6 +3016,7 @@ This will block new games from being created in this event, but existing games c
 
       function renderClaims(game){
         const el = $("bClaims");
+        if (!el) return;
         const claims = (game && Array.isArray(game.claims)) ? game.claims : [];
         if (!claims.length){
           el.innerHTML = "<div class=\"muted\">No claims yet.</div>";
@@ -3154,36 +3218,16 @@ This will block new games from being created in this event, but existing games c
         el.innerHTML = "";
         games.forEach(g => {
           const item = document.createElement("div");
-          item.style.padding = "8px 6px";
-          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const title = g.title || "Bingo";
-          const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-          const status = g.active ? "active" : "ended";
-          const deleteBtn = !g.active ? `<button data-delete="${g.game_id}" class="btn-ghost" style="max-width:90px">Delete</button>` : "";
-          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${title}</strong> - ${created} <span class="muted">(${status})</span></div>\n              ${deleteBtn}\n            </div>`;
+          item.innerHTML = `<strong>${title}</strong>`;
           item.style.cursor = "pointer";
           item.onclick = () => {
             setGameId(g.game_id || "");
+            showPanel("bingo");
             refreshBingo();
             loadOwnersForGame();
             loadGamesMenu();
           };
-          const del = item.querySelector("button[data-delete]");
-          if (del){
-            del.addEventListener("click", async (ev) => {
-              ev.stopPropagation();
-              if (!confirm("Delete this game? This cannot be undone.")){
-                return;
-              }
-              try{
-                await jsonFetch("/bingo/" + encodeURIComponent(g.game_id), {method:"DELETE"});
-                setStatus("Game deleted.", "ok");
-                await loadGamesMenu();
-              }catch(err){
-                setStatus(err.message, "err");
-              }
-            });
-          }
           el.appendChild(item);
         });
       }
@@ -3292,7 +3336,7 @@ This will block new games from being created in this event, but existing games c
           el.classList.toggle(name, state);
         }
         toggleClass("menuDashboard", "active", which === "dashboard");
-        toggleClass("menuBingo", "active", which === "bingo");
+        toggleClass("menuBingo", "active", which === "bingo" || which === "bingoSessions");
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
@@ -3305,6 +3349,7 @@ This will block new games from being created in this event, but existing games c
         // Venues are accessed via Dashboard buttons for now.
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
+        toggleClass("bingoSessionsPanel", "hidden", which !== "bingoSessions");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
         toggleClass("cardgameSessionsPanel", "hidden", which !== "cardgameSessions");
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
@@ -3315,6 +3360,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
         toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
+        toggleClass("iframePanel", "hidden", which !== "iframe");
         if (which === "dashboard"){
           renderDashboardChangelog();
           loadDashboardStats();
@@ -3345,6 +3391,15 @@ This will block new games from being created in this event, but existing games c
           loadEventsVenues();
           loadEventsList(true);
         }
+      }
+
+      // Load URL in iframe panel
+      function loadIframe(url){
+        const iframe = $("iframeContent");
+        if (iframe){
+          iframe.src = url;
+        }
+        showPanel("iframe");
       }
 
       function getSavedPanel(){
@@ -3461,7 +3516,20 @@ This will block new games from being created in this event, but existing games c
       }
 
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
-      $("menuBingo").addEventListener("click", () => showPanel("bingo"));
+      $("menuBingo").addEventListener("click", () => {
+        showPanel("bingoSessions");
+        loadGamesMenu();
+      });
+      
+      // XIVAuth Users - load in iframe
+      const dashboardXivAuthBtn = $("dashboardXivAuthLink");
+      if (dashboardXivAuthBtn){
+        dashboardXivAuthBtn.addEventListener("click", () => {
+          if (!ensureScope("admin:web", "Admin web access required.")) return;
+          loadIframe("/user-area/manage");
+        });
+      }
+      
       const menuGamesList = $("menuGamesList");
       if (menuGamesList){
         menuGamesList.addEventListener("click", () => {
@@ -3480,6 +3548,7 @@ This will block new games from being created in this event, but existing games c
         ev.stopPropagation();
         loadGamesMenu();
       });
+      on("bSessionsRefresh", "click", () => loadGamesMenu());
       $("bChannelRefresh").addEventListener("click", () => loadDiscordChannels());
       $("bChannelSelect").addEventListener("change", (ev) => {
         const pick = ev.target.value || "";
@@ -3496,8 +3565,15 @@ This will block new games from being created in this event, but existing games c
         $("bChannelSelect").value = "";
         $("bAnnounceCalls").checked = false;
         $("bSeedPot").value = "0";
-        bingoCreateBgUrl = "";
-        $("bCreateBgStatus").textContent = "No background selected.";
+        if (adminVenueCurrency && $("bCurrency")){
+          $("bCurrency").value = adminVenueCurrency;
+        }
+        const venueBingoBg = adminVenueGameBackgrounds ? (adminVenueGameBackgrounds.bingo || "") : "";
+        bingoCreateBgUrl = venueBingoBg || "";
+        $("bCreateBgStatus").textContent = bingoCreateBgUrl
+          ? "Venue background applied."
+          : "No background selected.";
+        loadEventOptions("bCreateEventSelect");
         loadDiscordChannels();
         updateBingoCreatePayload();
       });
@@ -3545,7 +3621,7 @@ This will block new games from being created in this event, but existing games c
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
       bindMenuKey("menuGamesList");
-      $("bAnnounceToggle").addEventListener("change", async (ev) => {
+      on("bAnnounceToggle", "change", async (ev) => {
         const gid = getGameId();
         if (!gid){
           setBingoStatus("Select a game first.", "err");
@@ -3795,7 +3871,8 @@ This will block new games from being created in this event, but existing games c
           "venueBackgroundBlackjack",
           "venueBackgroundPoker",
           "venueBackgroundHighlow",
-          "venueBackgroundCrapslite"
+          "venueBackgroundCrapslite",
+          "venueBackgroundTarot"
         ];
         ids.forEach((id) => {
           const sel = $(id);
@@ -3874,6 +3951,7 @@ This will block new games from being created in this event, but existing games c
         $("venueBackgroundPoker").value = gameBackgrounds?.poker || "";
         $("venueBackgroundHighlow").value = gameBackgrounds?.highlow || "";
         $("venueBackgroundCrapslite").value = gameBackgrounds?.crapslite || "";
+        $("venueBackgroundTarot").value = gameBackgrounds?.tarot || "";
         const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
         if (Array.isArray(ids)){
           $("venueAdmins").value = ids.join(", ");
@@ -3989,6 +4067,7 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           poker: $("venueBackgroundPoker").value || "",
           highlow: $("venueBackgroundHighlow").value || "",
           crapslite: $("venueBackgroundCrapslite").value || "",
+          tarot: $("venueBackgroundTarot").value || "",
         };
         if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
         if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
@@ -5834,6 +5913,11 @@ function getOwnerClaimStatus(ownerName){
       $("bCreate").addEventListener("click", async () => {
         try{
           updateBingoCreatePayload();
+            const eventSelect = $("bCreateEventSelect");
+            const eventId = parseInt(eventSelect?.value || "0", 10) || 0;
+            const eventCode = eventSelect?.selectedOptions?.length
+              ? (eventSelect.selectedOptions[0].dataset.code || "")
+              : "";
             const body = {
               title: $("bTitle").value,
               header_text: $("bHeader").value,
@@ -5844,7 +5928,9 @@ function getOwnerClaimStatus(ownerName){
               channel_id: $("bChannelSelect").value || $("bChannel").value || "",
               created_by: $("bCreatedBy").value || "",
               announce_calls: $("bAnnounceCalls").checked,
-              theme_color: $("bTheme").value || ""
+              theme_color: $("bTheme").value || "",
+              event_id: eventId || undefined,
+              event_code: eventCode || undefined
             };
           const data = await jsonFetch("/bingo/create", {
             method: "POST",
@@ -5879,6 +5965,8 @@ function getOwnerClaimStatus(ownerName){
       async function refreshBingo(){
         const gid = getGameId();
         if (!gid){
+          showPanel("bingoSessions");
+          loadGamesMenu();
           setBingoStatus("Select a game first.", "err");
           return;
         }
@@ -6000,7 +6088,10 @@ function getOwnerClaimStatus(ownerName){
           $("bOwners").textContent = "";
           const ownersEmpty = $("bOwnersEmpty");
           if (ownersEmpty) ownersEmpty.style.display = "flex";
-          $("bClaims").textContent = "No claims yet.";
+          const claimsEl = $("bClaims");
+          if (claimsEl){
+            claimsEl.textContent = "No claims yet.";
+          }
           $("bTitleVal").textContent = "No title";
           $("bHeaderVal").textContent = "No header";
           $("bStageVal").textContent = "No stage";
@@ -6086,7 +6177,7 @@ function getOwnerClaimStatus(ownerName){
             const body = {
               game_id: gid,
               owner_name: ownerName,
-              owner_user_id: $("bOwnerId").value.trim() || null,
+              owner_user_id: ($("bOwnerId")?.value || "").trim() || null,
               quantity: qty,
               gift: gift
             };
@@ -6114,7 +6205,7 @@ function getOwnerClaimStatus(ownerName){
         }
       });
 
-      $("bViewOwner").addEventListener("click", () => {
+      on("bViewOwner", "click", () => {
         const gid = getGameId();
         const owner = $("bOwner").value.trim();
         if (!gid || !owner){
@@ -6150,13 +6241,26 @@ function getOwnerClaimStatus(ownerName){
       }
 
       function renderLinks(code, token){
+        const container = $("tLink");
+        if (!container) return;
         const links = [];
         if (code){
           links.push(`<a href="${getPlayerUrl(code)}" target="_blank" rel="noreferrer">Player</a>`);
-          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Priestess</a>`);
-          links.push(`<a href="${getOverlayUrl(code)}" target="_blank" rel="noreferrer">Overlay</a>`);
+          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Host</a>`);
         }
-        $("tLink").innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+        container.innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
+      function setTarotBackgroundStatus(url){
+        const preview = $("tBackgroundPreview");
+        const img = $("tBackgroundPreviewImg");
+        const clean = (url || "").trim();
+        if (clean && preview && img){
+          img.src = clean;
+          preview.style.display = "block";
+        }else if (preview){
+          preview.style.display = "none";
+        }
       }
 
       async function loadTarotSessionDecks(selectValue){
@@ -6172,26 +6276,68 @@ function getOwnerClaimStatus(ownerName){
             opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             modalSelect.appendChild(opt2);
           });
-          modalSelect.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
+          // Use venue deck if available, otherwise fallback to selectValue or first deck
+          const defaultDeck = selectValue || adminVenueDeckId || (decks[0] ? decks[0].deck_id : "elf-classic");
+          modalSelect.value = defaultDeck;
         }catch(err){
           setStatus(err.message, "err");
         }
       }
 
       $("tCreateSession").addEventListener("click", () => {
+        loadTarotSessionDecks();
         $("sessionCreateModal").classList.add("show");
       });
       $("sessionCreateClose").addEventListener("click", () => {
         $("sessionCreateModal").classList.remove("show");
       });
+      // Session creation background image file input
+      $("sessionCreateBackground").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file){
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const dataUrl = evt.target.result;
+            $("sessionCreateBackgroundPreviewImg").src = dataUrl;
+            $("sessionCreateBackgroundPreview").style.display = "block";
+            $("sessionCreateBackground").dataset.backgroundUrl = dataUrl;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Session creation media library button
+      $("sessionCreateOpenMedia").addEventListener("click", (e) => {
+        e.preventDefault();
+        if (e.shiftKey){
+          $("sessionCreateBackground").click();
+        } else {
+          librarySelectHandler = (item) => {
+            const pick = item && (item.url || item.fallback_url || "");
+            if (!pick){
+              setStatus("No media selected.", "err");
+              return;
+            }
+            $("sessionCreateBackgroundPreviewImg").src = pick;
+            $("sessionCreateBackgroundPreview").style.display = "block";
+            $("sessionCreateBackground").dataset.backgroundUrl = pick;
+            setStatus("Background set from media.", "ok");
+            showLibraryModal(false);
+          };
+          showLibraryModal(true);
+          loadLibrary("media");
+        }
+      });
+
       $("sessionCreateSubmit").addEventListener("click", async () => {
         try{
           const deck = $("sessionCreateDeck").value.trim() || "elf-classic";
           const spread = $("sessionCreateSpread").value.trim() || "single";
+          const backgroundUrl = $("sessionCreateBackground").dataset.backgroundUrl || "";
           const data = await jsonFetch("/api/tarot/sessions", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({deck_id: deck, spread_id: spread})
+            body: JSON.stringify({deck_id: deck, spread_id: spread, background_url: backgroundUrl})
           }, true);
           $("tJoinCode").value = data.joinCode || "";
           $("tPriestessToken").value = data.priestessToken || "";
@@ -6222,11 +6368,146 @@ function getOwnerClaimStatus(ownerName){
             opt.dataset.token = s.priestess_token || "";
             select.appendChild(opt);
           });
+          // Auto-select when requested, otherwise pick the first option if only one exists
           if (selectJoin){
             select.value = selectJoin;
+          } else if (select.options.length === 1){
+            select.selectedIndex = 0;
+          }
+          // Trigger change event to populate fields when a selection exists
+          if (select.value){
+            select.dispatchEvent(new Event('change'));
           }
         }catch(err){
           setStatus(err.message, "err");
+        }
+      }
+
+      // Casino session creation modal handlers
+      $("casinoSessionCreateClose").addEventListener("click", () => {
+        $("casinoSessionCreateModal").classList.remove("show");
+      });
+
+      // Casino session background file input
+      $("casinoSessionCreateBackground").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file){
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const dataUrl = evt.target.result;
+            $("casinoSessionCreateBackgroundPreviewImg").src = dataUrl;
+            $("casinoSessionCreateBackgroundPreview").style.display = "block";
+            $("casinoSessionCreateBackground").dataset.backgroundUrl = dataUrl;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Casino session media library button
+      $("casinoSessionCreateOpenMedia").addEventListener("click", (e) => {
+        e.preventDefault();
+        if (e.shiftKey){
+          $("casinoSessionCreateBackground").click();
+        } else {
+          librarySelectHandler = (item) => {
+            const pick = item && (item.url || item.fallback_url || "");
+            if (!pick){
+              setStatus("No media selected.", "err");
+              return;
+            }
+            $("casinoSessionCreateBackgroundPreviewImg").src = pick;
+            $("casinoSessionCreateBackgroundPreview").style.display = "block";
+            $("casinoSessionCreateBackground").dataset.backgroundUrl = pick;
+            setStatus("Background set from media.", "ok");
+            showLibraryModal(false);
+          };
+          showLibraryModal(true);
+          loadLibrary("media");
+        }
+      });
+
+      // Update background when game type changes
+      $("casinoSessionCreateGame").addEventListener("change", () => {
+        updateCasinoSessionBackgroundFromGame();
+      });
+
+      $("casinoSessionCreateSubmit").addEventListener("click", async () => {
+        try{
+          const gameId = $("casinoSessionCreateGame").value.trim() || "blackjack";
+          const deckId = $("casinoSessionCreateDeck").value.trim() || "";
+          const pot = parseInt($("casinoSessionCreatePot").value || "0", 10) || 0;
+          const currency = $("casinoSessionCreateCurrency").value.trim() || "";
+          const backgroundUrl = $("casinoSessionCreateBackground").dataset.backgroundUrl || "";
+          const eventSelect = $("casinoSessionCreateEventSelect");
+          const eventId = parseInt(eventSelect?.value || "0", 10) || 0;
+          const eventCode = eventSelect?.selectedOptions?.length
+            ? (eventSelect.selectedOptions[0].dataset.code || "")
+            : "";
+          const payload = {
+            game_id: gameId,
+            deck_id: deckId,
+            pot: pot,
+            currency: currency,
+            background_url: backgroundUrl,
+            background_artist_id: "",
+            background_artist_name: "",
+            event_id: eventId || undefined,
+            event_code: eventCode || undefined
+          };
+          await createCardgameSession(payload);
+          $("casinoSessionCreateModal").classList.remove("show");
+        }catch(err){
+          setCardgameStatus(err.message, "err");
+        }
+      });
+
+      async function loadCasinoSessionDefaults(){
+        // Load decks
+        if (!ensureCardgamesScope()) return;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const modalSelect = $("casinoSessionCreateDeck");
+          modalSelect.innerHTML = "";
+          decks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            modalSelect.appendChild(opt);
+          });
+          // Use venue deck if available
+          const defaultDeck = adminVenueDeckId || (decks[0] ? decks[0].deck_id : "");
+          if (defaultDeck) modalSelect.value = defaultDeck;
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+
+        // Set currency from venue
+        $("casinoSessionCreateCurrency").value = adminVenueCurrency || "gil";
+        
+        // Set pot to 0 by default
+        $("casinoSessionCreatePot").value = "0";
+
+        // Set game to blackjack by default
+        $("casinoSessionCreateGame").value = "blackjack";
+
+        // Load background based on game type
+        updateCasinoSessionBackgroundFromGame();
+
+        // Load event options
+        loadEventOptions("casinoSessionCreateEventSelect");
+      }
+
+      function updateCasinoSessionBackgroundFromGame(){
+        const gameId = $("casinoSessionCreateGame").value || "blackjack";
+        const backgroundUrl = adminVenueGameBackgrounds[gameId] || "";
+        if (backgroundUrl){
+          $("casinoSessionCreateBackgroundPreviewImg").src = backgroundUrl;
+          $("casinoSessionCreateBackgroundPreview").style.display = "block";
+          $("casinoSessionCreateBackground").dataset.backgroundUrl = backgroundUrl;
+        } else {
+          $("casinoSessionCreateBackgroundPreview").style.display = "none";
+          $("casinoSessionCreateBackground").dataset.backgroundUrl = "";
         }
       }
 
@@ -6239,16 +6520,19 @@ function getOwnerClaimStatus(ownerName){
         renderLinks(join, token);
       });
 
-      $("tOpenOverlay").addEventListener("click", () => {
-        const code = $("tJoinCode").value.trim();
-        if (!code){
-          setStatus("Enter a join code.", "err");
-          return;
-        }
-        const url = getOverlayUrl(code);
-        renderLinks(code, $("tPriestessToken").value.trim());
-        window.open(url, "_blank");
-      });
+      const tOpenOverlayBtn = $("tOpenOverlay");
+      if (tOpenOverlayBtn){
+        tOpenOverlayBtn.addEventListener("click", () => {
+          const code = $("tJoinCode").value.trim();
+          if (!code){
+            setStatus("Enter a join code.", "err");
+            return;
+          }
+          const url = getOverlayUrl(code);
+          renderLinks(code, $("tPriestessToken").value.trim());
+          window.open(url, "_blank");
+        });
+      }
 
       $("tOpenPlayer").addEventListener("click", () => {
         const code = $("tJoinCode").value.trim();
@@ -6270,7 +6554,37 @@ function getOwnerClaimStatus(ownerName){
         const token = $("tPriestessToken").value.trim();
         const url = getPriestessUrl(code, token);
         renderLinks(code, token);
-        window.open(url, "_blank");
+        // Open priestess view inside the iframe panel to keep sidebar visible
+        loadIframe(url);
+      });
+
+      $("tCopyPlayer").addEventListener("click", async () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code to copy the player link.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(getPlayerUrl(code));
+          showToast("Player link copied.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
+      });
+
+      $("tCopyPriestess").addEventListener("click", async () => {
+        const code = $("tJoinCode").value.trim();
+        const token = $("tPriestessToken").value.trim();
+        if (!code){
+          setStatus("Enter a join code to copy the host link.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(getPriestessUrl(code, token));
+          showToast("Host link copied.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
       });
 
       $("tCloseSession").addEventListener("click", async () => {
@@ -6469,6 +6783,8 @@ function getOwnerClaimStatus(ownerName){
                 background_url: payload.background_url || "",
                 background_artist_id: payload.background_artist_id || "",
                 background_artist_name: payload.background_artist_name || "",
+                event_id: payload.event_id || undefined,
+                event_code: payload.event_code || undefined,
                 draft: true
               })
             }, true);
@@ -6493,7 +6809,6 @@ function getOwnerClaimStatus(ownerName){
             background_artist_id: payload.background_artist_id || "",
             background_artist_name: payload.background_artist_name || ""
           });
-          renderCardgameLinks(payload.game_id, session.join_code || "", session.priestess_token || "");
           setCardgameStatus("Session created.", "ok");
           await loadCardgameSessions(session.join_code || "");
         }catch(err){
@@ -6532,24 +6847,10 @@ function getOwnerClaimStatus(ownerName){
 
         if ($("cgCreateSession")){
           $("cgCreateSession").addEventListener("click", () => {
-            const payload = {
-              game_id: $("cgGameSelect").value,
-              deck_id: $("cgDeckSelect").value,
-              pot: parseInt(($("cgPot").value || "0").trim(), 10) || 0,
-              currency: ($("cgCurrency").value || "").trim(),
-              background_url: ($("cgBackgroundUrl").value || "").trim(),
-              background_artist_id: $("cgBackgroundUrl").dataset.artistId || "",
-              background_artist_name: $("cgBackgroundUrl").dataset.artistName || ""
-            };
-            createCardgameSession(payload);
+            loadCasinoSessionDefaults();
+            $("casinoSessionCreateModal").classList.add("show");
           });
-        ["cgPot", "cgCurrency", "cgDeckSelect", "cgGameSelect", "cgBackgroundUrl"].forEach(id => {
-          const el = $(id);
-          if (!el) return;
-          el.addEventListener("change", () => persistCardgameDefaults());
-          el.addEventListener("blur", () => persistCardgameDefaults());
-        });
-          $("cgCreateFromSelected").addEventListener("click", () => {
+          on("cgCreateFromSelected", "click", () => {
             const sel = $("cgSessionSelect");
             const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
             if (!opt){
@@ -6570,10 +6871,9 @@ function getOwnerClaimStatus(ownerName){
               background_artist_name: opt.dataset.backgroundArtistName || ""
             });
           });
-          if ($("cgDeckRefresh")){
-            $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
-          }
-        $("cgSessionSelect").addEventListener("change", (ev) => {
+        }
+
+        on("cgSessionSelect", "change", (ev) => {
           const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
           const join = opt ? (opt.value || "") : "";
           const token = opt ? (opt.dataset.token || "") : "";
@@ -6585,16 +6885,24 @@ function getOwnerClaimStatus(ownerName){
           const backgroundArtistId = opt ? (opt.dataset.backgroundArtistId || "") : "";
           const backgroundArtistName = opt ? (opt.dataset.backgroundArtistName || "") : "";
           const status = opt ? (opt.dataset.status || "") : "";
-          $("cgJoinCode").value = join;
-          $("cgJoinCode").dataset.sessionId = opt ? (opt.dataset.sessionId || "") : "";
-          $("cgJoinCode").dataset.gameId = gameId;
-          $("cgJoinCode").dataset.deckId = deckId;
-          $("cgPriestessToken").value = token;
-          $("cgPot").value = pot;
-          $("cgCurrency").value = currency || "gil";
-          $("cgGameSelect").value = gameId;
+          const joinEl = $("cgJoinCode");
+          if (joinEl){
+            joinEl.value = join;
+            joinEl.dataset.sessionId = opt ? (opt.dataset.sessionId || "") : "";
+            joinEl.dataset.gameId = gameId;
+            joinEl.dataset.deckId = deckId;
+          }
+          const tokenEl = $("cgPriestessToken");
+          if (tokenEl) tokenEl.value = token;
+          const potEl = $("cgPot");
+          if (potEl) potEl.value = pot;
+          const currencyEl = $("cgCurrency");
+          if (currencyEl) currencyEl.value = currency || "gil";
+          const gameSelectEl = $("cgGameSelect");
+          if (gameSelectEl) gameSelectEl.value = gameId;
           if (deckId){
-            $("cgDeckSelect").value = deckId;
+            const deckEl = $("cgDeckSelect");
+            if (deckEl) deckEl.value = deckId;
           }
           if ($("cgBackgroundUrl")){
             $("cgBackgroundUrl").value = background;
@@ -6605,36 +6913,83 @@ function getOwnerClaimStatus(ownerName){
           if ($("cgCreateFromSelected")){
             $("cgCreateFromSelected").disabled = status.toLowerCase() !== "live";
           }
-          renderCardgameLinks(gameId, join, token);
         });
-        $("cgBackgroundUrl").addEventListener("input", (ev) => {
+        on("cgBackgroundUrl", "input", (ev) => {
           ev.target.dataset.artistId = "";
           ev.target.dataset.artistName = "";
           setCardgameBackgroundStatus(ev.target.value.trim());
         });
-        $("cgOpenPlayer").addEventListener("click", () => {
-          const join = $("cgJoinCode").value.trim();
-          const gameId = $("cgGameSelect").value;
+        on("cgOpenPlayer", "click", () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = $("cgGameSelect")?.value || joinEl.dataset.gameId || "crapslite";
           if (!join){
             setCardgameStatus("Enter a join code.", "err");
             return;
           }
-          renderCardgameLinks(gameId, join, $("cgPriestessToken").value.trim());
-          window.open(getCardgamePlayerUrl(gameId, join), "_blank");
+          loadIframe(getCardgamePlayerUrl(gameId, join));
         });
-        $("cgOpenPriestess").addEventListener("click", () => {
-          const join = $("cgJoinCode").value.trim();
-          const gameId = $("cgGameSelect").value;
+        on("cgOpenPriestess", "click", () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = $("cgGameSelect")?.value || joinEl.dataset.gameId || "crapslite";
           if (!join){
             setCardgameStatus("Enter a join code.", "err");
             return;
           }
-          const token = $("cgPriestessToken").value.trim();
-          renderCardgameLinks(gameId, join, token);
-          window.open(getCardgameHostUrl(gameId, join, token), "_blank");
+          const tokenEl = $("cgPriestessToken");
+          const token = tokenEl ? tokenEl.value.trim() : "";
+          loadIframe(getCardgameHostUrl(gameId, join, token));
         });
-        $("cgFinishSession").addEventListener("click", () => finishCardgameSession());
-        $("cgDeleteSession").addEventListener("click", async () => {
+        on("cgCopyPlayer", "click", async () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = joinEl.dataset.gameId || "blackjack";
+          if (!join){
+            setCardgameStatus("Enter a join code to copy the player link.", "err");
+            return;
+          }
+          try{
+            await navigator.clipboard.writeText(getCardgamePlayerUrl(gameId, join));
+            showToast("Player link copied.", "ok");
+          }catch(err){
+            showToast("Copy failed.", "err");
+          }
+        });
+        on("cgCopyPriestess", "click", async () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const token = $("cgPriestessToken") ? $("cgPriestessToken").value.trim() : "";
+          const gameId = joinEl.dataset.gameId || "blackjack";
+          if (!join){
+            setCardgameStatus("Enter a join code to copy the host link.", "err");
+            return;
+          }
+          try{
+            await navigator.clipboard.writeText(getCardgameHostUrl(gameId, join, token));
+            showToast("Host link copied.", "ok");
+          }catch(err){
+            showToast("Copy failed.", "err");
+          }
+        });
+        on("cgFinishSession", "click", () => finishCardgameSession());
+        on("cgDeleteSession", "click", async () => {
           const join = $("cgJoinCode").value.trim();
           const token = $("cgPriestessToken").value.trim();
           const sessionId = $("cgJoinCode").dataset.sessionId || "";
@@ -6655,14 +7010,13 @@ function getOwnerClaimStatus(ownerName){
             $("cgJoinCode").value = "";
             $("cgJoinCode").dataset.sessionId = "";
             $("cgPriestessToken").value = "";
-            renderCardgameLinks("", "", "");
             setCardgameStatus("Session deleted.", "ok");
             await loadCardgameSessions();
           }catch(err){
             setCardgameStatus(err.message, "err");
           }
         });
-        $("cgUseSelectedMedia").addEventListener("click", () => {
+        on("cgUseSelectedMedia", "click", () => {
           const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
           if (!pick){
             setCardgameStatus("Select a media item first.", "err");
@@ -6671,7 +7025,7 @@ function getOwnerClaimStatus(ownerName){
           $("cgBackgroundUrl").value = pick;
           setCardgameBackgroundStatus(pick);
         });
-        $("cgOpenMedia").addEventListener("click", () => {
+        on("cgOpenMedia", "click", () => {
           librarySelectHandler = (item) => {
             const pick = item && (item.url || item.fallback_url || "");
             if (!pick){
@@ -6692,7 +7046,6 @@ function getOwnerClaimStatus(ownerName){
         if (defaults){
           setCardgameDefaults(defaults);
         }
-      }
 
       let taNumbers = [];
       let taSuitDefs = [];

@@ -177,6 +177,8 @@ async def bingo_create(req: web.Request):
         header_text=str(body.get("header_text") or body.get("header") or "BING"),
         theme_color=str(body.get("theme_color") or "").strip() or None,
         announce_calls=bool(body.get("announce_calls")),
+        event_id=int(body.get("event_id") or 0) or None,
+        event_code=str(body.get("event_code") or "").strip() or None,
         **{k: v for k, v in {
             "size": body.get("size"),
             "free_center": body.get("free_center"),

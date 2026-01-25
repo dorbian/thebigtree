@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Elfministration</title>
     <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="/static/overlay/overlay.css">
+    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260125a">
     <style>
+      :root{
+        --admin-login-bg-url: url("{ADMIN_BACKGROUND}");
+        --admin-shell-bg-url: url("/static/images/adminlogin.png");
+      }
       .dashboard-kpis-row {
         display: flex;
         align-items: flex-start;
@@ -26,10 +30,8 @@
         height: 100vh;
         width: 100vw;
         background:
-          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 80%),
-          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 80%),
-          linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
-          url("{ADMIN_BACKGROUND}");
+          var(--admin-login-bg-url),
+          var(--admin-bg-overlay);
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -46,7 +48,7 @@
         padding: 14px 16px;
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 12px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-kpis .stat-value {
         font-size: 2rem;
@@ -89,7 +91,7 @@
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 14px;
         padding: 14px 14px 16px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-admin-header {
         display: flex;
@@ -117,7 +119,7 @@
         border-radius: 14px;
         padding: 14px;
         margin-bottom: 16px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-logs-header {
         display: flex;
@@ -275,9 +277,9 @@
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Bingo</div>
-            <div class="menu-item" id="menuBingo" tabindex="0">
-              <span class="menu-label">Manager</span>
+            <div class="nav-title">Games</div>
+              <div class="menu-item" id="menuBingo" tabindex="0">
+              <span class="menu-label">Bingo Sessions</span>
               <div class="menu-actions">
                 <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -293,18 +295,8 @@
             </div>
             <div class="menu-sub" id="menuGames"></div>
             <div class="hidden" id="menuCreateGamePlaceholder"></div>
-          </div>
-
-          <div class="nav-block">
-            <div class="nav-title">Cards</div>
             <div class="menu-item" id="menuTarotLinks" tabindex="0"><span class="menu-label">Tarot Sessions</span></div>
-            <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Cardgame Sessions</span></div>
-          </div>
-
-          <div class="nav-block">
-            <div class="nav-title">Casino</div>
-            <div class="menu-item" id="menuCraps" tabindex="0"><span class="menu-label">Craps</span></div>
-            <div class="menu-item" id="menuSlots" tabindex="0"><span class="menu-label">Slots</span></div>
+            <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Casino Sessions</span></div>
           </div>
 
           <div class="nav-block">
@@ -364,9 +356,9 @@
                 <div class="dashboard-admin-title">User management</div>
               </div>
               <div class="dashboard-admin-actions">
-                <a id="dashboardXivAuthLink" class="dashboard-admin-link" href="/user-area/manage" target="_blank" rel="noreferrer">
+                <button type="button" id="dashboardXivAuthLink" class="dashboard-admin-link">
                   <span>XIVAuth Users</span>
-                </a>
+                </button>
                 <button type="button" id="menuArtists">
                   <span>Artist index</span>
                 </button>
@@ -574,9 +566,23 @@
             <div class="dashboard-logs-body" id="venuesListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
         </section>
-          <section class="panel" style="animation-delay:.05s" id="bingoPanel">
-            <h2>Bingo Manager</h2>
+        <section class="panel hidden" style="animation-delay:.045s" id="bingoSessionsPanel">
+          <h2>Bingo Sessions</h2>
+          <p class="muted">Select a session to manage.</p>
+          <div class="bingo-sessions">
+            <div class="bingo-sessions-header">
+              <h3>Sessions</h3>
+              <button class="btn-ghost icon-btn icon-btn--small" id="bSessionsRefresh" type="button" title="Refresh sessions" aria-label="Refresh sessions">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+              </button>
+            </div>
+            <div class="bingo-sessions-list" id="bGames">Loading sessions...</div>
+          </div>
+        </section>
 
+        <section class="panel hidden" style="animation-delay:.05s" id="bingoPanel">
+          <h2>Bingo Manager</h2>
+          <div class="bingo-main">
             <div class="bingo-section bingo-control">
               <h3>Game Control</h3>
               <div class="bingo-status-display" id="bGameStatusDisplay">
@@ -597,23 +603,37 @@
                   <div class="muted">No history yet.</div>
                 </div>
               </div>
-              <div class="status" id="bingoStatus">No game selected.</div>
             </div>
 
             <div class="section-divider"></div>
 
-            <div class="bingo-section">
-              <div class="section-header-row">
-                <h3>Players &amp; Cards</h3>
-                <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
-                </button>
-              </div>
-              <div class="empty-state" id="bOwnersEmpty">
-                <div class="muted">No players yet. Refresh to pull current owners.</div>
-                <div class="muted" style="font-size:12px;">Use the refresh icon above.</div>
-              </div>
-              <div class="list" id="bOwners"></div>
+              <div class="bingo-section">
+                <div class="section-header-row">
+                  <h3>Players &amp; Cards</h3>
+                  <div class="bingo-owners-actions">
+                    <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
+                    </button>
+                    <label class="bingo-owners-field">
+                      Owner
+                      <input id="bOwner" placeholder="Player name">
+                    </label>
+                    <label class="bingo-owners-field">
+                      Qty
+                      <input id="bQty" type="number" value="1" min="1" max="10">
+                    </label>
+                    <label class="bingo-owners-check">
+                      <input type="checkbox" id="bCountsPot" checked>
+                      Counts toward pot
+                    </label>
+                    <button id="bBuy" class="btn-ghost">Buy cards</button>
+                  </div>
+                </div>
+                <div class="empty-state" id="bOwnersEmpty">
+                  <div class="muted">No players yet. Refresh to pull current owners.</div>
+                  <div class="muted" style="font-size:12px;">Use the refresh icon above.</div>
+                </div>
+                <div class="list" id="bOwners"></div>
             </div>
 
             <div class="section-divider"></div>
@@ -636,76 +656,22 @@
 
             <div class="section-divider"></div>
 
-            <details class="bingo-advanced" id="bingoAdvanced">
-              <summary>Advanced</summary>
-              <div class="bingo-advanced-body">
-                <div class="row">
-                  <div>
-                    <label>Game ID</label>
-                    <div id="bGameId" class="status">No game selected.</div>
-                  </div>
-                  <div>
-                    <label for="bCountsPot">
-                      <input type="checkbox" id="bCountsPot" checked>
-                      Counts toward pot
-                    </label>
-                  </div>
-                  <div>
-                    <label for="bSeedPotAmount">Seed pot</label>
-                    <input id="bSeedPotAmount" type="number" value="0" min="0">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button class="btn-ghost" id="bSeedPotApply">Seed pot</button>
-                  </div>
-                </div>
-                <div class="row">
-                  <div>
-                    <label for="bOwner"><span class="req">*</span> Owner name</label>
-                    <input id="bOwner" placeholder="Player name">
-                  </div>
-                  <div>
-                    <label for="bQty">Quantity</label>
-                    <input id="bQty" type="number" value="1" min="1" max="10">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button id="bBuy" class="btn-ghost">Buy</button>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="bingo-advanced" id="bingoAdmin">
-              <summary>Admin Tools</summary>
-              <div class="bingo-advanced-body">
-                <div class="row">
-                  <div>
-                    <label for="bOwnerId">Discord ID</label>
-                    <input id="bOwnerId" placeholder="optional">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button class="btn-ghost" id="bViewOwner">View tickets</button>
-                  </div>
-                </div>
-                <div class="row">
-                  <div>
-                    <label>Announce calls</label>
-                    <div class="bingo-announce">
-                      <input type="checkbox" id="bAnnounceToggle">
-                      <span class="status-badge" id="bAnnounceBadge">Off</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="list" id="bClaims">No claims yet.</div>
-              </div>
-            </details>
-          </section>
+            <div id="bGameId" class="hidden"></div>
+          </div>
+        </section>
 
         <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
           <h2>Tarot Sessions</h2>
-          <p>Open the player, priestess, or elfministration view.</p>
+          <p>Open the player or host views.</p>
+          <div class="row">
+            <div style="grid-column: 1/-1;">
+              <label>&nbsp;</label>
+              <div class="inline-actions">
+                <button id="tCreateSession">New session</button>
+                <button class="btn-ghost" id="tCloseSession">Close session</button>
+              </div>
+            </div>
+          </div>
           <div class="row">
             <div>
               <label for="tSessionSelect">Existing sessions</label>
@@ -713,25 +679,11 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+              <button id="tSessionRefresh" class="menu-refresh icon-btn icon-btn--small" title="Refresh sessions" aria-label="Refresh sessions">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
                 </svg>
               </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tCreateSession">New session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tJoinCode">Join code</label>
-              <input id="tJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="tPriestessToken">Priestess token</label>
-              <input id="tPriestessToken" placeholder="token (for priestess)">
             </div>
           </div>
           <div class="row">
@@ -741,105 +693,46 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenPriestess">Open priestess</button>
+              <button id="tOpenPriestess">Open host</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tCopyPlayer" title="Copy player link" aria-label="Copy player link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy player link
+              </button>
+              <label for="tJoinCode" style="margin-top:8px;">Join code</label>
+              <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenOverlay">Open elfministration</button>
+              <button class="btn-ghost" id="tCopyPriestess" title="Copy host link" aria-label="Copy host link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy host link
+              </button>
+              <label for="tPriestessToken" style="margin-top:8px;">Host token</label>
+              <input id="tPriestessToken" placeholder="token (for host)">
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="tCloseSession">Close session</button>
-            </div>
-          </div>
-          <div class="row links">
-            <div>
-              <span class="pill">Links</span>
-              <div id="tLink">No join code entered.</div>
-            </div>
-          </div>
-          <h3>Tarot Games</h3>
-          <p>Create and manage tarot sessions.</p>
-          <div class="status hidden" id="tSpreadNote">
-            Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
           </div>
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="cardgameSessionsPanel">
-          <h2>Cardgame Sessions</h2>
-          <p>Create and manage sessions for blackjack, poker, and high/low.</p>
-            <div class="row">
-              <div>
-                <label for="cgGameSelect">Game</label>
-                <select id="cgGameSelect">
-                  <option value="blackjack">Blackjack</option>
-                  <option value="poker">Poker</option>
-                  <option value="highlow">High/Low</option>
-                  <option value="slots">Slots</option>
-                  <option value="crapslite">Craps (lite)</option>
-                </select>
-              </div>
-              <div>
-                <label for="cgDeckSelect">Deck</label>
-                <div class="row">
-                  <select id="cgDeckSelect"></select>
-                  <button class="btn-ghost icon-btn" id="cgDeckRefresh" title="Refresh decks" aria-label="Refresh decks">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <input id="cgPot" placeholder="0">
-              </div>
-              <div>
-                <label for="cgCurrency">Currency</label>
-                <input id="cgCurrency" placeholder="gil">
-              </div>
-            </div>
-          <div class="row">
-            <div>
-              <label for="cgBackgroundUrl">Background image</label>
-              <input id="cgBackgroundUrl" placeholder="/media/forest.png or https://...">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgUseSelectedMedia">Use selected media</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgOpenMedia">Open media library</button>
-            </div>
+          <h2>Casino Sessions</h2>
+          <div class="inline-actions" style="display:flex; gap:8px; margin-bottom:16px;">
+            <button id="cgCreateSession">New session</button>
+            <button class="btn-ghost danger-action" id="cgDeleteSession">Delete session</button>
+            <button class="btn-ghost" id="cgFinishSession">Finish session</button>
           </div>
-          <div class="background-preview" id="cgBackgroundPreview" style="display:none; margin-top: 8px;">
-            <img id="cgBackgroundPreviewImg" src="" alt="Background preview" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);">
-          </div>
-            <div class="row">
-              <div>
-                <label>&nbsp;</label>
-                <button id="cgCreateSession">Create draft</button>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn-ghost" id="cgCreateFromSelected">Create next from selected</button>
-              </div>
-            </div>
           <div class="row">
             <div>
               <label for="cgSessionSelect">Existing sessions</label>
               <select id="cgSessionSelect"></select>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="cgJoinCode">Join code</label>
-              <input id="cgJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="cgPriestessToken">Host token</label>
-              <input id="cgPriestessToken" placeholder="token (for host)">
             </div>
           </div>
           <div class="row">
@@ -851,19 +744,29 @@
               <label>&nbsp;</label>
               <button id="cgOpenPriestess">Open host</button>
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgFinishSession">Finish session</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost danger-action" id="cgDeleteSession">Delete session</button>
-            </div>
           </div>
-          <div class="row links">
+          <div class="row">
             <div>
-              <span class="pill">Links</span>
-              <div id="cgLink">No join code entered.</div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgCopyPlayer" title="Copy player link" aria-label="Copy player link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy player link
+              </button>
+              <label for="cgJoinCode" style="margin-top:8px;">Join code</label>
+              <input id="cgJoinCode" placeholder="e.g. AB12CD">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgCopyPriestess" title="Copy host link" aria-label="Copy host link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy host link
+              </button>
+              <label for="cgPriestessToken" style="margin-top:8px;">Host token</label>
+              <input id="cgPriestessToken" placeholder="token (for host)">
             </div>
           </div>
           <div class="status" id="cgStatus">Ready.</div>
@@ -1389,6 +1292,11 @@
               </div>
           </div>
         </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="iframePanel">
+          <iframe id="iframeContent" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation" allowfullscreen></iframe>
+        </section>
+
         <div class="modal" id="contestChannelModal">
           <div class="modal-card">
             <div class="modal-header">
@@ -1460,6 +1368,12 @@
           <div>
             <label for="bCurrency">Currency</label>
             <input id="bCurrency" value="gil">
+          </div>
+          <div>
+            <label for="bCreateEventSelect">Event</label>
+            <select id="bCreateEventSelect">
+              <option value="">No event</option>
+            </select>
           </div>
             <div>
               <label for="bMaxCards">Max cards</label>
@@ -1677,6 +1591,10 @@
             <div>
               <label for="venueBackgroundCrapslite">Crapslite</label>
               <select id="venueBackgroundCrapslite"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundTarot">Tarot</label>
+              <select id="venueBackgroundTarot"></select>
             </div>
           </div>
         <div class="row">
@@ -2071,8 +1989,80 @@
         </div>
         <div class="row">
           <div>
+            <label for="sessionCreateBackground">Background image</label>
+            <input id="sessionCreateBackground" type="file" accept="image/*" style="display:none;">
+            <button class="btn-ghost" id="sessionCreateOpenMedia">Media Library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <div class="background-preview" id="sessionCreateBackgroundPreview" style="display:none;">
+              <img id="sessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
             <label>&nbsp;</label>
             <button id="sessionCreateSubmit">Create session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="casinoSessionCreateModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Create Casino Session</div>
+          <button class="btn-ghost" id="casinoSessionCreateClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreateGame">Game type</label>
+            <select id="casinoSessionCreateGame">
+              <option value="blackjack">Blackjack</option>
+              <option value="poker">Poker</option>
+              <option value="highlow">High/Low</option>
+              <option value="slots">Slots</option>
+              <option value="crapslite">Craps (lite)</option>
+            </select>
+          </div>
+          <div>
+            <label for="casinoSessionCreateDeck">Deck</label>
+            <select id="casinoSessionCreateDeck"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreatePot">Pot amount</label>
+            <input id="casinoSessionCreatePot" type="number" value="0" min="0">
+          </div>
+          <div>
+            <label for="casinoSessionCreateCurrency">Currency</label>
+            <input id="casinoSessionCreateCurrency" placeholder="gil">
+          </div>
+          <div>
+            <label for="casinoSessionCreateEventSelect">Event</label>
+            <select id="casinoSessionCreateEventSelect">
+              <option value="">No event</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreateBackground">Background image</label>
+            <input id="casinoSessionCreateBackground" type="file" accept="image/*" style="display:none;">
+            <button class="btn-ghost" id="casinoSessionCreateOpenMedia">Media Library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <div class="background-preview" id="casinoSessionCreateBackgroundPreview" style="display:none;">
+              <img id="casinoSessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="casinoSessionCreateSubmit">Create session</button>
           </div>
         </div>
       </div>

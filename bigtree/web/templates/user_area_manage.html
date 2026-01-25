@@ -78,7 +78,12 @@
     const apiKeyInput = document.getElementById("apiKeyInput");
 
     function getApiKey(){
-      const key = (apiKeyInput?.value || localStorage.getItem("forest_api_key") || "").trim();
+      const key = (
+        apiKeyInput?.value ||
+        localStorage.getItem("forest_api_key") ||
+        localStorage.getItem("bt_api_key") ||
+        ""
+      ).trim();
       if (apiKeyInput && key && apiKeyInput.value.trim() !== key){
         apiKeyInput.value = key;
       }
@@ -89,11 +94,16 @@
       const key = (apiKeyInput?.value || "").trim();
       if (key){
         localStorage.setItem("forest_api_key", key);
+        localStorage.setItem("bt_api_key", key);
       }
     }
 
     if (apiKeyInput){
-      apiKeyInput.value = (localStorage.getItem("forest_api_key") || "").trim();
+      apiKeyInput.value = (
+        localStorage.getItem("forest_api_key") ||
+        localStorage.getItem("bt_api_key") ||
+        ""
+      ).trim();
       apiKeyInput.addEventListener("change", saveApiKey);
       apiKeyInput.addEventListener("blur", saveApiKey);
     }
