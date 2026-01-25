@@ -3544,7 +3544,7 @@ This will block new games from being created in this event, but existing games c
           showPanel("events");
         });
       }
-      $("menuBingoRefresh").addEventListener("click", (ev) => {
+      on("menuBingoRefresh", "click", (ev) => {
         ev.stopPropagation();
         loadGamesMenu();
       });
