@@ -2,6 +2,7 @@
 """Dice set management module."""
 from __future__ import annotations
 import logging
+from psycopg2.extras import Json
 from bigtree.inc.database import get_database
 
 log = logging.getLogger("bigtree.modules.dice")
@@ -28,7 +29,7 @@ def create_dice_set(dice_id: str, name: str = None, sides: int = 6, metadata: di
         SET name = EXCLUDED.name, sides = EXCLUDED.sides, metadata = EXCLUDED.metadata, payload = EXCLUDED.payload, updated_at = CURRENT_TIMESTAMP
         RETURNING dice_id, name, sides, metadata, payload
     """
-    row = db.fetchone(query, dice_id, name or dice_id, sides, metadata, payload)
+    row = db._fetchone(query, (dice_id, name or dice_id, sides, Json(metadata), Json(payload)))
     if not row:
         return None
     return {
@@ -44,7 +45,7 @@ def get_dice_set(dice_id: str) -> dict | None:
     """Get a dice set by ID."""
     db = get_database()
     query = "SELECT dice_id, name, sides, metadata, payload FROM dice_sets WHERE dice_id = $1"
-    row = db.fetchone(query, dice_id)
+    row = db._fetchone(query, (dice_id,))
     if not row:
         return None
     return {
@@ -60,7 +61,7 @@ def list_dice_sets() -> list[dict]:
     """List all dice sets."""
     db = get_database()
     query = "SELECT dice_id, name, sides, metadata FROM dice_sets ORDER BY name"
-    rows = db.fetchall(query)
+    rows = db._execute(query, fetch=True) or []
     result = []
     for row in rows:
         result.append({
@@ -94,7 +95,7 @@ def update_dice_set(dice_id: str, name: str = None, sides: int = None, metadata:
         WHERE dice_id = $1
         RETURNING dice_id, name, sides, metadata, payload
     """
-    row = db.fetchone(query, dice_id, current["name"], current["sides"], current["metadata"], current["payload"])
+    row = db._fetchone(query, (dice_id, current["name"], current["sides"], Json(current["metadata"]), Json(current["payload"])))
     if not row:
         return None
     return {
@@ -110,7 +111,7 @@ def delete_dice_set(dice_id: str) -> bool:
     """Delete a dice set."""
     db = get_database()
     query = "DELETE FROM dice_sets WHERE dice_id = $1"
-    db.execute(query, dice_id)
+    db._execute(query, (dice_id,))
     return True
 
 

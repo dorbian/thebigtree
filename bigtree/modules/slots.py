@@ -2,6 +2,7 @@
 """Slot machine management module."""
 from __future__ import annotations
 import logging
+from psycopg2.extras import Json
 from bigtree.inc.database import get_database
 
 log = logging.getLogger("bigtree.modules.slots")
@@ -31,7 +32,7 @@ def create_slot_machine(machine_id: str, name: str = None, reel_count: int = 3, 
         SET name = EXCLUDED.name, reel_count = EXCLUDED.reel_count, metadata = EXCLUDED.metadata, payload = EXCLUDED.payload, updated_at = CURRENT_TIMESTAMP
         RETURNING machine_id, name, reel_count, metadata, payload
     """
-    row = db.fetchone(query, machine_id, name or machine_id, reel_count, metadata, payload)
+    row = db._fetchone(query, (machine_id, name or machine_id, reel_count, Json(metadata), Json(payload)))
     if not row:
         return None
     return {
@@ -47,7 +48,7 @@ def get_slot_machine(machine_id: str) -> dict | None:
     """Get a slot machine by ID."""
     db = get_database()
     query = "SELECT machine_id, name, reel_count, metadata, payload FROM slot_machines WHERE machine_id = $1"
-    row = db.fetchone(query, machine_id)
+    row = db._fetchone(query, (machine_id,))
     if not row:
         return None
     return {
@@ -63,7 +64,7 @@ def list_slot_machines() -> list[dict]:
     """List all slot machines."""
     db = get_database()
     query = "SELECT machine_id, name, reel_count, metadata FROM slot_machines ORDER BY name"
-    rows = db.fetchall(query)
+    rows = db._execute(query, fetch=True) or []
     result = []
     for row in rows:
         result.append({
@@ -97,7 +98,7 @@ def update_slot_machine(machine_id: str, name: str = None, reel_count: int = Non
         WHERE machine_id = $1
         RETURNING machine_id, name, reel_count, metadata, payload
     """
-    row = db.fetchone(query, machine_id, current["name"], current["reel_count"], current["metadata"], current["payload"])
+    row = db._fetchone(query, (machine_id, current["name"], current["reel_count"], Json(current["metadata"]), Json(current["payload"])))
     if not row:
         return None
     return {
@@ -113,7 +114,7 @@ def delete_slot_machine(machine_id: str) -> bool:
     """Delete a slot machine."""
     db = get_database()
     query = "DELETE FROM slot_machines WHERE machine_id = $1"
-    db.execute(query, machine_id)
+    db._execute(query, (machine_id,))
     return True
 
 

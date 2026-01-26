@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2026-01-26
 - Editor: add Dice Sets editor with full CRUD operations for dice configurations.
 - Editor: add Slot Machines editor with full CRUD operations for slot machine configurations.
 - Database: add dice_sets and slot_machines tables with metadata and payload support.
 - API: add /api/dice/sets endpoints for dice set management (GET, POST, PUT, DELETE).
 - API: add /api/slots/machines endpoints for slot machine management (GET, POST, PUT, DELETE).
 - Modules: add dice.py and slots.py backend modules for dice and slots logic.
+- Fix: use correct Database API methods (_execute, _fetchone) in dice and slots modules.
+- Overlay: replace inline SVG icons with CSS sprite-based icon system for dice and slots editors.
+- Overlay: add icon sprite system using single texture file for better performance.
 - Overlay: add a subtle tint overlay in overlay mode to reduce background vibrancy.
 - Overlay: darken admin background overlays on login and admin shell.
 - Overlay: guard cardgame session UI bindings when elements are absent and fix the missing brace.
