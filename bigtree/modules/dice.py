@@ -49,11 +49,11 @@ def get_dice_set(dice_id: str) -> dict | None:
     if not row:
         return None
     return {
-        "dice_id": row[0],
-        "name": row[1],
-        "sides": row[2],
-        "metadata": row[3] or {},
-        "payload": row[4] or {},
+        "dice_id": row["dice_id"],
+        "name": row["name"],
+        "sides": row["sides"],
+        "metadata": row["metadata"] or {},
+        "payload": row["payload"] or {},
     }
 
 
