@@ -8809,6 +8809,97 @@ function getOwnerClaimStatus(ownerName){
         preview.style.backgroundSize = `${diceSpriteCols * 100}% ${diceSpriteRows * 100}%`;
       }
 
+      // Media picker for dice faces
+      let mediaPickerTarget = null;
+      let allMediaItems = [];
+
+      async function loadMediaItems(){
+        try{
+          const response = await jsonFetch("/api/gallery/admin/items", {method:"GET"}, true);
+          allMediaItems = response.items || [];
+          renderMediaPicker();
+        }catch(err){
+          console.error("Failed to load media items:", err);
+        }
+      }
+
+      function renderMediaPicker(){
+        const grid = $("mediaPickerGrid");
+        if (!grid) return;
+        
+        const filterType = $("mediaTypeFilter") ? $("mediaTypeFilter").value : "";
+        let filtered = allMediaItems;
+        
+        if (filterType){
+          filtered = allMediaItems.filter(item => {
+            const meta = item.metadata || {};
+            return meta.media_type === filterType;
+          });
+        }
+        
+        grid.innerHTML = "";
+        if (filtered.length === 0){
+          grid.innerHTML = '<div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: #999;">No media items found</div>';
+          return;
+        }
+        
+        filtered.forEach(item => {
+          const div = document.createElement("div");
+          div.style.cssText = "cursor: pointer; border: 2px solid #444; border-radius: 4px; overflow: hidden; transition: all 0.2s;";
+          div.innerHTML = `
+            <img src="${item.thumb_url || item.url}" style="width: 100%; height: 120px; object-fit: cover; display: block;">
+            <div style="padding: 0.5rem; font-size: 0.8rem; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.title || item.filename}</div>
+          `;
+          div.addEventListener("mouseenter", () => {
+            div.style.borderColor = "#4a9eff";
+            div.style.boxShadow = "0 0 8px rgba(74, 158, 255, 0.5)";
+          });
+          div.addEventListener("mouseleave", () => {
+            div.style.borderColor = "#444";
+            div.style.boxShadow = "none";
+          });
+          div.addEventListener("click", () => {
+            selectMediaForFace(item);
+          });
+          grid.appendChild(div);
+        });
+      }
+
+      function selectMediaForFace(item){
+        if (!mediaPickerTarget) return;
+        $("diceFaceImageUrl").value = item.url;
+        closeMediaPicker();
+      }
+
+      function openMediaPicker(target){
+        mediaPickerTarget = target;
+        const modal = $("mediaPickerModal");
+        if (modal) modal.style.display = "block";
+        loadMediaItems();
+      }
+
+      function closeMediaPicker(){
+        const modal = $("mediaPickerModal");
+        if (modal) modal.style.display = "none";
+        mediaPickerTarget = null;
+      }
+
+      // Event listeners for media picker
+      if ($("diceFaceLibrary")){
+        $("diceFaceLibrary").addEventListener("click", () => openMediaPicker("dice_face"));
+      }
+      if ($("mediaPickerClose")){
+        $("mediaPickerClose").addEventListener("click", closeMediaPicker);
+      }
+      if ($("mediaTypeFilter")){
+        $("mediaTypeFilter").addEventListener("change", renderMediaPicker);
+      }
+      if ($("mediaPickerModal")){
+        $("mediaPickerModal").addEventListener("click", (e) => {
+          if (e.target.id === "mediaPickerModal") closeMediaPicker();
+        });
+      }
+
       $("diceSet").addEventListener("change", async () => {
         await loadDiceSet();
       });

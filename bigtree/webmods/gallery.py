@@ -193,6 +193,13 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             continue
         item_id = _item_id("media", filename)
         hidden = bool(row.get("hidden")) or (item_id in hidden_set)
+        
+        # Hide dice and slots media by default in public gallery
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        media_type = metadata.get("media_type", "").lower()
+        if not include_hidden and media_type in ("dice", "slots"):
+            continue
+        
         if not include_hidden and hidden:
             continue
         url = (row.get("url") or "").strip() or f"/media/{filename}"
@@ -233,6 +240,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "artist": {"artist_id": None, "name": artist_name, "links": artist_links},
             "reactions": {},
             "hidden": hidden,
+            "metadata": metadata,
         })
         seen.add(url)
 
