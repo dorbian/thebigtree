@@ -349,6 +349,28 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS dice_sets (
+                id SERIAL PRIMARY KEY,
+                dice_id TEXT UNIQUE NOT NULL,
+                name TEXT,
+                sides INTEGER DEFAULT 6,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                payload JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS slot_machines (
+                id SERIAL PRIMARY KEY,
+                machine_id TEXT UNIQUE NOT NULL,
+                name TEXT,
+                reel_count INTEGER DEFAULT 3,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                payload JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS user_sessions (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

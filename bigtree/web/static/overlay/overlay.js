@@ -2569,7 +2569,10 @@ This will block new games from being created in this event, but existing games c
 
       function apiFetch(path, opts, withKey = true){
         const base = getBase();
-        const url = new URL(path, base).toString();
+        // Ensure path starts with / for absolute URL
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        const url = new URL(cleanPath, base).toString();
+        console.debug("apiFetch:", {path, cleanPath, base, url});
         const options = opts || {};
         options.headers = options.headers || {};
         if (withKey){
@@ -2594,26 +2597,25 @@ This will block new games from being created in this event, but existing games c
         }
         const contentType = (res.headers.get("content-type") || "").toLowerCase();
         const text = await res.text();
-        let data = {};
-        if (contentType.includes("application/json")){
-          try{
-            data = text ? JSON.parse(text) : {};
-          }catch(err){
-            data = {};
-          }
-        }else{
-          try{
-            data = text ? JSON.parse(text) : {};
-          }catch(err){
-            data = {};
-          }
+        
+        // Check for non-JSON responses (likely HTML from proxy/gateway)
+        if (!contentType.includes("application/json") && !text.trim().startsWith("{") && !text.trim().startsWith("[")){
+          console.error("Non-JSON response:", {status: res.status, contentType, text: text.substring(0, 200)});
+          throw new Error("Unexpected response from API. Check gateway/proxy routing.");
         }
+        
+        let data = {};
+        try{
+          data = text ? JSON.parse(text) : {};
+        }catch(err){
+          console.error("JSON parse error:", err, "Text:", text.substring(0, 200));
+          data = {};
+        }
+        
         if (!res.ok){
           throw new Error((data && data.error) || "Request failed");
         }
-        if (!contentType.includes("application/json") && !text.trim().startsWith("{")){
-          throw new Error("Unexpected response from API. Check gateway/proxy routing.");
-        }
+        
         return data;
       }
 
@@ -3395,6 +3397,8 @@ This will block new games from being created in this event, but existing games c
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
+        toggleClass("menuDiceEditor", "active", which === "diceEditor");
+        toggleClass("menuSlotsEditor", "active", which === "slotsEditor");
         toggleClass("menuContests", "active", which === "contests");
         toggleClass("menuMedia", "active", which === "media");
         toggleClass("menuGamesList", "active", which === "gamesList");
@@ -3408,6 +3412,8 @@ This will block new games from being created in this event, but existing games c
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
         toggleClass("cardgameSessionsPanel", "hidden", which !== "cardgameSessions");
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
+        toggleClass("diceEditorPanel", "hidden", which !== "diceEditor");
+        toggleClass("slotsEditorPanel", "hidden", which !== "slotsEditor");
         toggleClass("crapsPanel", "hidden", which !== "craps");
         toggleClass("slotsPanel", "hidden", which !== "slots");
         toggleClass("contestPanel", "hidden", which !== "contests");
@@ -3420,6 +3426,10 @@ This will block new games from being created in this event, but existing games c
           renderDashboardChangelog();
           loadDashboardStats();
           loadDashboardLogs(dashboardLogsKind);
+        } else if (which === "diceEditor"){
+          loadDiceSetList();
+        } else if (which === "slotsEditor"){
+          loadSlotMachineList();
         } else if (which === "venues"){
           loadVenuesPanel(true);
         } else if (which === "media"){
@@ -3651,6 +3661,14 @@ This will block new games from being created in this event, but existing games c
         if (!ensureScope("tarot:admin", "Tarot access required.")) return;
         showPanel("tarotDecks");
       });
+      $("menuDiceEditor").addEventListener("click", () => {
+        if (!ensureScope("dice:admin", "Dice access required.")) return;
+        showPanel("diceEditor");
+      });
+      $("menuSlotsEditor").addEventListener("click", () => {
+        if (!ensureScope("slots:admin", "Slots access required.")) return;
+        showPanel("slotsEditor");
+      });
       $("menuContests").addEventListener("click", () => {
         showPanel("contests");
         loadContestManagement();
@@ -3673,6 +3691,8 @@ This will block new games from being created in this event, but existing games c
       bindMenuKey("menuTarotLinks");
       bindMenuKey("menuCardgameSessions");
       bindMenuKey("menuTarotDecks");
+      bindMenuKey("menuDiceEditor");
+      bindMenuKey("menuSlotsEditor");
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
       bindMenuKey("menuGamesList");
@@ -4029,38 +4049,42 @@ This will block new games from being created in this event, but existing games c
         }
       }
 
-      function openVenueModal(mode){
+      async function openVenueModal(mode){
         const m = mode || {};
         showVenueModal(true);
         setVenueStatus("Loading...", "");
-        loadVenueDeps();
-        loadVenueDiscordUsers();
-        loadVenuesForModal().then(() => {
-          if (m.id){
-            const id = Number(m.id);
-            const found = (venueCache || []).find(v => Number(v.id) === id) || null;
-            if (found){
-              $("venueSelect").value = String(found.id);
-              setVenueFields(found);
-            }else{
-              $("venueSelect").value = "";
-              setVenueFields(null);
-            }
-          }else if (m.new){
+        
+        // Load all dependencies in parallel
+        await Promise.all([
+          loadVenueDeps(),
+          loadVenueDiscordUsers(),
+          loadVenuesForModal()
+        ]);
+        
+        if (m.id){
+          const id = Number(m.id);
+          const found = (venueCache || []).find(v => Number(v.id) === id) || null;
+          if (found){
+            $("venueSelect").value = String(found.id);
+            setVenueFields(found);
+          }else{
             $("venueSelect").value = "";
             setVenueFields(null);
-          }else{
-            // Load first venue into fields for convenience
-            const first = venueCache && venueCache.length ? venueCache[0] : null;
-            if (first){
-              $("venueSelect").value = String(first.id);
-              setVenueFields(first);
-            }else{
-              setVenueFields(null);
-            }
           }
-          setVenueStatus("Ready.", "");
-        });
+        }else if (m.new){
+          $("venueSelect").value = "";
+          setVenueFields(null);
+        }else{
+          // Load first venue into fields for convenience
+          const first = venueCache && venueCache.length ? venueCache[0] : null;
+          if (first){
+            $("venueSelect").value = String(first.id);
+            setVenueFields(first);
+          }else{
+            setVenueFields(null);
+          }
+        }
+        setVenueStatus("Ready.", "");
       }
 
       on("dashboardVenueList", "click", () => {
@@ -8627,6 +8651,380 @@ function getOwnerClaimStatus(ownerName){
           setStatus(err.message, "err");
         }
       }
+
+      // ========== Dice Editor ==========
+      let diceSelectedFaceId = "";
+      let diceFaces = [];
+
+      function setDiceStatus(msg, kind){
+        const statusEl = $("diceSetStatus");
+        if (!statusEl) return;
+        statusEl.textContent = msg || "";
+        statusEl.className = "status" + (kind ? " status-" + kind : "");
+      }
+
+      async function loadDiceSetList(selectValue, autoLoad = true){
+        if (!ensureScope("dice:admin", "Dice access required.")) return;
+        try{
+          const data = await jsonFetch("/api/dice/sets", {method:"GET"}, true);
+          const sets = data.dice_sets || [];
+          const select = $("diceSet");
+          select.innerHTML = "";
+          sets.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.dice_id;
+            opt.textContent = d.name ? `${d.name} (${d.dice_id})` : d.dice_id;
+            select.appendChild(opt);
+          });
+          select.value = selectValue || (sets.length > 0 ? sets[0].dice_id : "");
+          if (autoLoad && select.value){
+            await loadDiceSet();
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      async function loadDiceSet(){
+        try{
+          const dice_id = $("diceSet").value.trim();
+          if (!dice_id){
+            $("diceFaceList").textContent = "No dice set loaded.";
+            setDiceStatus("Pick a dice set to begin.", "ok");
+            return;
+          }
+          const data = await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id), {method:"GET"}, true);
+          diceFaces = data.faces || [];
+          renderDiceFaceList();
+          const setName = (data.dice_set && (data.dice_set.name || data.dice_set.dice_id)) || dice_id;
+          const count = diceFaces.length;
+          setDiceStatus(`Dice set loaded: ${setName} (${count} faces)`, "ok");
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
+      }
+
+      function renderDiceFaceList(){
+        const listEl = $("diceFaceList");
+        if (!listEl) return;
+        if (!diceFaces || diceFaces.length === 0){
+          listEl.textContent = "No faces yet.";
+          return;
+        }
+        listEl.innerHTML = "";
+        diceFaces.forEach(face => {
+          const item = document.createElement("div");
+          item.className = "list-item" + (face.face_id === diceSelectedFaceId ? " selected" : "");
+          item.textContent = face.name || face.face_id;
+          item.addEventListener("click", () => loadDiceFace(face));
+          listEl.appendChild(item);
+        });
+      }
+
+      function loadDiceFace(face){
+        diceSelectedFaceId = face.face_id;
+        $("diceFaceId").value = face.face_id || "";
+        $("diceFaceName").value = face.name || "";
+        $("diceFaceValue").value = face.value || 0;
+        $("diceFaceWeight").value = face.weight || 1;
+        $("diceFaceDescription").value = face.description || "";
+        $("diceFaceEffect").value = face.effect || "";
+        renderDiceFaceList();
+      }
+
+      $("diceSet").addEventListener("change", async () => {
+        await loadDiceSet();
+      });
+
+      $("diceAddSet").addEventListener("click", async () => {
+        const dice_id = prompt("Enter dice set ID:");
+        if (!dice_id) return;
+        const name = prompt("Enter dice set name:");
+        try{
+          await jsonFetch("/api/dice/sets", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({dice_id, name: name || dice_id, sides: 6})
+          }, true);
+          await loadDiceSetList(dice_id);
+          setDiceStatus("Dice set created.", "ok");
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
+      });
+
+      $("diceEditSet").addEventListener("click", async () => {
+        const dice_id = $("diceSet").value.trim();
+        if (!dice_id){
+          setDiceStatus("Pick a dice set to edit.", "err");
+          return;
+        }
+        const name = prompt("Enter new name:");
+        if (!name) return;
+        try{
+          await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name})
+          }, true);
+          await loadDiceSetList(dice_id);
+          setDiceStatus("Dice set updated.", "ok");
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
+      });
+
+      $("diceDeleteSet").addEventListener("click", async () => {
+        const dice_id = $("diceSet").value.trim();
+        if (!dice_id){
+          setDiceStatus("Pick a dice set to delete.", "err");
+          return;
+        }
+        if (!confirm("Delete this dice set?")){
+          return;
+        }
+        try{
+          await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id), {method:"DELETE"}, true);
+          setDiceStatus("Dice set deleted.", "ok");
+          await loadDiceSetList();
+          $("diceFaceList").textContent = "No dice set loaded.";
+          diceSelectedFaceId = "";
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
+      });
+
+      $("diceNewFace").addEventListener("click", () => {
+        diceSelectedFaceId = "";
+        $("diceFaceId").value = "";
+        $("diceFaceName").value = "";
+        $("diceFaceValue").value = "1";
+        $("diceFaceWeight").value = "1";
+        $("diceFaceDescription").value = "";
+        $("diceFaceEffect").value = "";
+        renderDiceFaceList();
+      });
+
+      $("diceSaveFace").addEventListener("click", async () => {
+        const dice_id = $("diceSet").value.trim();
+        if (!dice_id){
+          setDiceStatus("Pick a dice set first.", "err");
+          return;
+        }
+        const face = {
+          face_id: $("diceFaceId").value.trim() || Date.now().toString(),
+          name: $("diceFaceName").value.trim(),
+          value: parseInt($("diceFaceValue").value) || 0,
+          weight: parseFloat($("diceFaceWeight").value) || 1,
+          description: $("diceFaceDescription").value.trim(),
+          effect: $("diceFaceEffect").value.trim()
+        };
+        try{
+          const existingIndex = diceFaces.findIndex(f => f.face_id === face.face_id);
+          if (existingIndex >= 0){
+            diceFaces[existingIndex] = face;
+          }else{
+            diceFaces.push(face);
+          }
+          await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id) + "/faces", {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({faces: diceFaces})
+          }, true);
+          diceSelectedFaceId = face.face_id;
+          await loadDiceSet();
+          setDiceStatus("Face saved.", "ok");
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
+      });
+
+      // ========== Slots Editor ==========
+      let slotsSelectedSymbolId = "";
+      let slotsSymbols = [];
+
+      function setSlotsStatus(msg, kind){
+        const statusEl = $("slotsMachineStatus");
+        if (!statusEl) return;
+        statusEl.textContent = msg || "";
+        statusEl.className = "status" + (kind ? " status-" + kind : "");
+      }
+
+      async function loadSlotMachineList(selectValue, autoLoad = true){
+        if (!ensureScope("slots:admin", "Slots access required.")) return;
+        try{
+          const data = await jsonFetch("/api/slots/machines", {method:"GET"}, true);
+          const machines = data.machines || [];
+          const select = $("slotMachine");
+          select.innerHTML = "";
+          machines.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m.machine_id;
+            opt.textContent = m.name ? `${m.name} (${m.machine_id})` : m.machine_id;
+            select.appendChild(opt);
+          });
+          select.value = selectValue || (machines.length > 0 ? machines[0].machine_id : "");
+          if (autoLoad && select.value){
+            await loadSlotMachine();
+          }
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+      }
+
+      async function loadSlotMachine(){
+        try{
+          const machine_id = $("slotMachine").value.trim();
+          if (!machine_id){
+            $("slotsSymbolList").textContent = "No slot machine loaded.";
+            setSlotsStatus("Pick a machine to begin.", "ok");
+            return;
+          }
+          const data = await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id), {method:"GET"}, true);
+          slotsSymbols = data.symbols || [];
+          renderSlotsSymbolList();
+          const machineName = (data.machine && (data.machine.name || data.machine.machine_id)) || machine_id;
+          const count = slotsSymbols.length;
+          setSlotsStatus(`Slot machine loaded: ${machineName} (${count} symbols)`, "ok");
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
+      }
+
+      function renderSlotsSymbolList(){
+        const listEl = $("slotsSymbolList");
+        if (!listEl) return;
+        if (!slotsSymbols || slotsSymbols.length === 0){
+          listEl.textContent = "No symbols yet.";
+          return;
+        }
+        listEl.innerHTML = "";
+        slotsSymbols.forEach(symbol => {
+          const item = document.createElement("div");
+          item.className = "list-item" + (symbol.symbol_id === slotsSelectedSymbolId ? " selected" : "");
+          item.textContent = symbol.name || symbol.symbol_id;
+          item.addEventListener("click", () => loadSlotsSymbol(symbol));
+          listEl.appendChild(item);
+        });
+      }
+
+      function loadSlotsSymbol(symbol){
+        slotsSelectedSymbolId = symbol.symbol_id;
+        $("slotsSymbolId").value = symbol.symbol_id || "";
+        $("slotsSymbolName").value = symbol.name || "";
+        $("slotsSymbolRarity").value = symbol.rarity || "common";
+        $("slotsSymbolPayout").value = symbol.payout || 1;
+        $("slotsSymbolPaylines").value = symbol.paylines || "";
+        $("slotsSymbolDescription").value = symbol.description || "";
+        renderSlotsSymbolList();
+      }
+
+      $("slotMachine").addEventListener("change", async () => {
+        await loadSlotMachine();
+      });
+
+      $("slotsAddMachine").addEventListener("click", async () => {
+        const machine_id = prompt("Enter slot machine ID:");
+        if (!machine_id) return;
+        const name = prompt("Enter machine name:");
+        try{
+          await jsonFetch("/api/slots/machines", {
+            method:"POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({machine_id, name: name || machine_id, reel_count: 3})
+          }, true);
+          await loadSlotMachineList(machine_id);
+          setSlotsStatus("Slot machine created.", "ok");
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
+      });
+
+      $("slotsEditMachine").addEventListener("click", async () => {
+        const machine_id = $("slotMachine").value.trim();
+        if (!machine_id){
+          setSlotsStatus("Pick a machine to edit.", "err");
+          return;
+        }
+        const name = prompt("Enter new name:");
+        if (!name) return;
+        try{
+          await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name})
+          }, true);
+          await loadSlotMachineList(machine_id);
+          setSlotsStatus("Slot machine updated.", "ok");
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
+      });
+
+      $("slotsDeleteMachine").addEventListener("click", async () => {
+        const machine_id = $("slotMachine").value.trim();
+        if (!machine_id){
+          setSlotsStatus("Pick a machine to delete.", "err");
+          return;
+        }
+        if (!confirm("Delete this slot machine?")){
+          return;
+        }
+        try{
+          await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id), {method:"DELETE"}, true);
+          setSlotsStatus("Slot machine deleted.", "ok");
+          await loadSlotMachineList();
+          $("slotsSymbolList").textContent = "No slot machine loaded.";
+          slotsSelectedSymbolId = "";
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
+      });
+
+      $("slotsNewSymbol").addEventListener("click", () => {
+        slotsSelectedSymbolId = "";
+        $("slotsSymbolId").value = "";
+        $("slotsSymbolName").value = "";
+        $("slotsSymbolRarity").value = "common";
+        $("slotsSymbolPayout").value = "1";
+        $("slotsSymbolPaylines").value = "";
+        $("slotsSymbolDescription").value = "";
+        renderSlotsSymbolList();
+      });
+
+      $("slotsSaveSymbol").addEventListener("click", async () => {
+        const machine_id = $("slotMachine").value.trim();
+        if (!machine_id){
+          setSlotsStatus("Pick a machine first.", "err");
+          return;
+        }
+        const symbol = {
+          symbol_id: $("slotsSymbolId").value.trim() || Date.now().toString(),
+          name: $("slotsSymbolName").value.trim(),
+          rarity: $("slotsSymbolRarity").value || "common",
+          payout: parseFloat($("slotsSymbolPayout").value) || 1,
+          paylines: $("slotsSymbolPaylines").value.trim(),
+          description: $("slotsSymbolDescription").value.trim()
+        };
+        try{
+          const existingIndex = slotsSymbols.findIndex(s => s.symbol_id === symbol.symbol_id);
+          if (existingIndex >= 0){
+            slotsSymbols[existingIndex] = symbol;
+          }else{
+            slotsSymbols.push(symbol);
+          }
+          await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id) + "/symbols", {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({symbols: slotsSymbols})
+          }, true);
+          slotsSelectedSymbolId = symbol.symbol_id;
+          await loadSlotMachine();
+          setSlotsStatus("Symbol saved.", "ok");
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
+      });
 
       applyTokenFromUrl();
       applyTempTokenFromUrl();
