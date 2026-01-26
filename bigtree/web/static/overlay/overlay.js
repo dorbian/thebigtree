@@ -8842,6 +8842,73 @@ function getOwnerClaimStatus(ownerName){
       // ========== Slots Editor ==========
       let slotsSelectedSymbolId = "";
       let slotsSymbols = [];
+      let slotsSpriteSheet = "";
+      let slotsSpriteCols = 3;
+      let slotsSpriteRows = 4;
+
+      function setSlotsStatus(msg, kind){
+        const statusEl = $("slotsMachineStatus");
+        if (!statusEl) return;
+        statusEl.textContent = msg || "";
+        statusEl.className = "status" + (kind ? " status-" + kind : "");
+      }
+
+      function renderSymbolPicker(){
+        const picker = $("slotsSymbolPicker");
+        if (!picker) return;
+        
+        if (!slotsSpriteSheet){
+          picker.innerHTML = '<div class="muted">Configure sprite sheet first</div>';
+          return;
+        }
+
+        picker.innerHTML = "";
+        const totalSymbols = slotsSpriteCols * slotsSpriteRows;
+        
+        for (let i = 0; i < totalSymbols; i++){
+          const col = i % slotsSpriteCols;
+          const row = Math.floor(i / slotsSpriteCols);
+          
+          const item = document.createElement("div");
+          item.className = "symbol-picker-item";
+          item.style.backgroundImage = `url(${slotsSpriteSheet})`;
+          
+          // Calculate background position to show one symbol
+          const percentX = (col / (slotsSpriteCols - 1)) * 100;
+          const percentY = (row / (slotsSpriteRows - 1)) * 100;
+          item.style.backgroundPosition = `${percentX}% ${percentY}%`;
+          item.style.backgroundSize = `${slotsSpriteCols * 100}% ${slotsSpriteRows * 100}%`;
+          
+          item.dataset.col = col;
+          item.dataset.row = row;
+          
+          item.addEventListener("click", () => {
+            $("slotsSymbolGridX").value = col;
+            $("slotsSymbolGridY").value = row;
+            updateSymbolPreview();
+            
+            // Highlight selected
+            picker.querySelectorAll(".symbol-picker-item").forEach(el => el.classList.remove("selected"));
+            item.classList.add("selected");
+          });
+          
+          picker.appendChild(item);
+        }
+      }
+
+      function updateSymbolPreview(){
+        const preview = $("slotsSymbolPreview");
+        if (!preview || !slotsSpriteSheet) return;
+        
+        const col = parseInt($("slotsSymbolGridX").value) || 0;
+        const row = parseInt($("slotsSymbolGridY").value) || 0;
+        
+        preview.style.backgroundImage = `url(${slotsSpriteSheet})`;
+        const percentX = (col / (slotsSpriteCols - 1)) * 100;
+        const percentY = (row / (slotsSpriteRows - 1)) * 100;
+        preview.style.backgroundPosition = `${percentX}% ${percentY}%`;
+        preview.style.backgroundSize = `${slotsSpriteCols * 100}% ${slotsSpriteRows * 100}%`;
+      }
 
       function setSlotsStatus(msg, kind){
         const statusEl = $("slotsMachineStatus");
@@ -8882,7 +8949,20 @@ function getOwnerClaimStatus(ownerName){
           }
           const data = await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id), {method:"GET"}, true);
           slotsSymbols = data.symbols || [];
+          
+          // Load sprite config from metadata
+          const metadata = data.machine?.metadata || {};
+          slotsSpriteSheet = metadata.sprite_sheet || "";
+          slotsSpriteCols = metadata.sprite_cols || 3;
+          slotsSpriteRows = metadata.sprite_rows || 4;
+          
+          $("slotsSpriteSheet").value = slotsSpriteSheet;
+          $("slotsSpriteCols").value = slotsSpriteCols;
+          $("slotsSpriteRows").value = slotsSpriteRows;
+          
+          renderSymbolPicker();
           renderSlotsSymbolList();
+          
           const machineName = (data.machine && (data.machine.name || data.machine.machine_id)) || machine_id;
           const count = slotsSymbols.length;
           setSlotsStatus(`Slot machine loaded: ${machineName} (${count} symbols)`, "ok");
@@ -8912,15 +8992,63 @@ function getOwnerClaimStatus(ownerName){
         slotsSelectedSymbolId = symbol.symbol_id;
         $("slotsSymbolId").value = symbol.symbol_id || "";
         $("slotsSymbolName").value = symbol.name || "";
+        $("slotsSymbolGridX").value = symbol.grid_x !== undefined ? symbol.grid_x : 0;
+        $("slotsSymbolGridY").value = symbol.grid_y !== undefined ? symbol.grid_y : 0;
         $("slotsSymbolRarity").value = symbol.rarity || "common";
         $("slotsSymbolPayout").value = symbol.payout || 1;
         $("slotsSymbolPaylines").value = symbol.paylines || "";
         $("slotsSymbolDescription").value = symbol.description || "";
+        updateSymbolPreview();
         renderSlotsSymbolList();
+        
+        // Highlight in picker
+        const picker = $("slotsSymbolPicker");
+        if (picker){
+          picker.querySelectorAll(".symbol-picker-item").forEach(el => {
+            const col = parseInt(el.dataset.col);
+            const row = parseInt(el.dataset.row);
+            if (col === symbol.grid_x && row === symbol.grid_y){
+              el.classList.add("selected");
+            }else{
+              el.classList.remove("selected");
+            }
+          });
+        }
       }
 
       $("slotMachine").addEventListener("change", async () => {
         await loadSlotMachine();
+      });
+
+      $("slotsSaveSpriteConfig").addEventListener("click", async () => {
+        const machine_id = $("slotMachine").value.trim();
+        if (!machine_id){
+          setSlotsStatus("Pick a machine first.", "err");
+          return;
+        }
+        
+        slotsSpriteSheet = $("slotsSpriteSheet").value.trim();
+        slotsSpriteCols = parseInt($("slotsSpriteCols").value) || 3;
+        slotsSpriteRows = parseInt($("slotsSpriteRows").value) || 4;
+        
+        try{
+          await jsonFetch("/api/slots/machines/" + encodeURIComponent(machine_id), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              metadata: {
+                sprite_sheet: slotsSpriteSheet,
+                sprite_cols: slotsSpriteCols,
+                sprite_rows: slotsSpriteRows
+              }
+            })
+          }, true);
+          
+          renderSymbolPicker();
+          setSlotsStatus("Sprite config saved.", "ok");
+        }catch(err){
+          setSlotsStatus(err.message, "err");
+        }
       });
 
       $("slotsAddMachine").addEventListener("click", async () => {
@@ -8985,10 +9113,13 @@ function getOwnerClaimStatus(ownerName){
         slotsSelectedSymbolId = "";
         $("slotsSymbolId").value = "";
         $("slotsSymbolName").value = "";
+        $("slotsSymbolGridX").value = "0";
+        $("slotsSymbolGridY").value = "0";
         $("slotsSymbolRarity").value = "common";
         $("slotsSymbolPayout").value = "1";
         $("slotsSymbolPaylines").value = "";
         $("slotsSymbolDescription").value = "";
+        updateSymbolPreview();
         renderSlotsSymbolList();
       });
 
@@ -9001,6 +9132,8 @@ function getOwnerClaimStatus(ownerName){
         const symbol = {
           symbol_id: $("slotsSymbolId").value.trim() || Date.now().toString(),
           name: $("slotsSymbolName").value.trim(),
+          grid_x: parseInt($("slotsSymbolGridX").value) || 0,
+          grid_y: parseInt($("slotsSymbolGridY").value) || 0,
           rarity: $("slotsSymbolRarity").value || "common",
           payout: parseFloat($("slotsSymbolPayout").value) || 1,
           paylines: $("slotsSymbolPaylines").value.trim(),

@@ -237,8 +237,12 @@
       .owners-table th{position:sticky;top:0;background:rgba(9,14,12,.95);backdrop-filter: blur(6px);color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;z-index:2;}
       .owner-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
       .owner-actions .icon-action{padding:6px;border-radius:10px;}
-      .owner-actions .icon-action svg{width:16px;height:16px;}
+      .owner-actions .icon-svg{width:16px;height:16px;}
       .owner-actions .mini-btn{padding:6px 10px;border-radius:10px;font-size:0.82rem;}
+      .symbol-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;max-height:240px;overflow-y:auto;}
+      .symbol-picker-item{width:48px;height:48px;border:2px solid rgba(255,255,255,.15);border-radius:6px;background-size:cover;background-position:center;cursor:pointer;transition:all .15s ease;}
+      .symbol-picker-item:hover{border-color:rgba(255,255,255,.5);transform:scale(1.05);}
+      .symbol-picker-item.selected{border-color:#4a9eff;box-shadow:0 0 8px rgba(74,158,255,.6);}
     </style>
   </head>
   <body>
@@ -1092,6 +1096,26 @@
                 </button>
               </div>
             </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="slotsSpriteSheet">Symbol Sprite Sheet URL</label>
+              <input id="slotsSpriteSheet" placeholder="/static/sprites/slot-symbols.png">
+              <div class="muted">Upload sprite sheet via Gallery, then paste URL here</div>
+            </div>
+            <div>
+              <label for="slotsSpriteConfig">Sprite Grid (cols×rows)</label>
+              <div style="display:flex;gap:0.5rem;">
+                <input id="slotsSpriteCols" type="number" placeholder="3" style="width:5rem;" min="1" max="20">
+                <span style="padding:0.5rem 0;">×</span>
+                <input id="slotsSpriteRows" type="number" placeholder="4" style="width:5rem;" min="1" max="20">
+              </div>
+              <div class="muted">Number of columns and rows in sprite sheet</div>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="slotsSaveSpriteConfig" class="btn-primary">Save Sprite Config</button>
+            </div>
             <div>
               <label>&nbsp;</label>
               <div class="inline-actions">
@@ -1126,6 +1150,18 @@
               </div>
               <div class="row">
                 <div>
+                  <label>Sprite Position</label>
+                  <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <span>Col:</span>
+                    <input id="slotsSymbolGridX" type="number" placeholder="0" style="width:4rem;" min="0">
+                    <span>Row:</span>
+                    <input id="slotsSymbolGridY" type="number" placeholder="0" style="width:4rem;" min="0">
+                  </div>
+                  <div class="muted">Position in sprite sheet (0-indexed)</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
                   <label for="slotsSymbolRarity">Rarity</label>
                   <select id="slotsSymbolRarity">
                     <option value="common">Common</option>
@@ -1152,18 +1188,18 @@
               <h4>Visual</h4>
               <div class="row">
                 <div>
-                  <label>Symbol image</label>
-                  <button class="btn-ghost icon-btn" id="slotsSymbolLibrary" title="Choose from library">
-                    <i class="icon icon-image" aria-hidden="true"></i>
-                  </button>
+                  <label>Available Symbols</label>
+                  <div id="slotsSymbolPicker" class="symbol-picker">
+                    <div class="muted">Configure sprite sheet first</div>
+                  </div>
+                  <div class="muted">Click a symbol to select it</div>
                 </div>
               </div>
-              <input id="slotsSymbolArtist" type="hidden">
               <div class="row">
                 <div>
                   <label>Symbol preview</label>
                   <div class="preview-grid">
-                    <div class="preview-card" id="slotsSymbolPreview"><span class="preview-label">Symbol</span></div>
+                    <div class="preview-card" id="slotsSymbolPreview" style="width:64px;height:64px;background-size:cover;"><span class="preview-label">Symbol</span></div>
                   </div>
                 </div>
               </div>
