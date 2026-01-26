@@ -7,11 +7,11 @@
 - Editor: add sprite sheet upload and symbol picker to Dice Sets editor with grid position configuration for faces.
 - Editor: add symbol preview and payout configuration for slot machine symbols.
 - Editor: add symbol preview and grid position configuration for dice faces.
-- Database: add dice_sets and slot_machines tables with metadata and payload support.
+- Database: add dice_sets and slot_machines tables with metadata and payload support and created_at column.
 - API: add /api/dice/sets endpoints for dice set management (GET, POST, PUT, DELETE).
 - API: add /api/slots/machines endpoints for slot machine management (GET, POST, PUT, DELETE).
 - Modules: add dice.py and slots.py backend modules for dice and slots logic.
-- Fix: use correct Database API methods (_execute, _fetchone) in dice and slots modules.
+- Fix: convert dice and slots SQL queries from PostgreSQL $1 format to psycopg2 %s format for compatibility.
 - Overlay: replace inline SVG icons with CSS sprite-based icon system for dice and slots editors.
 - Overlay: add icon sprite system using single texture file for better performance.
 - Overlay: add sprite sheet configuration to slot machines with grid-based symbol picker.

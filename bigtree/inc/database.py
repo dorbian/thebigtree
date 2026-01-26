@@ -356,6 +356,7 @@ class Database:
                 sides INTEGER DEFAULT 6,
                 metadata JSONB DEFAULT '{}'::jsonb,
                 payload JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """,
@@ -367,6 +368,7 @@ class Database:
                 reel_count INTEGER DEFAULT 3,
                 metadata JSONB DEFAULT '{}'::jsonb,
                 payload JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """,

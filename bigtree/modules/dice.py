@@ -24,7 +24,7 @@ def create_dice_set(dice_id: str, name: str = None, sides: int = 6, metadata: di
     
     query = """
         INSERT INTO dice_sets (dice_id, name, sides, metadata, payload)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (dice_id) DO UPDATE
         SET name = EXCLUDED.name, sides = EXCLUDED.sides, metadata = EXCLUDED.metadata, payload = EXCLUDED.payload, updated_at = CURRENT_TIMESTAMP
         RETURNING dice_id, name, sides, metadata, payload
@@ -44,7 +44,7 @@ def create_dice_set(dice_id: str, name: str = None, sides: int = 6, metadata: di
 def get_dice_set(dice_id: str) -> dict | None:
     """Get a dice set by ID."""
     db = get_database()
-    query = "SELECT dice_id, name, sides, metadata, payload FROM dice_sets WHERE dice_id = $1"
+    query = "SELECT dice_id, name, sides, metadata, payload FROM dice_sets WHERE dice_id = %s"
     row = db._fetchone(query, (dice_id,))
     if not row:
         return None
@@ -91,11 +91,11 @@ def update_dice_set(dice_id: str, name: str = None, sides: int = None, metadata:
     
     query = """
         UPDATE dice_sets
-        SET name = $2, sides = $3, metadata = $4::jsonb, payload = $5::jsonb, updated_at = CURRENT_TIMESTAMP
-        WHERE dice_id = $1
+        SET name = %s, sides = %s, metadata = %s, payload = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE dice_id = %s
         RETURNING dice_id, name, sides, metadata, payload
     """
-    row = db._fetchone(query, (dice_id, current["name"], current["sides"], Json(current["metadata"]), Json(current["payload"])))
+    row = db._fetchone(query, (current["name"], current["sides"], Json(current["metadata"]), Json(current["payload"]), dice_id))
     if not row:
         return None
     return {
@@ -110,7 +110,7 @@ def update_dice_set(dice_id: str, name: str = None, sides: int = None, metadata:
 def delete_dice_set(dice_id: str) -> bool:
     """Delete a dice set."""
     db = get_database()
-    query = "DELETE FROM dice_sets WHERE dice_id = $1"
+    query = "DELETE FROM dice_sets WHERE dice_id = %s"
     db._execute(query, (dice_id,))
     return True
 

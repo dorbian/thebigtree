@@ -27,7 +27,7 @@ def create_slot_machine(machine_id: str, name: str = None, reel_count: int = 3, 
     
     query = """
         INSERT INTO slot_machines (machine_id, name, reel_count, metadata, payload)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (machine_id) DO UPDATE
         SET name = EXCLUDED.name, reel_count = EXCLUDED.reel_count, metadata = EXCLUDED.metadata, payload = EXCLUDED.payload, updated_at = CURRENT_TIMESTAMP
         RETURNING machine_id, name, reel_count, metadata, payload
@@ -47,7 +47,7 @@ def create_slot_machine(machine_id: str, name: str = None, reel_count: int = 3, 
 def get_slot_machine(machine_id: str) -> dict | None:
     """Get a slot machine by ID."""
     db = get_database()
-    query = "SELECT machine_id, name, reel_count, metadata, payload FROM slot_machines WHERE machine_id = $1"
+    query = "SELECT machine_id, name, reel_count, metadata, payload FROM slot_machines WHERE machine_id = %s"
     row = db._fetchone(query, (machine_id,))
     if not row:
         return None
@@ -94,11 +94,11 @@ def update_slot_machine(machine_id: str, name: str = None, reel_count: int = Non
     
     query = """
         UPDATE slot_machines
-        SET name = $2, reel_count = $3, metadata = $4::jsonb, payload = $5::jsonb, updated_at = CURRENT_TIMESTAMP
-        WHERE machine_id = $1
+        SET name = %s, reel_count = %s, metadata = %s, payload = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE machine_id = %s
         RETURNING machine_id, name, reel_count, metadata, payload
     """
-    row = db._fetchone(query, (machine_id, current["name"], current["reel_count"], Json(current["metadata"]), Json(current["payload"])))
+    row = db._fetchone(query, (current["name"], current["reel_count"], Json(current["metadata"]), Json(current["payload"]), machine_id))
     if not row:
         return None
     return {
@@ -113,7 +113,7 @@ def update_slot_machine(machine_id: str, name: str = None, reel_count: int = Non
 def delete_slot_machine(machine_id: str) -> bool:
     """Delete a slot machine."""
     db = get_database()
-    query = "DELETE FROM slot_machines WHERE machine_id = $1"
+    query = "DELETE FROM slot_machines WHERE machine_id = %s"
     db._execute(query, (machine_id,))
     return True
 
