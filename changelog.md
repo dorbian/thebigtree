@@ -12,6 +12,8 @@
 - API: add /api/slots/machines endpoints for slot machine management (GET, POST, PUT, DELETE).
 - Modules: add dice.py and slots.py backend modules for dice and slots logic.
 - Fix: convert dice and slots SQL queries from PostgreSQL $1 format to psycopg2 %s format for compatibility.
+- Fix: update dice and slots modules to access RealDictCursor results by column name instead of index.
+- UI: replace broken icon sprite references with inline SVG icons in dice and slots editors.
 - Overlay: replace inline SVG icons with CSS sprite-based icon system for dice and slots editors.
 - Overlay: add icon sprite system using single texture file for better performance.
 - Overlay: add sprite sheet configuration to slot machines with grid-based symbol picker.

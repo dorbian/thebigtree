@@ -36,11 +36,11 @@ def create_slot_machine(machine_id: str, name: str = None, reel_count: int = 3, 
     if not row:
         return None
     return {
-        "machine_id": row[0],
-        "name": row[1],
-        "reel_count": row[2],
-        "metadata": row[3] or {},
-        "payload": row[4] or {},
+        "machine_id": row["machine_id"],
+        "name": row["name"],
+        "reel_count": row["reel_count"],
+        "metadata": row["metadata"] or {},
+        "payload": row["payload"] or {},
     }
 
 
@@ -52,11 +52,11 @@ def get_slot_machine(machine_id: str) -> dict | None:
     if not row:
         return None
     return {
-        "machine_id": row[0],
-        "name": row[1],
-        "reel_count": row[2],
-        "metadata": row[3] or {},
-        "payload": row[4] or {},
+        "machine_id": row["machine_id"],
+        "name": row["name"],
+        "reel_count": row["reel_count"],
+        "metadata": row["metadata"] or {},
+        "payload": row["payload"] or {},
     }
 
 
@@ -68,10 +68,10 @@ def list_slot_machines() -> list[dict]:
     result = []
     for row in rows:
         result.append({
-            "machine_id": row[0],
-            "name": row[1],
-            "reel_count": row[2],
-            "metadata": row[3] or {},
+            "machine_id": row["machine_id"],
+            "name": row["name"],
+            "reel_count": row["reel_count"],
+            "metadata": row["metadata"] or {},
         })
     return result
 
@@ -102,11 +102,11 @@ def update_slot_machine(machine_id: str, name: str = None, reel_count: int = Non
     if not row:
         return None
     return {
-        "machine_id": row[0],
-        "name": row[1],
-        "reel_count": row[2],
-        "metadata": row[3] or {},
-        "payload": row[4] or {},
+        "machine_id": row["machine_id"],
+        "name": row["name"],
+        "reel_count": row["reel_count"],
+        "metadata": row["metadata"] or {},
+        "payload": row["payload"] or {},
     }
 
 
