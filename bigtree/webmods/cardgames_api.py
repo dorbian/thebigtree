@@ -1,11 +1,12 @@
 from __future__ import annotations
-from aiohttp import web
+from aiohttp import web, WSMsgType
 from typing import Dict, Any
 import asyncio
 import json
 from bigtree.inc.webserver import route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
+from bigtree.inc import web_tokens
 from bigtree.modules import tarot
 from bigtree.webmods.user_area import _resolve_user
 
@@ -19,8 +20,170 @@ def _get_view(req: web.Request) -> str:
 def _get_token(req: web.Request, body: Dict[str, Any]) -> str:
     return (req.headers.get("X-Cardgame-Token") or str(body.get("token") or "")).strip()
 
+def _extract_admin_token(req: web.Request) -> str:
+    auth = req.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+async def _send_ws_state(ws: web.WebSocketResponse, session: Dict[str, Any], view: str, token: str):
+    state = cg.get_state(session, view=view, token=token)
+    try:
+        db = get_database()
+        state["session"]["event_autoplay"] = _get_event_autoplay(db, session)
+        state["session"]["is_single_player"] = session.get("is_single_player", False)
+    except Exception:
+        pass
+    await ws.send_json({"type": "STATE", "state": state})
+
+@route("GET", "/ws/cardgames/{game_id}/sessions/{join_code}", allow_public=True)
+async def ws_stream(req: web.Request):
+    join_code = req.match_info["join_code"]
+    view = _get_view(req)
+    token = str(req.query.get("token") or "").strip()
+    ws = web.WebSocketResponse(heartbeat=30.0)
+    await ws.prepare(req)
+    session = await _run_blocking(cg.get_session_by_join_code, join_code)
+    if not session:
+        await ws.send_json({"type": "SESSION_GONE", "redirect": "/gallery"})
+        await ws.close()
+        return ws
+    session_id = session["session_id"]
+    last_seq = 0
+    last_seen = asyncio.get_event_loop().time()
+    await _send_ws_state(ws, session, view, token)
+
+    while not ws.closed:
+        now = asyncio.get_event_loop().time()
+        try:
+            msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+        except asyncio.TimeoutError:
+            msg = None
+        if msg is not None:
+            if msg.type == WSMsgType.TEXT:
+                last_seen = now
+                try:
+                    payload = json.loads(msg.data or "{}")
+                except Exception:
+                    payload = {}
+                if isinstance(payload, dict):
+                    if payload.get("type") == "auth":
+                        token = str(payload.get("token") or "").strip()
+                        await _send_ws_state(ws, session, view, token)
+                    elif payload.get("type") == "resume":
+                        await _send_ws_state(ws, session, view, token)
+            elif msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):
+                break
+        if now - last_seen > 300:
+            await ws.close(message=b"idle")
+            break
+        current = await _run_blocking(cg.get_session_by_id, session_id)
+        if not current:
+            await ws.send_json({"type": "SESSION_GONE", "redirect": "/gallery"})
+            await ws.close()
+            break
+        events = await _run_blocking(cg.list_events, session_id, last_seq)
+        if events:
+            last_seq = int(events[-1].get("seq", last_seq))
+            for ev in events:
+                await ws.send_json({"type": ev.get("type"), "data": ev.get("data"), "seq": ev.get("seq")})
+    return ws
+
+def _resolve_admin_user_id(req: web.Request) -> int | None:
+    token = _extract_admin_token(req)
+    if not token:
+        return None
+    doc = web_tokens.find_token(token) or {}
+    raw = doc.get("user_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except Exception:
+        return None
+
 def _normalize_currency(value: Any) -> str:
     return str(value or "").strip().lower()
+
+def _get_event_autoplay(db, session: Dict[str, Any]) -> bool:
+    if not session:
+        return False
+    session_id = str(session.get("session_id") or "")
+    join_code = str(session.get("join_code") or "")
+    row = db._fetchone(
+        """
+        SELECT event_id, metadata
+        FROM games
+        WHERE module = 'cardgames'
+          AND (
+            lower(game_id) = lower(%s)
+            OR lower(payload->>'join_code') = lower(%s)
+            OR lower(payload->>'joinCode') = lower(%s)
+            OR lower(payload->>'join') = lower(%s)
+          )
+        LIMIT 1
+        """,
+        (session_id, join_code, join_code, join_code),
+    )
+    if not row:
+        return False
+    try:
+        event_id = int(row.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    meta = row.get("metadata") or {}
+    return bool(event_id > 0 and meta.get("always_open") and meta.get("single_player"))
+
+def _sync_game_record(db, payload: Dict[str, Any]) -> None:
+    if not payload:
+        return
+    status_val = payload.get("status") or "created"
+    active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
+    metadata = {
+        "currency": payload.get("currency"),
+        "pot": payload.get("pot"),
+        "status": status_val,
+    }
+    db.upsert_game(
+        game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
+        module="cardgames",
+        payload=payload,
+        title=payload.get("game_id"),
+        created_by=None,
+        created_at=db._as_datetime(payload.get("created_at")),
+        ended_at=db._as_datetime(payload.get("updated_at")),
+        status=status_val,
+        active=active,
+        metadata=metadata,
+        run_source=payload.get("run_source") or "api",
+    )
+
+async def _finish_for_zero_balance(db, ctx: Dict[str, Any], user_id: int, session: Dict[str, Any]) -> bool:
+    if not ctx or not session:
+        return False
+    game_id = str(session.get("game_id") or "").strip().lower()
+    if game_id not in ("slots", "blackjack", "poker", "highlow"):
+        return False
+    try:
+        event_id = int(ctx.get("event_id") or 0)
+    except Exception:
+        event_id = 0
+    if event_id <= 0 or user_id <= 0:
+        return False
+    balance = db.get_event_wallet_balance(event_id, int(user_id))
+    if balance > 0:
+        return False
+    token = session.get("priestess_token") or ""
+    try:
+        await _run_blocking(cg.finish_session, session.get("session_id"), token)
+    except Exception:
+        return False
+    try:
+        updated = await _run_blocking(cg.get_session_by_id, session.get("session_id"))
+    except Exception:
+        updated = None
+    _sync_game_record(db, dict(updated or session))
+    return True
 
 async def _ensure_wallet_balance(req: web.Request, join_code: str, session: Dict[str, Any]) -> web.Response | Dict[str, Any] | None:
     db = get_database()
@@ -123,7 +286,10 @@ async def create_session(req: web.Request):
     background_artist_id = str(body.get("background_artist_id") or "").strip() or None
     background_artist_name = str(body.get("background_artist_name") or "").strip() or None
     currency = str(body.get("currency") or "").strip() or None
+    event_id = int(body.get("event_id") or 0) or None
+    event_code = str(body.get("event_code") or "").strip() or None
     status = str(body.get("status") or "").strip().lower()
+    is_single_player = bool(body.get("is_single_player", False))
     if not status and body.get("draft"):
         status = "draft"
     try:
@@ -137,6 +303,7 @@ async def create_session(req: web.Request):
             background_artist_name,
             currency,
             status or None,
+            is_single_player,
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
@@ -150,7 +317,13 @@ async def create_session(req: web.Request):
                 created_by = int(created_by) if created_by is not None else None
             except Exception:
                 created_by = None
+        if created_by is None:
+            created_by = _resolve_admin_user_id(req)
         payload = dict(s or {})
+        if event_id:
+            payload["event_id"] = event_id
+        if event_code:
+            payload["event_code"] = event_code
         status_val = payload.get("status") or "created"
         active = str(status_val).lower() not in ("finished", "ended", "complete", "closed")
         metadata = {
@@ -158,6 +331,10 @@ async def create_session(req: web.Request):
             "pot": payload.get("pot"),
             "status": status_val,
         }
+        if event_id:
+            metadata["event_id"] = event_id
+        if event_code:
+            metadata["event_code"] = event_code
         players = db._extract_cardgame_players(payload)
         db.upsert_game(
             game_id=str(payload.get("session_id") or payload.get("join_code") or ""),
@@ -220,7 +397,26 @@ async def get_state(req: web.Request):
     if not s:
         return web.json_response({"ok": False, "error": "not found", "redirect": "/gallery"}, status=404)
     token = req.headers.get("X-Cardgame-Token") or ""
-    return web.json_response({"ok": True, "state": cg.get_state(s, view=view, token=token)})
+    state = cg.get_state(s, view=view, token=token)
+    try:
+        db = get_database()
+        state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
+        state["session"]["is_single_player"] = s.get("is_single_player", False)
+        ctx = db.get_game_wallet_context(join_code=s.get("join_code"), game_id=s.get("session_id"))
+        wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
+        wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
+        needs_wallet = wallet_enabled and wallet_currency and wallet_currency != "gil"
+        if needs_wallet:
+            user = await _resolve_user(req)
+            if not isinstance(user, web.Response) and isinstance(user, dict):
+                event_id = int(ctx.get("event_id") or 0)
+                if event_id > 0:
+                    balance = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+                    state["wallet_balance"] = balance
+                    state["wallet_currency"] = wallet_currency
+    except Exception:
+        pass
+    return web.json_response({"ok": True, "state": state})
 
 @route("GET", "/api/cardgames/{game_id}/sessions/{join_code}/stream", allow_public=True)
 async def stream_events(req: web.Request):
@@ -241,7 +437,14 @@ async def stream_events(req: web.Request):
     await resp.prepare(req)
     last_seq = 0
     token = req.headers.get("X-Cardgame-Token") or ""
-    initial = {"type": "STATE", "state": cg.get_state(s, view=view, token=token)}
+    initial_state = cg.get_state(s, view=view, token=token)
+    try:
+        db = get_database()
+        initial_state["session"]["event_autoplay"] = _get_event_autoplay(db, s)
+        initial_state["session"]["is_single_player"] = s.get("is_single_player", False)
+    except Exception:
+        pass
+    initial = {"type": "STATE", "state": initial_state}
     await resp.write(f"data: {json.dumps(initial)}\n\n".encode("utf-8"))
     session_id = s["session_id"]
     try:
@@ -309,11 +512,40 @@ async def player_action(req: web.Request):
 
     # For wallet-enabled sessions, these actions must have a logged-in user.
     user = None
-    if needs_wallet and game_id in ("slots", "crapslite") and action in ("spin", "bet"):
+    if needs_wallet and game_id in ("slots", "crapslite", "blackjack", "poker", "highlow"):
         u = await _resolve_user(req)
         if isinstance(u, web.Response):
             return u
         user = u
+    # If wallet is required and balance is empty, end single-player sessions early.
+    if needs_wallet and user and game_id in ("slots", "crapslite", "blackjack", "poker", "highlow"):
+        try:
+            event_id = int(ctx.get("event_id") or 0)
+        except Exception:
+            event_id = 0
+        if event_id > 0:
+            bal = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+            if bal <= 0:
+                await _finish_for_zero_balance(db, ctx, int(user.get("id") or 0), s0)
+                return web.json_response(
+                    {"ok": False, "error": "no balance", "redirect": "/gallery", "balance": bal},
+                    status=409,
+                )
+
+    if game_id == "blackjack" and action == "start_round":
+        db = get_database()
+        # Allow start_round for single-player sessions or event autoplay sessions
+        if not (s0.get("is_single_player") or _get_event_autoplay(db, s0)):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
+        state_status = ((s0.get("state") or {}).get("status") or "").strip().lower()
+        if state_status and state_status != "finished":
+            return web.json_response({"ok": False, "error": "round not finished"}, status=409)
+        try:
+            await _run_blocking(cg.restart_blackjack_session, s0.get("session_id"))
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        refreshed = await _run_blocking(cg.get_session_by_id, s0.get("session_id"))
+        return web.json_response({"ok": True, "state": cg.get_state(refreshed or s0, view="player", token=token)})
     # If we need to debit a bet, do so BEFORE the game reducer runs.
     if needs_wallet and user and game_id == "crapslite" and action == "bet":
         try:
@@ -434,6 +666,26 @@ async def player_action(req: web.Request):
                     },
                     allow_negative=True,
                 )
+    if s and str(s.get("status") or "").lower() == "finished":
+        try:
+            _sync_game_record(db, dict(s))
+        except Exception:
+            pass
+    balance = None
+    if needs_wallet and user:
+        try:
+            event_id = int(ctx.get("event_id") or 0)
+        except Exception:
+            event_id = 0
+        if event_id > 0:
+            balance = db.get_event_wallet_balance(event_id, int(user.get("id") or 0))
+    if balance is not None and balance <= 0:
+        try:
+            if game_id in ("slots", "blackjack", "poker", "highlow"):
+                await _finish_for_zero_balance(db, ctx, int(user.get("id") or 0), s or s0)
+        except Exception:
+            pass
+        return web.json_response({"ok": True, "session": s, "redirect": "/gallery", "balance": balance})
     return web.json_response({"ok": True, "session": s})
 
 @route("POST", "/api/cardgames/{game_id}/sessions/{session_id}/host-action", allow_public=True)
@@ -451,6 +703,12 @@ async def host_action(req: web.Request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    if s and str(s.get("status") or "").lower() == "finished":
+        try:
+            db = get_database()
+            _sync_game_record(db, dict(s))
+        except Exception:
+            pass
     # If this was a crapslite roll, distribute payouts to all joined players.
     try:
         game_id = str((s or {}).get("game_id") or "").strip().lower()
@@ -598,6 +856,8 @@ async def clone_session(req: web.Request):
             s.get("background_artist_id"),
             s.get("background_artist_name"),
             s.get("currency"),
+            None,  # status - use default "created"
+            s.get("is_single_player", False),
         )
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
@@ -611,10 +871,20 @@ async def delete_session(req: web.Request):
     except Exception:
         body = {}
     token = _get_token(req, body)
+    s0 = await _run_blocking(cg.get_session_by_id, session_id)
     try:
         await _run_blocking(cg.delete_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    try:
+        if s0:
+            db = get_database()
+            payload = dict(s0 or {})
+            payload["status"] = "deleted"
+            payload["updated_at"] = db.now()
+            _sync_game_record(db, payload)
+    except Exception:
+        pass
     return web.json_response({"ok": True})

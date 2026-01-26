@@ -28,6 +28,8 @@ _SESSION_DB_PATH: Optional[str] = None
 _MIGRATED: Optional[bool] = None
 _DECKS_MIGRATED: Optional[bool] = None
 _TEMPLATE_DECK_ID = "tarot-template"
+_PLAYING_TEMPLATE_DECK_ID = "playing-template"
+_DECK_PURPOSES = {"tarot", "playing"}
 _DEFAULT_CARD_LIMIT = 2
 _SEED_CACHE: Optional[Dict[str, Any]] = None
 
@@ -492,6 +494,10 @@ def _normalize_theme(theme: Optional[str]) -> str:
     theme = str(theme or "").strip().lower()
     return theme if theme in _THEMES else "classic"
 
+def _normalize_purpose(purpose: Optional[str]) -> str:
+    value = str(purpose or "").strip().lower()
+    return value if value in _DECK_PURPOSES else "tarot"
+
 _ROMAN_MAP = {
     "I": 1,
     "V": 5,
@@ -588,6 +594,38 @@ def _standard_tarot_cards() -> List[Dict[str, Any]]:
             })
     return cards
 
+def _standard_playing_cards() -> List[Dict[str, Any]]:
+    rank_labels = [
+        ("A", "Ace"),
+        ("2", "Two"),
+        ("3", "Three"),
+        ("4", "Four"),
+        ("5", "Five"),
+        ("6", "Six"),
+        ("7", "Seven"),
+        ("8", "Eight"),
+        ("9", "Nine"),
+        ("10", "Ten"),
+        ("J", "Jack"),
+        ("Q", "Queen"),
+        ("K", "King"),
+    ]
+    suits = ["spades", "hearts", "diamonds", "clubs"]
+    cards: List[Dict[str, Any]] = []
+    for suit in suits:
+        suit_name = suit.title()
+        for rank, label in rank_labels:
+            name = f"{label} of {suit_name}"
+            card_id = f"{label.lower()}_of_{suit}"
+            cards.append({
+                "name": name,
+                "card_id": card_id,
+                "suit": suit,
+                "number": rank,
+                "tags": ["playing"],
+            })
+    return cards
+
 def _seed_candidates() -> List[str]:
     candidates: List[str] = []
     env_path = os.getenv("BIGTREE_TAROT_SEED")
@@ -629,25 +667,52 @@ def ensure_template_deck(deck_id: Optional[str] = None) -> Dict[str, Any]:
     template_id = (deck_id or _TEMPLATE_DECK_ID).strip() or _TEMPLATE_DECK_ID
     deck, cards, path = _load_deck_bundle(template_id)
     if deck and cards:
+        if deck.get("purpose") != "tarot":
+            deck["purpose"] = "tarot"
+            _save_deck_bundle(deck, cards, path or _deck_file_path(template_id))
         return deck
     seed_data = _load_seed_data()
     seed_deck, seed_cards = _normalize_seed_data(seed_data)
     if seed_cards:
         name = (seed_deck or {}).get("name") if seed_deck else None
         theme = (seed_deck or {}).get("theme") if seed_deck else None
-        deck = deck or create_deck(template_id, name=name or "Tarot Template", theme=theme)
+        deck = deck or create_deck(template_id, name=name or "Tarot Template", theme=theme, purpose="tarot")
         for card in seed_cards:
             payload = dict(card)
             payload["deck_id"] = template_id
             add_or_update_card(template_id, payload)
     else:
-        deck = deck or create_deck(template_id, name="Tarot Template", theme="classic")
+        deck = deck or create_deck(template_id, name="Tarot Template", theme="classic", purpose="tarot")
         existing_ids = {c.get("card_id") for c in (cards or []) if c.get("card_id")}
         for card in _standard_tarot_cards():
             if card.get("card_id") in existing_ids:
                 continue
             add_or_update_card(template_id, card)
     return get_deck(template_id) or deck
+
+def ensure_playing_template_deck(deck_id: Optional[str] = None) -> Dict[str, Any]:
+    template_id = (deck_id or _PLAYING_TEMPLATE_DECK_ID).strip() or _PLAYING_TEMPLATE_DECK_ID
+    deck, cards, path = _load_deck_bundle(template_id)
+    if deck and cards:
+        if deck.get("purpose") != "playing":
+            deck["purpose"] = "playing"
+            _save_deck_bundle(deck, cards, path or _deck_file_path(template_id))
+        return deck
+    deck = deck or create_deck(template_id, name="Playing Cards Template", theme="classic", purpose="playing")
+    existing_ids = {c.get("card_id") for c in (cards or []) if c.get("card_id")}
+    for card in _standard_playing_cards():
+        if card.get("card_id") in existing_ids:
+            continue
+        add_or_update_card(template_id, card)
+    return get_deck(template_id) or deck
+
+def list_template_cards(purpose: Optional[str] = None) -> List[Dict[str, Any]]:
+    purpose = _normalize_purpose(purpose)
+    if purpose == "playing":
+        ensure_playing_template_deck()
+        return list_cards(_PLAYING_TEMPLATE_DECK_ID)
+    ensure_template_deck()
+    return list_cards(_TEMPLATE_DECK_ID)
 
 def seed_deck_from_template(deck_id: str, template_id: Optional[str] = None) -> Dict[str, Any]:
     template_id = (template_id or _TEMPLATE_DECK_ID).strip() or _TEMPLATE_DECK_ID
@@ -684,6 +749,7 @@ def create_deck(
     deck_id: str,
     name: Optional[str] = None,
     theme: Optional[str] = None,
+    purpose: Optional[str] = None,
     suits: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     deck_id = (deck_id or "").strip() or "elf-classic"
@@ -696,6 +762,7 @@ def create_deck(
         "deck_id": deck_id,
         "name": (name or deck_id),
         "theme": _normalize_theme(theme),
+        "purpose": _normalize_purpose(purpose),
         "back_image": None,
         "suits": suits or [],
         "created_at": _now(),
@@ -733,7 +800,20 @@ def list_decks() -> List[Dict[str, Any]]:
     if not decks:
         create_deck("elf-classic")
         return list_decks()
-    return decks
+    filtered: List[Dict[str, Any]] = []
+    for deck in decks:
+        if not isinstance(deck, dict):
+            continue
+        deck_id = str(deck.get("deck_id") or deck.get("id") or "").strip()
+        if deck_id in {_TEMPLATE_DECK_ID, _PLAYING_TEMPLATE_DECK_ID}:
+            continue
+        if not deck.get("purpose"):
+            deck["purpose"] = "tarot"
+        filtered.append(deck)
+    if not filtered:
+        create_deck("elf-classic")
+        return list_decks()
+    return filtered
 
 def get_deck_bundle(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     deck, cards, _path = _load_deck_bundle(deck_id)
@@ -756,6 +836,7 @@ def update_deck(
     deck_id: str,
     name: Optional[str] = None,
     theme: Optional[str] = None,
+    purpose: Optional[str] = None,
     suits: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     deck_id = (deck_id or "").strip()
@@ -768,6 +849,8 @@ def update_deck(
         deck["name"] = (name or deck_id)
     if theme is not None:
         deck["theme"] = _normalize_theme(theme)
+    if purpose is not None:
+        deck["purpose"] = _normalize_purpose(purpose)
     if suits is not None:
         deck["suits"] = suits
     _save_deck_bundle(deck, cards, path or _deck_file_path(deck_id))
@@ -775,6 +858,8 @@ def update_deck(
 
 def get_deck(deck_id: str) -> Optional[Dict[str, Any]]:
     deck, _cards, _path = _load_deck_bundle(deck_id)
+    if deck and not deck.get("purpose"):
+        deck["purpose"] = "tarot"
     return deck
 
 def set_deck_back(deck_id: str, back_image: str, artist_id: Optional[str] = None) -> bool:

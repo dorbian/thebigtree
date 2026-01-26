@@ -80,6 +80,10 @@ def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
     return False, [], "unknown"
 
 
+def _admin_venue_scopes() -> list[str]:
+    return ["admin:web", "bingo:admin", "tarot:admin", "cardgames:admin", "event:host"]
+
+
 def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) -> list[str]:
     if not path:
         return []
@@ -109,14 +113,96 @@ async def auth_me(req: web.Request):
     if not valid:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
     doc = _find_web_token(token)
+    venue = None
+    try:
+        db = get_database()
+        raw_id = doc.get("user_id") if doc else None
+        if raw_id is not None:
+            venue = db.get_discord_venue(int(raw_id))
+    except Exception:
+        venue = None
+    if venue:
+        venue = to_jsonable(venue)
     return web.json_response({
         "ok": True,
         "user_name": doc.get("user_name") if doc else None,
         "user_id": doc.get("user_id") if doc else None,
         "user_icon": doc.get("user_icon") if doc else None,
+        "venue": venue,
         "scopes": scopes,
         "source": token_type,
     })
+
+
+@route("GET", "/admin/venues/list", scopes=_admin_venue_scopes())
+async def admin_venues_list_scoped(_req: web.Request) -> web.Response:
+    db = get_database()
+    return web.json_response({"ok": True, "venues": db.list_venues()})
+
+
+@route("GET", "/admin/venue/me", scopes=_admin_venue_scopes())
+async def admin_venue_me(req: web.Request) -> web.Response:
+    token = _extract_token(req)
+    doc = _find_web_token(token)
+    if not doc or not doc.get("user_id"):
+        return web.json_response({"ok": False, "error": "user_id required"}, status=400)
+    db = get_database()
+    membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
+    return web.json_response({"ok": True, "membership": membership})
+
+
+@route("POST", "/admin/venue/assign", scopes=_admin_venue_scopes())
+async def admin_venue_assign(req: web.Request) -> web.Response:
+    token = _extract_token(req)
+    doc = _find_web_token(token)
+    if not doc or not doc.get("user_id"):
+        return web.json_response({"ok": False, "error": "user_id required"}, status=400)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        venue_id = int(body.get("venue_id") or 0)
+    except Exception:
+        venue_id = 0
+    if not venue_id:
+        return web.json_response({"ok": False, "error": "venue_id required"}, status=400)
+    db = get_database()
+    venue = db.get_venue(venue_id)
+    if not venue:
+        return web.json_response({"ok": False, "error": "venue not found"}, status=404)
+    db.set_discord_venue(int(doc.get("user_id")), venue_id, role="admin")
+    membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
+    return web.json_response({"ok": True, "membership": membership})
+
+
+@route("POST", "/admin/venues/create", scopes=_admin_venue_scopes())
+async def admin_venues_create(req: web.Request) -> web.Response:
+    token = _extract_token(req)
+    doc = _find_web_token(token)
+    if not doc or not doc.get("user_id"):
+        return web.json_response({"ok": False, "error": "user_id required"}, status=400)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return web.json_response({"ok": False, "error": "name required"}, status=400)
+    db = get_database()
+    metadata = {"admin_discord_ids": [str(doc.get("user_id"))]}
+    venue = db.upsert_venue(name, metadata=metadata)
+    if not venue:
+        return web.json_response({"ok": False, "error": "save failed"}, status=500)
+    db.set_discord_venue(int(doc.get("user_id")), int(venue.get("id")), role="admin")
+    membership = db.get_discord_venue(int(doc.get("user_id")))
+    if membership:
+        membership = to_jsonable(membership)
+    return web.json_response({"ok": True, "venue": venue, "membership": membership})
 
 @route("GET", "/api/auth/permissions", allow_public=True)
 async def auth_permissions(req: web.Request):

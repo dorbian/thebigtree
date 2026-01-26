@@ -6,13 +6,17 @@ import logging
 from aiohttp import web
 import os
 import uuid
-import imghdr
+try:
+    import imghdr
+except ModuleNotFoundError:
+    from bigtree.inc import imghdr_compat as imghdr
 from pathlib import Path
 import bigtree
 import discord
 from bigtree.inc.logging import upload_logger
 from bigtree.inc.webserver import route, get_server, DynamicWebServer
 from bigtree.inc.database import get_database
+from bigtree.inc import web_tokens
 from bigtree.modules import tarot as tar
 from bigtree.modules import artists
 from bigtree.webmods import uploads as upload_mod
@@ -45,6 +49,25 @@ def _get_view(req: web.Request) -> str:
     if view not in ("priestess", "player", "overlay"):
         return "player"
     return view
+
+def _extract_admin_token(req: web.Request) -> str:
+    auth = req.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+
+def _resolve_admin_user_id(req: web.Request) -> int | None:
+    token = _extract_admin_token(req)
+    if not token:
+        return None
+    doc = web_tokens.find_token(token) or {}
+    raw = doc.get("user_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except Exception:
+        return None
 
 def _data_dir() -> str:
     try:
@@ -184,6 +207,7 @@ async def create_session(req: web.Request):
     s = tar.create_session(priestess_id, deck_id, spread_id)
     try:
         db = get_database()
+        created_by = _resolve_admin_user_id(req)
         status_val = s.get("status") or ("active" if s.get("active") else "ended")
         active = bool(s.get("active")) or str(status_val).lower() == "active"
         metadata = {
@@ -197,6 +221,7 @@ async def create_session(req: web.Request):
             module="tarot",
             payload=s,
             title=s.get("title") or s.get("name") or "Tarot",
+            created_by=created_by,
             created_at=db._as_datetime(s.get("created_at") or s.get("started_at")),
             ended_at=db._as_datetime(s.get("ended_at")),
             status=status_val,
@@ -266,6 +291,7 @@ async def create_session_from_priestess(req: web.Request):
     new_session = tar.create_session(session.get("priestess_id") or 0, deck_id, spread_id)
     try:
         db = get_database()
+        created_by = _resolve_admin_user_id(req)
         status_val = new_session.get("status") or ("active" if new_session.get("active") else "ended")
         active = bool(new_session.get("active")) or str(status_val).lower() == "active"
         metadata = {
@@ -279,6 +305,7 @@ async def create_session_from_priestess(req: web.Request):
             module="tarot",
             payload=new_session,
             title=new_session.get("title") or new_session.get("name") or "Tarot",
+            created_by=created_by,
             created_at=db._as_datetime(new_session.get("created_at") or new_session.get("started_at")),
             ended_at=db._as_datetime(new_session.get("ended_at")),
             status=status_val,
@@ -453,14 +480,24 @@ async def create_deck(req: web.Request):
     deck_id = str(body.get("deck_id") or body.get("id") or "elf-classic")
     name = body.get("name")
     theme = body.get("theme")
+    purpose = body.get("purpose")
     suits = body.get("suits") if isinstance(body.get("suits"), list) else None
-    deck = tar.create_deck(deck_id, name=name, theme=theme, suits=suits)
+    deck = tar.create_deck(deck_id, name=name, theme=theme, purpose=purpose, suits=suits)
     return web.json_response({"ok": True, "deck": deck})
 
 @route("GET", "/api/tarot/decks", scopes=["tarot:admin", "cardgames:admin"])
 async def list_decks(req: web.Request):
     decks = tar.list_decks()
     return web.json_response({"ok": True, "decks": decks})
+
+@route("GET", "/api/tarot/templates", scopes=["tarot:admin", "cardgames:admin"])
+async def list_template_cards(req: web.Request):
+    purpose = (req.query.get("purpose") or "tarot").strip().lower() or "tarot"
+    try:
+        cards = tar.list_template_cards(purpose)
+    except Exception:
+        return _json_error("invalid template purpose", status=400)
+    return web.json_response({"ok": True, "purpose": purpose, "cards": cards})
 
 @route("GET", "/api/tarot/decks/{deck_id}", scopes=["tarot:admin", "cardgames:admin"])
 async def get_deck(req: web.Request):
@@ -488,8 +525,9 @@ async def update_deck(req: web.Request):
         body = {}
     name = body.get("name")
     theme = body.get("theme")
+    purpose = body.get("purpose")
     suits = body.get("suits") if isinstance(body.get("suits"), list) else None
-    deck = tar.update_deck(deck_id, name=name, theme=theme, suits=suits)
+    deck = tar.update_deck(deck_id, name=name, theme=theme, purpose=purpose, suits=suits)
     if not deck:
         return _json_error("not found", status=404)
     return web.json_response({"ok": True, "deck": deck})

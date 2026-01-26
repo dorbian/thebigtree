@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Elfministration</title>
     <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="/static/overlay/overlay.css">
+    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260125a">
     <style>
+      :root{
+        --admin-login-bg-url: url("{ADMIN_BACKGROUND}");
+        --admin-shell-bg-url: url("/static/images/adminlogin.png");
+      }
       .dashboard-kpis-row {
         display: flex;
         align-items: flex-start;
@@ -14,12 +18,20 @@
         flex-wrap: wrap;
         margin-bottom: 16px;
       }
+      html, body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
       .login-screen{
+        min-height: 100vh;
+        min-width: 100vw;
+        height: 100vh;
+        width: 100vw;
         background:
-          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.10), transparent 80%),
-          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.10), transparent 80%),
-          linear-gradient(160deg, rgba(11,22,17,.92), rgba(14,36,25,.92) 55%, rgba(16,44,29,.92)),
-          url("{ADMIN_BACKGROUND}");
+          var(--admin-login-bg-url),
+          var(--admin-bg-overlay);
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -36,7 +48,7 @@
         padding: 14px 16px;
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 12px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-kpis .stat-value {
         font-size: 2rem;
@@ -79,7 +91,7 @@
         border: 1px solid rgba(255, 255, 255, .1);
         border-radius: 14px;
         padding: 14px 14px 16px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-admin-header {
         display: flex;
@@ -107,7 +119,7 @@
         border-radius: 14px;
         padding: 14px;
         margin-bottom: 16px;
-        background: rgba(255, 255, 255, .01);
+        background: rgba(6, 10, 18, .6);
       }
       .dashboard-logs-header {
         display: flex;
@@ -250,7 +262,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
                 <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
               </svg>
-              <span id="brandUserName"></span>
+              <div class="brand-user-text">
+                <span id="brandUserName"></span>
+                <span class="brand-user-venue" id="brandUserVenue"></span>
+              </div>
             </div>
           </div>
 
@@ -262,9 +277,9 @@
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Bingo</div>
-            <div class="menu-item" id="menuBingo" tabindex="0">
-              <span class="menu-label">Manager</span>
+            <div class="nav-title">Games</div>
+              <div class="menu-item" id="menuBingo" tabindex="0">
+              <span class="menu-label">Bingo Sessions</span>
               <div class="menu-actions">
                 <button class="menu-refresh" id="menuBingoRefresh" title="Refresh games" aria-label="Refresh games">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -280,22 +295,12 @@
             </div>
             <div class="menu-sub" id="menuGames"></div>
             <div class="hidden" id="menuCreateGamePlaceholder"></div>
-          </div>
-
-          <div class="nav-block">
-            <div class="nav-title">Cards</div>
             <div class="menu-item" id="menuTarotLinks" tabindex="0"><span class="menu-label">Tarot Sessions</span></div>
-            <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Cardgame Sessions</span></div>
+            <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Casino Sessions</span></div>
           </div>
 
           <div class="nav-block">
-            <div class="nav-title">Casino</div>
-            <div class="menu-item" id="menuCraps" tabindex="0"><span class="menu-label">Craps</span></div>
-            <div class="menu-item" id="menuSlots" tabindex="0"><span class="menu-label">Slots</span></div>
-          </div>
-
-          <div class="nav-block">
-            <div class="nav-title">Archives</div>
+            <div class="nav-title">Manage</div>
             <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">Games</span></div>
             <div class="menu-item" id="menuGamesEvents" tabindex="0"><span class="menu-label">Events</span></div>
           </div>
@@ -351,9 +356,9 @@
                 <div class="dashboard-admin-title">User management</div>
               </div>
               <div class="dashboard-admin-actions">
-                <a id="dashboardXivAuthLink" class="dashboard-admin-link" href="/user-area/manage" target="_blank" rel="noreferrer">
-                  <span>Registered characters</span>
-                </a>
+                <button type="button" id="dashboardXivAuthLink" class="dashboard-admin-link">
+                  <span>XIVAuth Users</span>
+                </button>
                 <button type="button" id="menuArtists">
                   <span>Artist index</span>
                 </button>
@@ -425,50 +430,39 @@
                   <span>Auth keys</span>
                 </button>
                 <button type="button" id="menuAuthTemp">
-                  <span>Temporary access</span>
+                  <span>Temp auth</span>
                 </button>
               </div>
               <p class="dashboard-admin-note">Roles, keys, and temp links.</p>
             </div>
-          </div>
-          <div class="dashboard-admin-card dashboard-plugin-card" id="dashboardPluginWrap">
-            <div class="dashboard-admin-header">
+            <div class="dashboard-admin-card">
+              <div class="dashboard-admin-header">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm1.2-7.4-.9.9A2.8 2.8 0 0 0 13 13h-2v-.5a4 4 0 0 1 1.2-2.8l1.2-1.2A1.8 1.8 0 0 0 12 5.5a1.9 1.9 0 0 0-2 1.8H8a3.9 3.9 0 0 1 8-.3 3.6 3.6 0 0 1-1.8 2.6z"/>
               </svg>
               <div class="dashboard-admin-title">FFXIV plugin setup</div>
             </div>
+            <p class="dashboard-admin-note">Add the Forest to XIVLauncher.</p>
+            <p class="dashboard-admin-note">XIVLauncher -> Settings -> Dalamud -> Experimental -> Custom Plugin Repositories</p>
             <div class="dashboard-admin-actions">
-              <a class="dashboard-admin-link" href="/with.leaf" target="_blank" rel="noreferrer">
-                <span>Open with.leaf</span>
-              </a>
+              <button class="btn-ghost" id="pluginRepoCopy" type="button"><span>Copy plugin link</span></button>
             </div>
-            <p class="dashboard-admin-note">Point XIVLauncher to the Forest plugin repository.</p>
-            <div class="dashboard-plugin-steps">
-              XIVLauncher → Settings → Dalamud → Experimental → Custom Plugin Repositories<br>
-              Add: <span class="cmd">https://rites.thebigtree.life/with.leaf</span>
-            </div>
+            <div class="dashboard-plugin-url" id="pluginRepoUrl">https://rites.thebigtree.life/with.leaf</div>
           </div>
-          <div class="dashboard-logs" id="dashboardLogsWrap">
-            <div class="dashboard-logs-header">
-              <div>
-                <strong>Logs</strong>
-                <span class="muted">Boot, auth, and upload activity.</span>
+          <div class="dashboard-logs dashboard-admin-card" id="dashboardLogsWrap">
+              <div class="dashboard-admin-header">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 4h16v4H4V4zm0 6h16v10H4V10zm3 3v4h2v-4H7zm4 0v4h2v-4h-2zm4 0v4h2v-4h-2z"/>
+                </svg>
+                <div class="dashboard-admin-title">Logs</div>
               </div>
-              <div class="dashboard-logs-actions">
-                <div class="dashboard-logs-tabs">
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsBoot">Boot</button>
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsAuth">Auth</button>
-                  <button type="button" class="dashboard-logs-tab" id="dashboardLogsUpload">Uploads</button>
-                </div>
-                <button type="button" class="dashboard-logs-refresh" id="dashboardLogsRefresh" title="Refresh" aria-label="Refresh">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                  </svg>
-                </button>
+              <p class="dashboard-admin-note">Boot, auth, and upload activity. <span id="dashboardLogsCurrent">Current: boot</span></p>
+              <div class="dashboard-admin-actions">
+                <button type="button" class="btn-ghost" id="dashboardLogsBoot"><span>Boot logs</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsAuth"><span>Auth logs</span></button>
+                <button type="button" class="btn-ghost" id="dashboardLogsUpload"><span>Upload logs</span></button>
               </div>
             </div>
-            <div class="dashboard-logs-body" id="dashboardLogsBody">Pick a log stream.</div>
           </div>
         </section>
 
@@ -498,9 +492,9 @@
                 Venue
                 <select id="gamesFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label class="games-filter games-filter--checkbox">
-                <span style="display:block; margin-bottom:6px;">Include inactive</span>
-                <input id="gamesFilterInactive" type="checkbox" checked style="transform:translateY(2px);" />
+              <label class="games-filter games-filter--checkbox" style="display:flex; align-items:center; gap:8px;">
+                <input id="gamesFilterInactive" type="checkbox" checked />
+                <span>Include inactive</span>
               </label>
               <button class="btn-ghost games-filter-apply" id="gamesFilterApply" type="button">Apply</button>
             </div>
@@ -533,23 +527,27 @@
           <h2>Events</h2>
           <p class="muted">Create game events that players can join with XIVAuth. Events can be hosted by a venue and optionally use a dedicated wallet currency.</p>
           <div class="dash-section-body">
-            <div class="row events-toolbar">
-              <label class="events-search">
+            <div class="row events-toolbar" style="gap:12px; flex-wrap:wrap; align-items:flex-end;">
+              <label class="events-search" style="flex:1; min-width:200px; max-width:320px;">
                 Search
                 <input id="eventsFilterQuery" placeholder="event code or title..." />
               </label>
-              <label style="min-width:220px;">
+              <label style="flex:1; min-width:200px; max-width:280px;">
                 Venue
                 <select id="eventsFilterVenue"><option value="">All venues</option></select>
               </label>
-              <label class="games-filter games-filter--checkbox" style="min-width:170px;">
-                <span style="display:block; margin-bottom:6px;">Include ended</span>
-                <input id="eventsFilterEnded" type="checkbox" checked style="transform:translateY(2px);" />
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-ghost icon-btn icon-btn--small" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+                </button>
+                <button id="eventsAdd" type="button">Add event</button>
+              </div>
+            </div>
+            <div style="margin-top:10px; margin-bottom:10px;">
+              <label class="games-filter games-filter--checkbox" style="display:flex; align-items:center; gap:8px;">
+                <input id="eventsFilterEnded" type="checkbox" checked />
+                <span>Include ended</span>
               </label>
-              <button class="btn-ghost icon-btn icon-btn--small" id="eventsRefresh" type="button" title="Refresh" aria-label="Refresh">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
-              </button>
-              <button id="eventsAdd" type="button">Add event</button>
             </div>
             <div class="dashboard-logs-body" id="eventsListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
@@ -572,9 +570,23 @@
             <div class="dashboard-logs-body" id="venuesListBody" style="max-height:520px; margin-top:12px;"></div>
           </div>
         </section>
-          <section class="panel" style="animation-delay:.05s" id="bingoPanel">
-            <h2>Bingo Manager</h2>
+        <section class="panel hidden" style="animation-delay:.045s" id="bingoSessionsPanel">
+          <h2>Bingo Sessions</h2>
+          <p class="muted">Select a session to manage.</p>
+          <div class="bingo-sessions">
+            <div class="bingo-sessions-header">
+              <h3>Sessions</h3>
+              <button class="btn-ghost icon-btn icon-btn--small" id="bSessionsRefresh" type="button" title="Refresh sessions" aria-label="Refresh sessions">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+              </button>
+            </div>
+            <div class="bingo-sessions-list" id="bGames">Loading sessions...</div>
+          </div>
+        </section>
 
+        <section class="panel hidden" style="animation-delay:.05s" id="bingoPanel">
+          <h2>Bingo Manager</h2>
+          <div class="bingo-main">
             <div class="bingo-section bingo-control">
               <h3>Game Control</h3>
               <div class="bingo-status-display" id="bGameStatusDisplay">
@@ -595,23 +607,37 @@
                   <div class="muted">No history yet.</div>
                 </div>
               </div>
-              <div class="status" id="bingoStatus">No game selected.</div>
             </div>
 
             <div class="section-divider"></div>
 
-            <div class="bingo-section">
-              <div class="section-header-row">
-                <h3>Players &amp; Cards</h3>
-                <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
-                </button>
-              </div>
-              <div class="empty-state" id="bOwnersEmpty">
-                <div class="muted">No players yet. Refresh to pull current owners.</div>
-                <div class="muted" style="font-size:12px;">Use the refresh icon above.</div>
-              </div>
-              <div class="list" id="bOwners"></div>
+              <div class="bingo-section">
+                <div class="section-header-row">
+                  <h3>Players &amp; Cards</h3>
+                  <div class="bingo-owners-actions">
+                    <button class="btn-ghost icon-btn" id="bOwnersRefreshIcon" title="Refresh players" aria-label="Refresh players">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/></svg>
+                    </button>
+                    <label class="bingo-owners-field">
+                      Owner
+                      <input id="bOwner" placeholder="Player name">
+                    </label>
+                    <label class="bingo-owners-field">
+                      Qty
+                      <input id="bQty" type="number" value="1" min="1" max="10">
+                    </label>
+                    <label class="bingo-owners-check">
+                      <input type="checkbox" id="bCountsPot" checked>
+                      Counts toward pot
+                    </label>
+                    <button id="bBuy" class="btn-ghost">Buy cards</button>
+                  </div>
+                </div>
+                <div class="empty-state" id="bOwnersEmpty">
+                  <div class="muted">No players yet. Refresh to pull current owners.</div>
+                  <div class="muted" style="font-size:12px;">Use the refresh icon above.</div>
+                </div>
+                <div class="list" id="bOwners"></div>
             </div>
 
             <div class="section-divider"></div>
@@ -634,76 +660,22 @@
 
             <div class="section-divider"></div>
 
-            <details class="bingo-advanced" id="bingoAdvanced">
-              <summary>Advanced</summary>
-              <div class="bingo-advanced-body">
-                <div class="row">
-                  <div>
-                    <label>Game ID</label>
-                    <div id="bGameId" class="status">No game selected.</div>
-                  </div>
-                  <div>
-                    <label for="bCountsPot">
-                      <input type="checkbox" id="bCountsPot" checked>
-                      Counts toward pot
-                    </label>
-                  </div>
-                  <div>
-                    <label for="bSeedPotAmount">Seed pot</label>
-                    <input id="bSeedPotAmount" type="number" value="0" min="0">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button class="btn-ghost" id="bSeedPotApply">Seed pot</button>
-                  </div>
-                </div>
-                <div class="row">
-                  <div>
-                    <label for="bOwner"><span class="req">*</span> Owner name</label>
-                    <input id="bOwner" placeholder="Player name">
-                  </div>
-                  <div>
-                    <label for="bQty">Quantity</label>
-                    <input id="bQty" type="number" value="1" min="1" max="10">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button id="bBuy" class="btn-ghost">Buy</button>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="bingo-advanced" id="bingoAdmin">
-              <summary>Admin Tools</summary>
-              <div class="bingo-advanced-body">
-                <div class="row">
-                  <div>
-                    <label for="bOwnerId">Discord ID</label>
-                    <input id="bOwnerId" placeholder="optional">
-                  </div>
-                  <div>
-                    <label>&nbsp;</label>
-                    <button class="btn-ghost" id="bViewOwner">View tickets</button>
-                  </div>
-                </div>
-                <div class="row">
-                  <div>
-                    <label>Announce calls</label>
-                    <div class="bingo-announce">
-                      <input type="checkbox" id="bAnnounceToggle">
-                      <span class="status-badge" id="bAnnounceBadge">Off</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="list" id="bClaims">No claims yet.</div>
-              </div>
-            </details>
-          </section>
+            <div id="bGameId" class="hidden"></div>
+          </div>
+        </section>
 
         <section class="panel" style="animation-delay:.1s" id="tarotLinksPanel">
           <h2>Tarot Sessions</h2>
-          <p>Open the player, priestess, or elfministration view.</p>
+          <p>Open the player or host views.</p>
+          <div class="row">
+            <div style="grid-column: 1/-1;">
+              <label>&nbsp;</label>
+              <div class="inline-actions">
+                <button id="tCreateSession">New session</button>
+                <button class="btn-ghost" id="tCloseSession">Close session</button>
+              </div>
+            </div>
+          </div>
           <div class="row">
             <div>
               <label for="tSessionSelect">Existing sessions</label>
@@ -711,25 +683,11 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
+              <button id="tSessionRefresh" class="menu-refresh icon-btn icon-btn--small" title="Refresh sessions" aria-label="Refresh sessions">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
                 </svg>
               </button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="tCreateSession">New session</button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="tJoinCode">Join code</label>
-              <input id="tJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="tPriestessToken">Priestess token</label>
-              <input id="tPriestessToken" placeholder="token (for priestess)">
             </div>
           </div>
           <div class="row">
@@ -739,111 +697,46 @@
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenPriestess">Open priestess</button>
+              <button id="tOpenPriestess">Open host</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="tCopyPlayer" title="Copy player link" aria-label="Copy player link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy player link
+              </button>
+              <label for="tJoinCode" style="margin-top:8px;">Join code</label>
+              <input id="tJoinCode" placeholder="e.g. AB12CD">
             </div>
             <div>
               <label>&nbsp;</label>
-              <button id="tOpenOverlay">Open elfministration</button>
+              <button class="btn-ghost" id="tCopyPriestess" title="Copy host link" aria-label="Copy host link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy host link
+              </button>
+              <label for="tPriestessToken" style="margin-top:8px;">Host token</label>
+              <input id="tPriestessToken" placeholder="token (for host)">
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="tCloseSession">Close session</button>
-            </div>
-          </div>
-          <div class="row links">
-            <div>
-              <span class="pill">Links</span>
-              <div id="tLink">No join code entered.</div>
-            </div>
-          </div>
-          <h3>Tarot Games</h3>
-          <p>Create and manage tarot sessions.</p>
-          <div class="status hidden" id="tSpreadNote">
-            Spread = the card layout for the reading. Single: one card. Tree: Root/Trunk/Canopy. Cross: Past/Present/Future.
           </div>
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="cardgameSessionsPanel">
-          <h2>Cardgame Sessions</h2>
-          <p>Create and manage sessions for blackjack, poker, and high/low.</p>
-            <div class="row">
-              <div>
-                <label for="cgGameSelect">Game</label>
-                <select id="cgGameSelect">
-                  <option value="blackjack">Blackjack</option>
-                  <option value="poker">Poker</option>
-                  <option value="highlow">High/Low</option>
-                  <option value="slots">Slots</option>
-                  <option value="crapslite">Craps (lite)</option>
-                </select>
-              </div>
-              <div>
-                <label for="cgDeckSelect">Deck</label>
-                <div class="row">
-                  <select id="cgDeckSelect"></select>
-                  <button class="btn-ghost icon-btn" id="cgDeckRefresh" title="Refresh decks" aria-label="Refresh decks">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <input id="cgPot" placeholder="0">
-              </div>
-              <div>
-                <label for="cgCurrency">Currency</label>
-                <input id="cgCurrency" placeholder="gil">
-              </div>
-            </div>
-          <div class="row">
-            <div>
-              <label for="cgBackgroundUrl">Background image</label>
-              <input id="cgBackgroundUrl" placeholder="/media/forest.png or https://...">
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgUseSelectedMedia">Use selected media</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgOpenMedia">Open media library</button>
-            </div>
+          <h2>Casino Sessions</h2>
+          <div class="inline-actions" style="display:flex; gap:8px; margin-bottom:16px;">
+            <button id="cgCreateSession">New session</button>
+            <button class="btn-ghost danger-action" id="cgDeleteSession">Delete session</button>
+            <button class="btn-ghost" id="cgFinishSession">Finish session</button>
           </div>
-          <div class="status" id="cgBackgroundStatus">No background selected.</div>
-            <div class="row">
-              <div>
-                <label>&nbsp;</label>
-                <button id="cgCreateSession">Create draft</button>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn-ghost" id="cgCreateFromSelected">Create next from selected</button>
-              </div>
-            </div>
           <div class="row">
             <div>
               <label for="cgSessionSelect">Existing sessions</label>
               <select id="cgSessionSelect"></select>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button id="cgSessionRefresh" class="menu-refresh" title="Refresh sessions" aria-label="Refresh sessions">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 1-6.65 9H3a9 9 0 1 0 2.64-6.36L3 6v6h6l-2.55-2.55A7 7 0 0 1 12 5z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="cgJoinCode">Join code</label>
-              <input id="cgJoinCode" placeholder="e.g. AB12CD">
-            </div>
-            <div>
-              <label for="cgPriestessToken">Host token</label>
-              <input id="cgPriestessToken" placeholder="token (for host)">
             </div>
           </div>
           <div class="row">
@@ -855,19 +748,29 @@
               <label>&nbsp;</label>
               <button id="cgOpenPriestess">Open host</button>
             </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost" id="cgFinishSession">Finish session</button>
-            </div>
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn-ghost danger-action" id="cgDeleteSession">Delete session</button>
-            </div>
           </div>
-          <div class="row links">
+          <div class="row">
             <div>
-              <span class="pill">Links</span>
-              <div id="cgLink">No join code entered.</div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgCopyPlayer" title="Copy player link" aria-label="Copy player link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy player link
+              </button>
+              <label for="cgJoinCode" style="margin-top:8px;">Join code</label>
+              <input id="cgJoinCode" placeholder="e.g. AB12CD">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn-ghost" id="cgCopyPriestess" title="Copy host link" aria-label="Copy host link">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;fill:currentColor">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                Copy host link
+              </button>
+              <label for="cgPriestessToken" style="margin-top:8px;">Host token</label>
+              <input id="cgPriestessToken" placeholder="token (for host)">
             </div>
           </div>
           <div class="status" id="cgStatus">Ready.</div>
@@ -884,14 +787,6 @@
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="tarotDecksPanel">
-          <h2>Deck Editor</h2>
-          <div class="context-header">
-            <div>
-              <div class="context-path" id="taContextPath">Deck Editor / Forest / No card selected</div>
-              <div class="context-meta" id="taContextMeta">Pick a card to edit.</div>
-            </div>
-            <div class="context-meta" id="taContextDeck"></div>
-          </div>
           <div class="row">
             <div>
               <label for="taDeck">Deck</label>
@@ -917,19 +812,39 @@
                 </button>
               </div>
             </div>
+            <div>
+              <label>&nbsp;</label>
+              <div class="inline-actions">
+                <button id="taNewCard" class="btn-ghost">
+                  New card
+                </button>
+                <button id="taSaveCard" class="btn-primary">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+                  </svg>
+                  Save card
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="list" id="taDeckList">No deck loaded.</div>
-          <div class="status" id="taDeckStatus">Pick a deck to begin.</div>
-
-          <div class="section-divider"></div>
-          <h3>Card Editor</h3>
-          <div class="deck-editor-grid">
-            <div class="deck-editor-column">
+          <div class="deck-editor-top">
+            <div class="deck-editor-panel">
+              <div class="list" id="taDeckList">No deck loaded.</div>
+              <div class="status" id="taDeckStatus">Pick a deck to begin.</div>
+            </div>
+            <div class="deck-editor-column" id="taIdentityPanel">
               <h4>Identity</h4>
               <div class="row">
                 <div>
+                  <label for="taCardTemplate">Template card</label>
+                  <select id="taCardTemplate"></select>
+                  <div class="muted" id="taCardTemplateHint">Pick a template card to prefill this card.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
                   <label for="taCardId">Card ID</label>
-                  <input id="taCardId" placeholder="candlecap_sprite">
+                  <input id="taCardId" placeholder="auto from name" readonly>
                 </div>
               </div>
               <div class="row">
@@ -967,27 +882,11 @@
                 </div>
               </div>
             </div>
-            <div class="deck-editor-column">
-              <h4>Meaning</h4>
-              <div class="row">
-                <div>
-                  <label for="taCardFlavor">Flavor text</label>
-                  <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="taCardUpright">Upright</label>
-                  <textarea id="taCardUpright"></textarea>
-                </div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="taCardReversed">Reversed</label>
-                  <textarea id="taCardReversed"></textarea>
-                </div>
-              </div>
-            </div>
+          </div>
+
+          <div class="section-divider"></div>
+          <h3>Card Editor</h3>
+          <div class="deck-editor-grid">
             <div class="deck-editor-column">
               <h4>Meta</h4>
               <div class="row">
@@ -1030,19 +929,29 @@
                 </div>
               </div>
             </div>
-          </div>
-
-          <div class="row">
-            <div>
-              <label>&nbsp;</label>
-              <button id="taSaveCard" class="btn-primary">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
-                </svg>
-                Save card
-              </button>
+            <div class="deck-editor-column">
+              <h4>Meaning</h4>
+              <div class="row">
+                <div>
+                  <label for="taCardFlavor">Flavor text</label>
+                  <textarea id="taCardFlavor" rows="2" placeholder="Short flavor line for the card..."></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardUpright">Upright</label>
+                  <textarea id="taCardUpright"></textarea>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="taCardReversed">Reversed</label>
+                  <textarea id="taCardReversed"></textarea>
+                </div>
+              </div>
             </div>
           </div>
+
         </section>
 
         <section class="panel hidden" style="animation-delay:.1s" id="contestPanel">
@@ -1183,11 +1092,33 @@
                     <label for="mediaUploadOriginLabel">Origin label</label>
                     <input id="mediaUploadOriginLabel" placeholder="Offered during...">
                   </div>
+                  <label class="checkbox-row">
+                    <input id="mediaUploadHidden" type="checkbox">
+                    <span>Hide from gallery</span>
+                  </label>
                 </div>
-                <div class="row">
-                  <div>
-                    <label>&nbsp;</label>
-                    <button id="mediaUploadUpload" disabled>Upload</button>
+                  <div class="row">
+                    <div>
+                      <label for="mediaUploadType">Media type</label>
+                      <select id="mediaUploadType">
+                        <option value="">(none)</option>
+                        <option value="playing_card">Playing cards</option>
+                        <option value="background">Backgrounds</option>
+                        <option value="gallery">Gallery</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="mediaUploadVenue">Venue</label>
+                      <select id="mediaUploadVenue">
+                        <option value="">All venues</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div>
+                      <label>&nbsp;</label>
+                      <button id="mediaUploadUpload" disabled>Upload</button>
                   </div>
                 </div>
                   <div class="status" id="mediaUploadStatus">Upload idle.</div>
@@ -1260,11 +1191,29 @@
                         <option value="Gallery">Gallery</option>
                       </select>
                     </div>
-                    <div>
-                      <label for="mediaEditOriginLabel">Origin label</label>
-                      <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                      <div>
+                        <label for="mediaEditOriginLabel">Origin label</label>
+                        <input id="mediaEditOriginLabel" placeholder="Offered during...">
+                      </div>
                     </div>
-                  </div>
+                    <div class="row">
+                      <div>
+                        <label for="mediaEditType">Media type</label>
+                        <select id="mediaEditType">
+                          <option value="">(none)</option>
+                          <option value="playing_card">Playing cards</option>
+                          <option value="background">Backgrounds</option>
+                          <option value="gallery">Gallery</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label for="mediaEditVenue">Venue</label>
+                        <select id="mediaEditVenue">
+                          <option value="">All venues</option>
+                        </select>
+                      </div>
+                    </div>
                     <div class="row">
                       <div>
                         <label>&nbsp;</label>
@@ -1281,6 +1230,13 @@
                     <select id="mediaFilterArtist">
                       <option value="">All artists</option>
                     </select>
+                    <select id="mediaFilterType">
+                      <option value="">All types</option>
+                      <option value="playing_card">Playing cards</option>
+                      <option value="background">Backgrounds</option>
+                      <option value="gallery">Gallery</option>
+                      <option value="other">Other</option>
+                    </select>
                     <select id="mediaFilterOriginType">
                       <option value="">All origins</option>
                       <option value="Artifact">Artifact</option>
@@ -1289,6 +1245,9 @@
                       <option value="Tarot">Tarot</option>
                       <option value="Bingo">Bingo</option>
                       <option value="Gallery">Gallery</option>
+                    </select>
+                    <select id="mediaFilterVenue">
+                      <option value="">All venues</option>
                     </select>
                     <select id="mediaFilterLabel">
                       <option value="any">Any label</option>
@@ -1313,6 +1272,7 @@
                     <option value="old">Oldest first</option>
                     <option value="title">Title A-Z</option>
                     <option value="artist">Artist A-Z</option>
+                    <option value="gallery">Gallery</option>
                   </select>
                   <div class="media-selection" id="mediaSelectionIndicator">0 selected</div>
                 </div>
@@ -1342,6 +1302,11 @@
               </div>
           </div>
         </section>
+
+        <section class="panel hidden" style="animation-delay:.1s" id="iframePanel">
+          <iframe id="iframeContent" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation" allowfullscreen></iframe>
+        </section>
+
         <div class="modal" id="contestChannelModal">
           <div class="modal-card">
             <div class="modal-header">
@@ -1413,6 +1378,12 @@
           <div>
             <label for="bCurrency">Currency</label>
             <input id="bCurrency" value="gil">
+          </div>
+          <div>
+            <label for="bCreateEventSelect">Event</label>
+            <select id="bCreateEventSelect">
+              <option value="">No event</option>
+            </select>
           </div>
             <div>
               <label for="bMaxCards">Max cards</label>
@@ -1532,6 +1503,10 @@
               <label for="uploadLibraryArtist">Artist</label>
               <select id="uploadLibraryArtist"></select>
             </div>
+            <label class="checkbox-row">
+              <input id="uploadLibraryHidden" type="checkbox">
+              <span>Hide from gallery</span>
+            </label>
             <button id="uploadLibraryUpload" disabled>Upload</button>
             <div class="status" id="uploadLibraryStatus">Ready.</div>
           </section>
@@ -1588,16 +1563,50 @@
             <input id="venueMinBet" type="number" min="0" value="0">
           </div>
         </div>
-        <div class="row">
-          <div>
-            <label for="venueBackground">Game background</label>
-            <select id="venueBackground"></select>
+          <div class="row">
+            <div>
+              <label for="venueBackground">Game background</label>
+              <select id="venueBackground"></select>
+            </div>
+            <div>
+              <label for="venueDeck">Card deck</label>
+              <select id="venueDeck"></select>
+            </div>
           </div>
-          <div>
-            <label for="venueDeck">Card deck</label>
-            <select id="venueDeck"></select>
+          <div class="row">
+            <div style="flex:1">
+              <label>Per-game backgrounds</label>
+              <div class="muted" style="font-size:12px;margin-top:6px;">Optional overrides per game. Leave blank to use the venue default.</div>
+            </div>
           </div>
-        </div>
+          <div class="row">
+            <div>
+              <label for="venueBackgroundSlots">Slots</label>
+              <select id="venueBackgroundSlots"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundBlackjack">Blackjack</label>
+              <select id="venueBackgroundBlackjack"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundPoker">Poker</label>
+              <select id="venueBackgroundPoker"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="venueBackgroundHighlow">High/Low</label>
+              <select id="venueBackgroundHighlow"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundCrapslite">Crapslite</label>
+              <select id="venueBackgroundCrapslite"></select>
+            </div>
+            <div>
+              <label for="venueBackgroundTarot">Tarot</label>
+              <select id="venueBackgroundTarot"></select>
+            </div>
+          </div>
         <div class="row">
           <div style="flex:1">
             <label for="venueAdminsSelect">Admin Discord IDs</label>
@@ -1629,14 +1638,8 @@
               Title
               <input id="eventTitle" placeholder="e.g. Friday bingo night" />
             </label>
-            <label>
-              Venue
-              <select id="eventVenue"><option value="">None</option></select>
-            </label>
-            <label>
-              Currency name (optional)
-              <input id="eventCurrency" placeholder="e.g. Leaves" />
-            </label>
+            <div class="status" id="eventVenueDisplay">Venue: loading…</div>
+            <div class="status" id="eventCurrencyDisplay">Currency: loading…</div>
             <label style="display:flex; flex-direction:column; gap:6px;">
               <span>Wallet enabled</span>
               <input id="eventWalletEnabled" type="checkbox" />
@@ -1645,17 +1648,23 @@
               <span>Wallet carry-over</span>
               <input id="eventCarryOver" type="checkbox" />
             </label>
-
             <label>
-              Background image (optional)
-              <input id="eventBackgroundUrl" placeholder="/media/forest.png or https://..." />
+              Join wallet amount
+              <input id="eventJoinWalletAmount" type="number" min="0" step="1" value="0" />
             </label>
-            <div style="display:flex; gap:8px; align-items:end;">
-              <button class="btn-ghost" id="eventUseSelectedMedia" type="button">Use selected media</button>
-              <button class="btn-ghost" id="eventOpenMedia" type="button">Open media library</button>
+
+            <div style="grid-column:1 / -1;">
+              <div style="font-weight:600; margin-bottom:8px;">Background image (optional)</div>
+              <button class="btn-ghost" id="eventOpenMedia" type="button" style="width:auto; padding:8px 12px;">Open media library</button>
             </div>
 
-            <div class="status" id="eventBackgroundStatus" style="grid-column:1 / -1;">No background selected.</div>
+            <div id="eventBackgroundPreview" style="grid-column:1 / -1; display:flex; gap:12px; align-items:center; margin-top:6px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(0,0,0,.12);">
+              <div style="width:140px; height:90px; border-radius:10px; overflow:hidden; background:rgba(0,0,0,.2); display:flex; align-items:center; justify-content:center;">
+                <img id="eventBackgroundPreviewImg" src="" alt="Background preview" style="width:100%; height:100%; object-fit:cover; display:none;" />
+                <div id="eventBackgroundPreviewEmpty" class="muted" style="font-size:12px;">No image selected</div>
+              </div>
+              <div class="status" id="eventBackgroundStatus" style="margin:0;">No background selected.</div>
+            </div>
 
             <div style="grid-column:1 / -1;">
               <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -1663,7 +1672,7 @@
                   <div style="font-weight:600;">Enabled minigames</div>
                   <div class="muted" style="font-size:12px;">Controls what shows up on the public event page.</div>
                 </div>
-                <button class="btn-ghost" id="eventPickGames" type="button">Pick minigames</button>
+                <button class="btn-ghost" id="eventPickGames" type="button" style="width:auto; padding:8px 12px;">Pick minigames</button>
               </div>
               <div class="status" id="eventGamesStatus" style="margin-top:8px;">All games allowed (no filter).</div>
             </div>
@@ -1673,31 +1682,10 @@
 
           <div style="margin-top:12px;">
             <strong>Registered players</strong>
-            <div class="dashboard-logs-body" id="eventPlayersList" style="max-height:180px; margin-top:8px;">No players loaded.</div>
+            <div class="muted" id="eventPlayersNote" style="font-size:12px; margin-top:4px;">Save the event to see players and manage wallets.</div>
+            <div class="dashboard-logs-body" id="eventPlayersList" style="max-height:200px; margin-top:8px;">No players loaded.</div>
+            <div class="status" id="eventHouseTotal">House total: -</div>
           </div>
-          <div style="margin-top:12px;">
-            <strong>Wallet top-up</strong>
-            <div class="row" style="margin-top:8px; gap:10px; flex-wrap:wrap;">
-              <label style="min-width:200px;">
-                Player
-                <select id="eventWalletUser"><option value="">Select player</option></select>
-              </label>
-              <label style="min-width:160px;">
-                Amount to add
-                <input id="eventWalletAmount" type="number" step="1" placeholder="0">
-              </label>
-              <label style="min-width:220px; flex:1;">
-                Comment (required)
-                <input id="eventWalletComment" placeholder="Reason for the adjustment">
-              </label>
-              <div>
-                <label>&nbsp;</label>
-                <button id="eventWalletSet" type="button">Add balance</button>
-              </div>
-            </div>
-          <div class="status" id="eventWalletStatus">Ready.</div>
-          <div class="status" id="eventHouseTotal">House total: -</div>
-        </div>
 
           <div class="row" style="justify-content:space-between; margin-top:12px; flex-wrap:wrap; gap:10px;">
             <button class="btn-ghost danger-btn" id="eventEnd" type="button" style="display:none;">End event</button>
@@ -1708,6 +1696,36 @@
               </button>
               <button id="eventSave" type="button">Save</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="eventWalletModal">
+      <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+          <div class="modal-title" id="eventWalletModalTitle">Top up wallet</div>
+          <button class="btn-ghost icon-btn icon-btn--small" id="eventWalletModalClose" type="button" aria-label="Close" title="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12.01l-6.3-6.3-1.41 1.41 6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="eventWalletPlayerLabel">Player: -</div>
+          <div class="status" id="eventWalletBalanceLabel" style="margin-top:6px;">Balance: -</div>
+          <div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+            <label style="min-width:160px;">
+              Amount to add
+              <input id="eventWalletAmount" type="number" step="1" placeholder="0">
+            </label>
+            <label style="min-width:220px; flex:1;">
+              Comment (required)
+              <input id="eventWalletComment" placeholder="Reason for the adjustment">
+            </label>
+          </div>
+          <div class="status" id="eventWalletStatus" style="margin-top:10px;">Ready.</div>
+          <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button class="btn-ghost" id="eventWalletModalCancel" type="button">Cancel</button>
+            <button id="eventWalletSet" type="button">Add balance</button>
           </div>
         </div>
       </div>
@@ -1740,6 +1758,22 @@
               <button id="eventGamesSave" type="button">Save</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="dashboardLogsModal">
+      <div class="modal-card modal-card--wide">
+        <div class="modal-header">
+          <div class="modal-title">Logs</div>
+          <button class="btn-ghost icon-btn" id="dashboardLogsClose" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="row" style="justify-content:flex-end; margin-bottom:10px;">
+            <button type="button" class="btn-ghost" id="dashboardLogsRefresh">Refresh</button>
+          </div>
+          <div class="dash-changelog" id="dashboardLogsBody">Pick a log stream.</div>
         </div>
       </div>
     </div>
@@ -1809,6 +1843,13 @@
           <div>
             <label for="deckCreateName">Name</label>
             <input id="deckCreateName" placeholder="Elf Classic">
+          </div>
+          <div>
+            <label for="deckCreatePurpose">Deck purpose</label>
+            <select id="deckCreatePurpose">
+              <option value="tarot">Tarot</option>
+              <option value="playing">Playing cards</option>
+            </select>
           </div>
           <div>
             <label for="deckCreateTheme">Card theme</label>
@@ -1888,6 +1929,13 @@
             <input id="deckEditName" placeholder="Elf Classic">
           </div>
           <div>
+            <label for="deckEditPurpose">Deck purpose</label>
+            <select id="deckEditPurpose">
+              <option value="tarot">Tarot</option>
+              <option value="playing">Playing cards</option>
+            </select>
+          </div>
+          <div>
             <label for="deckEditTheme">Card theme</label>
             <select id="deckEditTheme">
               <option value="classic">Classic</option>
@@ -1965,8 +2013,80 @@
         </div>
         <div class="row">
           <div>
+            <label for="sessionCreateBackground">Background image</label>
+            <input id="sessionCreateBackground" type="file" accept="image/*" style="display:none;">
+            <button class="btn-ghost" id="sessionCreateOpenMedia">Media Library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <div class="background-preview" id="sessionCreateBackgroundPreview" style="display:none;">
+              <img id="sessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
             <label>&nbsp;</label>
             <button id="sessionCreateSubmit">Create session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="casinoSessionCreateModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Create Casino Session</div>
+          <button class="btn-ghost" id="casinoSessionCreateClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreateGame">Game type</label>
+            <select id="casinoSessionCreateGame">
+              <option value="blackjack">Blackjack</option>
+              <option value="poker">Poker</option>
+              <option value="highlow">High/Low</option>
+              <option value="slots">Slots</option>
+              <option value="crapslite">Craps (lite)</option>
+            </select>
+          </div>
+          <div>
+            <label for="casinoSessionCreateDeck">Deck</label>
+            <select id="casinoSessionCreateDeck"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreatePot">Pot amount</label>
+            <input id="casinoSessionCreatePot" type="number" value="0" min="0">
+          </div>
+          <div>
+            <label for="casinoSessionCreateCurrency">Currency</label>
+            <input id="casinoSessionCreateCurrency" placeholder="gil">
+          </div>
+          <div>
+            <label for="casinoSessionCreateEventSelect">Event</label>
+            <select id="casinoSessionCreateEventSelect">
+              <option value="">No event</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="casinoSessionCreateBackground">Background image</label>
+            <input id="casinoSessionCreateBackground" type="file" accept="image/*" style="display:none;">
+            <button class="btn-ghost" id="casinoSessionCreateOpenMedia">Media Library</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <div class="background-preview" id="casinoSessionCreateBackgroundPreview" style="display:none;">
+              <img id="casinoSessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="casinoSessionCreateSubmit">Create session</button>
           </div>
         </div>
       </div>
@@ -2219,7 +2339,7 @@
       </div>
     </div>
     <div class="modal" id="authRolesModal">
-      <div class="modal-card">
+      <div class="modal-card modal-card--wide">
         <div class="modal-header">
           <div class="modal-title">Auth Roles</div>
           <button class="btn-ghost" id="authRolesClose">Close</button>
@@ -2244,6 +2364,30 @@
             <button id="authRolesSave">Save</button>
           </div>
         </div>
+        <div class="section-divider"></div>
+        <h3>Role Preview</h3>
+        <div class="row">
+          <div>
+            <label for="authPreviewRole">Access profile (role scope)</label>
+            <select id="authPreviewRole"></select>
+            <div class="muted" id="authPreviewScopesPreview">Scopes: none</div>
+          </div>
+          <div>
+            <label for="authPreviewScopes">Scopes override (optional, comma separated)</label>
+            <input id="authPreviewScopes" placeholder="bingo:admin, tarot:admin">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button id="authPreviewStart">Start preview</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="authPreviewStop">Stop preview</button>
+          </div>
+        </div>
+        <div class="status" id="authPreviewStatus">Preview off.</div>
         <div class="status" id="authRolesStatus">Ready.</div>
       </div>
     </div>
@@ -2293,6 +2437,23 @@
           <div class="muted">Link is single-use. The session lasts 6 hours after activation.</div>
         </div>
         <div class="status" id="authTempStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="adminVenueModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Select venue</div>
+        </div>
+        <div class="modal-content">
+          <label for="adminVenueSelect">Existing venues</label>
+          <select id="adminVenueSelect"></select>
+          <button class="btn-ghost" id="adminVenueAssign" type="button">Join venue</button>
+          <div class="section-divider"></div>
+          <label for="adminVenueCreateName">Create venue</label>
+          <input id="adminVenueCreateName" placeholder="Venue name">
+          <button id="adminVenueCreate" type="button">Create venue</button>
+          <div class="status" id="adminVenueStatus">Pick a venue to continue.</div>
+        </div>
       </div>
     </div>
     <div class="modal" id="systemConfigModal">

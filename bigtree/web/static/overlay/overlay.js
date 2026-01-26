@@ -23,6 +23,8 @@
       let currentCard = null;
       let currentGame = null;
       let taSelectedCardId = "";
+      let taTemplateCache = {tarot: null, playing: null};
+      let taTemplatePurpose = "tarot";
       let lastCalledCount = 0;
       let lastCalloutNumber = null;
       let activeGameId = "";
@@ -30,12 +32,19 @@
       window.taArtists = [];
       let calendarData = [];
       let authUserScopes = new Set();
+      let previewScopesActive = false;
+      let previewScopes = new Set();
       let authUserIsElfmin = false;
       let authTokensCache = [];
       let dashboardStatsLoaded = false;
       let dashboardStatsLoading = false;
       let dashboardLogsKind = "boot";
       let dashboardLogsLoading = false;
+      let adminVenueId = null;
+      let adminVenueName = "";
+      let adminVenueDeckId = null;
+      let adminVenueCurrency = null;
+      let adminVenueGameBackgrounds = {};
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -122,6 +131,10 @@
       };
 
       function getBase(){
+        // Use injected API_BASE_URL if available (dev mode with remote API)
+        if (window.API_BASE_URL){
+          return window.API_BASE_URL;
+        }
         return window.location.origin;
       }
 
@@ -165,6 +178,16 @@
         overlayLog("loadDashboardStats", {force, loading: dashboardStatsLoading, loaded: dashboardStatsLoaded});
         if (dashboardStatsLoading) return;
         if (dashboardStatsLoaded && !force){
+          return;
+        }
+        if (!hasScope("admin:web")){
+          overlayLog("loadDashboardStats skip: missing admin:web scope");
+          setStatValue("dashStatDiscord", "--");
+          setStatValue("dashStatPlayers", "--");
+          setStatValue("dashStatRegistered", "--");
+          setStatValue("dashStatGames", "--");
+          setStatValue("dashStatVenues", "--");
+          dashboardStatsLoaded = true;
           return;
         }
         dashboardStatsLoading = true;
@@ -225,6 +248,10 @@
           const safeKind = ["boot", "auth", "upload"].includes(kind) ? kind : "boot";
           const resp = await jsonFetch(`/admin/logs?kind=${safeKind}&lines=200`, {method: "GET"});
           dashboardLogsKind = resp.kind || safeKind;
+          const currentLabel = $("dashboardLogsCurrent");
+          if (currentLabel){
+            currentLabel.textContent = `Current: ${dashboardLogsKind}`;
+          }
           renderDashboardLogs(resp.entries || [], dashboardLogsKind);
         }catch(err){
           if (body){
@@ -284,9 +311,7 @@
 
       function renderEventsVenues(){
         const select = $("eventsFilterVenue");
-        const modalSelect = $("eventVenue");
         const current = select ? (select.value || "") : "";
-        const modalCurrent = modalSelect ? (modalSelect.value || "") : "";
         const options = [`<option value="">All venues</option>`]
           .concat((eventsVenues || []).map(v => {
             const id = v.id ?? v.venue_id ?? "";
@@ -296,16 +321,6 @@
         if (select){
           select.innerHTML = options.join("");
           if (current) select.value = current;
-        }
-        if (modalSelect){
-          modalSelect.innerHTML = [`<option value="">None</option>`]
-            .concat((eventsVenues || []).map(v => {
-              const id = v.id ?? v.venue_id ?? "";
-              const name = v.name || `Venue ${id}`;
-              return `<option value="${String(id)}">${escapeHtml(name)}</option>`;
-            }))
-            .join("");
-          if (modalCurrent) modalSelect.value = modalCurrent;
         }
       }
 
@@ -395,7 +410,15 @@
           tr.addEventListener("click", () => {
             const code = tr.getAttribute("data-event-code") || "";
             const ev = (eventsCache || []).find(x => String(x.event_code || "") === String(code));
-            if (ev) openEventModal(ev);
+            if (!ev){
+              return;
+            }
+            if (ev.event_code){
+              const url = `/events/${encodeURIComponent(String(ev.event_code))}/dashboard`;
+              loadIframe(url);
+              return;
+            }
+            openEventModal(ev);
           });
         });
       }
@@ -415,32 +438,60 @@
           const resp = await jsonFetch(`/admin/events?${params.toString()}`, {method: "GET"});
           if (resp.ok){
             eventsCache = resp.events || [];
+            renderEventsList();
           }
         }catch(err){
           eventsCache = [];
+          renderEventsList();
         }
-        renderEventsList();
+      }
+
+      async function loadEventOptions(selectId){
+        const select = $(selectId);
+        if (!select) return;
+        select.innerHTML = `<option value="">No event</option>`;
+        try{
+          const resp = await jsonFetch("/admin/events?include_ended=0", {method: "GET"});
+          if (!resp.ok) throw new Error(resp.error || "Unable to load events");
+          const items = (resp.events || []).filter(ev => String(ev.status || "").toLowerCase() !== "ended");
+          items.forEach(ev => {
+            const id = ev.id ?? ev.event_id ?? "";
+            if (!id) return;
+            const opt = document.createElement("option");
+            const title = ev.title || ev.event_code || `Event ${id}`;
+            const status = ev.status ? ` (${ev.status})` : "";
+            opt.value = String(id);
+            opt.textContent = `${title}${status}`;
+            opt.dataset.code = ev.event_code || "";
+            select.appendChild(opt);
+          });
+        }catch(err){
+          select.innerHTML = `<option value="">No events available</option>`;
+        }
       }
 
       function setEventBackgroundStatus(url){
         const el = $("eventBackgroundStatus");
+        const img = $("eventBackgroundPreviewImg");
+        const empty = $("eventBackgroundPreviewEmpty");
+        const preview = $("eventBackgroundPreview");
+        const modal = $("eventModal");
+        const artist = modal?.dataset?.artist_name || "";
         if (!el) return;
         if (!url){
           el.textContent = "No background selected.";
+          if (img) img.style.display = "none";
+          if (empty) empty.style.display = "flex";
+          if (preview) preview.style.display = "flex";
           return;
         }
-        el.textContent = "Background selected.";
-      }
-
-      function getEventEnabledGames(modal){
-        const raw = (modal && modal.dataset && modal.dataset.enabled_games) ? String(modal.dataset.enabled_games) : "";
-        if (!raw) return [];
-        try{
-          const parsed = JSON.parse(raw);
-          return Array.isArray(parsed) ? parsed.map(x => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
-        }catch(_e){
-          return [];
+        if (img){
+          img.src = url;
+          img.style.display = "block";
         }
+        if (empty) empty.style.display = "none";
+        if (preview) preview.style.display = "flex";
+        el.textContent = artist ? `Selected (${artist})` : "Selected.";
       }
 
       function setEventGamesStatus(games){
@@ -479,6 +530,48 @@
         return out;
       }
 
+      function showEventWalletModal(show){
+        const modal = $("eventWalletModal");
+        if (!modal) return;
+        modal.classList.toggle("show", !!show);
+        if (!show){
+          modal.dataset.player = "";
+        }
+      }
+
+      function openEventWalletModal(playerName, balance, currency){
+        const modal = $("eventWalletModal");
+        const status = $("eventWalletStatus");
+        const eventModal = $("eventModal");
+        if (!modal || !eventModal) return;
+        const walletEnabled = modal.dataset.wallet_enabled === "1" || eventModal.dataset.wallet_enabled === "1";
+        const eventId = parseInt(eventModal.dataset.event_id || modal.dataset.event_id || "0", 10) || 0;
+        if (!walletEnabled || !eventId){
+          if (status) status.textContent = "Save the event and enable wallets first.";
+          return;
+        }
+        modal.dataset.player = playerName || "";
+        modal.dataset.event_id = String(eventId);
+        modal.dataset.currency = currency || modal.dataset.currency || "";
+        const playerLabel = $("eventWalletPlayerLabel");
+        if (playerLabel) playerLabel.textContent = `Player: ${playerName || "-"}`;
+        const balanceLabel = $("eventWalletBalanceLabel");
+        const balanceText = currency ? `${balance || 0} ${currency}` : String(balance || 0);
+        if (balanceLabel) balanceLabel.textContent = `Balance: ${balanceText}`;
+        if (status) status.textContent = "Ready.";
+        const amt = $("eventWalletAmount");
+        if (amt){
+          amt.disabled = false;
+          amt.value = "";
+        }
+        const comment = $("eventWalletComment");
+        if (comment){
+          comment.disabled = false;
+          comment.value = "";
+        }
+        showEventWalletModal(true);
+      }
+
       function openEventModal(eventObj){
         const modal = $("eventModal");
         if (!modal) return;
@@ -487,26 +580,26 @@
         const isNew = !eventObj || !eventObj.id;
         modal.dataset.event_id = String(eventObj?.id || "");
         modal.dataset.event_code = String(eventObj?.event_code || "");
+        const walletModalRef = $("eventWalletModal");
+        if (walletModalRef){
+          walletModalRef.dataset.event_id = String(eventObj?.id || "");
+          walletModalRef.dataset.currency = eventObj?.currency_name || "";
+        }
         loadEventPlayers(eventObj?.id || 0);
         loadEventSummary(eventObj?.id || 0);
         $("eventModalTitle").textContent = isNew ? "Add event" : `Event: ${eventObj.title || eventObj.event_code}`;
         $("eventTitle").value = eventObj?.title || "";
-        $("eventVenue").value = eventObj?.venue_id ? String(eventObj.venue_id) : "";
-        $("eventCurrency").value = eventObj?.currency_name || "";
-        // If the event does not override currency, default from the venue.
-        if (!(eventObj?.currency_name) && (eventObj?.venue_id)){
-          const v = (eventsVenues || []).find(x => Number(x.id) === Number(eventObj.venue_id)) || null;
-          if (v && v.currency_name){
-            $("eventCurrency").value = String(v.currency_name);
-          }
+        modal.dataset.venue_id = eventObj?.venue_id ? String(eventObj.venue_id) : "";
+        modal.dataset.currency_name = eventObj?.currency_name || "";
+        const venueDisplay = $("eventVenueDisplay");
+        if (venueDisplay){
+          const venueName = eventObj?.venue_name || eventObj?.venue || "Database-managed venue";
+          venueDisplay.textContent = `Venue: ${venueName}`;
         }
-        // If currency not set on the event, default it from the selected venue
-        if (!$("eventCurrency").value){
-          const vid = parseInt($("eventVenue").value || "0", 10) || 0;
-          const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
-          if (v && v.currency_name){
-            $("eventCurrency").value = String(v.currency_name || "");
-          }
+        const currencyDisplay = $("eventCurrencyDisplay");
+        if (currencyDisplay){
+          const currencyName = eventObj?.currency_name || "";
+          currencyDisplay.textContent = `Currency: ${currencyName || "(none)"}`;
         }
         $("eventWalletEnabled").checked = !!eventObj?.wallet_enabled;
         const carryEl = $("eventCarryOver");
@@ -514,17 +607,20 @@
           const meta = eventObj?.metadata || {};
           carryEl.checked = !!(meta.carry_over || meta.carryover);
         }
+        const joinWalletEl = $("eventJoinWalletAmount");
+        if (joinWalletEl){
+          const meta = eventObj?.metadata || {};
+          const raw = meta.join_wallet_amount ?? meta.join_wallet_bonus ?? 0;
+          joinWalletEl.value = String(raw || 0);
+        }
 
         // Event background + enabled minigames
         const meta = eventObj?.metadata || {};
-        const bgEl = $("eventBackgroundUrl");
-        if (bgEl){
-          const bg = String(meta.background_url || meta.background || "").trim();
-          bgEl.value = bg;
-          bgEl.dataset.artistId = meta.background_artist_id || meta.backgroundArtistId || "";
-          bgEl.dataset.artistName = meta.background_artist_name || meta.backgroundArtistName || "";
-          setEventBackgroundStatus(bg);
-        }
+        const bg = String(meta.background_url || meta.background || "").trim();
+        modal.dataset.background_url = bg;
+        modal.dataset.artist_id = meta.background_artist_id || meta.backgroundArtistId || "";
+        modal.dataset.artist_name = meta.background_artist_name || meta.backgroundArtistName || "";
+        setEventBackgroundStatus(bg);
         const enabled = Array.isArray(meta.enabled_games)
           ? meta.enabled_games
           : (Array.isArray(meta.enabledGames) ? meta.enabledGames : []);
@@ -535,18 +631,27 @@
         );
         setEventGamesStatus(getEventEnabledGames(modal));
 
-        const walletUser = $("eventWalletUser");
         const walletAmount = $("eventWalletAmount");
         const walletSet = $("eventWalletSet");
         const walletStatus = $("eventWalletStatus");
         const walletComment = $("eventWalletComment");
         const walletEnabled = !!eventObj?.wallet_enabled;
-        if (walletUser) walletUser.disabled = !walletEnabled || isNew;
+        const walletModal = $("eventWalletModal");
+        if (walletModal){
+          walletModal.dataset.wallet_enabled = walletEnabled && !isNew ? "1" : "0";
+        }
+        modal.dataset.wallet_enabled = walletEnabled ? "1" : "0";
         if (walletAmount) walletAmount.disabled = !walletEnabled || isNew;
         if (walletComment) walletComment.disabled = !walletEnabled || isNew;
         if (walletSet) walletSet.disabled = !walletEnabled || isNew;
         if (walletStatus){
           walletStatus.textContent = walletEnabled ? "Ready." : "Wallet is disabled for this event.";
+        }
+        const playersNote = $("eventPlayersNote");
+        if (playersNote){
+          playersNote.textContent = (!walletEnabled || isNew)
+            ? "Save the event and enable wallets to manage balances."
+            : "Click a player to top up their wallet.";
         }
 
         const joinInfo = $("eventJoinInfo");
@@ -569,9 +674,10 @@
           const box = $("eventPlayersList");
           if (!box) return;
           const id = parseInt(String(eventId || "0"), 10) || 0;
+          const walletEnabled = $("eventModal")?.dataset?.wallet_enabled === "1";
+          const walletModalRef = $("eventWalletModal");
           if (!id){
             box.textContent = "Save the event to view registered players.";
-            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
             return;
           }
           box.textContent = "Loading players...";
@@ -581,27 +687,42 @@
               throw new Error(resp.error || "Unable to load players");
             }
             const players = resp.players || [];
+            const currency = resp.currency_name || resp.currency || resp.currencyName || walletModalRef?.dataset?.currency || "";
+            if (walletModalRef) walletModalRef.dataset.currency = currency || "";
             if (!players.length){
               box.textContent = "No players have joined yet.";
-              if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
               return;
             }
-            box.textContent = players
-              .map(p => (p && p.xiv_username ? String(p.xiv_username) : "Unknown"))
-              .join("\n");
-            const select = $("eventWalletUser");
-            if (select){
-              const options = ["<option value=\"\">Select player</option>"].concat(
-                players.map(p => {
-                  const name = String(p.xiv_username || "").trim();
-                  return name ? `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>` : "";
-                }).filter(Boolean)
-              );
-              select.innerHTML = options.join("");
+            const rows = players.map(p => {
+              const name = String(p?.xiv_username || p?.user || "").trim() || "Unknown";
+              const balanceRaw = p?.wallet_balance ?? p?.balance ?? p?.wallet ?? 0;
+              const balanceLabel = currency ? `${balanceRaw} ${currency}` : String(balanceRaw);
+              const btn = walletEnabled
+                ? `<button class="btn-ghost" type="button" data-topup="${escapeHtml(name)}" data-balance="${escapeHtml(String(balanceRaw))}" data-currency="${escapeHtml(currency)}">Top up</button>`
+                : "<span class=\"muted\" style=\"font-size:12px;\">Wallet disabled</span>";
+              return `
+                <div class="event-player-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid rgba(255,255,255,.08); border-radius:10px;">
+                  <div>
+                    <div style="font-weight:600;">${escapeHtml(name)}</div>
+                    <div class="muted" style="font-size:12px;">Wallet: ${escapeHtml(balanceLabel || "-")}</div>
+                  </div>
+                  ${btn}
+                </div>
+              `;
+            }).join("") || "<div class=\"muted\">No players have joined yet.</div>";
+            box.innerHTML = rows;
+            if (walletEnabled){
+              box.querySelectorAll("button[data-topup]").forEach(btn => {
+                btn.addEventListener("click", () => {
+                  const player = btn.dataset.topup || "";
+                  const bal = btn.dataset.balance || "-";
+                  const cur = btn.dataset.currency || currency || "";
+                  openEventWalletModal(player, bal, cur);
+                });
+              });
             }
           }catch(err){
             box.textContent = err.message || "Unable to load players.";
-            if ($("eventWalletUser")) $("eventWalletUser").innerHTML = "<option value=\"\">Select player</option>";
           }
         }
 
@@ -636,11 +757,12 @@
           id: modal.dataset.event_id || "",
           event_code: modal.dataset.event_code || "",
           title: $("eventTitle")?.value?.trim() || "",
-          venue_id: $("eventVenue")?.value || "",
-          currency_name: $("eventCurrency")?.value?.trim() || "",
+          venue_id: modal.dataset.venue_id || "",
+          currency_name: modal.dataset.currency_name || "",
           wallet_enabled: $("eventWalletEnabled")?.checked || false,
           carry_over: $("eventCarryOver")?.checked || false,
-          background_url: $("eventBackgroundUrl") ? $("eventBackgroundUrl").value.trim() : "",
+          join_wallet_amount: $("eventJoinWalletAmount")?.value || "0",
+          background_url: modal.dataset.background_url || "",
           enabled_games: getEventEnabledGames(modal),
         };
         const joinInfo = $("eventJoinInfo");
@@ -801,6 +923,9 @@ This will block new games from being created in this event, but existing games c
       }
 
       function hasScope(scope){
+        if (previewScopesActive){
+          return previewScopes.has("*") || previewScopes.has(scope);
+        }
         return authUserScopes.has("*") || authUserScopes.has(scope);
       }
 
@@ -1141,7 +1266,7 @@ This will block new games from being created in this event, but existing games c
         editPanel.classList.toggle("active", tab === "edit");
       }
 
-      function updateMediaEditPanel(){
+        function updateMediaEditPanel(){
         const count = mediaSelected.size;
         const editBtn = $("mediaTabEditBtn");
         if (editBtn){
@@ -1192,6 +1317,8 @@ This will block new games from being created in this event, but existing games c
           $("mediaEditArtist").value = currentMediaEdit.artist_id || "";
           $("mediaEditOriginType").value = currentMediaEdit.origin_type || "Artifact";
           $("mediaEditOriginLabel").value = currentMediaEdit.origin_label || "";
+          $("mediaEditType").value = currentMediaEdit.media_type || "";
+          $("mediaEditVenue").value = currentMediaEdit.venue_id ? String(currentMediaEdit.venue_id) : "";
           $("mediaEditSave").disabled = false;
           $("mediaEditClear").disabled = false;
           $("mediaEditCopy").disabled = false;
@@ -1207,9 +1334,9 @@ This will block new games from being created in this event, but existing games c
         if (artistDisplay) artistDisplay.textContent = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "Forest";
         const originText = [currentMediaEdit.origin_type || "", currentMediaEdit.origin_label || ""].filter(Boolean).join(" - ");
         if (originDisplay) originDisplay.textContent = originText || "Unlabeled";
-        if (meta){
-          meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nhidden: ${isHidden ? "yes" : "no"}`;
-        }
+          if (meta){
+            meta.textContent = `filename: ${currentMediaEdit.name || ""}\nartist_id: ${currentMediaEdit.artist_id || "none"}\norigin_type: ${currentMediaEdit.origin_type || ""}\norigin_label: ${currentMediaEdit.origin_label || ""}\nmedia_type: ${currentMediaEdit.media_type || ""}\nvenue_id: ${currentMediaEdit.venue_id || ""}\nhidden: ${isHidden ? "yes" : "no"}`;
+          }
         const preview = $("mediaEditPreview");
         if (preview){
           const img = document.createElement("img");
@@ -1226,14 +1353,49 @@ This will block new games from being created in this event, but existing games c
           preview.innerHTML = "";
           preview.appendChild(img);
         }
-        setMediaEditStatus("Edit details and save.", "ok");
-      }
+          setMediaEditStatus("Edit details and save.", "ok");
+        }
 
-      async function loadMediaLibrary(){
-        const grid = $("mediaLibraryGrid");
-        if (!grid) return;
-        if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
-          setMediaLibraryStatus("Media access requires permission.", "err");
+        let mediaVenueCache = [];
+        async function ensureMediaVenueOptions(){
+          if (!hasScope("admin:web")) return;
+          if (!mediaVenueCache.length){
+            try{
+              const resp = await jsonFetch("/admin/venues", {method:"GET"});
+              mediaVenueCache = resp.venues || [];
+            }catch(err){
+              mediaVenueCache = [];
+            }
+          }
+          populateMediaVenueSelects(mediaVenueCache);
+        }
+
+        function populateMediaVenueSelects(venues){
+          const selects = ["mediaFilterVenue", "mediaUploadVenue", "mediaEditVenue"];
+          selects.forEach((id) => {
+            const el = $(id);
+            if (!el) return;
+            const current = el.value || "";
+            const opts = [`<option value=\"\">All venues</option>`]
+              .concat((venues || []).map(v => {
+                const vid = v.id ?? v.venue_id ?? "";
+                const name = v.name || `Venue ${vid}`;
+                return `<option value=\"${escapeHtml(String(vid))}\">${escapeHtml(name)}</option>`;
+              }));
+            el.innerHTML = opts.join("");
+            if (current && Array.from(el.options).some(o => o.value === current)){
+              el.value = current;
+            }else if (!current && adminVenueId){
+              el.value = String(adminVenueId);
+            }
+          });
+        }
+
+        async function loadMediaLibrary(){
+          const grid = $("mediaLibraryGrid");
+          if (!grid) return;
+          if (!(hasScope("bingo:admin") || hasScope("tarot:admin") || hasScope("admin:web"))){
+            setMediaLibraryStatus("Media access requires permission.", "err");
           grid.innerHTML = "";
           return;
         }
@@ -1245,7 +1407,15 @@ This will block new games from being created in this event, but existing games c
           grid.appendChild(skel);
         }
         try{
-          const res = await apiFetch("/api/media/list", {method: "GET"}, true);
+          const typeFilter = ($("mediaFilterType")?.value || "").trim();
+          const venueFilter = ($("mediaFilterVenue")?.value || "").trim();
+          const originFilter = ($("mediaFilterOriginType")?.value || "").trim();
+          const params = new URLSearchParams();
+          if (typeFilter) params.set("media_type", typeFilter);
+          if (venueFilter) params.set("venue_id", venueFilter);
+          if (originFilter) params.set("origin_type", originFilter);
+          const url = params.toString() ? `/api/media/list?${params.toString()}` : "/api/media/list";
+          const res = await apiFetch(url, {method: "GET"}, true);
           if (res.status === 401){
             handleUnauthorized();
             throw new Error("Unauthorized");
@@ -1258,12 +1428,12 @@ This will block new games from being created in this event, but existing games c
           }
           const data = await res.json();
           if (!data.ok) throw new Error(data.error || "Failed");
-          mediaLibraryItems = data.items || [];
-          mediaSelected.clear();
-          mediaLastIndex = null;
-          currentMediaEdit = null;
-            applyMediaFilters();
-            showToast("Library loaded.", "ok");
+            mediaLibraryItems = data.items || [];
+            mediaSelected.clear();
+            mediaLastIndex = null;
+            currentMediaEdit = null;
+              applyMediaFilters();
+              showToast("Library loaded.", "ok");
         }catch(err){
           setMediaLibraryStatus(err.message, "err");
         }
@@ -1273,63 +1443,84 @@ This will block new games from being created in this event, but existing games c
         return item.name || item.filename || item.url || "";
       }
 
-        function applyMediaFilters(){
-          const searchEl = $("mediaToolbarSearch");
-          const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
-          const artistEl = $("mediaFilterArtist");
-          const originEl = $("mediaFilterOriginType");
-          const labelEl = $("mediaFilterLabel");
-          const artistFilter = (artistEl ? artistEl.value : "").trim();
-          const originFilter = (originEl ? originEl.value : "").trim();
-          const labelFilter = (labelEl ? labelEl.value : "any").trim();
-          const sortEl = $("mediaToolbarSort");
-          const sortMode = (sortEl ? sortEl.value : "new").trim();
-          let items = mediaLibraryItems.slice();
-          if (searchRaw){
-            items = items.filter(item => {
-              const hay = [
-                item.title,
-                item.artist_name,
-                item.artist_id,
-              item.origin_label,
-              item.origin_type,
-              item.name
-            ].filter(Boolean).join(" ").toLowerCase();
-            return hay.includes(searchRaw);
-          });
-        }
-        if (artistFilter){
-          items = items.filter(item => (item.artist_id || "") === artistFilter);
-        }
-        if (originFilter){
-          items = items.filter(item => (item.origin_type || "") === originFilter);
-        }
-        if (labelFilter === "has"){
-          items = items.filter(item => (item.origin_label || "").trim());
-        }else if (labelFilter === "none"){
-          items = items.filter(item => !(item.origin_label || "").trim());
-        }
-        if (sortMode === "old"){
-          items.reverse();
-        }else if (sortMode === "title"){
-          items.sort((a, b) => (a.title || a.name || "").localeCompare(b.title || b.name || ""));
-        }else if (sortMode === "artist"){
-          items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
-        }
-          mediaVisibleItems = items;
-          renderMediaGrid(items);
-          updateMediaFilterSummary({searchRaw, artistFilter, originFilter, labelFilter});
-          updateMediaLibraryStatus(items.length, mediaLibraryItems.length, {searchRaw, artistFilter, originFilter, labelFilter});
-        }
+          function applyMediaFilters(){
+            const searchEl = $("mediaToolbarSearch");
+            const searchRaw = (searchEl ? searchEl.value : "").trim().toLowerCase();
+            const artistEl = $("mediaFilterArtist");
+            const typeEl = $("mediaFilterType");
+            const originEl = $("mediaFilterOriginType");
+            const venueEl = $("mediaFilterVenue");
+            const labelEl = $("mediaFilterLabel");
+            const artistFilter = (artistEl ? artistEl.value : "").trim();
+            const typeFilter = (typeEl ? typeEl.value : "").trim();
+            const originFilter = (originEl ? originEl.value : "").trim();
+            const venueFilter = (venueEl ? venueEl.value : "").trim();
+            const labelFilter = (labelEl ? labelEl.value : "any").trim();
+            const sortEl = $("mediaToolbarSort");
+            const sortMode = (sortEl ? sortEl.value : "new").trim();
+            let items = mediaLibraryItems.slice();
+            if (searchRaw){
+              items = items.filter(item => {
+                const hay = [
+                  item.title,
+                  item.artist_name,
+                  item.artist_id,
+                item.origin_label,
+                item.origin_type,
+                item.media_type,
+                item.venue_id,
+                item.name
+              ].filter(Boolean).join(" ").toLowerCase();
+              return hay.includes(searchRaw);
+            });
+          }
+          if (artistFilter){
+            items = items.filter(item => (item.artist_id || "") === artistFilter);
+          }
+          if (typeFilter){
+            items = items.filter(item => (item.media_type || "") === typeFilter);
+          }
+          if (originFilter){
+            items = items.filter(item => (item.origin_type || "") === originFilter);
+          }
+          if (venueFilter){
+            items = items.filter(item => String(item.venue_id || "") === String(venueFilter));
+          }
+          if (labelFilter === "has"){
+            items = items.filter(item => (item.origin_label || "").trim());
+          }else if (labelFilter === "none"){
+            items = items.filter(item => !(item.origin_label || "").trim());
+          }
+          if (sortMode === "old"){
+            items.reverse();
+          }else if (sortMode === "title"){
+            items.sort((a, b) => (a.title || a.name || "").localeCompare(b.title || b.name || ""));
+          }else if (sortMode === "artist"){
+            items.sort((a, b) => (a.artist_name || a.artist_id || "").localeCompare(b.artist_name || b.artist_id || ""));
+          }else if (sortMode === "gallery"){
+            items.sort((a, b) => {
+              const ga = (a.origin_label || "").toLowerCase();
+              const gb = (b.origin_label || "").toLowerCase();
+              if (ga !== gb) return ga.localeCompare(gb);
+              return (a.title || a.name || "").localeCompare(b.title || b.name || "");
+            });
+          }
+            mediaVisibleItems = items;
+            renderMediaGrid(items);
+            updateMediaFilterSummary({searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter});
+            updateMediaLibraryStatus(items.length, mediaLibraryItems.length, {searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter});
+          }
 
-        function countActiveMediaFilters({searchRaw, artistFilter, originFilter, labelFilter}){
-          let count = 0;
-          if (searchRaw) count += 1;
-          if (artistFilter) count += 1;
-          if (originFilter) count += 1;
-          if (labelFilter === "has" || labelFilter === "none") count += 1;
-          return count;
-        }
+          function countActiveMediaFilters({searchRaw, artistFilter, typeFilter, originFilter, venueFilter, labelFilter}){
+            let count = 0;
+            if (searchRaw) count += 1;
+            if (artistFilter) count += 1;
+            if (typeFilter) count += 1;
+            if (originFilter) count += 1;
+            if (venueFilter) count += 1;
+            if (labelFilter === "has" || labelFilter === "none") count += 1;
+            return count;
+          }
 
         function updateMediaFilterSummary(ctx){
           const summary = $("mediaFiltersSummary");
@@ -1827,7 +2018,7 @@ This will block new games from being created in this event, but existing games c
 
         const saved = getSavedPanel();
         const blocked =
-          (!canBingo && (saved === "bingo" || saved === "media")) ||
+          (!canBingo && (saved === "bingo" || saved === "bingoSessions" || saved === "media")) ||
           (!canAdmin && (saved === "contests")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
           (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots"));
@@ -1861,6 +2052,48 @@ This will block new games from being created in this event, but existing games c
           select.appendChild(opt);
         });
         updateAuthTempScopesPreview(select.value || "");
+      }
+
+      function renderAuthPreviewRoles(){
+        const select = $("authPreviewRole");
+        if (!select) return;
+        const keys = Object.keys(authRoleScopes || {});
+        select.innerHTML = "";
+        if (!keys.length){
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "No role scopes configured";
+          select.appendChild(opt);
+          updateAuthPreviewScopesPreview("");
+          return;
+        }
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "Select access profile";
+        select.appendChild(empty);
+        keys.forEach((id) => {
+          const role = (authRolesCache || []).find(r => String(r.id) === String(id));
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = role ? `${role.name} (${id})` : id;
+          select.appendChild(opt);
+        });
+        updateAuthPreviewScopesPreview(select.value || "");
+      }
+
+      function updateAuthPreviewScopesPreview(roleId){
+        const preview = $("authPreviewScopesPreview");
+        if (!preview) return;
+        const scopes = (authRoleScopes && roleId) ? (authRoleScopes[roleId] || []) : [];
+        if (!roleId){
+          preview.textContent = "Scopes: none";
+          return;
+        }
+        preview.textContent = scopes.length ? `Scopes: ${scopes.join(", ")}` : "Scopes: (from role profile)";
+        const scopesEl = $("authPreviewScopes");
+        if (scopesEl && !scopesEl.value.trim() && scopes.length){
+          scopesEl.value = scopes.join(", ");
+        }
       }
 
       function updateAuthTempScopesPreview(roleId){
@@ -1942,6 +2175,7 @@ This will block new games from being created in this event, but existing games c
           authRolesCache = roles;
           renderAuthRolesList(roles);
           renderAuthTempRoles();
+          renderAuthPreviewRoles();
           setAuthRolesStatus("Ready.", "ok");
         }catch(err){
           setAuthRolesStatus(err.message, "err");
@@ -2185,9 +2419,11 @@ This will block new games from being created in this event, but existing games c
 
       function setBingoStatus(msg, kind){
         const el = $("bingoStatus");
-        if (!el) return;
-        el.textContent = msg;
-        el.className = "status" + (kind ? " " + kind : "");
+        if (el){
+          el.textContent = msg;
+          el.className = "status" + (kind ? " " + kind : "");
+        }
+        setStatus(msg, kind);
       }
 
       let bingoHistory = [];
@@ -2356,15 +2592,43 @@ This will block new games from being created in this event, but existing games c
           handleUnauthorized();
           throw new Error("Unauthorized");
         }
-        const data = await res.json().catch(() => ({}));
+        const contentType = (res.headers.get("content-type") || "").toLowerCase();
+        const text = await res.text();
+        let data = {};
+        if (contentType.includes("application/json")){
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            data = {};
+          }
+        }else{
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            data = {};
+          }
+        }
         if (!res.ok){
-          throw new Error(data.error || "Request failed");
+          throw new Error((data && data.error) || "Request failed");
+        }
+        if (!contentType.includes("application/json") && !text.trim().startsWith("{")){
+          throw new Error("Unexpected response from API. Check gateway/proxy routing.");
         }
         return data;
       }
 
       function handleUnauthorized(){
-        clearAuthSession("Unauthorized. Please log in again.", "err");
+        // Do not wipe stored tokens; just surface the error.
+        const msg = "Unauthorized. Check API key or scopes.";
+        if (loginStatusEl){
+          loginStatusEl.textContent = msg;
+          loginStatusEl.className = "status err";
+        }
+        if (statusEl){
+          statusEl.textContent = msg;
+          statusEl.className = "status-bar status err";
+        }
+        showToast(msg, "err");
       }
 
       function clearAuthSession(message, kind){
@@ -2417,6 +2681,7 @@ This will block new games from being created in this event, but existing games c
         const brandUserName = $("brandUserName");
         const brandUserIcon = $("brandUserIcon");
         const brandUserFallback = $("brandUserFallback");
+        const brandUserVenue = $("brandUserVenue");
         if (!brandUser || !brandUserName || !brandUserIcon || !brandUserFallback){
           return;
         }
@@ -2454,12 +2719,28 @@ This will block new games from being created in this event, but existing games c
             brandUserName.textContent = "";
             brandUser.classList.add("hidden");
           }
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
+          }
+          if (userId){
+            await ensureAdminVenue(data.venue || null);
+          }else{
+            setBrandVenue(null);
+          }
         }catch(err){
           brandUserName.textContent = "";
           brandUserIcon.src = "";
           brandUserIcon.classList.add("hidden");
           brandUserFallback.classList.remove("hidden");
           brandUser.classList.add("hidden");
+          if (brandUserVenue){
+            brandUserVenue.textContent = "";
+          }
+          adminVenueId = null;
+          adminVenueName = "";
+          adminVenueDeckId = null;
+          adminVenueCurrency = null;
+          adminVenueGameBackgrounds = {};
           authUserScopes = new Set();
           authUserIsElfmin = false;
           applyElfminVisibility();
@@ -2469,7 +2750,65 @@ This will block new games from being created in this event, but existing games c
             createdBy.value = "";
           }
           updateBingoCreatePayload();
+          clearAuthSession("Auth failed. Check your API key.", "err");
         }
+      }
+
+      function setBrandVenue(membership){
+        const brandUserVenue = $("brandUserVenue");
+        const name = membership ? (membership.name || membership.venue_name || "") : "";
+        if (brandUserVenue){
+          brandUserVenue.textContent = name || "";
+        }
+        adminVenueId = membership && membership.venue_id ? Number(membership.venue_id) : null;
+        adminVenueName = name || "";
+        adminVenueDeckId = membership && membership.deck_id ? String(membership.deck_id) : null;
+        adminVenueCurrency = membership && membership.currency_name ? String(membership.currency_name) : null;
+        adminVenueGameBackgrounds = (membership && membership.metadata && membership.metadata.game_backgrounds) ? membership.metadata.game_backgrounds : {};
+      }
+
+      async function loadAdminVenues(){
+        const select = $("adminVenueSelect");
+        if (!select) return [];
+        select.innerHTML = `<option value="">Loading...</option>`;
+        try{
+          const resp = await jsonFetch("/admin/venues/list", {method:"GET"}, true);
+          const venues = resp.venues || [];
+          select.innerHTML = `<option value="">Select a venue</option>`;
+          venues.forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = String(v.id ?? v.venue_id ?? "");
+            opt.textContent = v.name || `Venue ${opt.value}`;
+            select.appendChild(opt);
+          });
+          return venues;
+        }catch(err){
+          select.innerHTML = `<option value="">No venues available</option>`;
+          return [];
+        }
+      }
+
+      async function ensureAdminVenue(initialMembership){
+        const modal = $("adminVenueModal");
+        if (!modal) return;
+        let membership = initialMembership || null;
+        if (!membership){
+          try{
+            const resp = await jsonFetch("/admin/venue/me", {method:"GET"}, true);
+            membership = resp.membership || null;
+          }catch(err){
+            membership = null;
+          }
+        }
+        if (membership && membership.venue_id){
+          setBrandVenue(membership);
+          modal.classList.remove("show");
+          return;
+        }
+        await loadAdminVenues();
+        setBrandVenue(null);
+        modal.classList.add("show");
+        setStatusText("adminVenueStatus", "Pick a venue to continue.", "");
       }
 
       async function initAuthenticatedSession(){
@@ -2491,6 +2830,7 @@ This will block new games from being created in this event, but existing games c
         const allowedPanels = new Set(["dashboard"]);
         if (canBingo){
           allowedPanels.add("bingo");
+          allowedPanels.add("bingoSessions");
           allowedPanels.add("media");
         }
         if (canAdmin){
@@ -2505,12 +2845,15 @@ This will block new games from being created in this event, but existing games c
           allowedPanels.add("craps");
           allowedPanels.add("slots");
         }
-        let nextPanel = saved || (canBingo ? "bingo" : "dashboard");
+        let nextPanel = saved || (canBingo ? "bingoSessions" : "dashboard");
+        if (nextPanel === "bingo" && !getGameId()){
+          nextPanel = "bingoSessions";
+        }
         if (!allowedPanels.has(nextPanel)){
           nextPanel = "dashboard";
         }
         if (!getSeenDashboard()){
-          showPanelOnce("dashboard");
+          showPanelOnce(canBingo ? "bingoSessions" : "dashboard");
           setSeenDashboard();
         } else {
           showPanel(nextPanel);
@@ -2728,6 +3071,7 @@ This will block new games from being created in this event, but existing games c
 
       function renderClaims(game){
         const el = $("bClaims");
+        if (!el) return;
         const claims = (game && Array.isArray(game.claims)) ? game.claims : [];
         if (!claims.length){
           el.innerHTML = "<div class=\"muted\">No claims yet.</div>";
@@ -2929,36 +3273,16 @@ This will block new games from being created in this event, but existing games c
         el.innerHTML = "";
         games.forEach(g => {
           const item = document.createElement("div");
-          item.style.padding = "8px 6px";
-          item.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
           const title = g.title || "Bingo";
-          const created = g.created_at ? new Date(g.created_at * 1000).toLocaleString() : "Unknown date";
-          const status = g.active ? "active" : "ended";
-          const deleteBtn = !g.active ? `<button data-delete="${g.game_id}" class="btn-ghost" style="max-width:90px">Delete</button>` : "";
-          item.innerHTML = `\n            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">\n              <div><strong>${title}</strong> - ${created} <span class="muted">(${status})</span></div>\n              ${deleteBtn}\n            </div>`;
+          item.innerHTML = `<strong>${title}</strong>`;
           item.style.cursor = "pointer";
           item.onclick = () => {
             setGameId(g.game_id || "");
+            showPanel("bingo");
             refreshBingo();
             loadOwnersForGame();
             loadGamesMenu();
           };
-          const del = item.querySelector("button[data-delete]");
-          if (del){
-            del.addEventListener("click", async (ev) => {
-              ev.stopPropagation();
-              if (!confirm("Delete this game? This cannot be undone.")){
-                return;
-              }
-              try{
-                await jsonFetch("/bingo/" + encodeURIComponent(g.game_id), {method:"DELETE"});
-                setStatus("Game deleted.", "ok");
-                await loadGamesMenu();
-              }catch(err){
-                setStatus(err.message, "err");
-              }
-            });
-          }
           el.appendChild(item);
         });
       }
@@ -3067,7 +3391,7 @@ This will block new games from being created in this event, but existing games c
           el.classList.toggle(name, state);
         }
         toggleClass("menuDashboard", "active", which === "dashboard");
-        toggleClass("menuBingo", "active", which === "bingo");
+        toggleClass("menuBingo", "active", which === "bingo" || which === "bingoSessions");
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
@@ -3080,6 +3404,7 @@ This will block new games from being created in this event, but existing games c
         // Venues are accessed via Dashboard buttons for now.
         toggleClass("dashboardPanel", "hidden", which !== "dashboard");
         toggleClass("bingoPanel", "hidden", which !== "bingo");
+        toggleClass("bingoSessionsPanel", "hidden", which !== "bingoSessions");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
         toggleClass("cardgameSessionsPanel", "hidden", which !== "cardgameSessions");
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
@@ -3090,6 +3415,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
         toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
+        toggleClass("iframePanel", "hidden", which !== "iframe");
         if (which === "dashboard"){
           renderDashboardChangelog();
           loadDashboardStats();
@@ -3098,11 +3424,19 @@ This will block new games from being created in this event, but existing games c
           loadVenuesPanel(true);
         } else if (which === "media"){
           setMediaTab("upload");
-          loadMediaLibrary();
+          ensureMediaVenueOptions().then(() => loadMediaLibrary());
           loadTarotArtists();
           updateMediaUploadDropDisplay(mediaUploadFile);
           updateMediaUploadState();
         }else if (which === "cardgameSessions"){
+          const defaults = getCardgameDefaults();
+          if (defaults){
+            setCardgameDefaults(defaults);
+          }else{
+            if ($("cgGameSelect") && !$("cgGameSelect").value) $("cgGameSelect").value = "blackjack";
+            if ($("cgPot") && !$("cgPot").value) $("cgPot").value = 0;
+            if ($("cgCurrency") && !$("cgCurrency").value) $("cgCurrency").value = "gil";
+          }
           loadCardgameDecks();
           loadCardgameSessions();
         }else if (which === "gamesList"){
@@ -3112,6 +3446,15 @@ This will block new games from being created in this event, but existing games c
           loadEventsVenues();
           loadEventsList(true);
         }
+      }
+
+      // Load URL in iframe panel
+      function loadIframe(url){
+        const iframe = $("iframeContent");
+        if (iframe){
+          iframe.src = url;
+        }
+        showPanel("iframe");
       }
 
       function getSavedPanel(){
@@ -3228,7 +3571,20 @@ This will block new games from being created in this event, but existing games c
       }
 
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
-      $("menuBingo").addEventListener("click", () => showPanel("bingo"));
+      $("menuBingo").addEventListener("click", () => {
+        showPanel("bingoSessions");
+        loadGamesMenu();
+      });
+      
+      // XIVAuth Users - load in iframe
+      const dashboardXivAuthBtn = $("dashboardXivAuthLink");
+      if (dashboardXivAuthBtn){
+        dashboardXivAuthBtn.addEventListener("click", () => {
+          if (!ensureScope("admin:web", "Admin web access required.")) return;
+          loadIframe("/user-area/manage");
+        });
+      }
+      
       const menuGamesList = $("menuGamesList");
       if (menuGamesList){
         menuGamesList.addEventListener("click", () => {
@@ -3243,10 +3599,11 @@ This will block new games from being created in this event, but existing games c
           showPanel("events");
         });
       }
-      $("menuBingoRefresh").addEventListener("click", (ev) => {
+      on("menuBingoRefresh", "click", (ev) => {
         ev.stopPropagation();
         loadGamesMenu();
       });
+      on("bSessionsRefresh", "click", () => loadGamesMenu());
       $("bChannelRefresh").addEventListener("click", () => loadDiscordChannels());
       $("bChannelSelect").addEventListener("change", (ev) => {
         const pick = ev.target.value || "";
@@ -3263,8 +3620,15 @@ This will block new games from being created in this event, but existing games c
         $("bChannelSelect").value = "";
         $("bAnnounceCalls").checked = false;
         $("bSeedPot").value = "0";
-        bingoCreateBgUrl = "";
-        $("bCreateBgStatus").textContent = "No background selected.";
+        if (adminVenueCurrency && $("bCurrency")){
+          $("bCurrency").value = adminVenueCurrency;
+        }
+        const venueBingoBg = adminVenueGameBackgrounds ? (adminVenueGameBackgrounds.bingo || "") : "";
+        bingoCreateBgUrl = venueBingoBg || "";
+        $("bCreateBgStatus").textContent = bingoCreateBgUrl
+          ? "Venue background applied."
+          : "No background selected.";
+        loadEventOptions("bCreateEventSelect");
         loadDiscordChannels();
         updateBingoCreatePayload();
       });
@@ -3312,7 +3676,7 @@ This will block new games from being created in this event, but existing games c
       bindMenuKey("menuContests");
       bindMenuKey("menuMedia");
       bindMenuKey("menuGamesList");
-      $("bAnnounceToggle").addEventListener("change", async (ev) => {
+      on("bAnnounceToggle", "change", async (ev) => {
         const gid = getGameId();
         if (!gid){
           setBingoStatus("Select a game first.", "err");
@@ -3431,10 +3795,41 @@ This will block new games from being created in this event, but existing games c
       on("systemXivSave", "click", () => saveSystemConfig("xivauth"));
       on("systemOpenAISave", "click", () => saveSystemConfig("openai"));
       on("dashboardStatsRefresh", "click", () => loadDashboardStats(true));
-      on("dashboardLogsBoot", "click", () => loadDashboardLogs("boot", true));
-      on("dashboardLogsAuth", "click", () => loadDashboardLogs("auth", true));
-      on("dashboardLogsUpload", "click", () => loadDashboardLogs("upload", true));
+      on("dashboardLogsClose", "click", () => $("dashboardLogsModal")?.classList.remove("show"));
+      on("dashboardLogsModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "dashboardLogsModal"){
+          ev.currentTarget.classList.remove("show");
+        }
+      });
+      on("dashboardLogsBoot", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: boot";
+        $("dashboardLogsModal")?.classList.add("show");
+        loadDashboardLogs("boot", true);
+      });
+      on("dashboardLogsAuth", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: auth";
+        $("dashboardLogsModal")?.classList.add("show");
+        loadDashboardLogs("auth", true);
+      });
+      on("dashboardLogsUpload", "click", () => {
+        $("dashboardLogsCurrent").textContent = "Current: upload";
+        $("dashboardLogsModal")?.classList.add("show");
+        loadDashboardLogs("upload", true);
+      });
       on("dashboardLogsRefresh", "click", () => loadDashboardLogs(dashboardLogsKind || "boot", true));
+      on("pluginRepoCopy", "click", async () => {
+        const url = ($("pluginRepoUrl")?.textContent || "").trim();
+        if (!url){
+          showToast("No link to copy.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(url);
+          showToast("Copied link.", "ok");
+        }catch (err){
+          showToast("Copy failed.", "err");
+        }
+      });
       // Venue management (dashboard)
       let venueCache = [];
       let venueMediaCache = [];
@@ -3525,16 +3920,28 @@ This will block new games from being created in this event, but existing games c
       }
 
       function renderVenueBackgroundSelect(){
-        const sel = $("venueBackground");
-        if (!sel) return;
-        const cur = sel.value || "";
-        const opts = [`<option value="">(default)</option>`]
-          .concat((venueMediaCache || []).map(it => {
-            const label = it.title || it.name || it.filename || "Image";
-            return `<option value="${escapeHtml(it.url || "")}">${escapeHtml(label)}</option>`;
-          }));
-        sel.innerHTML = opts.join("");
-        if (cur) sel.value = cur;
+        const ids = [
+          "venueBackground",
+          "venueBackgroundSlots",
+          "venueBackgroundBlackjack",
+          "venueBackgroundPoker",
+          "venueBackgroundHighlow",
+          "venueBackgroundCrapslite",
+          "venueBackgroundTarot"
+        ];
+        ids.forEach((id) => {
+          const sel = $(id);
+          if (!sel) return;
+          const cur = sel.value || "";
+          const defaultLabel = id === "venueBackground" ? "(default)" : "(use venue default)";
+          const opts = [`<option value="">${defaultLabel}</option>`]
+            .concat((venueMediaCache || []).map(it => {
+              const label = it.title || it.name || it.filename || "Image";
+              return `<option value="${escapeHtml(it.url || "")}">${escapeHtml(label)}</option>`;
+            }));
+          sel.innerHTML = opts.join("");
+          if (cur) sel.value = cur;
+        });
       }
 
       function renderVenueDeckSelect(){
@@ -3557,10 +3964,16 @@ This will block new games from being created in this event, but existing games c
         venueMediaCache = [];
         venueDeckCache = [];
         try{
-          const res = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          const res = await fetch("/api/media/list?media_type=background", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
           if (res.status === 401){ handleUnauthorized(); throw new Error("Unauthorized"); }
           const data = await res.json();
           if (data.ok) venueMediaCache = data.items || [];
+          if (data.ok && (!venueMediaCache || !venueMediaCache.length)){
+            const fallback = await fetch("/api/media/list", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+            if (fallback.status === 401){ handleUnauthorized(); throw new Error("Unauthorized"); }
+            const fallbackData = await fallback.json();
+            if (fallbackData.ok) venueMediaCache = fallbackData.items || [];
+          }
         }catch(_e){ venueMediaCache = []; }
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
@@ -3587,6 +4000,13 @@ This will block new games from being created in this event, but existing games c
         $("venueMinBet").value = String(v?.minimal_spend ?? 0);
         $("venueBackground").value = v?.background_image || "";
         $("venueDeck").value = v?.deck_id || "";
+        const gameBackgrounds = (v?.metadata && v.metadata.game_backgrounds) ? v.metadata.game_backgrounds : {};
+        $("venueBackgroundSlots").value = gameBackgrounds?.slots || "";
+        $("venueBackgroundBlackjack").value = gameBackgrounds?.blackjack || "";
+        $("venueBackgroundPoker").value = gameBackgrounds?.poker || "";
+        $("venueBackgroundHighlow").value = gameBackgrounds?.highlow || "";
+        $("venueBackgroundCrapslite").value = gameBackgrounds?.crapslite || "";
+        $("venueBackgroundTarot").value = gameBackgrounds?.tarot || "";
         const ids = (v?.metadata && v.metadata.admin_discord_ids) ? v.metadata.admin_discord_ids : "";
         if (Array.isArray(ids)){
           $("venueAdmins").value = ids.join(", ");
@@ -3696,6 +4116,14 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         const currency = $("venueCurrency").value.trim();
         const bg = $("venueBackground").value || "";
         const deck = $("venueDeck").value || "";
+        const game_backgrounds = {
+          slots: $("venueBackgroundSlots").value || "",
+          blackjack: $("venueBackgroundBlackjack").value || "",
+          poker: $("venueBackgroundPoker").value || "",
+          highlow: $("venueBackgroundHighlow").value || "",
+          crapslite: $("venueBackgroundCrapslite").value || "",
+          tarot: $("venueBackgroundTarot").value || "",
+        };
         if (!currency){ setVenueStatus("Currency is required.", "err"); return; }
         if (!bg){ setVenueStatus("Background must be selected.", "err"); return; }
         if (!deck){ setVenueStatus("Card deck must be selected.", "err"); return; }
@@ -3706,6 +4134,7 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           background_image: bg || null,
           deck_id: deck || null,
           admin_discord_ids: $("venueAdmins").value || null,
+          game_backgrounds: game_backgrounds,
         };
         setVenueStatus("Saving...", "");
         try{
@@ -3841,19 +4270,6 @@ Games and events will keep their history, but this venue will be removed.`)) ret
       });
 
       // Event background helpers (uses media library selection)
-      on("eventUseSelectedMedia", "click", () => {
-        const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
-        if (!pick){
-          setStatusText("eventJoinInfo", "Select a media item first.", "err");
-          return;
-        }
-        const el = $("eventBackgroundUrl");
-        if (!el) return;
-        el.value = pick;
-        el.dataset.artistId = currentMediaEdit.artist_id || "";
-        el.dataset.artistName = currentMediaEdit.artist_name || currentMediaEdit.artist_id || "";
-        setEventBackgroundStatus(pick);
-      });
       on("eventOpenMedia", "click", () => {
         librarySelectHandler = (item) => {
           const pick = item && (item.url || item.fallback_url || "");
@@ -3861,11 +4277,11 @@ Games and events will keep their history, but this venue will be removed.`)) ret
             setStatusText("eventJoinInfo", "Select a media item first.", "err");
             return;
           }
-          const el = $("eventBackgroundUrl");
-          if (!el) return;
-          el.value = pick;
-          el.dataset.artistId = item.artist_id || "";
-          el.dataset.artistName = item.artist_name || item.artist_id || "";
+          const modal = $("eventModal");
+          if (!modal) return;
+          modal.dataset.background_url = pick;
+          modal.dataset.artist_id = item.artist_id || "";
+          modal.dataset.artist_name = item.artist_name || item.artist_id || "";
           setEventBackgroundStatus(pick);
           showLibraryModal(false);
         };
@@ -3899,15 +4315,29 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         setEventGamesStatus(enabled);
         showEventGamesModal(false);
       });
+      ["eventWalletModalClose", "eventWalletModalCancel"].forEach(id => {
+        on(id, "click", () => showEventWalletModal(false));
+      });
+      on("eventWalletModal", "click", (ev) => {
+        if (ev.target && ev.target.id === "eventWalletModal"){
+          showEventWalletModal(false);
+        }
+      });
       on("eventWalletSet", "click", async () => {
         const modal = $("eventModal");
         const status = $("eventWalletStatus");
-        const eventId = parseInt(modal?.dataset?.event_id || "0", 10) || 0;
-        const user = $("eventWalletUser")?.value || "";
+        const walletModal = $("eventWalletModal");
+        const eventId = parseInt(walletModal?.dataset?.event_id || modal?.dataset?.event_id || "0", 10) || 0;
+        const user = walletModal?.dataset?.player || "";
+        const walletEnabled = walletModal?.dataset?.wallet_enabled === "1" || modal?.dataset?.wallet_enabled === "1";
         const amountRaw = $("eventWalletAmount")?.value || "0";
         const comment = $("eventWalletComment")?.value || "";
         const hostName = $("brandUserName")?.textContent?.trim() || "";
         const amount = parseInt(amountRaw, 10);
+        if (!walletEnabled){
+          if (status) status.textContent = "Wallet is disabled for this event.";
+          return;
+        }
         if (!eventId){
           if (status) status.textContent = "Save the event first.";
           return;
@@ -3942,22 +4372,13 @@ Games and events will keep their history, but this venue will be removed.`)) ret
           if (status) status.textContent = `Wallet balance is now ${resp.balance}.`;
           const commentEl = $("eventWalletComment");
           if (commentEl) commentEl.value = "";
+          showEventWalletModal(false);
+          await loadEventPlayers(eventId);
+          await loadEventSummary(eventId);
         }catch(err){
           if (status) status.textContent = err.message || "Unable to set wallet balance.";
         }
       });
-
-      on("eventVenue", "change", () => {
-        const currencyEl = $("eventCurrency");
-        if (!currencyEl) return;
-        if (currencyEl.value && currencyEl.value.trim()) return;
-        const vid = parseInt($("eventVenue")?.value || "0", 10) || 0;
-        const v = (eventsVenues || []).find(x => Number(x.id) === vid) || null;
-        if (v && v.currency_name){
-          currencyEl.value = String(v.currency_name || "");
-        }
-      });
-
 
       on("dashboardChangelogToggle", "click", () => {
         const modal = $("changelogModal");
@@ -4145,14 +4566,16 @@ Games and events will keep their history, but this venue will be removed.`)) ret
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "tarot");
+          const visibleDecks = filtered.length ? filtered : decks;
           select.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
           });
-          if (!decks.length){
+          if (!visibleDecks.length){
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "No decks found.";
@@ -5245,7 +5668,7 @@ function getOwnerClaimStatus(ownerName){
         authTempCopy.addEventListener("click", async () => {
           const urlInput = $("authTempUrl");
           const url = urlInput ? urlInput.value.trim() : "";
-        if (!url){
+          if (!url){
           setAuthTempStatus("No link to copy.", "err");
           return;
         }
@@ -5257,6 +5680,51 @@ function getOwnerClaimStatus(ownerName){
         }
         });
       }
+      on("adminVenueAssign", "click", async () => {
+        const select = $("adminVenueSelect");
+        const id = parseInt(select?.value || "0", 10) || 0;
+        if (!id){
+          setStatusText("adminVenueStatus", "Pick a venue first.", "err");
+          return;
+        }
+        setStatusText("adminVenueStatus", "Saving...", "");
+        try{
+          const resp = await jsonFetch("/admin/venue/assign", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({venue_id: id})
+          }, true);
+          if (resp.membership){
+            setBrandVenue(resp.membership);
+          }
+          $("adminVenueModal")?.classList.remove("show");
+          setStatusText("adminVenueStatus", "Assigned.", "ok");
+        }catch(err){
+          setStatusText("adminVenueStatus", err.message || "Failed to assign venue.", "err");
+        }
+      });
+      on("adminVenueCreate", "click", async () => {
+        const name = ($("adminVenueCreateName")?.value || "").trim();
+        if (!name){
+          setStatusText("adminVenueStatus", "Enter a venue name.", "err");
+          return;
+        }
+        setStatusText("adminVenueStatus", "Creating...", "");
+        try{
+          const resp = await jsonFetch("/admin/venues/create", {
+            method:"POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({name})
+          }, true);
+          if (resp.membership){
+            setBrandVenue(resp.membership);
+          }
+          $("adminVenueModal")?.classList.remove("show");
+          setStatusText("adminVenueStatus", "Created.", "ok");
+        }catch(err){
+          setStatusText("adminVenueStatus", err.message || "Failed to create venue.", "err");
+        }
+      });
       $("authRolesList").addEventListener("change", (ev) => {
         const input = ev.target;
         if (!input || input.tagName !== "INPUT") return;
@@ -5295,6 +5763,60 @@ function getOwnerClaimStatus(ownerName){
           setAuthRolesStatus(err.message, "err");
         }
       });
+      // Role preview interactions
+      const authPreviewRole = $("authPreviewRole");
+      if (authPreviewRole){
+        authPreviewRole.addEventListener("change", (ev) => {
+          updateAuthPreviewScopesPreview(ev.target.value || "");
+        });
+      }
+      const authPreviewStart = $("authPreviewStart");
+      if (authPreviewStart){
+        authPreviewStart.addEventListener("click", () => {
+          const roleEl = $("authPreviewRole");
+          const scopesEl = $("authPreviewScopes");
+          if (!roleEl || !scopesEl){
+            $("authPreviewStatus").textContent = "Preview UI not loaded.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          const roleId = (roleEl.value || "").trim();
+          const scopesRaw = (scopesEl.value || "").trim();
+          let scopes = scopesRaw ? scopesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+          if (!scopes.length && roleId && authRoleScopes && authRoleScopes[roleId]){
+            scopes = (authRoleScopes[roleId] || []).map(s => String(s).trim()).filter(Boolean);
+          }
+          if (!roleId && scopes.length === 0){
+            $("authPreviewStatus").textContent = "Select a role profile or provide scopes.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          if (roleId && scopes.length === 0){
+            $("authPreviewStatus").textContent = "Selected profile has no scopes. Add a scopes override.";
+            $("authPreviewStatus").className = "status err";
+            return;
+          }
+          previewScopes = new Set(scopes);
+          previewScopesActive = true;
+          $("authPreviewStatus").textContent = `Preview on: ${scopes.join(", ")}`;
+          $("authPreviewStatus").className = "status ok";
+          // Trigger any UI gates to re-evaluate
+          // Example: reload venues/events list
+          loadEventsVenues(true);
+          loadGamesListVenues(true);
+        });
+      }
+      const authPreviewStop = $("authPreviewStop");
+      if (authPreviewStop){
+        authPreviewStop.addEventListener("click", () => {
+          previewScopesActive = false;
+          previewScopes = new Set();
+          $("authPreviewStatus").textContent = "Preview off.";
+          $("authPreviewStatus").className = "status";
+          loadEventsVenues(true);
+          loadGamesListVenues(true);
+        });
+      }
       $("bOwnerClose").addEventListener("click", () => {
         $("bOwnerModal").classList.remove("show");
       });
@@ -5406,6 +5928,7 @@ function getOwnerClaimStatus(ownerName){
           return;
         }
         const name = $("deckCreateName").value.trim();
+        const purpose = $("deckCreatePurpose").value || "tarot";
         const theme = $("deckCreateTheme").value || "classic";
         const seedChoice = $("deckCreateSeed").value || "none";
         const perHouse = Number($("deckCreatePerHouse").value || 0);
@@ -5425,6 +5948,7 @@ function getOwnerClaimStatus(ownerName){
             body: JSON.stringify({
               deck_id: id,
               name: name || undefined,
+              purpose,
               theme,
               suits: suits && suits.length ? suits : []
             })
@@ -5502,6 +6026,11 @@ function getOwnerClaimStatus(ownerName){
       $("bCreate").addEventListener("click", async () => {
         try{
           updateBingoCreatePayload();
+            const eventSelect = $("bCreateEventSelect");
+            const eventId = parseInt(eventSelect?.value || "0", 10) || 0;
+            const eventCode = eventSelect?.selectedOptions?.length
+              ? (eventSelect.selectedOptions[0].dataset.code || "")
+              : "";
             const body = {
               title: $("bTitle").value,
               header_text: $("bHeader").value,
@@ -5512,7 +6041,9 @@ function getOwnerClaimStatus(ownerName){
               channel_id: $("bChannelSelect").value || $("bChannel").value || "",
               created_by: $("bCreatedBy").value || "",
               announce_calls: $("bAnnounceCalls").checked,
-              theme_color: $("bTheme").value || ""
+              theme_color: $("bTheme").value || "",
+              event_id: eventId || undefined,
+              event_code: eventCode || undefined
             };
           const data = await jsonFetch("/bingo/create", {
             method: "POST",
@@ -5547,6 +6078,8 @@ function getOwnerClaimStatus(ownerName){
       async function refreshBingo(){
         const gid = getGameId();
         if (!gid){
+          showPanel("bingoSessions");
+          loadGamesMenu();
           setBingoStatus("Select a game first.", "err");
           return;
         }
@@ -5638,7 +6171,7 @@ function getOwnerClaimStatus(ownerName){
 
       document.addEventListener("keydown", (ev) => {
         if (ev.repeat) return;
-        if (ev.key.toLowerCase() !== "n") return;
+        if (!ev.key || ev.key.toLowerCase() !== "n") return;
         const target = ev.target;
         const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
         if (tag === "input" || tag === "textarea" || target.isContentEditable) return;
@@ -5668,7 +6201,10 @@ function getOwnerClaimStatus(ownerName){
           $("bOwners").textContent = "";
           const ownersEmpty = $("bOwnersEmpty");
           if (ownersEmpty) ownersEmpty.style.display = "flex";
-          $("bClaims").textContent = "No claims yet.";
+          const claimsEl = $("bClaims");
+          if (claimsEl){
+            claimsEl.textContent = "No claims yet.";
+          }
           $("bTitleVal").textContent = "No title";
           $("bHeaderVal").textContent = "No header";
           $("bStageVal").textContent = "No stage";
@@ -5754,7 +6290,7 @@ function getOwnerClaimStatus(ownerName){
             const body = {
               game_id: gid,
               owner_name: ownerName,
-              owner_user_id: $("bOwnerId").value.trim() || null,
+              owner_user_id: ($("bOwnerId")?.value || "").trim() || null,
               quantity: qty,
               gift: gift
             };
@@ -5782,7 +6318,7 @@ function getOwnerClaimStatus(ownerName){
         }
       });
 
-      $("bViewOwner").addEventListener("click", () => {
+      on("bViewOwner", "click", () => {
         const gid = getGameId();
         const owner = $("bOwner").value.trim();
         if (!gid || !owner){
@@ -5818,13 +6354,26 @@ function getOwnerClaimStatus(ownerName){
       }
 
       function renderLinks(code, token){
+        const container = $("tLink");
+        if (!container) return;
         const links = [];
         if (code){
           links.push(`<a href="${getPlayerUrl(code)}" target="_blank" rel="noreferrer">Player</a>`);
-          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Priestess</a>`);
-          links.push(`<a href="${getOverlayUrl(code)}" target="_blank" rel="noreferrer">Overlay</a>`);
+          links.push(`<a href="${getPriestessUrl(code, token)}" target="_blank" rel="noreferrer">Host</a>`);
         }
-        $("tLink").innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+        container.innerHTML = links.length ? links.join(" | ") : "No join code entered.";
+      }
+
+      function setTarotBackgroundStatus(url){
+        const preview = $("tBackgroundPreview");
+        const img = $("tBackgroundPreviewImg");
+        const clean = (url || "").trim();
+        if (clean && preview && img){
+          img.src = clean;
+          preview.style.display = "block";
+        }else if (preview){
+          preview.style.display = "none";
+        }
       }
 
       async function loadTarotSessionDecks(selectValue){
@@ -5832,34 +6381,78 @@ function getOwnerClaimStatus(ownerName){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "tarot");
+          const visibleDecks = filtered.length ? filtered : decks;
           const modalSelect = $("sessionCreateDeck");
           modalSelect.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt2 = document.createElement("option");
             opt2.value = d.deck_id;
             opt2.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             modalSelect.appendChild(opt2);
           });
-          modalSelect.value = selectValue || (decks[0] ? decks[0].deck_id : "elf-classic");
+          // Use venue deck if available, otherwise fallback to selectValue or first deck
+          const defaultDeck = selectValue || adminVenueDeckId || (visibleDecks[0] ? visibleDecks[0].deck_id : "elf-classic");
+          modalSelect.value = defaultDeck;
         }catch(err){
           setStatus(err.message, "err");
         }
       }
 
       $("tCreateSession").addEventListener("click", () => {
+        loadTarotSessionDecks();
         $("sessionCreateModal").classList.add("show");
       });
       $("sessionCreateClose").addEventListener("click", () => {
         $("sessionCreateModal").classList.remove("show");
       });
+      // Session creation background image file input
+      $("sessionCreateBackground").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file){
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const dataUrl = evt.target.result;
+            $("sessionCreateBackgroundPreviewImg").src = dataUrl;
+            $("sessionCreateBackgroundPreview").style.display = "block";
+            $("sessionCreateBackground").dataset.backgroundUrl = dataUrl;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Session creation media library button
+      $("sessionCreateOpenMedia").addEventListener("click", (e) => {
+        e.preventDefault();
+        if (e.shiftKey){
+          $("sessionCreateBackground").click();
+        } else {
+          librarySelectHandler = (item) => {
+            const pick = item && (item.url || item.fallback_url || "");
+            if (!pick){
+              setStatus("No media selected.", "err");
+              return;
+            }
+            $("sessionCreateBackgroundPreviewImg").src = pick;
+            $("sessionCreateBackgroundPreview").style.display = "block";
+            $("sessionCreateBackground").dataset.backgroundUrl = pick;
+            setStatus("Background set from media.", "ok");
+            showLibraryModal(false);
+          };
+          showLibraryModal(true);
+          loadLibrary("media");
+        }
+      });
+
       $("sessionCreateSubmit").addEventListener("click", async () => {
         try{
           const deck = $("sessionCreateDeck").value.trim() || "elf-classic";
           const spread = $("sessionCreateSpread").value.trim() || "single";
+          const backgroundUrl = $("sessionCreateBackground").dataset.backgroundUrl || "";
           const data = await jsonFetch("/api/tarot/sessions", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({deck_id: deck, spread_id: spread})
+            body: JSON.stringify({deck_id: deck, spread_id: spread, background_url: backgroundUrl})
           }, true);
           $("tJoinCode").value = data.joinCode || "";
           $("tPriestessToken").value = data.priestessToken || "";
@@ -5890,11 +6483,148 @@ function getOwnerClaimStatus(ownerName){
             opt.dataset.token = s.priestess_token || "";
             select.appendChild(opt);
           });
+          // Auto-select when requested, otherwise pick the first option if only one exists
           if (selectJoin){
             select.value = selectJoin;
+          } else if (select.options.length === 1){
+            select.selectedIndex = 0;
+          }
+          // Trigger change event to populate fields when a selection exists
+          if (select.value){
+            select.dispatchEvent(new Event('change'));
           }
         }catch(err){
           setStatus(err.message, "err");
+        }
+      }
+
+      // Casino session creation modal handlers
+      $("casinoSessionCreateClose").addEventListener("click", () => {
+        $("casinoSessionCreateModal").classList.remove("show");
+      });
+
+      // Casino session background file input
+      $("casinoSessionCreateBackground").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file){
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const dataUrl = evt.target.result;
+            $("casinoSessionCreateBackgroundPreviewImg").src = dataUrl;
+            $("casinoSessionCreateBackgroundPreview").style.display = "block";
+            $("casinoSessionCreateBackground").dataset.backgroundUrl = dataUrl;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Casino session media library button
+      $("casinoSessionCreateOpenMedia").addEventListener("click", (e) => {
+        e.preventDefault();
+        if (e.shiftKey){
+          $("casinoSessionCreateBackground").click();
+        } else {
+          librarySelectHandler = (item) => {
+            const pick = item && (item.url || item.fallback_url || "");
+            if (!pick){
+              setStatus("No media selected.", "err");
+              return;
+            }
+            $("casinoSessionCreateBackgroundPreviewImg").src = pick;
+            $("casinoSessionCreateBackgroundPreview").style.display = "block";
+            $("casinoSessionCreateBackground").dataset.backgroundUrl = pick;
+            setStatus("Background set from media.", "ok");
+            showLibraryModal(false);
+          };
+          showLibraryModal(true);
+          loadLibrary("media");
+        }
+      });
+
+      // Update background when game type changes
+      $("casinoSessionCreateGame").addEventListener("change", () => {
+        updateCasinoSessionBackgroundFromGame();
+      });
+
+      $("casinoSessionCreateSubmit").addEventListener("click", async () => {
+        try{
+          const gameId = $("casinoSessionCreateGame").value.trim() || "blackjack";
+          const deckId = $("casinoSessionCreateDeck").value.trim() || "";
+          const pot = parseInt($("casinoSessionCreatePot").value || "0", 10) || 0;
+          const currency = $("casinoSessionCreateCurrency").value.trim() || "";
+          const backgroundUrl = $("casinoSessionCreateBackground").dataset.backgroundUrl || "";
+          const eventSelect = $("casinoSessionCreateEventSelect");
+          const eventId = parseInt(eventSelect?.value || "0", 10) || 0;
+          const eventCode = eventSelect?.selectedOptions?.length
+            ? (eventSelect.selectedOptions[0].dataset.code || "")
+            : "";
+          const payload = {
+            game_id: gameId,
+            deck_id: deckId,
+            pot: pot,
+            currency: currency,
+            background_url: backgroundUrl,
+            background_artist_id: "",
+            background_artist_name: "",
+            event_id: eventId || undefined,
+            event_code: eventCode || undefined
+          };
+          await createCardgameSession(payload);
+          $("casinoSessionCreateModal").classList.remove("show");
+        }catch(err){
+          setCardgameStatus(err.message, "err");
+        }
+      });
+
+      async function loadCasinoSessionDefaults(){
+        // Load decks
+        if (!ensureCardgamesScope()) return;
+        try{
+          const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
+          const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "playing");
+          const visibleDecks = filtered.length ? filtered : decks;
+          const modalSelect = $("casinoSessionCreateDeck");
+          modalSelect.innerHTML = "";
+          visibleDecks.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.deck_id;
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            modalSelect.appendChild(opt);
+          });
+          // Use venue deck if available
+          const defaultDeck = adminVenueDeckId || (visibleDecks[0] ? visibleDecks[0].deck_id : "");
+          if (defaultDeck) modalSelect.value = defaultDeck;
+        }catch(err){
+          setStatus(err.message, "err");
+        }
+
+        // Set currency from venue
+        $("casinoSessionCreateCurrency").value = adminVenueCurrency || "gil";
+        
+        // Set pot to 0 by default
+        $("casinoSessionCreatePot").value = "0";
+
+        // Set game to blackjack by default
+        $("casinoSessionCreateGame").value = "blackjack";
+
+        // Load background based on game type
+        updateCasinoSessionBackgroundFromGame();
+
+        // Load event options
+        loadEventOptions("casinoSessionCreateEventSelect");
+      }
+
+      function updateCasinoSessionBackgroundFromGame(){
+        const gameId = $("casinoSessionCreateGame").value || "blackjack";
+        const backgroundUrl = adminVenueGameBackgrounds[gameId] || "";
+        if (backgroundUrl){
+          $("casinoSessionCreateBackgroundPreviewImg").src = backgroundUrl;
+          $("casinoSessionCreateBackgroundPreview").style.display = "block";
+          $("casinoSessionCreateBackground").dataset.backgroundUrl = backgroundUrl;
+        } else {
+          $("casinoSessionCreateBackgroundPreview").style.display = "none";
+          $("casinoSessionCreateBackground").dataset.backgroundUrl = "";
         }
       }
 
@@ -5907,16 +6637,19 @@ function getOwnerClaimStatus(ownerName){
         renderLinks(join, token);
       });
 
-      $("tOpenOverlay").addEventListener("click", () => {
-        const code = $("tJoinCode").value.trim();
-        if (!code){
-          setStatus("Enter a join code.", "err");
-          return;
-        }
-        const url = getOverlayUrl(code);
-        renderLinks(code, $("tPriestessToken").value.trim());
-        window.open(url, "_blank");
-      });
+      const tOpenOverlayBtn = $("tOpenOverlay");
+      if (tOpenOverlayBtn){
+        tOpenOverlayBtn.addEventListener("click", () => {
+          const code = $("tJoinCode").value.trim();
+          if (!code){
+            setStatus("Enter a join code.", "err");
+            return;
+          }
+          const url = getOverlayUrl(code);
+          renderLinks(code, $("tPriestessToken").value.trim());
+          window.open(url, "_blank");
+        });
+      }
 
       $("tOpenPlayer").addEventListener("click", () => {
         const code = $("tJoinCode").value.trim();
@@ -5938,7 +6671,37 @@ function getOwnerClaimStatus(ownerName){
         const token = $("tPriestessToken").value.trim();
         const url = getPriestessUrl(code, token);
         renderLinks(code, token);
-        window.open(url, "_blank");
+        // Open priestess view inside the iframe panel to keep sidebar visible
+        loadIframe(url);
+      });
+
+      $("tCopyPlayer").addEventListener("click", async () => {
+        const code = $("tJoinCode").value.trim();
+        if (!code){
+          setStatus("Enter a join code to copy the player link.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(getPlayerUrl(code));
+          showToast("Player link copied.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
+      });
+
+      $("tCopyPriestess").addEventListener("click", async () => {
+        const code = $("tJoinCode").value.trim();
+        const token = $("tPriestessToken").value.trim();
+        if (!code){
+          setStatus("Enter a join code to copy the host link.", "err");
+          return;
+        }
+        try{
+          await navigator.clipboard.writeText(getPriestessUrl(code, token));
+          showToast("Host link copied.", "ok");
+        }catch(err){
+          showToast("Copy failed.", "err");
+        }
       });
 
       $("tCloseSession").addEventListener("click", async () => {
@@ -5988,6 +6751,7 @@ function getOwnerClaimStatus(ownerName){
 
       function setCardgameStatus(msg, kind){
         setStatusText("cgStatus", msg, kind);
+        setStatus(msg, kind);
       }
 
       function renderCardgameLinks(gameId, joinCode, token){
@@ -6050,15 +6814,17 @@ function getOwnerClaimStatus(ownerName){
         try{
           const data = await jsonFetch("/api/tarot/decks", {method:"GET"}, true);
           const decks = data.decks || [];
+          const filtered = filterDecksByPurpose(decks, "playing");
+          const visibleDecks = filtered.length ? filtered : decks;
           select.innerHTML = "";
-          decks.forEach(d => {
+          visibleDecks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
             opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
             select.appendChild(opt);
           });
           const defaults = getCardgameDefaults();
-          const pick = selectValue || (defaults && defaults.deck_id) || (decks[0] ? decks[0].deck_id : "");
+          const pick = selectValue || (defaults && defaults.deck_id) || (visibleDecks[0] ? visibleDecks[0].deck_id : "");
           if (pick) select.value = pick;
         }catch(err){
           select.innerHTML = `<option value="">Failed to load</option>`;
@@ -6082,7 +6848,7 @@ function getOwnerClaimStatus(ownerName){
             opt.value = s.join_code || "";
             const created = s.created_at ? new Date(s.created_at * 1000).toLocaleString() : "unknown";
             const currency = s.currency || "gil";
-            opt.textContent = `${s.join_code || "-"} | ${s.game_id || "-"} | ${s.deck_id || "-"} | ${s.status || "-"} | pot ${s.pot || 0} ${currency} | ${created}`;
+            opt.textContent = `${s.game_id || "-"} | ${s.join_code || "-"} | ${s.deck_id || "-"} | ${s.status || "-"} | pot ${s.pot || 0} ${currency} | ${created}`;
             opt.dataset.token = s.priestess_token || "";
             opt.dataset.sessionId = s.session_id || "";
             opt.dataset.pot = s.pot || 0;
@@ -6108,14 +6874,18 @@ function getOwnerClaimStatus(ownerName){
       }
 
       function setCardgameBackgroundStatus(url){
-        const el = $("cgBackgroundStatus");
-        if (!el) return;
+        const previewEl = $("cgBackgroundPreview");
+        const imgEl = $("cgBackgroundPreviewImg");
+        if (!previewEl || !imgEl) return;
         const artistName = $("cgBackgroundUrl").dataset.artistName || "";
         if (!url){
-          el.textContent = "No background selected.";
+          previewEl.style.display = "none";
           return;
         }
-        el.textContent = artistName ? `Background selected - ${artistName}.` : "Background selected.";
+        imgEl.src = url;
+        imgEl.alt = artistName ? `Background by ${artistName}` : "Background preview";
+        imgEl.title = artistName ? `Background by ${artistName}` : "Background preview";
+        previewEl.style.display = "block";
       }
 
         async function createCardgameSession(payload){
@@ -6132,6 +6902,8 @@ function getOwnerClaimStatus(ownerName){
                 background_url: payload.background_url || "",
                 background_artist_id: payload.background_artist_id || "",
                 background_artist_name: payload.background_artist_name || "",
+                event_id: payload.event_id || undefined,
+                event_code: payload.event_code || undefined,
                 draft: true
               })
             }, true);
@@ -6156,7 +6928,6 @@ function getOwnerClaimStatus(ownerName){
             background_artist_id: payload.background_artist_id || "",
             background_artist_name: payload.background_artist_name || ""
           });
-          renderCardgameLinks(payload.game_id, session.join_code || "", session.priestess_token || "");
           setCardgameStatus("Session created.", "ok");
           await loadCardgameSessions(session.join_code || "");
         }catch(err){
@@ -6195,24 +6966,10 @@ function getOwnerClaimStatus(ownerName){
 
         if ($("cgCreateSession")){
           $("cgCreateSession").addEventListener("click", () => {
-            const payload = {
-              game_id: $("cgGameSelect").value,
-              deck_id: $("cgDeckSelect").value,
-              pot: parseInt(($("cgPot").value || "0").trim(), 10) || 0,
-              currency: ($("cgCurrency").value || "").trim(),
-              background_url: ($("cgBackgroundUrl").value || "").trim(),
-              background_artist_id: $("cgBackgroundUrl").dataset.artistId || "",
-              background_artist_name: $("cgBackgroundUrl").dataset.artistName || ""
-            };
-            createCardgameSession(payload);
+            loadCasinoSessionDefaults();
+            $("casinoSessionCreateModal").classList.add("show");
           });
-        ["cgPot", "cgCurrency", "cgDeckSelect", "cgGameSelect", "cgBackgroundUrl"].forEach(id => {
-          const el = $(id);
-          if (!el) return;
-          el.addEventListener("change", () => persistCardgameDefaults());
-          el.addEventListener("blur", () => persistCardgameDefaults());
-        });
-          $("cgCreateFromSelected").addEventListener("click", () => {
+          on("cgCreateFromSelected", "click", () => {
             const sel = $("cgSessionSelect");
             const opt = sel && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
             if (!opt){
@@ -6233,11 +6990,9 @@ function getOwnerClaimStatus(ownerName){
               background_artist_name: opt.dataset.backgroundArtistName || ""
             });
           });
-          if ($("cgDeckRefresh")){
-            $("cgDeckRefresh").addEventListener("click", () => loadCardgameDecks());
-          }
-        $("cgSessionRefresh").addEventListener("click", () => loadCardgameSessions());
-        $("cgSessionSelect").addEventListener("change", (ev) => {
+        }
+
+        on("cgSessionSelect", "change", (ev) => {
           const opt = ev.target.selectedOptions.length ? ev.target.selectedOptions[0] : null;
           const join = opt ? (opt.value || "") : "";
           const token = opt ? (opt.dataset.token || "") : "";
@@ -6249,16 +7004,24 @@ function getOwnerClaimStatus(ownerName){
           const backgroundArtistId = opt ? (opt.dataset.backgroundArtistId || "") : "";
           const backgroundArtistName = opt ? (opt.dataset.backgroundArtistName || "") : "";
           const status = opt ? (opt.dataset.status || "") : "";
-          $("cgJoinCode").value = join;
-          $("cgJoinCode").dataset.sessionId = opt ? (opt.dataset.sessionId || "") : "";
-          $("cgJoinCode").dataset.gameId = gameId;
-          $("cgJoinCode").dataset.deckId = deckId;
-          $("cgPriestessToken").value = token;
-          $("cgPot").value = pot;
-          $("cgCurrency").value = currency || "gil";
-          $("cgGameSelect").value = gameId;
+          const joinEl = $("cgJoinCode");
+          if (joinEl){
+            joinEl.value = join;
+            joinEl.dataset.sessionId = opt ? (opt.dataset.sessionId || "") : "";
+            joinEl.dataset.gameId = gameId;
+            joinEl.dataset.deckId = deckId;
+          }
+          const tokenEl = $("cgPriestessToken");
+          if (tokenEl) tokenEl.value = token;
+          const potEl = $("cgPot");
+          if (potEl) potEl.value = pot;
+          const currencyEl = $("cgCurrency");
+          if (currencyEl) currencyEl.value = currency || "gil";
+          const gameSelectEl = $("cgGameSelect");
+          if (gameSelectEl) gameSelectEl.value = gameId;
           if (deckId){
-            $("cgDeckSelect").value = deckId;
+            const deckEl = $("cgDeckSelect");
+            if (deckEl) deckEl.value = deckId;
           }
           if ($("cgBackgroundUrl")){
             $("cgBackgroundUrl").value = background;
@@ -6269,36 +7032,83 @@ function getOwnerClaimStatus(ownerName){
           if ($("cgCreateFromSelected")){
             $("cgCreateFromSelected").disabled = status.toLowerCase() !== "live";
           }
-          renderCardgameLinks(gameId, join, token);
         });
-        $("cgBackgroundUrl").addEventListener("input", (ev) => {
+        on("cgBackgroundUrl", "input", (ev) => {
           ev.target.dataset.artistId = "";
           ev.target.dataset.artistName = "";
           setCardgameBackgroundStatus(ev.target.value.trim());
         });
-        $("cgOpenPlayer").addEventListener("click", () => {
-          const join = $("cgJoinCode").value.trim();
-          const gameId = $("cgGameSelect").value;
+        on("cgOpenPlayer", "click", () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = $("cgGameSelect")?.value || joinEl.dataset.gameId || "crapslite";
           if (!join){
             setCardgameStatus("Enter a join code.", "err");
             return;
           }
-          renderCardgameLinks(gameId, join, $("cgPriestessToken").value.trim());
-          window.open(getCardgamePlayerUrl(gameId, join), "_blank");
+          loadIframe(getCardgamePlayerUrl(gameId, join));
         });
-        $("cgOpenPriestess").addEventListener("click", () => {
-          const join = $("cgJoinCode").value.trim();
-          const gameId = $("cgGameSelect").value;
+        on("cgOpenPriestess", "click", () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = $("cgGameSelect")?.value || joinEl.dataset.gameId || "crapslite";
           if (!join){
             setCardgameStatus("Enter a join code.", "err");
             return;
           }
-          const token = $("cgPriestessToken").value.trim();
-          renderCardgameLinks(gameId, join, token);
-          window.open(getCardgameHostUrl(gameId, join, token), "_blank");
+          const tokenEl = $("cgPriestessToken");
+          const token = tokenEl ? tokenEl.value.trim() : "";
+          loadIframe(getCardgameHostUrl(gameId, join, token));
         });
-        $("cgFinishSession").addEventListener("click", () => finishCardgameSession());
-        $("cgDeleteSession").addEventListener("click", async () => {
+        on("cgCopyPlayer", "click", async () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const gameId = joinEl.dataset.gameId || "blackjack";
+          if (!join){
+            setCardgameStatus("Enter a join code to copy the player link.", "err");
+            return;
+          }
+          try{
+            await navigator.clipboard.writeText(getCardgamePlayerUrl(gameId, join));
+            showToast("Player link copied.", "ok");
+          }catch(err){
+            showToast("Copy failed.", "err");
+          }
+        });
+        on("cgCopyPriestess", "click", async () => {
+          const joinEl = $("cgJoinCode");
+          if (!joinEl){
+            setCardgameStatus("Select a session first.", "err");
+            return;
+          }
+          const join = joinEl.value.trim();
+          const token = $("cgPriestessToken") ? $("cgPriestessToken").value.trim() : "";
+          const gameId = joinEl.dataset.gameId || "blackjack";
+          if (!join){
+            setCardgameStatus("Enter a join code to copy the host link.", "err");
+            return;
+          }
+          try{
+            await navigator.clipboard.writeText(getCardgameHostUrl(gameId, join, token));
+            showToast("Host link copied.", "ok");
+          }catch(err){
+            showToast("Copy failed.", "err");
+          }
+        });
+        on("cgFinishSession", "click", () => finishCardgameSession());
+        on("cgDeleteSession", "click", async () => {
           const join = $("cgJoinCode").value.trim();
           const token = $("cgPriestessToken").value.trim();
           const sessionId = $("cgJoinCode").dataset.sessionId || "";
@@ -6319,14 +7129,13 @@ function getOwnerClaimStatus(ownerName){
             $("cgJoinCode").value = "";
             $("cgJoinCode").dataset.sessionId = "";
             $("cgPriestessToken").value = "";
-            renderCardgameLinks("", "", "");
             setCardgameStatus("Session deleted.", "ok");
             await loadCardgameSessions();
           }catch(err){
             setCardgameStatus(err.message, "err");
           }
         });
-        $("cgUseSelectedMedia").addEventListener("click", () => {
+        on("cgUseSelectedMedia", "click", () => {
           const pick = currentMediaEdit ? (currentMediaEdit.url || currentMediaEdit.fallback_url || "") : "";
           if (!pick){
             setCardgameStatus("Select a media item first.", "err");
@@ -6335,7 +7144,7 @@ function getOwnerClaimStatus(ownerName){
           $("cgBackgroundUrl").value = pick;
           setCardgameBackgroundStatus(pick);
         });
-        $("cgOpenMedia").addEventListener("click", () => {
+        on("cgOpenMedia", "click", () => {
           librarySelectHandler = (item) => {
             const pick = item && (item.url || item.fallback_url || "");
             if (!pick){
@@ -6356,7 +7165,6 @@ function getOwnerClaimStatus(ownerName){
         if (defaults){
           setCardgameDefaults(defaults);
         }
-      }
 
       let taNumbers = [];
       let taSuitDefs = [];
@@ -6505,6 +7313,103 @@ function getOwnerClaimStatus(ownerName){
         if (deckMeta){
           deckMeta.textContent = deckId ? `${deckName} (${deckId})` : "";
         }
+      }
+
+      function taNormalizePurpose(purpose){
+        const value = String(purpose || "").trim().toLowerCase();
+        return value === "playing" ? "playing" : "tarot";
+      }
+
+      function filterDecksByPurpose(decks, purpose){
+        const target = taNormalizePurpose(purpose);
+        return (decks || []).filter(d => taNormalizePurpose(d && d.purpose) === target);
+      }
+
+      function taGetDeckPurpose(){
+        const deck = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : null;
+        return taNormalizePurpose(deck && deck.purpose);
+      }
+
+      async function taLoadTemplateOptions(){
+        const select = $("taCardTemplate");
+        if (!select) return;
+        const purpose = taGetDeckPurpose();
+        taTemplatePurpose = purpose;
+        let cards = taTemplateCache[purpose];
+        if (!cards){
+          try{
+            const data = await jsonFetch("/api/tarot/templates?purpose=" + encodeURIComponent(purpose), {method:"GET"}, true);
+            cards = Array.isArray(data.cards) ? data.cards : [];
+            taTemplateCache[purpose] = cards;
+          }catch(err){
+            select.innerHTML = "<option value=\"\">Failed to load templates</option>";
+            const hint = $("taCardTemplateHint");
+            if (hint) hint.textContent = "Template cards unavailable.";
+            return;
+          }
+        }
+        const current = select.value;
+        select.innerHTML = "";
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = purpose === "playing" ? "Pick a playing card..." : "Pick a tarot card...";
+        select.appendChild(empty);
+        cards.forEach(card => {
+          const opt = document.createElement("option");
+          const id = card.card_id || card.id || "";
+          opt.value = id;
+          const name = card.name || card.title || id || "Card";
+          const suit = card.suit || "";
+          const number = (card.number !== undefined && card.number !== null) ? card.number : "";
+          const suffix = (suit || number) ? ` (${[number, suit].filter(Boolean).join(" ")})` : "";
+          opt.textContent = name + suffix;
+          select.appendChild(opt);
+        });
+        select.value = current || "";
+        const hint = $("taCardTemplateHint");
+        if (hint){
+          hint.textContent = purpose === "playing"
+            ? "Pick a playing card to prefill this card."
+            : "Pick a tarot card to prefill this card.";
+        }
+      }
+
+      function taApplyTemplateCard(card){
+        if (!card) return;
+        const existing = window.taDeckData && window.taDeckData.cards
+          ? window.taDeckData.cards.find(c => c.card_id === (card.card_id || card.id))
+          : null;
+        if (existing){
+          taLoadCard(existing);
+          return;
+        }
+        taSuppressDirty = true;
+        taSelectedCardId = "";
+        $("taCardId").value = card.card_id || card.id || "";
+        $("taCardName").value = card.name || card.title || "";
+        $("taCardSuit").value = card.suit || "";
+        $("taCardNumber").value = (card.number !== undefined && card.number !== null) ? card.number : "";
+        $("taCardTags").value = (card.tags || []).join(", ");
+        $("taCardFlavor").value = card.flavor_text || "";
+        $("taCardUpright").value = card.upright || "";
+        $("taCardReversed").value = card.reversed || "";
+        $("taCardArtist").value = card.artist_id || "";
+        window.taUploadedImageUrl = card.image || "";
+        taRenderThemeWeights(card.themes || {}, card.suit || "");
+        taRenderSuitInfo(card.suit || "");
+        taRenderNumberInfo($("taCardNumber").value);
+        taApplySuitThemeDefaults(card.suit || "");
+        taRenderPreviews({
+          name: $("taCardName").value.trim(),
+          number: $("taCardNumber").value.trim(),
+          image: window.taUploadedImageUrl || "",
+          suit: $("taCardSuit").value.trim(),
+          upright: $("taCardUpright").value.trim(),
+          reversed: $("taCardReversed").value.trim()
+        });
+        taUpdateContext(null);
+        taSuppressDirty = false;
+        taSetDirty(true);
       }
 
       function taRenderThemeWeights(weights, suitValue){
@@ -6714,6 +7619,10 @@ function getOwnerClaimStatus(ownerName){
         taRenderPreviews(card);
         taSyncCardSelection();
         taUpdateContext(card);
+        const templateSelect = $("taCardTemplate");
+        if (templateSelect){
+          templateSelect.value = card.card_id || "";
+        }
         taDirty = false;
         taSuppressDirty = false;
       }
@@ -6913,9 +7822,17 @@ function getOwnerClaimStatus(ownerName){
       if (mediaFilterArtist){
         mediaFilterArtist.addEventListener("change", () => applyMediaFilters());
       }
+      const mediaFilterType = $("mediaFilterType");
+      if (mediaFilterType){
+        mediaFilterType.addEventListener("change", () => loadMediaLibrary());
+      }
       const mediaFilterOriginType = $("mediaFilterOriginType");
       if (mediaFilterOriginType){
         mediaFilterOriginType.addEventListener("change", () => applyMediaFilters());
+      }
+      const mediaFilterVenue = $("mediaFilterVenue");
+      if (mediaFilterVenue){
+        mediaFilterVenue.addEventListener("change", () => loadMediaLibrary());
       }
       const mediaFilterLabel = $("mediaFilterLabel");
       if (mediaFilterLabel){
@@ -6925,18 +7842,22 @@ function getOwnerClaimStatus(ownerName){
       if (mediaToolbarSort){
         mediaToolbarSort.addEventListener("change", () => applyMediaFilters());
       }
-      const mediaFilterClear = $("mediaFilterClear");
-      if (mediaFilterClear){
-        mediaFilterClear.addEventListener("click", () => {
-          const artist = $("mediaFilterArtist");
-          const origin = $("mediaFilterOriginType");
-          const label = $("mediaFilterLabel");
-          if (artist) artist.value = "";
-          if (origin) origin.value = "";
-          if (label) label.value = "any";
-          applyMediaFilters();
-        });
-      }
+        const mediaFilterClear = $("mediaFilterClear");
+        if (mediaFilterClear){
+          mediaFilterClear.addEventListener("click", () => {
+            const artist = $("mediaFilterArtist");
+            const type = $("mediaFilterType");
+            const origin = $("mediaFilterOriginType");
+            const venue = $("mediaFilterVenue");
+            const label = $("mediaFilterLabel");
+            if (artist) artist.value = "";
+            if (type) type.value = "";
+            if (origin) origin.value = "";
+            if (venue) venue.value = "";
+            if (label) label.value = "any";
+            loadMediaLibrary();
+          });
+        }
       $("mediaBulkDelete").addEventListener("click", async () => {
         if (!hasScope("admin:web")){
           setMediaLibraryStatus("Delete requires admin access.", "err");
@@ -7086,12 +8007,12 @@ function getOwnerClaimStatus(ownerName){
         });
       }
 
-      $("mediaUploadUpload").addEventListener("click", async () => {
-        const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
-        if (!file){
-          setMediaUploadStatus("Select an image to upload.", "err");
-          return;
-        }
+        $("mediaUploadUpload").addEventListener("click", async () => {
+          const file = mediaUploadFile || ($("mediaUploadFile").files[0] || null);
+          if (!file){
+            setMediaUploadStatus("Select an image to upload.", "err");
+            return;
+          }
         const title = $("mediaUploadTitleInput").value.trim();
         if (!title){
           setMediaUploadStatus("Enter a title before uploading.", "err");
@@ -7103,19 +8024,33 @@ function getOwnerClaimStatus(ownerName){
           const fd = new FormData();
           fd.append("file", file);
           fd.append("title", title);
-          const artistId = $("mediaUploadArtist").value.trim();
-          if (artistId) fd.append("artist_id", artistId);
-          const originType = $("mediaUploadOriginType").value.trim();
-          const originLabel = $("mediaUploadOriginLabel").value.trim();
-          if (originType) fd.append("origin_type", originType);
-          if (originLabel) fd.append("origin_label", originLabel);
-          const res = await fetch("/api/media/upload", {
-            method: "POST",
-            headers: {"X-API-Key": apiKeyEl.value.trim()},
+            const artistId = $("mediaUploadArtist").value.trim();
+            if (artistId) fd.append("artist_id", artistId);
+            const originType = $("mediaUploadOriginType").value.trim();
+            const originLabel = $("mediaUploadOriginLabel").value.trim();
+            if (originType) fd.append("origin_type", originType);
+            if (originLabel) fd.append("origin_label", originLabel);
+            const mediaType = $("mediaUploadType").value.trim();
+            const venueId = $("mediaUploadVenue").value.trim();
+            if (mediaType) fd.append("media_type", mediaType);
+            if (venueId) fd.append("venue_id", venueId);
+            if ($("mediaUploadHidden")?.checked) fd.append("hidden", "1");
+            const res = await fetch("/api/media/upload", {
+              method: "POST",
+              headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
+          const text = await res.text();
+          let data = {};
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            const msg = (res.status === 401 || res.status === 403)
+              ? "Unauthorized. Check API key."
+              : "Upload failed (non-JSON response).";
+            throw new Error(msg);
+          }
+          if (!res.ok || data.ok === false) throw new Error(data.error || "Failed");
           $("mediaUploadFile").value = "";
           $("mediaUploadTitleInput").value = "";
           $("mediaUploadOriginLabel").value = "";
@@ -7146,29 +8081,33 @@ function getOwnerClaimStatus(ownerName){
         }
         const title = $("mediaEditTitle").value.trim();
         const artistId = $("mediaEditArtist").value.trim();
-        const artistName = $("mediaEditArtist").selectedOptions.length
-          ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
-          : "";
-        const originType = $("mediaEditOriginType").value.trim();
-        const originLabel = $("mediaEditOriginLabel").value.trim();
-        try{
-          $("mediaEditSave").disabled = true;
-          setMediaEditStatus("Saving...", "");
-          const res = await fetch("/api/gallery/media/update", {
+          const artistName = $("mediaEditArtist").selectedOptions.length
+            ? $("mediaEditArtist").selectedOptions[0].textContent.trim()
+            : "";
+          const originType = $("mediaEditOriginType").value.trim();
+          const originLabel = $("mediaEditOriginLabel").value.trim();
+          const mediaType = $("mediaEditType").value.trim();
+          const venueId = $("mediaEditVenue").value.trim();
+          try{
+            $("mediaEditSave").disabled = true;
+            setMediaEditStatus("Saving...", "");
+            const res = await fetch("/api/gallery/media/update", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "X-API-Key": apiKeyEl.value.trim()
             },
-            body: JSON.stringify({
-              filename,
-              title,
-              artist_id: artistId,
-              artist_name: artistName,
-              origin_type: originType,
-              origin_label: originLabel
-            })
-          });
+              body: JSON.stringify({
+                filename,
+                title,
+                artist_id: artistId,
+                artist_name: artistName,
+                origin_type: originType,
+                origin_label: originLabel,
+                media_type: mediaType,
+                venue_id: venueId
+              })
+            });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.ok === false){
             throw new Error(data.error || "Save failed");
@@ -7284,13 +8223,23 @@ function getOwnerClaimStatus(ownerName){
           fd.append("title", title);
           const artistId = $("uploadLibraryArtist").value.trim();
           if (artistId) fd.append("artist_id", artistId);
+          if ($("uploadLibraryHidden")?.checked) fd.append("hidden", "1");
           const res = await fetch("/api/media/upload", {
             method: "POST",
             headers: {"X-API-Key": apiKeyEl.value.trim()},
             body: fd
           });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "Failed");
+          const text = await res.text();
+          let data = {};
+          try{
+            data = text ? JSON.parse(text) : {};
+          }catch(err){
+            const msg = (res.status === 401 || res.status === 403)
+              ? "Unauthorized. Check API key."
+              : "Upload failed (non-JSON response).";
+            throw new Error(msg);
+          }
+          if (!res.ok || data.ok === false) throw new Error(data.error || "Failed");
           $("uploadLibraryFile").value = "";
           $("uploadLibraryTitleInput").value = "";
           libraryUploadFile = null;
@@ -7334,6 +8283,44 @@ function getOwnerClaimStatus(ownerName){
           }
         });
       });
+      const templateSelect = $("taCardTemplate");
+      if (templateSelect){
+        templateSelect.addEventListener("change", () => {
+          const pick = templateSelect.value;
+          if (!pick) return;
+          const purpose = taGetDeckPurpose();
+          const cards = taTemplateCache[purpose] || [];
+          const card = cards.find(c => (c.card_id || c.id) === pick);
+          if (card){
+            taApplyTemplateCard(card);
+          }
+        });
+      }
+      const newCardBtn = $("taNewCard");
+      if (newCardBtn){
+        newCardBtn.addEventListener("click", () => {
+          taSelectedCardId = "";
+          $("taCardId").value = "";
+          $("taCardName").value = "";
+          $("taCardSuit").value = "";
+          $("taCardNumber").value = "";
+          $("taCardTags").value = "";
+          $("taCardFlavor").value = "";
+          $("taCardUpright").value = "";
+          $("taCardReversed").value = "";
+          $("taCardArtist").value = "";
+          window.taUploadedImageUrl = "";
+          taRenderNumberInfo("");
+          taSetCardThemeWeights({});
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
+          taRenderPreviews(null);
+          taUpdateContext(null);
+          taSetDirty(false);
+        });
+      }
       $("taDeckList").addEventListener("click", (ev) => {
         const target = ev.target.closest(".list-card");
         if (!target || !target.dataset.cardId || !window.taDeckData) return;
@@ -7347,6 +8334,11 @@ function getOwnerClaimStatus(ownerName){
           const deck = $("taDeck").value.trim() || "elf-classic";
           const data = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck), {method:"GET"}, true);
           showList($("taDeckList"), data);
+          await taLoadTemplateOptions();
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
           taSetSuitDefinitions(data.deck && Array.isArray(data.deck.suits) ? data.deck.suits : []);
           taRenderPreviews(null);
           const deckName = (data.deck && (data.deck.name || data.deck.deck_id)) || deck;
@@ -7377,6 +8369,7 @@ function getOwnerClaimStatus(ownerName){
       $("taAddDeck").addEventListener("click", () => {
         $("deckCreateId").value = "";
         $("deckCreateName").value = "";
+        $("deckCreatePurpose").value = "tarot";
         $("deckCreateTheme").value = "classic";
         $("deckCreateSeed").value = "none";
         $("deckCreatePerHouse").value = "4";
@@ -7403,6 +8396,7 @@ function getOwnerClaimStatus(ownerName){
           }
           const deckData = window.taDeckData && window.taDeckData.deck ? window.taDeckData.deck : {};
           $("deckEditName").value = deckData.name || "";
+          $("deckEditPurpose").value = deckData.purpose || "tarot";
           $("deckEditTheme").value = deckData.theme || "classic";
           const suits = Array.isArray(deckData.suits) ? deckData.suits : [];
           deckEditHadSuits = suits.length > 0;
@@ -7481,6 +8475,7 @@ function getOwnerClaimStatus(ownerName){
           return;
         }
         const name = $("deckEditName").value.trim();
+        const purpose = $("deckEditPurpose").value || "tarot";
         const theme = $("deckEditTheme").value || "classic";
         const backUrl = $("deckEditBackPick").dataset.backUrl || "";
         const artistId = $("deckEditBackPick").dataset.artistId || "";
@@ -7501,6 +8496,7 @@ function getOwnerClaimStatus(ownerName){
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
               name: name || undefined,
+              purpose,
               theme,
               suits: suits && suits.length ? suits : []
             })
@@ -7579,7 +8575,7 @@ function getOwnerClaimStatus(ownerName){
             themes: taGetCardThemeWeights(),
             artist_links: undefined
           };
-          await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
+          const saved = await jsonFetch("/api/tarot/decks/" + encodeURIComponent(deck) + "/cards", {
             method:"POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(body)
@@ -7594,9 +8590,13 @@ function getOwnerClaimStatus(ownerName){
           $("taCardUpright").value = "";
           $("taCardReversed").value = "";
           $("taCardArtist").value = "";
+          const templateSelect = $("taCardTemplate");
+          if (templateSelect){
+            templateSelect.value = "";
+          }
           taRenderNumberInfo("");
           taSetCardThemeWeights({});
-          taSelectedCardId = body.card_id || "";
+          taSelectedCardId = (saved && saved.card && saved.card.card_id) ? saved.card.card_id : (body.card_id || "");
           taDirty = false;
           await loadTarotDeck();
           setTarotStatus("Saved", "ok");
@@ -7615,7 +8615,8 @@ function getOwnerClaimStatus(ownerName){
           decks.forEach(d => {
             const opt = document.createElement("option");
             opt.value = d.deck_id;
-            opt.textContent = d.name ? `${d.name} (${d.deck_id})` : d.deck_id;
+            const purposeLabel = d.purpose ? ` • ${d.purpose}` : "";
+            opt.textContent = d.name ? `${d.name} (${d.deck_id})${purposeLabel}` : `${d.deck_id}${purposeLabel}`;
             select.appendChild(opt);
           });
           select.value = selectValue || "elf-classic";

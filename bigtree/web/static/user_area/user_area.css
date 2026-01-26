@@ -4,6 +4,9 @@
   --text:var(--text);
   --muted:var(--muted);
 }
+html, body{
+  height:100%;
+}
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
@@ -17,6 +20,7 @@ body{
   color:#e7f2ea;
   position:relative;
   overflow-x:hidden;
+  min-height:100vh;
 }
 body::before,
 body::after{

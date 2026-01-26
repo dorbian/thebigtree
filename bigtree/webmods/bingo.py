@@ -177,12 +177,42 @@ async def bingo_create(req: web.Request):
         header_text=str(body.get("header_text") or body.get("header") or "BING"),
         theme_color=str(body.get("theme_color") or "").strip() or None,
         announce_calls=bool(body.get("announce_calls")),
+        event_id=int(body.get("event_id") or 0) or None,
+        event_code=str(body.get("event_code") or "").strip() or None,
         **{k: v for k, v in {
             "size": body.get("size"),
             "free_center": body.get("free_center"),
             "max_number": body.get("max_number"),
         }.items() if v is not None}
     )
+    try:
+        db = get_database()
+        created_at = db._as_datetime(game.get("created_at"))
+        metadata = {
+            "currency": game.get("currency"),
+            "price": game.get("price"),
+            "pot": game.get("pot"),
+            "status": "active" if game.get("active") else "ended",
+        }
+        if game.get("event_id"):
+            metadata["event_id"] = game.get("event_id")
+        if game.get("event_code"):
+            metadata["event_code"] = game.get("event_code")
+        db.upsert_game(
+            game_id=str(game.get("game_id") or ""),
+            module="bingo",
+            payload=game,
+            title=game.get("title"),
+            channel_id=game.get("channel_id"),
+            created_by=game.get("created_by"),
+            created_at=created_at,
+            status=metadata["status"],
+            active=bool(game.get("active")),
+            metadata=metadata,
+            run_source="api",
+        )
+    except Exception:
+        pass
     channel_id = int(game.get("channel_id") or 0)
     if channel_id and bot:
         try:

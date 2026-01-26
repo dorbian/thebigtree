@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Craps‑lite</title>
+  <title>Crapslite</title>
   <link rel="icon" href="/icon.png" type="image/png">
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;background:#0b1310;color:#e7f2ea;min-height:100vh}
@@ -25,10 +25,11 @@
 <body>
   <header>
     <div>
-      <h1>Craps‑lite</h1>
-      <div class="muted" id="statusLine">Connecting…</div>
+      <h1>Crapslite</h1>
+      <div class="muted" id="statusLine">Connecting...</div>
     </div>
     <div class="pill"><span class="muted">Join:</span> <strong id="joinCode">{JOIN}</strong></div>
+    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
   </header>
 
   <main>
@@ -79,20 +80,33 @@
   const betBtn = document.getElementById("betBtn");
   const yourBets = document.getElementById("yourBets");
   const tableList = document.getElementById("tableList");
+  const USER_TOKEN_KEY = "bigtree_user_token";
+  const walletBalance = document.getElementById("walletBalance");
 
   let playerToken = window.localStorage.getItem(tokenKey) || "";
 
+  function getUserToken(){
+    try{
+      return window.localStorage.getItem(USER_TOKEN_KEY) || "";
+    }catch(e){
+      return "";
+    }
+  }
+
   function randNonce(){
-    // 16 bytes random -> hex
     const a = new Uint8Array(16);
     crypto.getRandomValues(a);
-    return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join("");
   }
 
   async function join(){
     if(playerToken) return;
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/join`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({})});
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "join failed");
     playerToken = data.player_token || "";
     if(!playerToken) throw new Error("no player token");
@@ -100,10 +114,30 @@
   }
 
   async function fetchState(){
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {headers:{"X-Cardgame-Token": playerToken}});
+    const userToken = getUserToken();
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state`, {
+      headers:{
+        "X-Cardgame-Token": playerToken,
+        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+      }
+    });
     const data = await res.json();
+    if(data && data.redirect){
+      window.location.assign(data.redirect);
+      return;
+    }
     if(!res.ok || !data.ok) throw new Error(data.error || "state failed");
     const st = data.state || {};
+
+    if (walletBalance){
+      if (st.wallet_balance !== undefined && st.wallet_balance !== null){
+        const suffix = st.wallet_currency ? ` ${st.wallet_currency}` : "";
+        walletBalance.textContent = `Balance: ${st.wallet_balance}${suffix}`;
+        walletBalance.style.display = "inline-flex";
+      }else{
+        walletBalance.style.display = "none";
+      }
+    }
 
     bettingState.textContent = st.betting_open ? "OPEN" : "CLOSED";
     roundNo.textContent = st.round || 0;
@@ -115,12 +149,10 @@
     const lr = st.last_resolution || null;
     outcomeLine.textContent = lr ? `Outcome: ${lr.outcome} (roll ${lr.roll_total})` : "Outcome: --";
 
-    // You
     const you = st.you || null;
     const bets = (you && Array.isArray(you.bets)) ? you.bets : [];
     yourBets.innerHTML = bets.length ? bets.map(b=>`<li>${b.amount}</li>`).join("") : "<li class='muted'>No bets yet.</li>";
 
-    // Table (names + totals only)
     const players = Array.isArray(st.players) ? st.players : [];
     if(!players.length){
       tableList.textContent = "No players yet.";
@@ -129,7 +161,7 @@
         const name = (p.name || "Player");
         const tb = (p.total_bet || 0);
         const tp = (p.total_payout || 0);
-        return `<div><strong>${name}</strong> — bet: ${tb} — payout: ${tp}</div>`;
+        return `<div><strong>${name}</strong> bet: ${tb} payout: ${tp}</div>`;
       }).join("");
     }
 
@@ -144,14 +176,22 @@
       return;
     }
     const nonce = randNonce();
+    const userToken = getUserToken();
     betBtn.disabled = true;
     try{
       const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/action`, {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
+        },
         body:JSON.stringify({token: playerToken, action:"bet", payload:{amount: amt, nonce}})
       });
       const data = await res.json();
+      if(data && data.redirect){
+        window.location.assign(data.redirect);
+        return;
+      }
       if(!res.ok || !data.ok) throw new Error(data.error || "bet failed");
       betAmount.value = "";
       await fetchState();
@@ -162,11 +202,69 @@
     }
   }
 
+  let ws = null;
+  let wsBackoff = 1000;
+  let wsPing = null;
+
+  function wsUrl(){
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const params = new URLSearchParams({view: "player"});
+    if (playerToken) params.set("token", playerToken);
+    return `${proto}://${window.location.host}/ws/cardgames/${gameId}/sessions/${joinCode}?${params.toString()}`;
+  }
+
+  function schedulePing(){
+    if (wsPing) clearInterval(wsPing);
+    wsPing = setInterval(() => {
+      if (!ws || ws.readyState !== 1) return;
+      if (document.hidden) return;
+      ws.send(JSON.stringify({type: "ping"}));
+    }, 30000);
+  }
+
+  function connectWs(){
+    if (ws) ws.close();
+    ws = new WebSocket(wsUrl());
+    ws.onopen = () => {
+      wsBackoff = 1000;
+      if (playerToken){
+        ws.send(JSON.stringify({type: "auth", token: playerToken}));
+      }
+      ws.send(JSON.stringify({type: "resume"}));
+    };
+    ws.onmessage = () => {
+      fetchState();
+    };
+    ws.onclose = () => {
+      if (document.hidden) return;
+      setTimeout(connectWs, wsBackoff);
+      wsBackoff = Math.min(wsBackoff * 2, 10000);
+    };
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden){
+      if (!ws || ws.readyState > 1){
+        connectWs();
+      }else{
+        ws.send(JSON.stringify({type: "resume"}));
+      }
+    }
+  });
+  window.addEventListener("focus", () => {
+    if (!ws || ws.readyState > 1){
+      connectWs();
+    }else{
+      ws.send(JSON.stringify({type: "resume"}));
+    }
+  });
+
   (async()=>{
     try{
       await join();
       await fetchState();
-      setInterval(()=>fetchState().catch(()=>{}), 1000);
+      schedulePing();
+      connectWs();
     }catch(err){
       statusLine.textContent = err.message || "failed";
     }

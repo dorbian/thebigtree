@@ -696,7 +696,7 @@
   .image-modal{
     position:fixed;
     inset:0;
-    background:rgba(4,10,8,.9);
+    background:rgba(2,6,5,.94);
     display:none;
     align-items:center;
     justify-content:center;
@@ -734,6 +734,11 @@
     font-size:16px;
     cursor:pointer;
     flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+    padding:0;
   }
   .image-modal .nav{
     position:absolute;
@@ -877,6 +882,7 @@
     grid-template-columns:1fr;
     gap:18px;
     align-items:stretch;
+    justify-items:center;
     max-width:min(920px, 92vw);
     max-height:90vh;
   }
@@ -888,6 +894,7 @@
   }
   .detail-media{
     position:relative;
+    width:100%;
   }
   .detail-media img{
     width:100%;
@@ -911,8 +918,10 @@
     pointer-events:none;
   }
   .detail-body{
-    background:rgba(12,18,15,.75);
-    border:1px solid var(--line);
+    width:15vw;
+    min-width:180px;
+    background:#eee8dc;
+    border:3px double #c2b59c;
     border-radius:16px;
     padding:16px;
     display:flex;
@@ -920,6 +929,39 @@
     gap:10px;
     max-height:none;
     overflow:visible;
+    margin-top:10px;
+    color:#1f2a24;
+    box-shadow:0 18px 40px rgba(0,0,0,.35);
+  }
+  .detail-body .detail-title{
+    color:#1f2a24;
+  }
+  .detail-body .detail-artist,
+  .detail-body .detail-origin{
+    color:#4f5f55;
+  }
+  .detail-body .detail-links a{
+    color:#2f6f52;
+  }
+  .detail-body .detail-vote-title{
+    color:#6b5f4f;
+  }
+  .detail-body .reaction{
+    background:#fffdf7;
+    border:1px solid rgba(63,90,74,.35);
+    color:#2b3a32;
+  }
+  .detail-body .reaction span{
+    color:#2f6f52;
+  }
+  .detail-body .tag-pill{
+    border-color:rgba(63,90,74,.35);
+    color:#2f6f52;
+  }
+  .detail-body .close{
+    background:#f3eee4;
+    border-color:#c2b59c;
+    color:#2b3a32;
   }
   .detail-vote-title{
     font-size:12px;

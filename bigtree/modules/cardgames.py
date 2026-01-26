@@ -1,18 +1,22 @@
 from __future__ import annotations
-import os
 import json
 import time
 import secrets
 import random
 import itertools
-import sqlite3
 import threading
 from typing import Any, Dict, List, Optional, Tuple
+from psycopg2.extras import Json
 
 try:
     import bigtree
 except Exception:
     bigtree = None
+
+try:
+    from bigtree.inc.database import get_database
+except Exception:
+    get_database = None
 
 try:
     from bigtree.inc.logging import logger
@@ -21,9 +25,6 @@ except Exception:
     logger = logging.getLogger("bigtree")
 
 GAMES = {"blackjack", "poker", "highlow", "slots", "crapslite"}
-_DB_PATH: Optional[str] = None
-_DB_READY = False
-_DB_CONFIGURED = False
 _DB_LOCK = threading.RLock()
 _FINISHED_TTL = 15.0
 
@@ -34,116 +35,10 @@ RANK_VALUES = {r: i + 1 for i, r in enumerate(RANKS)}
 def _now() -> float:
     return time.time()
 
-def _get_base_dir() -> str:
-    base = os.getenv("BIGTREE_CARDGAMES_DB_DIR")
-    if base:
-        return base
-    base = None
-    try:
-        if getattr(bigtree, "settings", None):
-            base = bigtree.settings.get("BOT.DATA_DIR", None)
-    except Exception:
-        base = None
-    if not base:
-        base = os.getenv("BIGTREE__BOT__DATA_DIR") or os.getenv("BIGTREE_DATA_DIR")
-    if not base:
-        base = os.getenv("BIGTREE_WORKDIR") or os.path.join(os.getcwd(), ".bigtree")
-    return base
-
-def _get_db_path() -> str:
-    global _DB_PATH
-    if _DB_PATH:
-        return _DB_PATH
-    base = _get_base_dir()
-    if not base:
-        base = "/opt/bigtree/database"
-    path = os.path.join(base, "cardgames")
-    os.makedirs(path, exist_ok=True)
-    _DB_PATH = os.path.join(path, "cardgames.db")
-    return _DB_PATH
-
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_get_db_path(), timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=30000")
-    return conn
-
-def _with_conn(fn, retries: int = 10, delay: float = 0.2):
-    last_err = None
-    for attempt in range(retries):
-        with _DB_LOCK:
-            try:
-                with _connect() as conn:
-                    return fn(conn)
-            except sqlite3.OperationalError as exc:
-                last_err = exc
-                if "locked" not in str(exc).lower():
-                    raise
-        time.sleep(delay * (attempt + 1))
-    if last_err:
-        raise last_err
-
-def _configure_db(conn: sqlite3.Connection) -> None:
-    conn.execute("PRAGMA journal_mode=DELETE")
-    conn.execute("PRAGMA synchronous=NORMAL")
-
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_def: str) -> None:
-    cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
-    if column not in cols:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
-
-def _ensure_db() -> None:
-    global _DB_READY, _DB_CONFIGURED
-    if _DB_READY:
-        return
-    with _DB_LOCK:
-        if _DB_READY:
-            return
-        def _init(conn):
-            if not _DB_CONFIGURED:
-                _configure_db(conn)
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sessions (
-                    session_id TEXT PRIMARY KEY,
-                    join_code TEXT UNIQUE,
-                    priestess_token TEXT,
-                    player_token TEXT,
-                    game_id TEXT,
-                    deck_id TEXT,
-                    background_url TEXT,
-                    background_artist_id TEXT,
-                    background_artist_name TEXT,
-                    currency TEXT,
-                    status TEXT,
-                    pot INTEGER,
-                    winnings INTEGER,
-                    state_json TEXT,
-                    created_at REAL,
-                    updated_at REAL
-                )
-                """
-            )
-            _ensure_column(conn, "sessions", "deck_id", "TEXT")
-            _ensure_column(conn, "sessions", "background_url", "TEXT")
-            _ensure_column(conn, "sessions", "background_artist_id", "TEXT")
-            _ensure_column(conn, "sessions", "background_artist_name", "TEXT")
-            _ensure_column(conn, "sessions", "currency", "TEXT")
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS events (
-                    session_id TEXT,
-                    seq INTEGER,
-                    ts REAL,
-                    type TEXT,
-                    data_json TEXT,
-                    PRIMARY KEY (session_id, seq)
-                )
-                """
-            )
-        _with_conn(_init, retries=15, delay=0.3)
-        _DB_CONFIGURED = True
-        _DB_READY = True
+def _db():
+    if not get_database:
+        raise RuntimeError("database unavailable")
+    return get_database()
 
 def _new_id() -> str:
     return secrets.token_urlsafe(10)
@@ -793,20 +688,25 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
         ]
         population = [s for s, _w in symbols]
         weights = [w for _s, w in symbols]
-        reels = random.choices(population, weights=weights, k=3)
-
+        reels = random.choices(population, weights=weights, k=9)
+        paytable = {
+            "cherry": 2,
+            "lemon": 3,
+            "bar": 5,
+            "seven": 10,
+            "diamond": 15,
+        }
         payout_mult = 0
-        if reels[0] == reels[1] == reels[2]:
-            paytable = {
-                "cherry": 2,
-                "lemon": 3,
-                "bar": 5,
-                "seven": 10,
-                "diamond": 15,
-            }
-            payout_mult = int(paytable.get(reels[0], 0))
-        elif reels.count("cherry") == 2:
-            payout_mult = 1
+        row_results = []
+        for row in range(3):
+            line = reels[row * 3 : (row + 1) * 3]
+            line_mult = 0
+            if line[0] == line[1] == line[2]:
+                line_mult = int(paytable.get(line[0], 0))
+            elif line.count("cherry") == 2:
+                line_mult = 1
+            row_results.append({"line": line, "multiplier": line_mult})
+            payout_mult += line_mult
 
         nonce = str(payload.get("nonce") or "").strip() or _new_id()
         payout = bet * payout_mult
@@ -817,6 +717,7 @@ def _apply_action(game_id: str, state: Dict[str, Any], action: str, payload: Dic
             "bet": bet,
             "multiplier": payout_mult,
             "payout": payout,
+            "rows": row_results,
             "nonce": nonce,
             "ts": _now(),
         }
@@ -871,64 +772,52 @@ def _poker_visible_community(state: Dict[str, Any]) -> List[Dict[str, Any]]:
         return community[:4]
     return community
 
-def _session_from_row(row: sqlite3.Row) -> Dict[str, Any]:
-    deck_id = None
-    background_url = None
-    background_artist_id = None
-    background_artist_name = None
-    currency = None
-    try:
-        deck_id = row["deck_id"]
-    except Exception:
-        deck_id = None
-    try:
-        background_url = row["background_url"]
-    except Exception:
-        background_url = None
-    try:
-        background_artist_id = row["background_artist_id"]
-    except Exception:
-        background_artist_id = None
-    try:
-        background_artist_name = row["background_artist_name"]
-    except Exception:
-        background_artist_name = None
-    try:
-        currency = row["currency"]
-    except Exception:
-        currency = None
+def _session_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    if not row:
+        return {}
+    state = row.get("state")
+    if state is None:
+        state = row.get("state_json")
+    if isinstance(state, str):
+        try:
+            state = json.loads(state)
+        except Exception:
+            state = {}
+    if not isinstance(state, dict):
+        state = {}
     return {
-        "session_id": row["session_id"],
-        "join_code": row["join_code"],
-        "priestess_token": row["priestess_token"],
-        "player_token": row["player_token"],
-        "game_id": row["game_id"],
-        "deck_id": deck_id,
-        "background_url": background_url,
-        "background_artist_id": background_artist_id,
-        "background_artist_name": background_artist_name,
-        "currency": currency,
-        "status": row["status"],
-        "pot": int(row["pot"] or 0),
-        "winnings": int(row["winnings"] or 0),
-        "state": json.loads(row["state_json"] or "{}"),
-        "created_at": float(row["created_at"] or 0),
-        "updated_at": float(row["updated_at"] or 0),
+        "session_id": row.get("session_id"),
+        "join_code": row.get("join_code"),
+        "priestess_token": row.get("priestess_token"),
+        "player_token": row.get("player_token"),
+        "game_id": row.get("game_id"),
+        "deck_id": row.get("deck_id"),
+        "background_url": row.get("background_url"),
+        "background_artist_id": row.get("background_artist_id"),
+        "background_artist_name": row.get("background_artist_name"),
+        "currency": row.get("currency"),
+        "status": row.get("status"),
+        "pot": int(row.get("pot") or 0),
+        "winnings": int(row.get("winnings") or 0),
+        "state": state,
+        "is_single_player": bool(row.get("is_single_player")),
+        "created_at": float(row.get("created_at") or 0),
+        "updated_at": float(row.get("updated_at") or 0),
     }
 
-def _delete_session(conn: sqlite3.Connection, session_id: str) -> None:
-    conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
-    conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
-
-def _cleanup_finished(conn: sqlite3.Connection) -> None:
-    now = _now()
-    rows = conn.execute(
-        "SELECT session_id, updated_at FROM sessions WHERE status = 'finished'"
-    ).fetchall()
-    for row in rows:
-        updated = float(row["updated_at"] or 0)
-        if now - updated >= _FINISHED_TTL:
-            _delete_session(conn, row["session_id"])
+def _cleanup_finished() -> None:
+    cutoff = _now() - _FINISHED_TTL
+    db = _db()
+    rows = db._execute(
+        "SELECT session_id FROM cardgame_sessions WHERE status = 'finished' AND EXTRACT(EPOCH FROM updated_at) < %s",
+        (cutoff,),
+        fetch=True,
+    ) or []
+    ids = [r.get("session_id") for r in rows if r.get("session_id")]
+    if not ids:
+        return
+    db._execute("DELETE FROM cardgame_events WHERE session_id = ANY(%s)", (ids,))
+    db._execute("DELETE FROM cardgame_sessions WHERE session_id = ANY(%s)", (ids,))
 
 def create_session(
     game_id: str,
@@ -939,14 +828,11 @@ def create_session(
     background_artist_name: Optional[str] = None,
     currency: Optional[str] = None,
     status: Optional[str] = None,
+    is_single_player: bool = False,
 ) -> Dict[str, Any]:
     game_id = str(game_id or "").strip().lower()
     if game_id not in GAMES:
         raise ValueError("invalid game")
-    _ensure_db()
-    session_id = _new_id()
-    join_code = _new_code()
-    priestess_token = _new_id()
     deck_id = (deck_id or "").strip() or None
     background_url = (background_url or "").strip() or None
     background_artist_id = (background_artist_id or "").strip() or None
@@ -957,66 +843,149 @@ def create_session(
         status = "created"
     state = _init_state(game_id, deck_id)
     now = _now()
-    def _insert(conn):
-        conn.execute(
+    db = _db()
+    for _ in range(10):
+        session_id = _new_id()
+        join_code = _new_code()
+        priestess_token = _new_id()
+        row = db._fetchone(
             """
-            INSERT INTO sessions (session_id, join_code, priestess_token, player_token, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, status, pot, winnings, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO cardgame_sessions (
+                session_id, join_code, priestess_token, player_token, game_id, deck_id,
+                background_url, background_artist_id, background_artist_name, currency,
+                status, pot, winnings, state, is_single_player, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, to_timestamp(%s), to_timestamp(%s))
+            ON CONFLICT (join_code) DO NOTHING
+            RETURNING session_id, join_code, priestess_token, player_token, game_id, deck_id,
+                      background_url, background_artist_id, background_artist_name, currency,
+                      status, pot, winnings, state, is_single_player,
+                      EXTRACT(EPOCH FROM created_at) AS created_at,
+                      EXTRACT(EPOCH FROM updated_at) AS updated_at
             """,
-            (session_id, join_code, priestess_token, None, game_id, deck_id, background_url, background_artist_id, background_artist_name, currency, status, int(pot or 0), 0, json.dumps(state), now, now)
+            (
+                session_id,
+                join_code,
+                priestess_token,
+                None,
+                game_id,
+                deck_id,
+                background_url,
+                background_artist_id,
+                background_artist_name,
+                currency,
+                status,
+                int(pot or 0),
+                0,
+                Json(state),
+                is_single_player,
+                now,
+                now,
+            ),
         )
-    _with_conn(_insert)
-    _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
-    return get_session_by_id(session_id) or {}
+        if row:
+            _add_event(session_id, "SESSION_CREATED", {"join_code": join_code, "game_id": game_id})
+            return _session_from_row(row)
+    raise ValueError("unable to create session")
 
 def list_sessions(game_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    _ensure_db()
-    def _load(conn):
-        _cleanup_finished(conn)
-        if game_id:
-            return conn.execute(
-                "SELECT * FROM sessions WHERE game_id = ? AND status != 'finished' ORDER BY created_at DESC",
-                (game_id,),
-            ).fetchall()
-        return conn.execute("SELECT * FROM sessions WHERE status != 'finished' ORDER BY created_at DESC").fetchall()
-    rows = _with_conn(_load)
+    _cleanup_finished()
+    db = _db()
+    if game_id:
+        rows = db._execute(
+            """
+            SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
+                   background_url, background_artist_id, background_artist_name, currency,
+                   status, pot, winnings, state, is_single_player,
+                   EXTRACT(EPOCH FROM created_at) AS created_at,
+                   EXTRACT(EPOCH FROM updated_at) AS updated_at
+            FROM cardgame_sessions
+            WHERE game_id = %s AND status != 'finished'
+            ORDER BY created_at DESC
+            """,
+            (game_id,),
+            fetch=True,
+        ) or []
+    else:
+        rows = db._execute(
+            """
+            SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
+                   background_url, background_artist_id, background_artist_name, currency,
+                   status, pot, winnings, state, is_single_player,
+                   EXTRACT(EPOCH FROM created_at) AS created_at,
+                   EXTRACT(EPOCH FROM updated_at) AS updated_at
+            FROM cardgame_sessions
+            WHERE status != 'finished'
+            ORDER BY created_at DESC
+            """,
+            fetch=True,
+        ) or []
     return [_session_from_row(row) for row in rows]
 
 def get_session_by_join_code(join_code: str) -> Optional[Dict[str, Any]]:
-    _ensure_db()
-    def _load(conn):
-        _cleanup_finished(conn)
-        return conn.execute("SELECT * FROM sessions WHERE join_code = ?", (join_code,)).fetchone()
-    row = _with_conn(_load)
+    _cleanup_finished()
+    db = _db()
+    row = db._fetchone(
+        """
+        SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
+               background_url, background_artist_id, background_artist_name, currency,
+               status, pot, winnings, state, is_single_player,
+               EXTRACT(EPOCH FROM created_at) AS created_at,
+               EXTRACT(EPOCH FROM updated_at) AS updated_at
+        FROM cardgame_sessions
+        WHERE join_code = %s
+        LIMIT 1
+        """,
+        (join_code,),
+    )
     if not row:
         return None
     s = _session_from_row(row)
-    if s.get("status") == "finished":
-        return None
-    return s
+    return None if s.get("status") == "finished" else s
 
 def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
-    _ensure_db()
-    def _load(conn):
-        _cleanup_finished(conn)
-        return conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
-    row = _with_conn(_load)
+    _cleanup_finished()
+    db = _db()
+    row = db._fetchone(
+        """
+        SELECT session_id, join_code, priestess_token, player_token, game_id, deck_id,
+               background_url, background_artist_id, background_artist_name, currency,
+               status, pot, winnings, state, is_single_player,
+               EXTRACT(EPOCH FROM created_at) AS created_at,
+               EXTRACT(EPOCH FROM updated_at) AS updated_at
+        FROM cardgame_sessions
+        WHERE session_id = %s
+        LIMIT 1
+        """,
+        (session_id,),
+    )
     if not row:
         return None
     s = _session_from_row(row)
-    if s.get("status") == "finished":
-        return None
-    return s
+    return None if s.get("status") == "finished" else s
 
 def _update_session(session_id: str, payload: Dict[str, Any]) -> None:
-    _ensure_db()
     now = _now()
-    def _update(conn):
-        conn.execute(
-            "UPDATE sessions SET status = ?, pot = ?, winnings = ?, state_json = ?, updated_at = ? WHERE session_id = ?",
-            (payload.get("status"), int(payload.get("pot") or 0), int(payload.get("winnings") or 0), json.dumps(payload.get("state") or {}), now, session_id)
-        )
-    _with_conn(_update)
+    db = _db()
+    db._execute(
+        """
+        UPDATE cardgame_sessions
+        SET status = %s,
+            pot = %s,
+            winnings = %s,
+            state = %s,
+            updated_at = to_timestamp(%s)
+        WHERE session_id = %s
+        """,
+        (
+            payload.get("status"),
+            int(payload.get("pot") or 0),
+            int(payload.get("winnings") or 0),
+            Json(payload.get("state") or {}),
+            now,
+            session_id,
+        ),
+    )
 
 def join_session(join_code: str, player_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Join a session as a player.
@@ -1056,41 +1025,54 @@ def join_session(join_code: str, player_meta: Optional[Dict[str, Any]] = None) -
         return {"player_token": token, "session": get_session_by_id(s["session_id"]) or s}
 
     # Default behavior for single-player games.
-    def _update(conn):
-        conn.execute(
-            "UPDATE sessions SET player_token = ?, updated_at = ? WHERE session_id = ?",
-            (token, _now(), s["session_id"]),
-        )
-    _with_conn(_update)
+    db = _db()
+    db._execute(
+        "UPDATE cardgame_sessions SET player_token = %s, updated_at = to_timestamp(%s) WHERE session_id = %s",
+        (token, _now(), s["session_id"]),
+    )
     _add_event(s["session_id"], "PLAYER_JOINED", {})
     s["player_token"] = token
     return {"player_token": token, "session": s}
 
 def _add_event(session_id: str, event_type: str, data: Dict[str, Any]) -> None:
-    _ensure_db()
-    def _insert(conn):
-        row = conn.execute("SELECT MAX(seq) AS max_seq FROM events WHERE session_id = ?", (session_id,)).fetchone()
-        seq = int(row["max_seq"] or 0) + 1
-        conn.execute(
-            "INSERT INTO events (session_id, seq, ts, type, data_json) VALUES (?, ?, ?, ?, ?)",
-            (session_id, seq, _now(), event_type, json.dumps(data or {}))
-        )
-    _with_conn(_insert)
+    db = _db()
+    db._execute(
+        """
+        INSERT INTO cardgame_events (session_id, ts, type, data)
+        VALUES (%s, to_timestamp(%s), %s, %s)
+        """,
+        (session_id, _now(), event_type, Json(data or {})),
+    )
 
 def list_events(session_id: str, since_seq: int) -> List[Dict[str, Any]]:
-    _ensure_db()
-    def _load(conn):
-        return conn.execute(
-            "SELECT seq, ts, type, data_json FROM events WHERE session_id = ? AND seq > ? ORDER BY seq ASC",
-            (session_id, int(since_seq))
-        ).fetchall()
-    rows = _with_conn(_load)
-    return [{
-        "seq": int(r["seq"]),
-        "ts": float(r["ts"] or 0),
-        "type": r["type"],
-        "data": json.loads(r["data_json"] or "{}"),
-    } for r in rows]
+    db = _db()
+    rows = db._execute(
+        """
+        SELECT id, EXTRACT(EPOCH FROM ts) AS ts, type, data
+        FROM cardgame_events
+        WHERE session_id = %s AND id > %s
+        ORDER BY id ASC
+        """,
+        (session_id, int(since_seq)),
+        fetch=True,
+    ) or []
+    out = []
+    for r in rows:
+        payload = r.get("data")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        out.append({
+            "seq": int(r.get("id") or 0),
+            "ts": float(r.get("ts") or 0),
+            "type": r.get("type"),
+            "data": payload,
+        })
+    return out
 
 def start_session(session_id: str, token: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
@@ -1111,6 +1093,21 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
     s["state"] = state
     _update_session(session_id, s)
     _add_event(session_id, "SESSION_STARTED", {})
+    return s
+
+def restart_blackjack_session(session_id: str) -> Dict[str, Any]:
+    s = get_session_by_id(session_id)
+    if not s:
+        raise ValueError("not found")
+    if s.get("game_id") != "blackjack":
+        raise ValueError("invalid game")
+    state = _init_blackjack_state(s.get("deck_id"))
+    _start_blackjack(state)
+    s["status"] = "live"
+    s["state"] = state
+    s["winnings"] = 0
+    _update_session(session_id, s)
+    _add_event(session_id, "STATE_UPDATED", {"action": "start_round"})
     return s
 
 def finish_session(session_id: str, token: str) -> Dict[str, Any]:
@@ -1296,7 +1293,46 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     if not s:
         raise ValueError("not found")
     state = s.get("state") or {}
-    if s.get("game_id") == "crapslite":
+    game_id = s.get("game_id")
+    is_single_player = s.get("is_single_player", False)
+    
+    # For single-player blackjack sessions, allow hit/stand/double/split actions
+    if game_id == "blackjack" and is_single_player and action in ("hit", "stand", "double", "split"):
+        if token != s.get("player_token"):
+            raise PermissionError("unauthorized")
+        if s.get("status") != "live":
+            raise ValueError("session not live")
+        updated, err = _apply_action(game_id, state, action, payload or {})
+        if err:
+            raise ValueError(err)
+        s["state"] = updated
+        if updated.get("status") == "finished":
+            result = updated.get("result")
+            pot = int(s.get("pot") or 0)
+            winnings = 0
+            results = updated.get("hand_results") or []
+            multipliers = updated.get("hand_multipliers") or []
+            if not results and result:
+                results = [result]
+            for idx, hand_result in enumerate(results):
+                if hand_result not in ("win", "push"):
+                    continue
+                multiplier = 1
+                if idx < len(multipliers):
+                    try:
+                        multiplier = int(multipliers[idx] or 1)
+                    except Exception:
+                        multiplier = 1
+                if hand_result == "win":
+                    winnings += pot * max(1, multiplier)
+                else:
+                    winnings += int(pot * max(1, multiplier) / 2)
+            s["winnings"] = winnings
+        _update_session(session_id, s)
+        _add_event(session_id, "STATE_UPDATED", {"action": action})
+        return s
+    
+    if game_id == "crapslite":
         players = state.get("players") if isinstance(state, dict) else None
         if not isinstance(players, dict) or token not in players:
             raise PermissionError("unauthorized")
@@ -1306,28 +1342,28 @@ def player_action(session_id: str, token: str, action: str, payload: Dict[str, A
     else:
         if token != s.get("player_token"):
             raise PermissionError("unauthorized")
-    if s.get("game_id") == "highlow" and not state.get("base_pot"):
+    if game_id == "highlow" and not state.get("base_pot"):
         state["base_pot"] = int(s.get("pot") or 0)
     if s.get("status") != "live":
         raise ValueError("session not live")
-    updated, err = _apply_action(s["game_id"], state, action, payload or {})
+    updated, err = _apply_action(game_id, state, action, payload or {})
     if err:
         raise ValueError(err)
     s["state"] = updated
-    if s.get("game_id") == "highlow":
+    if game_id == "highlow":
         s["winnings"] = int(updated.get("winnings") or 0)
-    if s.get("game_id") == "poker":
+    if game_id == "poker":
         s["pot"] = int(updated.get("pot") or s.get("pot") or 0)
     if updated.get("status") == "finished":
         result = updated.get("result")
         pot = int(s.get("pot") or 0)
         winnings = 0
-        if s.get("game_id") == "poker":
+        if game_id == "poker":
             if result == "player":
                 winnings = pot
             elif result == "push":
                 winnings = int(pot / 2)
-        elif s.get("game_id") == "blackjack":
+        elif game_id == "blackjack":
             results = updated.get("hand_results") or []
             multipliers = updated.get("hand_multipliers") or []
             if not results and result:
@@ -1371,7 +1407,7 @@ def _background_artist_payload(artist_id: Optional[str], artist_name: Optional[s
     name = (artist_name or "").strip()
     if name:
         return {"artist_id": artist_id, "name": name, "links": {}}
-    return {"artist_id": None, "name": "Forest", "links": {}}
+    return {}
 
 def get_state(session: Dict[str, Any], view: str = "player", token: Optional[str] = None) -> Dict[str, Any]:
     state = session.get("state") or {}
@@ -1452,13 +1488,12 @@ def get_state(session: Dict[str, Any], view: str = "player", token: Optional[str
         "state": state,
     }
 def delete_session(session_id: str, token: Optional[str] = None) -> None:
-    _ensure_db()
     if token:
         s = get_session_by_id(session_id)
         if not s:
             raise ValueError("not found")
         if token != s.get("priestess_token"):
             raise PermissionError("unauthorized")
-    def _delete(conn):
-        _delete_session(conn, session_id)
-    _with_conn(_delete)
+    db = _db()
+    db._execute("DELETE FROM cardgame_events WHERE session_id = %s", (session_id,))
+    db._execute("DELETE FROM cardgame_sessions WHERE session_id = %s", (session_id,))

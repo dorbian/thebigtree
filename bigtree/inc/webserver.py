@@ -41,11 +41,13 @@ def _cfg():
         jwt_algs = st.get("WEB.jwt_algorithms", ["HS256"], cast="json")
         api_keys = st.get("WEB.api_keys", [], cast="json")
         scopes   = st.get("WEB.api_key_scopes", {}, cast="json")
+        max_mb = st.get("WEB.client_max_size_mb", 32, int)
         return {
             "host": host, "port": port, "base_url": base,
             "cors_origin": cors,
             "jwt_secret": jwt_secret, "jwt_algorithms": jwt_algs,
             "api_keys": api_keys, "api_key_scopes": scopes,
+            "client_max_size": max(1, int(max_mb)) * 1024 * 1024,
         }
 
     # Fallback: legacy ConfigObj path (old code paths)
@@ -59,6 +61,11 @@ def _cfg():
             port = 8443
         base = (web.get("base_url") or f"http://{host}:{port}").rstrip("/")
         cors = (cfg.config.get("webapi", {}).get("cors_origin") or "*")
+        max_mb = web.get("client_max_size_mb", 32)
+        try:
+            max_mb = int(str(max_mb))
+        except Exception:
+            max_mb = 32
         return {
             "host": host, "port": port, "base_url": base,
             "cors_origin": cors,
@@ -66,6 +73,7 @@ def _cfg():
             "jwt_algorithms": web.get("jwt_algorithms", ["HS256"]),
             "api_keys": web.get("api_keys", []),
             "api_key_scopes": web.get("api_key_scopes", {}),
+            "client_max_size": max(1, int(max_mb)) * 1024 * 1024,
         }
 
     # Last resort defaults
@@ -73,16 +81,20 @@ def _cfg():
         "host": "0.0.0.0", "port": 8443, "base_url": "http://0.0.0.0:8443",
         "cors_origin": "*", "jwt_secret": "", "jwt_algorithms": ["HS256"],
         "api_keys": [], "api_key_scopes": {},
+        "client_max_size": 32 * 1024 * 1024,
     }
 
 class DynamicWebServer:
     def __init__(self):
-        # middlewares: CORS + (externalized) AUTH
-        self.app = web.Application(middlewares=[self._cors_mw, auth_middleware()])
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
         self.ws_active: Set[web.WebSocketResponse] = set()
         self._cfg = _cfg()
+        # middlewares: CORS + (externalized) AUTH
+        self.app = web.Application(
+            middlewares=[self._cors_mw, auth_middleware()],
+            client_max_size=int(self._cfg.get("client_max_size") or 32 * 1024 * 1024),
+        )
 
         self.app["ws_active"] = self.ws_active
     def reload_runtime_config(self):
