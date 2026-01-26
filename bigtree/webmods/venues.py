@@ -172,7 +172,6 @@ async def admin_venues_upsert(req: web.Request) -> web.Response:
     deck_id = body.get("deck_id")
     minimal_spend = body.get("minimal_spend")
     admin_discord_ids = body.get("admin_discord_ids")
-    game_backgrounds = body.get("game_backgrounds")
     if currency_name is not None:
         currency_name = str(currency_name).strip() or None
     if background_image is not None:
@@ -195,13 +194,6 @@ async def admin_venues_upsert(req: web.Request) -> web.Response:
         else:
             ids = []
         metadata["admin_discord_ids"] = ids
-    if isinstance(game_backgrounds, dict):
-        cleaned = {}
-        for key, value in game_backgrounds.items():
-            if not key:
-                continue
-            cleaned[str(key).strip().lower()] = str(value or "").strip()
-        metadata["game_backgrounds"] = cleaned
 
     venue = db.upsert_venue(
         name,

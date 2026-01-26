@@ -1,9 +1,9 @@
-      :root{
+:root{
         --bg-1:#0b1611;
         --bg-2:#0e2419;
         --bg-3:#102c1d;
-        --panel:rgba(10,14,15,.72);
-        --panel-2:rgba(7,10,11,.62);
+        --panel:#0f1e16;
+        --panel-2:#0a1510;
         --ink:#e8f7ef;
         --muted:#9bb6a7;
         --accent:#9de07d;
@@ -13,10 +13,6 @@
         --line:#1f3a2b;
         --shadow:0 18px 40px rgba(0,0,0,.35);
         --radius:18px;
-        --admin-login-bg-url:url("/static/images/adminlogin.png");
-        --admin-shell-bg-url:url("/static/images/adminlogin.png");
-        --admin-bg-overlay:rgba(0,0,0,.55);
-        --admin-bg-overlay-strong:rgba(0,0,0,.78);
       }
       *{box-sizing:border-box}
       body{
@@ -25,8 +21,8 @@
         font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
         color:var(--ink);
         background:
-          radial-gradient(1200px 600px at 15% -10%, rgba(120,120,128,.08), transparent 60%),
-          radial-gradient(900px 700px at 120% 20%, rgba(90,90,100,.08), transparent 60%),
+          radial-gradient(1200px 600px at 15% -10%, rgba(157,224,125,.18), transparent 60%),
+          radial-gradient(900px 700px at 120% 20%, rgba(60,207,142,.18), transparent 60%),
           linear-gradient(160deg, var(--bg-1), var(--bg-2) 55%, var(--bg-3));
         background-repeat:no-repeat;
         background-size:cover;
@@ -34,20 +30,6 @@
       }
       body.overlay{
         background:transparent;
-        position:relative;
-      }
-      body.overlay::before{
-        content:"";
-        position:fixed;
-        inset:0;
-        background:linear-gradient(160deg, rgba(6,10,12,.62), rgba(8,14,12,.48));
-        pointer-events:none;
-        z-index:0;
-      }
-      body.overlay .app-shell,
-      body.overlay .login-screen{
-        position:relative;
-        z-index:1;
       }
       body.overlay .sidebar{
         display:none;
@@ -86,13 +68,6 @@
         align-items:center;
         justify-content:center;
         padding:24px;
-        background:
-          var(--admin-login-bg-url),
-          var(--admin-bg-overlay);
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
       }
       .login-card{
         width:min(480px,92vw);
@@ -119,25 +94,14 @@
         grid-template-columns:260px 1fr;
         min-height:100vh;
         background:
-          var(--admin-shell-bg-url),
-          var(--admin-bg-overlay-strong);
+          radial-gradient(1200px 600px at 15% -10%, rgba(214,178,110,.10), transparent 80%),
+          radial-gradient(900px 700px at 120% 20%, rgba(231,242,234,.06), transparent 80%),
+          linear-gradient(160deg, rgba(11,14,13,.92), rgba(14,18,17,.92) 55%, rgba(12,15,14,.92)),
+          url("/static/images/adminlogin.png");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
-        position:relative;
-      }
-      .app-shell::before{
-        content:"";
-        position:fixed;
-        inset:0;
-        background:rgba(0,0,0,.5);
-        pointer-events:none;
-        z-index:0;
-      }
-      .app-shell > *{
-        position:relative;
-        z-index:1;
       }
       .sidebar{
         background:rgba(9,14,20,.9);
@@ -411,15 +375,14 @@
         display:flex;
         align-items:center;
         justify-content:space-between;
-        gap:32px;
+        gap:16px;
       }
       .brand{
-        font-family:"Brush Script MT","Segoe Script","Lucida Handwriting",cursive;
-        font-size:24px;
-        letter-spacing:.05em;
-        text-transform:none;
+        font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+        font-size:20px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
         color:var(--accent);
-        font-weight:normal;
       }
       .brand-user{
         display:flex;
@@ -429,17 +392,7 @@
         letter-spacing:.08em;
         text-transform:uppercase;
         color:var(--muted);
-        margin-top:0;
-      }
-      .brand-user-text{
-        display:flex;
-        flex-direction:column;
-        gap:2px;
-      }
-      .brand-user-venue{
-        font-size:10px;
-        letter-spacing:.12em;
-        color:rgba(155,182,167,.75);
+        margin-top:-6px;
       }
       .auth-temp-scopes{
         margin-top:6px;
@@ -471,7 +424,7 @@
         gap:18px;
       }
       .panel{
-        background:rgba(8,12,16,.6);
+        background:rgba(10,16,28,.72);
         border:1px solid var(--line);
         border-radius:var(--radius);
         padding:18px 18px 16px;
@@ -479,11 +432,6 @@
         position:relative;
         overflow:hidden;
         animation:rise .6s ease both;
-      }
-      .panel:not(.dashboard){
-        max-width:1200px;
-        margin-left:auto;
-        margin-right:auto;
       }
       .panel.dashboard{
         padding:24px;
@@ -515,7 +463,7 @@
         border:1px solid var(--line);
         border-radius:14px;
         padding:14px;
-        background:rgba(6,10,18,.86);
+        background:rgba(6,10,18,.6);
         position:relative;
         overflow:hidden;
       }
@@ -551,7 +499,6 @@
 
       .dashboard-admin-actions{
         display:flex;
-        flex-direction:column;
         flex-wrap:wrap;
         gap:10px;
         margin:10px 0 8px;
@@ -561,7 +508,8 @@
       /* Cap individual actions at ~20 characters wide and center their labels. */
       .dashboard-admin-actions > a,
       .dashboard-admin-actions > button{
-        width:100%;
+        flex:1 1 20ch;
+        max-width:20ch;
         text-align:center;
         justify-content:center;
       }
@@ -596,12 +544,20 @@
         z-index:1;
       }
 
-      .dashboard-plugin-url{
-        margin-top:8px;
+      .dashboard-plugin-card{
+        margin-top:16px;
+      }
+      .dashboard-plugin-steps{
+        margin-top:10px;
+        padding:10px;
+        border-radius:12px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(8,12,16,.55);
         color:var(--muted);
         font-size:12px;
-        line-height:1.4;
-        word-break:break-all;
+        line-height:1.5;
+        position:relative;
+        z-index:1;
       }
       .dashboard-readme{
         max-width:880px;
@@ -790,7 +746,7 @@
         content:"";
         position:absolute;
         inset:0;
-        background:linear-gradient(120deg, rgba(157,224,125,.05), transparent 45%);
+        background:linear-gradient(120deg, rgba(157,224,125,.12), transparent 45%);
         pointer-events:none;
       }
       .panel h2{
@@ -824,10 +780,6 @@
       #tarotDecksPanel{
         padding:16px;
         font-size:12px;
-        max-width:1800px;
-        width:100%;
-        grid-column:1 / -1;
-        overflow-x:hidden;
       }
       #tarotDecksPanel h2{
         font-size:17px;
@@ -840,9 +792,6 @@
       #tarotDecksPanel .row{
         gap:8px;
         margin-bottom:8px;
-      }
-      #tarotDecksPanel .inline-actions{
-        flex-wrap:wrap;
       }
       #tarotDecksPanel input,
       #tarotDecksPanel select,
@@ -940,78 +889,6 @@
         flex-direction:column;
         gap:10px;
       }
-      .bingo-owners-actions{
-        display:flex;
-        align-items:flex-end;
-        flex-wrap:wrap;
-        gap:10px;
-      }
-      .bingo-owners-field{
-        display:flex;
-        flex-direction:column;
-        gap:4px;
-        font-size:11px;
-        color:var(--muted);
-        min-width:160px;
-      }
-      .bingo-owners-field input{
-        width:160px;
-      }
-      .bingo-owners-check{
-        display:flex;
-        align-items:center;
-        gap:6px;
-        font-size:11px;
-        color:var(--muted);
-        padding-bottom:6px;
-      }
-      .bingo-main{
-        display:flex;
-        flex-direction:column;
-        gap:18px;
-      }
-      .bingo-sessions{
-        border:1px solid rgba(255,255,255,.08);
-        border-radius:14px;
-        padding:12px;
-        background:rgba(6,10,18,.6);
-        display:flex;
-        flex-direction:column;
-        gap:10px;
-        max-height:60vh;
-      }
-      .bingo-sessions-header{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:10px;
-      }
-      .bingo-sessions-header h3{
-        margin:0;
-        color:var(--accent);
-        letter-spacing:.12em;
-        text-transform:uppercase;
-        font-size:12px;
-      }
-      .bingo-sessions-list{
-        display:flex;
-        flex-direction:column;
-        gap:6px;
-        max-height:100%;
-        overflow:auto;
-        padding-right:4px;
-        color:var(--muted);
-        font-size:12px;
-      }
-      .bingo-sessions-list > div{
-        padding:8px 10px;
-        border-radius:10px;
-        border:1px solid rgba(255,255,255,.08);
-        background:rgba(8,12,16,.4);
-      }
-      .bingo-sessions-list .muted{
-        font-size:11px;
-      }
       .bingo-section h3{
         margin:0;
         color:var(--accent);
@@ -1074,11 +951,6 @@
         border:1px solid rgba(31,58,43,.6);
         background:rgba(6,10,18,.6);
       }
-      @media (max-width: 1100px){
-        .bingo-sessions{
-          max-height:none;
-        }
-      }
       .status-badge{
         display:inline-flex;
         align-items:center;
@@ -1114,28 +986,20 @@
         gap:10px;
       }
       .owner-row{
-        padding:4px 6px;
+        padding:8px 6px;
         border-bottom:1px solid rgba(255,255,255,0.05);
-        line-height:1.2;
       }
       .owner-row-main{
         display:flex;
         align-items:center;
         justify-content:space-between;
         gap:12px;
-        flex-wrap:nowrap;
+        flex-wrap:wrap;
       }
       .owner-row-name{
         display:flex;
         align-items:center;
         gap:10px;
-        min-width:0;
-        overflow:hidden;
-      }
-      .owner-row-name strong,
-      .owner-row-name .owner-meta{
-        overflow:hidden;
-        text-overflow:ellipsis;
       }
       .owner-row-actions{
         display:flex;
@@ -1405,13 +1269,6 @@
         gap:8px;
         margin-bottom:8px;
       }
-      .inline-actions{
-        display:flex;
-        gap:8px;
-        align-items:center;
-        flex-wrap:nowrap;
-        width:100%;
-      }
       label{
         display:block;
         font-size:12px;
@@ -1419,19 +1276,6 @@
         letter-spacing:.1em;
         color:var(--neutral-2);
         margin-bottom:4px;
-      }
-      .checkbox-row{
-        display:flex;
-        align-items:center;
-        gap:8px;
-        text-transform:none;
-        letter-spacing:0;
-        font-size:13px;
-        color:var(--ink);
-      }
-      .checkbox-row input{
-        width:auto;
-        margin:0;
       }
       input, select, textarea, button{
         width:100%;
@@ -1446,31 +1290,24 @@
       textarea{min-height:70px;resize:vertical}
       button{
         cursor:pointer;
-        background:rgba(255,255,255,.03);
-        color:var(--ink);
-        border:1px solid rgba(255,255,255,.15);
-        font-weight:600;
-        letter-spacing:.02em;
-        transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+        background:linear-gradient(135deg, rgba(157,224,125,.9), rgba(60,207,142,.75));
+        color:#0a1510;
+        border:none;
+        font-weight:700;
+        letter-spacing:.04em;
+        transition:transform .12s ease, box-shadow .12s ease;
       }
-      button:hover{
-        transform:translateY(-1px);
-        box-shadow:0 8px 18px rgba(0,0,0,.25);
-        border-color:rgba(107,212,162,.5);
-      }
+      button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(0,0,0,.25)}
       .btn-ghost{
-        background:rgba(255,255,255,.02);
-        border:1px solid rgba(255,255,255,.15);
+        background:transparent;
+        border:1px solid var(--line);
         color:var(--ink);
       }
       #bingoPanel input,
       #bingoPanel select,
       #bingoPanel button{
-        font-size:11px;
-        padding:5px 7px;
-      }
-      #bingoPanel button{
-        width:auto;
+        font-size:12px;
+        padding:6px 8px;
       }
       #bingoPanel .btn-ghost{
         font-weight:600;
@@ -1478,33 +1315,6 @@
       #bingoPanel{
         position:relative;
         overflow:hidden;
-      }
-      #bOwners{
-        max-height:840px;
-      }
-      .owners-table{
-        font-size:0.72rem;
-        line-height:1.15;
-      }
-      .owners-table th{
-        padding:3px 6px;
-      }
-      .owners-table td{
-        padding:2px 6px;
-      }
-      .owner-actions{
-        gap:4px;
-      }
-      .owner-actions .icon-action{
-        padding:3px;
-      }
-      .owner-actions .icon-action svg{
-        width:13px;
-        height:13px;
-      }
-      .owner-actions .mini-btn{
-        padding:3px 6px;
-        font-size:0.7rem;
       }
       #bingoPanel::before{
         content:"";
@@ -1623,19 +1433,8 @@
       }
       .deck-editor-grid{
         display:grid;
-        grid-template-columns:repeat(2, minmax(260px, 1fr));
+        grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
         gap:14px;
-      }
-      .deck-editor-top{
-        display:grid;
-        grid-template-columns:repeat(2, minmax(260px, 1fr));
-        gap:14px;
-        margin-bottom:14px;
-      }
-      .deck-editor-panel{
-        display:flex;
-        flex-direction:column;
-        gap:10px;
       }
       .deck-editor-column{
         background:rgba(7,12,16,.5);
@@ -2387,14 +2186,6 @@
         padding:18px;
         box-shadow:var(--shadow);
       }
-      .modal-content{
-        width:min(720px,92vw);
-        background:var(--panel);
-        border:1px solid var(--line);
-        border-radius:20px;
-        padding:18px;
-        box-shadow:var(--shadow);
-      }
       .modal-card--wide{
         width:min(1400px,92vw);
         height:90vh;
@@ -2594,25 +2385,6 @@
       /* --- Venues list panel --- */
       .venues-toolbar{gap:10px;flex-wrap:wrap;align-items:flex-end}
       .venues-search{min-width:260px;flex:1}
-
-      /* --- Iframe panel --- */
-      #iframePanel{
-        padding:0;
-        display:flex;
-        flex-direction:column;
-        max-width:100% !important;
-        margin:0 !important;
-        height:calc(100vh - 120px);
-        overflow:hidden;
-      }
-      #iframeContent{
-        flex:1;
-        border:none;
-        width:100%;
-        height:100%;
-        min-height:0;
-        background:#fff;
-      }
 
       /* --- Events list panel --- */
       .events-toolbar{gap:10px;flex-wrap:wrap;align-items:flex-end}

@@ -93,7 +93,6 @@ const grid = document.getElementById("feed");
   let currentDetailIndex = -1;
   let scrollLinkedInit = false;
   const WALLET_TOKEN_KEY = "bigtree_user_token";
-  let modalLockedItemId = null;
 
   const LINK_ORDER = ["instagram", "bluesky", "x", "artstation", "linktree", "website"];
   const LINK_LABELS = {
@@ -238,16 +237,12 @@ const grid = document.getElementById("feed");
     if (detailActions) detailActions.innerHTML = actionsHtml;
     if (detailTags) detailTags.innerHTML = tagsHtml;
 
-    const modalOpen = imageModal && imageModal.classList.contains("show");
-    const allowModalUpdate = !modalOpen || !modalLockedItemId || modalLockedItemId === data.item_id;
-    if (allowModalUpdate){
-      if (modalDetailTitle) modalDetailTitle.textContent = title;
-      if (modalDetailArtist) modalDetailArtist.textContent = artistLabel;
-      if (modalDetailLinks) modalDetailLinks.innerHTML = linkHtml;
-      if (modalDetailOrigin) modalDetailOrigin.textContent = origin;
-      if (modalDetailActions) modalDetailActions.innerHTML = actionsHtml;
-      if (modalDetailTags) modalDetailTags.innerHTML = tagsHtml;
-    }
+    if (modalDetailTitle) modalDetailTitle.textContent = title;
+    if (modalDetailArtist) modalDetailArtist.textContent = artistLabel;
+    if (modalDetailLinks) modalDetailLinks.innerHTML = linkHtml;
+    if (modalDetailOrigin) modalDetailOrigin.textContent = origin;
+    if (modalDetailActions) modalDetailActions.innerHTML = actionsHtml;
+    if (modalDetailTags) modalDetailTags.innerHTML = tagsHtml;
   }
 
   function renderPostOverlay(postEl, item){
@@ -300,9 +295,6 @@ const grid = document.getElementById("feed");
     }
     if (data.item_id){
       currentDetailIndex = galleryItems.findIndex((item) => getItemKey(item) === data.item_id);
-      modalLockedItemId = data.item_id;
-    }else{
-      modalLockedItemId = null;
     }
     updateDetailNav();
     imageModal.classList.add("show");
@@ -316,7 +308,6 @@ const grid = document.getElementById("feed");
     imageModalImg.src = "";
     imageInfo.textContent = "";
     if (detailWatermark) detailWatermark.textContent = "";
-    modalLockedItemId = null;
     updateDetailNav();
   }
 
@@ -656,11 +647,7 @@ const grid = document.getElementById("feed");
         match.reactions = data.reactions || {};
       }
       showToast("The Forest has received your offering.");
-      // Refresh counts for the active item or open modal.
-      const modalOpen = imageModal && imageModal.classList.contains("show");
-      if (modalOpen && modalLockedItemId === itemId && match){
-        renderDetailPanel(buildDetailPayload(match));
-      }
+      // Refresh the right-side panel counts for the active item.
       if (currentDetailIndex >= 0){
         const current = galleryItems[currentDetailIndex];
         if (current && getItemKey(current) === itemId){
@@ -1013,10 +1000,6 @@ const grid = document.getElementById("feed");
     if (index < 0 || index >= galleryItems.length) return;
     const item = galleryItems[index];
     if (!item) return;
-    const modalOpen = imageModal && imageModal.classList.contains("show");
-    if (modalOpen && modalLockedItemId){
-      return;
-    }
     currentDetailIndex = index;
     // Highlight active post
     document.querySelectorAll(".post.active").forEach((el) => el.classList.remove("active"));

@@ -433,73 +433,25 @@
     }
   }
 
-  let ws = null;
-  let wsBackoff = 1000;
-  let wsPing = null;
-
-  function wsUrl(){
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const params = new URLSearchParams({view: "priestess"});
-    return `${proto}://${window.location.host}/ws/cardgames/${gameId}/sessions/${joinCode}?${params.toString()}`;
-  }
-
-  function schedulePing(){
-    if (wsPing) clearInterval(wsPing);
-    wsPing = setInterval(() => {
-      if (!ws || ws.readyState !== 1) return;
-      if (document.hidden) return;
-      ws.send(JSON.stringify({type: "ping"}));
-    }, 30000);
-  }
-
-  function connectWs(){
-    if (ws) ws.close();
-    ws = new WebSocket(wsUrl());
-    ws.onopen = () => {
-      wsBackoff = 1000;
-      ws.send(JSON.stringify({type: "resume"}));
-    };
-    ws.onmessage = (ev) => {
-      try{
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "STATE" && payload.state){
-          render(payload.state);
-        }else if (payload.type === "SESSION_GONE"){
-          statusLine.textContent = "Session closed.";
-          startBtn.disabled = true;
-          finishBtn.disabled = true;
-        }else{
-          loadState();
-        }
-      }catch(err){}
-    };
-    ws.onclose = () => {
-      if (document.hidden) return;
-      setTimeout(connectWs, wsBackoff);
-      wsBackoff = Math.min(wsBackoff * 2, 10000);
-    };
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden){
-      if (!ws || ws.readyState > 1){
-        connectWs();
+  const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=priestess`);
+  src.onmessage = (ev) => {
+    try{
+      const payload = JSON.parse(ev.data);
+      if (payload.type === "STATE" && payload.state){
+        render(payload.state);
+      }else if (payload.type === "SESSION_GONE"){
+        statusLine.textContent = "Session closed.";
+        startBtn.disabled = true;
+        finishBtn.disabled = true;
       }else{
-        ws.send(JSON.stringify({type: "resume"}));
+        loadState();
       }
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (!ws || ws.readyState > 1){
-      connectWs();
-    }else{
-      ws.send(JSON.stringify({type: "resume"}));
-    }
-  });
-
-  schedulePing();
-  connectWs();
+    }catch(err){}
+  };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>

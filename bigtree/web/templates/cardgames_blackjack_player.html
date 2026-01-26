@@ -42,7 +42,6 @@
       <h1>Blackjack</h1>
       <div class="muted" id="statusLine">Waiting for session...</div>
     </div>
-    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
     <div class="user-box" id="userBox">
       <span id="userName"></span>
       <button id="assignBtn" type="button">Assign to me</button>
@@ -68,9 +67,8 @@
       <button id="standBtn">Hold</button>
       <button id="doubleBtn">Double</button>
       <button id="splitBtn">Split</button>
-      <button id="restartBtn" style="display:none;">Play again</button>
     </div>
-    <div class="panel" id="artistPanel">
+    <div class="panel">
       <div class="muted">Artist credits</div>
       <div id="artistCredits" class="muted">No artist credits.</div>
     </div>
@@ -97,17 +95,14 @@
   const winValue = document.getElementById("winValue");
   const dealerHand = document.getElementById("dealerHand");
   const playerHands = document.getElementById("playerHands");
-  const artistPanel = document.getElementById("artistPanel");
   const artistCredits = document.getElementById("artistCredits");
   const hitBtn = document.getElementById("hitBtn");
   const standBtn = document.getElementById("standBtn");
   const doubleBtn = document.getElementById("doubleBtn");
   const splitBtn = document.getElementById("splitBtn");
-  const restartBtn = document.getElementById("restartBtn");
   const userBox = document.getElementById("userBox");
   const userName = document.getElementById("userName");
   const assignBtn = document.getElementById("assignBtn");
-  const walletBalance = document.getElementById("walletBalance");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   const userTokenKey = "bigtree_user_token";
   let playerToken = "";
@@ -184,7 +179,7 @@
 
   function cardLabel(card){
     if (!card) return "?";
-    const suitMap = {spades:"S", hearts:"H", diamonds:"D", clubs:"C", hidden:"?"};
+    const suitMap = {spades:"♠", hearts:"♥", diamonds:"♦", clubs:"♣", hidden:"?"};
     return `${card.rank || "?"}${suitMap[card.suit] || ""}`;
   }
 
@@ -232,10 +227,8 @@
     const names = collectArtists(cards);
     if (!names.length){
       artistCredits.textContent = "No artist credits.";
-      if (artistPanel) artistPanel.style.display = "none";
       return;
     }
-    if (artistPanel) artistPanel.style.display = "";
     artistCredits.innerHTML = names.map(n => `<div>${n}</div>`).join("");
   }
 
@@ -304,27 +297,12 @@
   async function postAction(action, payload){
     await ensureToken();
     if (!sessionId) return;
-    const userToken = getUserToken();
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
+    await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
-      headers: {
-        "Content-Type":"application/json",
-        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
-      },
+      headers: {"Content-Type":"application/json"},
       body: JSON.stringify({token: playerToken, action, payload: payload || {}})
     });
-    if (res){
-      const data = await res.json().catch(() => ({}));
-      if (data && data.redirect){
-        window.location.assign(data.redirect);
-        return;
-      }
-      if (!res.ok || data.ok === false){
-        statusLine.textContent = data.error || "Action failed.";
-        return;
-      }
-    }
-    await loadState();
+    loadState();
   }
 
   function render(state){
@@ -338,15 +316,6 @@
     if (currencyLabel) currencyLabel.textContent = currency;
     if (currencyLabelWin) currencyLabelWin.textContent = currency;
     statusLine.textContent = `Status: ${state.session.status}`;
-    if (walletBalance){
-      if (state.wallet_balance !== undefined && state.wallet_balance !== null){
-        const suffix = state.wallet_currency ? ` ${state.wallet_currency}` : "";
-        walletBalance.textContent = `Balance: ${state.wallet_balance}${suffix}`;
-        walletBalance.style.display = "inline-flex";
-      }else{
-        walletBalance.style.display = "none";
-      }
-    }
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
     const hands = (state.state && state.state.player_hands) || [];
@@ -357,44 +326,22 @@
     const renderList = hands.length ? hands : fallbackHand;
     renderHand(dealerHand, (state.state && state.state.dealer_hand) || []);
     renderHands(playerHands, renderList, activeHand, results, multipliers);
-    const stateStatus = (state.state && state.state.status) || "";
-    const sessionStatus = (state.session && state.session.status) || "";
-    const live = (sessionStatus === "live" || stateStatus === "live") && stateStatus !== "finished";
+    const live = state.session.status === "live" && !((state.state && state.state.status) === "finished");
     const hand = renderList[activeHand] || [];
     const handResult = results[activeHand];
-    const isSinglePlayer = !!(state.session && state.session.is_single_player);
-    const canAct = isSinglePlayer && live && (!handResult || handResult === "pending");
+    const canAct = live && (!handResult || handResult === "pending");
     const canDouble = canAct && hand.length === 2;
     const canSplit = canAct && renderList.length <= 1 && hand.length === 2 && hand[0] && hand[1] && hand[0].rank === hand[1].rank;
-    
-    // Hide action buttons in hosted mode (not single player)
-    if (isSinglePlayer) {
-      hitBtn.style.display = "inline-flex";
-      standBtn.style.display = "inline-flex";
-      doubleBtn.style.display = "inline-flex";
-      splitBtn.style.display = "inline-flex";
-      hitBtn.disabled = !canAct;
-      standBtn.disabled = !canAct;
-      doubleBtn.disabled = !canDouble;
-      splitBtn.disabled = !canSplit;
-    } else {
-      hitBtn.style.display = "none";
-      standBtn.style.display = "none";
-      doubleBtn.style.display = "none";
-      splitBtn.style.display = "none";
-    }
-    
-    if (restartBtn){
-      const canRestart = isSinglePlayer && stateStatus === "finished" && !!(state.session && state.session.event_autoplay);
-      restartBtn.style.display = canRestart ? "inline-flex" : "none";
-      restartBtn.disabled = !canRestart;
-    }
+    hitBtn.disabled = !canAct;
+    standBtn.disabled = !canAct;
+    doubleBtn.disabled = !canDouble;
+    splitBtn.disabled = !canSplit;
     const visibleCards = []
       .concat(...renderList)
       .concat((state.state && state.state.dealer_hand) || []);
     renderArtists(visibleCards);
     if (state.session.status === "finished"){
-      statusLine.textContent = isSinglePlayer ? "Status: finished" : "Status: finished (waiting for host)";
+      statusLine.textContent = "Status: finished (waiting for host)";
     }
   }
 
@@ -402,7 +349,6 @@
   standBtn.addEventListener("click", () => postAction("stand"));
   doubleBtn.addEventListener("click", () => postAction("double"));
   splitBtn.addEventListener("click", () => postAction("split"));
-  if (restartBtn) restartBtn.addEventListener("click", () => postAction("start_round"));
   assignBtn?.addEventListener("click", assignSession);
 
   // If the session is already assigned, reflect that immediately.
@@ -427,10 +373,7 @@
   }
 
   async function loadState(){
-    const userToken = getUserToken();
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`, {
-      headers: userToken ? {"Authorization": `Bearer ${userToken}`} : {}
-    });
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
     const data = await res.json();
     if (data && data.ok && data.state){
       render(data.state);
@@ -439,75 +382,21 @@
     }
   }
 
-  let ws = null;
-  let wsBackoff = 1000;
-  let wsPing = null;
-
-  function wsUrl(){
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const params = new URLSearchParams({view: "player"});
-    if (playerToken) params.set("token", playerToken);
-    return `${proto}://${window.location.host}/ws/cardgames/${gameId}/sessions/${joinCode}?${params.toString()}`;
-  }
-
-  function schedulePing(){
-    if (wsPing) clearInterval(wsPing);
-    wsPing = setInterval(() => {
-      if (!ws || ws.readyState !== 1) return;
-      if (document.hidden) return;
-      ws.send(JSON.stringify({type: "ping"}));
-    }, 30000);
-  }
-
-  function connectWs(){
-    if (ws) ws.close();
-    ws = new WebSocket(wsUrl());
-    ws.onopen = () => {
-      wsBackoff = 1000;
-      if (playerToken){
-        ws.send(JSON.stringify({type: "auth", token: playerToken}));
-      }
-      ws.send(JSON.stringify({type: "resume"}));
-    };
-    ws.onmessage = (ev) => {
-      try{
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "STATE" && payload.state){
-          render(payload.state);
-        }else if (payload.type === "SESSION_GONE" && payload.redirect){
-          window.location.assign(payload.redirect);
-        }else{
-          loadState();
-        }
-      }catch(err){}
-    };
-    ws.onclose = () => {
-      if (document.hidden) return;
-      setTimeout(connectWs, wsBackoff);
-      wsBackoff = Math.min(wsBackoff * 2, 10000);
-    };
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden){
-      if (!ws || ws.readyState > 1){
-        connectWs();
+  const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=player`);
+  src.onmessage = (ev) => {
+    try{
+      const payload = JSON.parse(ev.data);
+      if (payload.type === "STATE" && payload.state){
+        render(payload.state);
       }else{
-        ws.send(JSON.stringify({type: "resume"}));
+        loadState();
       }
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (!ws || ws.readyState > 1){
-      connectWs();
-    }else{
-      ws.send(JSON.stringify({type: "resume"}));
-    }
-  });
-
-  schedulePing();
-  connectWs();
+    }catch(err){}
+  };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>

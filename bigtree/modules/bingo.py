@@ -177,8 +177,6 @@ def create_game(
     header_text: Optional[str] = None,
     theme_color: Optional[str] = None,
     announce_calls: Optional[bool] = None,
-    event_id: Optional[int] = None,
-    event_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     _ensure_dirs()
     game_id = _new_game_id()
@@ -205,8 +203,6 @@ def create_game(
         "started": False,
         "stage": "single",  # NEW
         "active": True,
-        "event_id": int(event_id) if event_id else None,
-        "event_code": (event_code or "").strip() or None,
         "background_path": None,  # file path under assets
         "theme_color": (theme_color or "").strip() or None,
         "announce_calls": bool(announce_calls),

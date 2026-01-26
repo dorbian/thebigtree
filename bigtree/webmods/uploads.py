@@ -10,10 +10,7 @@ from bigtree.modules import artists as artist_mod
 from bigtree.modules import media as media_mod
 from bigtree.modules import gallery as gallery_mod
 import uuid
-try:
-    import imghdr
-except ModuleNotFoundError:
-    from bigtree.inc import imghdr_compat as imghdr
+import imghdr
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
@@ -118,8 +115,6 @@ def _media_item(
     origin_label: str | None = None,
     artist_name: str | None = None,
     artist_links: dict | None = None,
-    media_type: str | None = None,
-    venue_id: int | None = None,
 ) -> dict:
     url = (discord_url if (prefer_discord and discord_url) else f"/media/{filename}")
     item_id = f"media:{filename}" if filename else ""
@@ -138,10 +133,6 @@ def _media_item(
         "used_in": used_in or [],
         "hidden": gallery_mod.is_hidden(item_id) if item_id else False,
     }
-    if media_type:
-        item["media_type"] = media_type
-    if venue_id is not None:
-        item["venue_id"] = venue_id
     if artist_name:
         item["artist_name"] = artist_name
     if artist_links:
@@ -265,14 +256,6 @@ async def upload_media(req: web.Request):
     title = (fields.get("title") or "").strip() or None
     origin_type = (fields.get("origin_type") or "").strip() or None
     origin_label = (fields.get("origin_label") or "").strip() or None
-    media_type = (fields.get("media_type") or "").strip() or None
-    hidden_raw = (fields.get("hidden") or "").strip().lower()
-    hidden = hidden_raw in ("1", "true", "yes", "on")
-    venue_id_raw = (fields.get("venue_id") or "").strip()
-    try:
-        venue_id = int(venue_id_raw) if venue_id_raw else None
-    except Exception:
-        venue_id = None
     kind = imghdr.what(None, h=data)
     ext_map = {
         "jpeg": ".jpg",
@@ -299,13 +282,6 @@ async def upload_media(req: web.Request):
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
     db = get_database()
     artist_name, artist_links = _artist_payload_for_db(artist_id)
-    metadata = {"source": "upload"}
-    if artist_id:
-        metadata["artist_id"] = artist_id
-    if media_type:
-        metadata["media_type"] = media_type
-    if venue_id is not None:
-        metadata["venue_id"] = venue_id
     db.upsert_media_item(
         media_id=filename,
         filename=filename,
@@ -316,8 +292,7 @@ async def upload_media(req: web.Request):
         origin_label=origin_label,
         url=f"/media/{filename}",
         thumb_url=f"/media/thumbs/{filename}",
-        hidden=hidden,
-        metadata=metadata,
+        metadata={"source": "upload", "artist_id": artist_id} if artist_id else {"source": "upload"},
     )
     try:
         from bigtree.webmods import gallery as gallery_web
@@ -335,34 +310,16 @@ async def upload_media(req: web.Request):
         origin_label=origin_label or "",
         artist_name=artist_name,
         artist_links=artist_links,
-        media_type=media_type or "",
-        venue_id=venue_id,
     )
-    item["hidden"] = hidden
     return web.json_response({"ok": True, "item": item})
 
 @route("GET", "/api/media/list", scopes=["tarot:admin", "bingo:admin", "admin:web"])
-async def list_media(req: web.Request):
+async def list_media(_req: web.Request):
     items: list[dict] = []
     seen: set[str] = set()
     usage_map = _build_usage_map()
     db = get_database()
-    media_type = (req.query.get("media_type") or "").strip()
-    venue_raw = (req.query.get("venue_id") or "").strip()
-    origin_type = (req.query.get("origin_type") or "").strip()
-    try:
-        venue_id = int(venue_raw) if venue_raw else None
-    except Exception:
-        venue_id = None
-    filters_active = bool(media_type or venue_id or origin_type)
-    rows = db.list_media_items(
-        limit=5000,
-        offset=0,
-        include_hidden=True,
-        media_type=media_type or None,
-        venue_id=venue_id,
-        origin_type=origin_type or None,
-    )
+    rows = db.list_media_items(limit=5000, offset=0, include_hidden=True)
     for row in rows or []:
         filename = row.get("filename") or row.get("media_id")
         if not filename or filename in seen:
@@ -373,12 +330,6 @@ async def list_media(req: web.Request):
         artist_links = row.get("artist_links") if isinstance(row.get("artist_links"), dict) else {}
         meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
         artist_id = (meta.get("artist_id") or "").strip() if isinstance(meta, dict) else ""
-        media_type = (meta.get("media_type") or "").strip() if isinstance(meta, dict) else ""
-        venue_id = meta.get("venue_id") if isinstance(meta, dict) else None
-        try:
-            venue_id = int(venue_id) if venue_id is not None and venue_id != "" else None
-        except Exception:
-            venue_id = None
         items.append(_media_item(
             filename,
             artist_id or None,
@@ -391,16 +342,12 @@ async def list_media(req: web.Request):
             origin_label=row.get("origin_label") or "",
             artist_name=artist_name,
             artist_links=artist_links,
-            media_type=media_type,
-            venue_id=venue_id,
         ))
         items[-1]["url"] = url
         if url and url != f"/media/{filename}":
             items[-1]["fallback_url"] = f"/media/{filename}"
         items[-1]["hidden"] = bool(row.get("hidden"))
 
-    if filters_active:
-        return web.json_response({"ok": True, "items": items})
     for deck in tarot_mod.list_decks():
         back = (deck.get("back_image") or "").strip()
         if back:

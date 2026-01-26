@@ -121,79 +121,9 @@
     }
   }
 
-  let ws = null;
-  let wsBackoff = 1000;
-  let wsPing = null;
-
-  function wsUrl(){
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const params = new URLSearchParams({view: "priestess"});
-    return `${proto}://${window.location.host}/ws/cardgames/${gameId}/sessions/${joinCode}?${params.toString()}`;
-  }
-
-  function schedulePing(){
-    if (wsPing) clearInterval(wsPing);
-    wsPing = setInterval(() => {
-      if (!ws || ws.readyState !== 1) return;
-      if (document.hidden) return;
-      ws.send(JSON.stringify({type: "ping"}));
-    }, 30000);
-  }
-
-  function connectWs(){
-    if (ws) ws.close();
-    ws = new WebSocket(wsUrl());
-    ws.onopen = () => {
-      wsBackoff = 1000;
-      ws.send(JSON.stringify({type: "resume"}));
-    };
-    ws.onmessage = (ev) => {
-      try{
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "STATE" && payload.state){
-          render(payload.state);
-        }else if (payload.type === "SESSION_GONE" && payload.redirect){
-          window.location.assign(payload.redirect);
-        }else{
-          fetchState();
-        }
-      }catch(err){}
-    };
-    ws.onclose = () => {
-      if (document.hidden) return;
-      setTimeout(connectWs, wsBackoff);
-      wsBackoff = Math.min(wsBackoff * 2, 10000);
-    };
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden){
-      if (!ws || ws.readyState > 1){
-        connectWs();
-      }else{
-        ws.send(JSON.stringify({type: "resume"}));
-      }
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (!ws || ws.readyState > 1){
-      connectWs();
-    }else{
-      ws.send(JSON.stringify({type: "resume"}));
-    }
-  });
-
   startBtn.addEventListener("click", start);
   finishBtn.addEventListener("click", finish);
-  (async()=>{
-    try{
-      await fetchState();
-      schedulePing();
-      connectWs();
-    }catch(e){
-      statusLine.textContent = e.message || "failed";
-    }
-  })();
+  (async()=>{try{await fetchState();setInterval(()=>fetchState().catch(()=>{}),1500);}catch(e){statusLine.textContent=e.message||"failed"}})();
 </script>
 </body>
 </html>

@@ -11,7 +11,6 @@
       margin:0;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
       background:linear-gradient(180deg,#07100c,#030906);
-      background-repeat: no-repeat;
       color:#e7f2ea;
       min-height:100vh;
       display:flex;
@@ -59,25 +58,20 @@
 </head>
 <body>
   <div class="card">
-  <div id="joinedHeader" style="display:none;">
-    <h1 id="joinedTitle"></h1>
-    <div class="status" id="joinedBalance" style="margin-bottom:12px;"></div>
-    <div class="row" style="margin-bottom:18px;">
-      <a class="btn" href="/user-area">Back to Wallet Area</a>
-    </div>
-  </div>
   <h1 id="eventTitle">Forest Event</h1>
   <div class="muted" id="eventMeta">Loading event <code>{event_code}</code>...</div>
-  <div class="status" id="eventWalletBalance" style="display:none;">Wallet balance: -</div>
+  <div class="status" id="eventWalletBalance">Wallet balance: -</div>
 
   <div class="status" id="eventStatus">Loading...</div>
 
   <div class="row">
     <a class="btn" href="/user-area">Open Forest Wallet / Login</a>
     <button id="joinBtn" type="button">Join event</button>
-    <button id="guestBtn" type="button" style="display:none;">Continue as guest</button>
   </div>
-  <div class="muted" id="createGameStatus" style="margin-top:6px; font-size:12px;"></div>
+
+  <div class="muted" style="margin-top:12px; font-size:13px;">
+    Tip: if you just logged in, come back here and press "Join event".
+  </div>
   <div class="game-list" id="eventGames"></div>
 </div>
 
@@ -113,26 +107,18 @@
       if (el) el.textContent = msg;
     }
 
-    function setWalletBalance(balance, currency, visible){
+    function setWalletBalance(balance, currency){
       const el = document.getElementById("eventWalletBalance");
       if (!el) return;
-      if (!visible){
-        el.style.display = "none";
-        return;
-      }
       if (balance === null || balance === undefined){
         el.textContent = "Wallet balance: -";
-        el.style.display = "none";
         return;
       }
       const suffix = currency ? ` ${currency}` : "";
       el.textContent = `Wallet balance: ${balance}${suffix}`;
-      el.style.display = "block";
     }
 
-    const guestBtn = document.getElementById("guestBtn");
-
-    function renderGames(games, enabledGames, canCreate){
+    function renderGames(games, enabledGames){
       const list = document.getElementById("eventGames");
       if (!list) return;
       const open = Array.isArray(games) ? games : [];
@@ -151,13 +137,11 @@
           const title = game ? (game.title || game.type || "Game") : k;
           const join = game ? game.join_url : "";
           const meta = game
-            ? [game.module, game.currency].filter(Boolean).join(" \u25b8 ")
+            ? [game.module, game.currency].filter(Boolean).join(" • ")
             : "Waiting for a host to open a table";
           const joinBtn = join
             ? `<a class="btn" href="${join}">Open table</a>`
-            : (canCreate
-              ? `<button class="btn" data-create="${k}" type="button">Create table</button>`
-              : "<span class=\"muted\">Not available yet</span>");
+            : "<span class='muted'>Not available yet</span>";
           return `
             <div class="game-card">
               <div>
@@ -168,38 +152,20 @@
             </div>
           `;
         }).join("");
-        list.innerHTML = cards || "<div class=\"muted\">No games configured.</div>";
-        attachCreateHandlers(list);
+        list.innerHTML = cards || "<div class='muted'>No games configured.</div>";
         return;
       }
 
-        if (!open.length){
-          if (canCreate){
-            const defaults = ["blackjack", "slots"];
-            list.innerHTML = defaults.map(key => {
-              const title = key.charAt(0).toUpperCase() + key.slice(1);
-              return `
-                <div class="game-card">
-                  <div>
-                    <div>${title}</div>
-                    <div class="game-meta">No open tables yet</div>
-                  </div>
-                  <button class="btn" data-create="${key}" type="button">Create table</button>
-                </div>
-              `;
-            }).join("");
-            attachCreateHandlers(list);
-            return;
-          }
-          list.innerHTML = "<div class=\"muted\">No open tables yet.</div>";
-          return;
-        }
+      if (!open.length){
+        list.innerHTML = "<div class='muted'>No open tables yet.</div>";
+        return;
+      }
 
       list.innerHTML = open.map(game => {
         const title = game.title || game.type || "Game";
         const join = game.join_url;
-        const meta = [game.module, game.currency].filter(Boolean).join(" \u25b8 ");
-        const joinBtn = join ? `<a class="btn" href="${join}">Open table</a>` : "<span class=\"muted\">No link</span>";
+        const meta = [game.module, game.currency].filter(Boolean).join(" • ");
+        const joinBtn = join ? `<a class="btn" href="${join}">Open table</a>` : "<span class='muted'>No link</span>";
         return `
           <div class="game-card">
             <div>
@@ -210,13 +176,6 @@
           </div>
         `;
       }).join("");
-      attachCreateHandlers(list);
-    }
-
-    function attachCreateHandlers(list){
-      list.querySelectorAll("button[data-create]").forEach(btn => {
-        btn.addEventListener("click", () => createGame(btn.dataset.create || ""));
-      });
     }
 
     async function load(){
@@ -237,49 +196,33 @@
         meta.push(`Status: ${ev.status || "active"}`);
         document.getElementById("eventMeta").textContent = meta.join(" · ");
 
-        // Hide joined header by default
-        document.getElementById("joinedHeader").style.display = "none";
-
         if (data.requires_login){
-          setStatus("Please login with XIVAuth, or continue as guest for this event.");
-          setWalletBalance(null, ev.currency_name, false);
+          setStatus("Please login first (XIVAuth) using the Wallet button, then come back and join.");
+          setWalletBalance(null, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
-          if (guestBtn) guestBtn.style.display = "inline-flex";
         }else if (data.joined){
-            // Show joined header
-            document.getElementById("joinedHeader").style.display = "block";
-            // Compose "VENUE presents: TITLE"
-            let venue = ev.venue_name ? ev.venue_name : "Venue";
-            let title = ev.title ? ev.title : `Event ${ev.event_code}`;
-            document.getElementById("joinedTitle").textContent = `${venue} presents: ${title}`;
-            // Show balance
-            let bal = (data.wallet_balance !== undefined && data.wallet_balance !== null) ? data.wallet_balance : "-";
-            let cur = ev.currency_name ? ev.currency_name : "";
-            document.getElementById("joinedBalance").textContent = `Wallet balance: ${bal}${cur ? ' ' + cur : ''}`;
-
-            // Hide default event title/meta/balance/status/buttons
-            document.getElementById("eventTitle").style.display = "none";
-            document.getElementById("eventMeta").style.display = "none";
-            document.getElementById("eventWalletBalance").style.display = "none";
-            document.getElementById("eventStatus").style.display = "none";
-            document.querySelectorAll(".row").forEach(r => r.style.display = "none");
-
-            try{
-              const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
-              renderGames((games && games.games) || [], enabledGames, true);
-            }catch(err){
-              renderGames([], enabledGames, true);
-            }
+          let msg = "You are already joined.";
+          if (ev.wallet_enabled && data.wallet_balance !== null && data.wallet_balance !== undefined){
+            msg += ` Wallet balance: ${data.wallet_balance}`;
+          }
+          setWalletBalance(data.wallet_balance, ev.currency_name);
+          setStatus(msg);
+          document.getElementById("joinBtn").textContent = "Joined";
+          document.getElementById("joinBtn").disabled = true;
+          try{
+            const games = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games`, {method:"GET"});
+            renderGames((games && games.games) || [], enabledGames);
+          }catch(err){
+            renderGames([], enabledGames);
+          }
         }else if ((ev.status || "") === "ended"){
           setStatus("This event has ended. You can no longer join.");
-          setWalletBalance(data.wallet_balance, ev.currency_name, !!ev.wallet_enabled);
+          setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = true;
-          if (guestBtn) guestBtn.style.display = "none";
         }else{
           setStatus("Ready to join.");
-          setWalletBalance(data.wallet_balance, ev.currency_name, false);
+          setWalletBalance(data.wallet_balance, ev.currency_name);
           document.getElementById("joinBtn").disabled = false;
-          if (guestBtn) guestBtn.style.display = "none";
         }
       }catch(err){
         setStatus(err.message || "Unable to load event.");
@@ -296,39 +239,6 @@
         setStatus(err.message || "Unable to join.");
       }
     });
-
-    if (guestBtn){
-      guestBtn.addEventListener("click", async () => {
-        try{
-          setStatus("Setting up guest access...");
-          const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/guest`, {method:"POST", body:"{}"});
-          if (!data.ok) throw new Error(data.error || "unable to start guest session");
-          await load();
-        }catch(err){
-          setStatus(err.message || "Unable to start guest session.");
-        }
-      });
-    }
-
-    async function createGame(gameId){
-      const statusEl = document.getElementById("createGameStatus");
-      if (statusEl) statusEl.textContent = `Creating ${gameId} table...`;
-      try{
-        const data = await jsonFetch(`/api/events/${encodeURIComponent(EVENT_CODE)}/games/create`, {
-          method:"POST",
-          body: JSON.stringify({game_id: gameId}),
-        });
-        if (!data.ok) throw new Error(data.error || "unable to create");
-        if (data.join_url){
-          window.location.assign(data.join_url);
-          return;
-        }
-        if (statusEl) statusEl.textContent = "Table created.";
-        await load();
-      }catch(err){
-        if (statusEl) statusEl.textContent = err.message || "Unable to create table.";
-      }
-    }
 
     load();
   </script>

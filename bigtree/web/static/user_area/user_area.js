@@ -125,15 +125,8 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(data.error || "Failed to load games");
       }
       const games = data.games || [];
-      const isActiveGame = (g) => {
-        const status = String(g?.status || "").toLowerCase();
-        if (["ended", "finished", "complete", "closed"].includes(status)) return false;
-        if (g?.active === false) return false;
-        if (g?.active === true) return true;
-        return status === "active" || status === "";
-      };
-      const activeGames = games.filter(isActiveGame);
-      const pastGames = games.filter(g => !isActiveGame(g));
+      const activeGames = games.filter(g => !!g.active);
+      const pastGames = games.filter(g => !g.active);
       renderGames(activeGames, activeGamesContainer);
       renderGames(pastGames, pastGamesContainer, {emptyText: "No past games found yet."});
     }catch(err){
@@ -256,9 +249,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderGameRow(game){
     const title = getGameTitle(game);
-    const status = game.status || (game.active ? "active" : "ended");
-    const isActive = String(status || "").toLowerCase() === "active" || game.active;
-    const outcome = isActive ? "-" : (game.outcome || status);
+    const status = game.active ? "active" : "ended";
+    const outcome = game.active ? "-" : (game.outcome || status);
     const playerUrl = buildPlayerUrl(game);
     const playerLink = playerUrl ? `<a href="${escapeHtml(playerUrl)}" target="_blank" rel="noreferrer">Open</a>` : "-";
     return `
@@ -279,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     gameDetailTitle.textContent = getGameTitle(game);
-    const status = game.status || (game.active ? "active" : "ended");
+    const status = game.active ? "active" : "ended";
     const playerUrl = buildPlayerUrl(game);
     const details = [
       {label: "Title", value: getGameTitle(game)},

@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import string
+import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, date
@@ -197,40 +198,6 @@ class Database:
             )
             """,
             """
-            CREATE TABLE IF NOT EXISTS cardgame_sessions (
-                session_id TEXT PRIMARY KEY,
-                join_code TEXT UNIQUE NOT NULL,
-                priestess_token TEXT,
-                player_token TEXT,
-                game_id TEXT NOT NULL,
-                deck_id TEXT,
-                background_url TEXT,
-                background_artist_id TEXT,
-                background_artist_name TEXT,
-                currency TEXT,
-                status TEXT NOT NULL DEFAULT 'created',
-                pot BIGINT NOT NULL DEFAULT 0,
-                winnings BIGINT NOT NULL DEFAULT 0,
-                state JSONB DEFAULT '{}'::jsonb,
-                is_single_player BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS cardgame_events (
-                id BIGSERIAL PRIMARY KEY,
-                session_id TEXT NOT NULL REFERENCES cardgame_sessions(session_id) ON DELETE CASCADE,
-                ts TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                type TEXT NOT NULL,
-                data JSONB DEFAULT '{}'::jsonb
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_join_code ON cardgame_sessions(join_code)",
-            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_game_id ON cardgame_sessions(game_id)",
-            "CREATE INDEX IF NOT EXISTS idx_cardgame_sessions_status ON cardgame_sessions(status)",
-            "CREATE INDEX IF NOT EXISTS idx_cardgame_events_session ON cardgame_events(session_id, id)",
-            """
             CREATE TABLE IF NOT EXISTS venues (
                 id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
@@ -302,17 +269,6 @@ class Database:
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id)
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS venue_admins (
-                id SERIAL PRIMARY KEY,
-                venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
-                discord_id BIGINT NOT NULL UNIQUE,
-                role TEXT NOT NULL DEFAULT 'admin',
-                metadata JSONB DEFAULT '{}'::jsonb,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             """,
             """
@@ -458,7 +414,6 @@ class Database:
             self._ensure_column(conn, "games", "venue_id", "INTEGER")
             self._ensure_column(conn, "games", "event_id", "INTEGER")
             self._ensure_column(conn, "venues", "deck_id", "TEXT")
-            self._ensure_column(conn, "cardgame_sessions", "is_single_player", "BOOLEAN DEFAULT FALSE")
         logger.debug("[database] schema ready")
 
     def _count_rows(self, table: str) -> int:
@@ -1004,7 +959,6 @@ class Database:
         venue_id: Optional[int] = None,
         currency_name: Optional[str] = None,
         wallet_enabled: Optional[bool] = None,
-        created_by: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         metadata = metadata or {}
@@ -1044,7 +998,7 @@ class Database:
             venue_id=venue_id,
             currency_name=currency_name,
             wallet_enabled=bool(wallet_enabled),
-            created_by=created_by,
+            created_by=None,
             metadata=metadata,
         )
 
@@ -1686,40 +1640,6 @@ class Database:
         )
         return True
 
-    def get_discord_venue(self, discord_id: int) -> Optional[Dict[str, Any]]:
-        if not discord_id:
-            return None
-        row = self._fetchone(
-            """
-            SELECT va.venue_id, va.role, va.metadata AS membership_metadata,
-                   v.id AS id, v.name, v.currency_name, v.minimal_spend, v.background_image, v.deck_id, v.metadata,
-                   v.created_at, v.updated_at
-            FROM venue_admins va
-            JOIN venues v ON v.id = va.venue_id
-            WHERE va.discord_id = %s
-            LIMIT 1
-            """,
-            (int(discord_id),),
-        )
-        return dict(row) if row else None
-
-    def set_discord_venue(self, discord_id: int, venue_id: int, role: str = "admin") -> bool:
-        if not discord_id or not venue_id:
-            return False
-        role = (role or "admin").strip() or "admin"
-        self._execute(
-            """
-            INSERT INTO venue_admins (venue_id, discord_id, role)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (discord_id) DO UPDATE
-              SET venue_id = EXCLUDED.venue_id,
-                  role = COALESCE(venue_admins.role, EXCLUDED.role),
-                  updated_at = CURRENT_TIMESTAMP
-            """,
-            (venue_id, int(discord_id), role),
-        )
-        return True
-
     def set_user_venue_role(self, user_id: int, venue_id: int, role: str) -> bool:
         if not user_id or not venue_id:
             return False
@@ -2135,15 +2055,7 @@ class Database:
             ),
         )
 
-    def list_media_items(
-        self,
-        limit: int = 200,
-        offset: int = 0,
-        include_hidden: bool = False,
-        media_type: Optional[str] = None,
-        venue_id: Optional[int] = None,
-        origin_type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    def list_media_items(self, limit: int = 200, offset: int = 0, include_hidden: bool = False) -> List[Dict[str, Any]]:
         limit = int(limit)
         offset = int(offset)
         if limit < 1:
@@ -2154,20 +2066,8 @@ class Database:
             offset = 0
         sql = "SELECT * FROM media_items"
         params: List[Any] = []
-        filters: List[str] = []
         if not include_hidden:
-            filters.append("hidden = FALSE")
-        if media_type:
-            filters.append("LOWER(COALESCE(metadata->>'media_type', '')) = %s")
-            params.append(str(media_type).strip().lower())
-        if venue_id:
-            filters.append("metadata->>'venue_id' = %s")
-            params.append(str(venue_id))
-        if origin_type:
-            filters.append("origin_type = %s")
-            params.append(str(origin_type).strip())
-        if filters:
-            sql += " WHERE " + " AND ".join(filters)
+            sql += " WHERE hidden = FALSE"
         sql += " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         rows = self._execute(sql, tuple(params), fetch=True) or []
@@ -3183,7 +3083,52 @@ class Database:
                 self._store_game_player(session_id, player, role="player")
 
     def _migrate_cardgames(self):
-        logger.info("[database] cardgames migration skipped (Postgres-only mode)")
+        card_dir = self._resolve_cardgames_dir()
+        db_path = os.path.join(card_dir, "cardgames.db")
+        if not os.path.exists(db_path):
+            logger.info("[database] cardgames db missing: %s", db_path)
+            return
+        logger.info("[database] importing cardgames sessions from %s", db_path)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            for row in conn.execute("SELECT * FROM sessions"):
+                data = dict(row)
+                session_id = data.get("session_id") or data.get("game_id")
+                if not session_id:
+                    continue
+                status = data.get("status") or data.get("stage") or "unknown"
+                active = status.lower() not in ("finished", "ended", "complete", "closed")
+                created_at = self._as_datetime(data.get("created_at"))
+                ended_at = self._as_datetime(data.get("updated_at"))
+                payload = dict(row)
+                state_json = payload.get("state_json")
+                if isinstance(state_json, str):
+                    try:
+                        payload["state_json_parsed"] = json.loads(state_json)
+                    except Exception:
+                        pass
+                metadata = {
+                    "currency": data.get("currency"),
+                    "pot": data.get("pot"),
+                    "status": status,
+                }
+                self._store_game(
+                    game_id=session_id,
+                    module="cardgames",
+                    payload=payload,
+                    title=payload.get("game_id"),
+                    created_at=created_at,
+                    ended_at=ended_at,
+                    status=status,
+                    active=active,
+                    metadata=metadata,
+                    run_source="import",
+                )
+                for player in self._extract_cardgame_players(payload):
+                    self._store_game_player(session_id, player, role="player")
+        finally:
+            conn.close()
 
     # ---------------- helpers ----------------
     def _store_game(
@@ -3272,12 +3217,6 @@ class Database:
         """
         if not discord_id:
             return None
-        try:
-            member = self.get_discord_venue(int(discord_id))
-            if member and member.get("venue_id"):
-                return int(member.get("venue_id"))
-        except Exception:
-            pass
         try:
             did = str(int(discord_id))
         except Exception:

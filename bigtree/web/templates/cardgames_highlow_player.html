@@ -43,7 +43,6 @@
       <h1>High/Low</h1>
       <div class="muted" id="statusLine">Waiting for session...</div>
     </div>
-    <div class="muted" id="walletBalance" style="display:none;">Balance: -</div>
     <div class="user-box" id="userBox">
       <span id="userName"></span>
       <button id="assignBtn" type="button">Assign to me</button>
@@ -116,7 +115,6 @@
   const userBox = document.getElementById("userBox");
   const userName = document.getElementById("userName");
   const assignBtn = document.getElementById("assignBtn");
-  const walletBalance = document.getElementById("walletBalance");
   const tokenKey = `cardgame_${gameId}_token_${joinCode}`;
   const userTokenKey = "bigtree_user_token";
   let playerToken = "";
@@ -289,21 +287,13 @@
     pendingAction = true;
     setButtonsState(false);
     decisionHint.textContent = "Waiting for the dealer...";
-    const userToken = getUserToken();
     const res = await fetch(`/api/cardgames/${gameId}/sessions/${sessionId}/action`, {
       method:"POST",
-      headers: {
-        "Content-Type":"application/json",
-        ...(userToken ? {"Authorization": `Bearer ${userToken}`} : {}),
-      },
+      headers: {"Content-Type":"application/json"},
       body: JSON.stringify({token: playerToken, action, payload: {}})
     });
     if (res){
       const data = await res.json().catch(() => ({}));
-      if (data && data.redirect){
-        window.location.assign(data.redirect);
-        return;
-      }
       if (data && data.ok === false){
         decisionHint.textContent = data.error || "Action failed.";
         pendingAction = false;
@@ -363,15 +353,6 @@
     if (currencyLabelWin) currencyLabelWin.textContent = currency;
     phaseLine.textContent = `Phase: ${phase}`;
     statusLine.textContent = `Status: ${state.session.status}`;
-    if (walletBalance){
-      if (state.wallet_balance !== undefined && state.wallet_balance !== null){
-        const suffix = state.wallet_currency ? ` ${state.wallet_currency}` : "";
-        walletBalance.textContent = `Balance: ${state.wallet_balance}${suffix}`;
-        walletBalance.style.display = "inline-flex";
-      }else{
-        walletBalance.style.display = "none";
-      }
-    }
     applyBackground(state.session.background_url || "");
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
 
@@ -448,10 +429,7 @@
   loadUser();
 
   async function loadState(){
-    const userToken = getUserToken();
-    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`, {
-      headers: userToken ? {"Authorization": `Bearer ${userToken}`} : {}
-    });
+    const res = await fetch(`/api/cardgames/${gameId}/sessions/${joinCode}/state?view=player`);
     const data = await res.json();
     if (data && data.ok && data.state){
       render(data.state);
@@ -460,75 +438,21 @@
     }
   }
 
-  let ws = null;
-  let wsBackoff = 1000;
-  let wsPing = null;
-
-  function wsUrl(){
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const params = new URLSearchParams({view: "player"});
-    if (playerToken) params.set("token", playerToken);
-    return `${proto}://${window.location.host}/ws/cardgames/${gameId}/sessions/${joinCode}?${params.toString()}`;
-  }
-
-  function schedulePing(){
-    if (wsPing) clearInterval(wsPing);
-    wsPing = setInterval(() => {
-      if (!ws || ws.readyState !== 1) return;
-      if (document.hidden) return;
-      ws.send(JSON.stringify({type: "ping"}));
-    }, 30000);
-  }
-
-  function connectWs(){
-    if (ws) ws.close();
-    ws = new WebSocket(wsUrl());
-    ws.onopen = () => {
-      wsBackoff = 1000;
-      if (playerToken){
-        ws.send(JSON.stringify({type: "auth", token: playerToken}));
-      }
-      ws.send(JSON.stringify({type: "resume"}));
-    };
-    ws.onmessage = (ev) => {
-      try{
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "STATE" && payload.state){
-          render(payload.state);
-        }else if (payload.type === "SESSION_GONE" && payload.redirect){
-          window.location.assign(payload.redirect);
-        }else{
-          loadState();
-        }
-      }catch(err){}
-    };
-    ws.onclose = () => {
-      if (document.hidden) return;
-      setTimeout(connectWs, wsBackoff);
-      wsBackoff = Math.min(wsBackoff * 2, 10000);
-    };
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden){
-      if (!ws || ws.readyState > 1){
-        connectWs();
+  const src = new EventSource(`/api/cardgames/${gameId}/sessions/${joinCode}/stream?view=player`);
+  src.onmessage = (ev) => {
+    try{
+      const payload = JSON.parse(ev.data);
+      if (payload.type === "STATE" && payload.state){
+        render(payload.state);
       }else{
-        ws.send(JSON.stringify({type: "resume"}));
+        loadState();
       }
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (!ws || ws.readyState > 1){
-      connectWs();
-    }else{
-      ws.send(JSON.stringify({type: "resume"}));
-    }
-  });
-
-  schedulePing();
-  connectWs();
+    }catch(err){}
+  };
   loadState();
+  setInterval(() => {
+    if (!document.hidden) loadState();
+  }, 3000);
 </script>
 </body>
 </html>
