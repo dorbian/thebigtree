@@ -1005,6 +1005,29 @@
               <div class="status" id="diceSetStatus">Pick a dice set to begin.</div>
             </div>
             <div class="deck-editor-column" id="diceIdentityPanel">
+              <h4>Sprite Sheet Config</h4>
+              <div class="row">
+                <div>
+                  <label for="diceSpriteSheetUrl">Sprite Sheet URL</label>
+                  <input id="diceSpriteSheetUrl" placeholder="Paste image URL from Gallery">
+                </div>
+              </div>
+              <div class="row">
+                <div style="flex: 1">
+                  <label for="diceSpriteCols">Grid Columns</label>
+                  <input id="diceSpriteCols" type="number" placeholder="3" value="3">
+                </div>
+                <div style="flex: 1">
+                  <label for="diceSpriteRows">Grid Rows</label>
+                  <input id="diceSpriteRows" type="number" placeholder="4" value="4">
+                </div>
+              </div>
+              <div class="row">
+                <button id="diceSaveSpriteConfig" class="btn-primary" style="width: 100%">
+                  <i class="icon icon-save" aria-hidden="true"></i>
+                  Save Sprite Config
+                </button>
+              </div>
               <h4>Face Identity</h4>
               <div class="row">
                 <div>
@@ -1031,6 +1054,16 @@
                   <div class="muted">Higher weight = more likely to appear</div>
                 </div>
               </div>
+              <div class="row">
+                <div style="flex: 1">
+                  <label for="diceFaceGridX">Grid Col</label>
+                  <input id="diceFaceGridX" type="number" placeholder="0">
+                </div>
+                <div style="flex: 1">
+                  <label for="diceFaceGridY">Grid Row</label>
+                  <input id="diceFaceGridY" type="number" placeholder="0">
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1038,10 +1071,27 @@
           <h3>Face Editor</h3>
           <div class="deck-editor-grid">
             <div class="deck-editor-column">
+              <h4>Symbol Picker</h4>
+              <div class="row">
+                <div>
+                  <label>Select face from sprite sheet</label>
+                  <div class="symbol-picker" id="diceFaceSymbolPicker" style="grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));">No sprite sheet loaded.</div>
+                </div>
+              </div>
+            </div>
+            <div class="deck-editor-column">
               <h4>Visual</h4>
               <div class="row">
                 <div>
-                  <label>Face image</label>
+                  <label>Face preview</label>
+                  <div class="preview-grid">
+                    <div class="preview-card" id="diceFacePreviewSprite" style="background-size: cover; background-position: center;"><span class="preview-label">Face</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Or upload individual image</label>
                   <button class="btn-ghost icon-btn" id="diceFaceLibrary" title="Choose from library">
                     <i class="icon icon-image" aria-hidden="true"></i>
                   </button>

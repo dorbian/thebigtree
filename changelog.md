@@ -4,7 +4,9 @@
 - Editor: add Dice Sets editor with full CRUD operations for dice configurations.
 - Editor: add Slot Machines editor with full CRUD operations for slot machine configurations.
 - Editor: add sprite sheet upload and symbol picker to Slot Machines editor with grid position configuration.
+- Editor: add sprite sheet upload and symbol picker to Dice Sets editor with grid position configuration for faces.
 - Editor: add symbol preview and payout configuration for slot machine symbols.
+- Editor: add symbol preview and grid position configuration for dice faces.
 - Database: add dice_sets and slot_machines tables with metadata and payload support.
 - API: add /api/dice/sets endpoints for dice set management (GET, POST, PUT, DELETE).
 - API: add /api/slots/machines endpoints for slot machine management (GET, POST, PUT, DELETE).
@@ -13,6 +15,7 @@
 - Overlay: replace inline SVG icons with CSS sprite-based icon system for dice and slots editors.
 - Overlay: add icon sprite system using single texture file for better performance.
 - Overlay: add sprite sheet configuration to slot machines with grid-based symbol picker.
+- Overlay: add sprite sheet configuration to dice sets with grid-based face picker.
 - Overlay: add a subtle tint overlay in overlay mode to reduce background vibrancy.
 - Overlay: darken admin background overlays on login and admin shell.
 - Overlay: guard cardgame session UI bindings when elements are absent and fix the missing brace.

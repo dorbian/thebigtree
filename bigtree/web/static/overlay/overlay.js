@@ -8695,6 +8695,18 @@ function getOwnerClaimStatus(ownerName){
           }
           const data = await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id), {method:"GET"}, true);
           diceFaces = data.faces || [];
+          
+          // Load sprite config from metadata
+          if (data.dice_set && data.dice_set.metadata){
+            diceSpriteSheet = data.dice_set.metadata.sprite_sheet || "";
+            diceSpriteCols = data.dice_set.metadata.sprite_cols || 3;
+            diceSpriteRows = data.dice_set.metadata.sprite_rows || 4;
+            $("diceSpriteSheetUrl").value = diceSpriteSheet;
+            $("diceSpriteCols").value = diceSpriteCols;
+            $("diceSpriteRows").value = diceSpriteRows;
+            renderDiceSymbolPicker();
+          }
+          
           renderDiceFaceList();
           const setName = (data.dice_set && (data.dice_set.name || data.dice_set.dice_id)) || dice_id;
           const count = diceFaces.length;
@@ -8727,9 +8739,74 @@ function getOwnerClaimStatus(ownerName){
         $("diceFaceName").value = face.name || "";
         $("diceFaceValue").value = face.value || 0;
         $("diceFaceWeight").value = face.weight || 1;
+        $("diceFaceGridX").value = face.grid_x || 0;
+        $("diceFaceGridY").value = face.grid_y || 0;
         $("diceFaceDescription").value = face.description || "";
         $("diceFaceEffect").value = face.effect || "";
+        updateDiceSymbolPreview();
         renderDiceFaceList();
+      }
+
+      // Dice sprite sheet management
+      let diceSpriteSheet = "";
+      let diceSpriteCols = 3;
+      let diceSpriteRows = 4;
+
+      function renderDiceSymbolPicker(){
+        const picker = $("diceFaceSymbolPicker");
+        if (!picker) return;
+        
+        if (!diceSpriteSheet){
+          picker.innerHTML = '<div class="muted">Configure sprite sheet first</div>';
+          return;
+        }
+
+        picker.innerHTML = "";
+        const totalSymbols = diceSpriteCols * diceSpriteRows;
+        
+        for (let i = 0; i < totalSymbols; i++){
+          const col = i % diceSpriteCols;
+          const row = Math.floor(i / diceSpriteCols);
+          
+          const item = document.createElement("div");
+          item.className = "symbol-picker-item";
+          item.style.backgroundImage = `url(${diceSpriteSheet})`;
+          
+          // Calculate background position to show one symbol
+          const percentX = (col / (diceSpriteCols - 1)) * 100;
+          const percentY = (row / (diceSpriteRows - 1)) * 100;
+          item.style.backgroundPosition = `${percentX}% ${percentY}%`;
+          item.style.backgroundSize = `${diceSpriteCols * 100}% ${diceSpriteRows * 100}%`;
+          
+          item.dataset.col = col;
+          item.dataset.row = row;
+          
+          item.addEventListener("click", () => {
+            $("diceFaceGridX").value = col;
+            $("diceFaceGridY").value = row;
+            updateDiceSymbolPreview();
+            
+            // Highlight selected
+            picker.querySelectorAll(".symbol-picker-item").forEach(el => el.classList.remove("selected"));
+            item.classList.add("selected");
+          });
+          
+          picker.appendChild(item);
+        }
+      }
+
+      function updateDiceSymbolPreview(){
+        const preview = $("diceFacePreviewSprite");
+        if (!preview || !diceSpriteSheet) return;
+        
+        const col = parseInt($("diceFaceGridX").value) || 0;
+        const row = parseInt($("diceFaceGridY").value) || 0;
+        
+        preview.style.backgroundImage = `url(${diceSpriteSheet})`;
+        const percentX = (col / (diceSpriteCols - 1)) * 100;
+        const percentY = (row / (diceSpriteRows - 1)) * 100;
+        preview.style.backgroundPosition = `${percentX}% ${percentY}%`;
+        preview.style.backgroundSize = `${diceSpriteCols * 100}% ${diceSpriteRows * 100}%`;
       }
 
       $("diceSet").addEventListener("change", async () => {
@@ -8800,9 +8877,40 @@ function getOwnerClaimStatus(ownerName){
         $("diceFaceName").value = "";
         $("diceFaceValue").value = "1";
         $("diceFaceWeight").value = "1";
+        $("diceFaceGridX").value = "0";
+        $("diceFaceGridY").value = "0";
         $("diceFaceDescription").value = "";
         $("diceFaceEffect").value = "";
         renderDiceFaceList();
+      });
+
+      $("diceSaveSpriteConfig").addEventListener("click", async () => {
+        const dice_id = $("diceSet").value.trim();
+        if (!dice_id){
+          setDiceStatus("Pick a dice set first.", "err");
+          return;
+        }
+        diceSpriteSheet = $("diceSpriteSheetUrl").value.trim();
+        diceSpriteCols = parseInt($("diceSpriteCols").value) || 3;
+        diceSpriteRows = parseInt($("diceSpriteRows").value) || 4;
+        
+        try{
+          await jsonFetch("/api/dice/sets/" + encodeURIComponent(dice_id), {
+            method:"PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              metadata: {
+                sprite_sheet: diceSpriteSheet,
+                sprite_cols: diceSpriteCols,
+                sprite_rows: diceSpriteRows
+              }
+            })
+          }, true);
+          renderDiceSymbolPicker();
+          setDiceStatus("Sprite sheet config saved.", "ok");
+        }catch(err){
+          setDiceStatus(err.message, "err");
+        }
       });
 
       $("diceSaveFace").addEventListener("click", async () => {
@@ -8816,6 +8924,8 @@ function getOwnerClaimStatus(ownerName){
           name: $("diceFaceName").value.trim(),
           value: parseInt($("diceFaceValue").value) || 0,
           weight: parseFloat($("diceFaceWeight").value) || 1,
+          grid_x: parseInt($("diceFaceGridX").value) || 0,
+          grid_y: parseInt($("diceFaceGridY").value) || 0,
           description: $("diceFaceDescription").value.trim(),
           effect: $("diceFaceEffect").value.trim()
         };
