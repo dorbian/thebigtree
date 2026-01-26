@@ -1531,10 +1531,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.3-6.31z"/></svg>
           </button>
         </div>
-        <div class="row">
-          <div>
+        <div class="row" style="gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:220px; max-width:360px;">
             <label for="venueSelect">Existing venues</label>
-            <select id="venueSelect"></select>
+            <select id="venueSelect" style="width:100%;"></select>
           </div>
           <div>
             <label>&nbsp;</label>
@@ -2444,14 +2444,18 @@
         <div class="modal-header">
           <div class="modal-title">Select venue</div>
         </div>
-        <div class="modal-content">
-          <label for="adminVenueSelect">Existing venues</label>
-          <select id="adminVenueSelect"></select>
-          <button class="btn-ghost" id="adminVenueAssign" type="button">Join venue</button>
+        <div class="modal-content" style="display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <label for="adminVenueSelect">Existing venues</label>
+            <select id="adminVenueSelect" style="width:100%; max-width:420px;"></select>
+          </div>
+          <button class="btn-ghost" id="adminVenueAssign" type="button" style="width:auto; align-self:flex-start;">Join venue</button>
           <div class="section-divider"></div>
-          <label for="adminVenueCreateName">Create venue</label>
-          <input id="adminVenueCreateName" placeholder="Venue name">
-          <button id="adminVenueCreate" type="button">Create venue</button>
+          <div>
+            <label for="adminVenueCreateName">Create venue</label>
+            <input id="adminVenueCreateName" placeholder="Venue name" style="width:100%; max-width:420px;">
+          </div>
+          <button id="adminVenueCreate" type="button" style="width:auto; align-self:flex-start;">Create venue</button>
           <div class="status" id="adminVenueStatus">Pick a venue to continue.</div>
         </div>
       </div>
