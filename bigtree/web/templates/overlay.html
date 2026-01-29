@@ -371,6 +371,9 @@
                 <button type="button" id="dashboardXivAuthLink" class="dashboard-admin-link">
                   <span>XIVAuth Users</span>
                 </button>
+                <button type="button" id="dashboardAuthUsers" class="dashboard-admin-link">
+                  <span>Auth logins</span>
+                </button>
                 <button type="button" id="menuArtists">
                   <span>Artist index</span>
                 </button>
@@ -2762,6 +2765,25 @@
           <div class="list" id="authTokensList">No keys loaded.</div>
         </div>
         <div class="status" id="authTokensStatus">Ready.</div>
+      </div>
+    </div>
+    <div class="modal" id="authUsersModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">/auth logins</div>
+          <button class="btn-ghost" id="authUsersClose">Close</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-ghost" id="authUsersRefresh">Refresh</button>
+          </div>
+          <div class="muted" style="align-self:center">Users that generated /auth keys and their scopes.</div>
+        </div>
+        <div class="role-table-wrap" id="authUsersWrap">
+          <div class="list" id="authUsersList">No users loaded.</div>
+        </div>
+        <div class="status" id="authUsersStatus">Ready.</div>
       </div>
     </div>
     <div class="modal" id="authTempModal">

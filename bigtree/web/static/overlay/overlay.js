@@ -1823,6 +1823,13 @@ This will block new games from being created in this event, but existing games c
         el.className = "status" + (kind ? " " + kind : "");
       }
 
+      function setAuthUsersStatus(msg, kind){
+        const el = $("authUsersStatus");
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
       function setAuthTempStatus(msg, kind){
         const el = $("authTempStatus");
         if (!el) return;
@@ -2289,6 +2296,68 @@ This will block new games from being created in this event, but existing games c
         list.appendChild(table);
       }
 
+      function renderAuthUsersList(tokens){
+        const list = $("authUsersList");
+        if (!list) return;
+        list.innerHTML = "";
+        if (!tokens || !tokens.length){
+          list.textContent = "No users loaded.";
+          return;
+        }
+        const users = new Map();
+        tokens.forEach(token => {
+          const userId = token.user_id != null ? String(token.user_id) : "unknown";
+          const key = userId;
+          const entry = users.get(key) || {
+            user_id: userId,
+            user_name: token.user_name || "",
+            scopes: new Set(),
+            tokens: 0,
+            latest_created_at: 0,
+          };
+          (token.scopes || []).forEach(scope => entry.scopes.add(String(scope)));
+          entry.tokens += 1;
+          const createdAt = Number(token.created_at) || 0;
+          if (createdAt > entry.latest_created_at){
+            entry.latest_created_at = createdAt;
+          }
+          if (!entry.user_name && token.user_name){
+            entry.user_name = token.user_name;
+          }
+          users.set(key, entry);
+        });
+        const rows = Array.from(users.values()).sort((a, b) => (b.latest_created_at || 0) - (a.latest_created_at || 0));
+        const table = document.createElement("table");
+        table.className = "role-table";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>User ID</th>
+              <th>Scopes</th>
+              <th>Tokens</th>
+              <th>Latest</th>
+            </tr>
+          </thead>
+          <tbody></tbody>`;
+        const tbody = table.querySelector("tbody");
+        rows.forEach(row => {
+          const tr = document.createElement("tr");
+          const scopes = Array.from(row.scopes).sort().join(", ") || "(none)";
+          const latest = row.latest_created_at
+            ? new Date(row.latest_created_at * 1000).toLocaleString()
+            : "-";
+          tr.innerHTML = `
+            <td>${escapeHtml(row.user_name || "Unknown")}</td>
+            <td>${escapeHtml(row.user_id || "-")}</td>
+            <td>${escapeHtml(scopes)}</td>
+            <td>${row.tokens}</td>
+            <td>${escapeHtml(latest)}</td>`;
+          tbody.appendChild(tr);
+        });
+        list.appendChild(table);
+      }
+
       async function loadAuthTokens(){
         setAuthTokensStatus("Loading keys...", "");
         $("authTokensList").textContent = "Loading...";
@@ -2306,6 +2375,26 @@ This will block new games from being created in this event, but existing games c
         }catch(err){
           setAuthTokensStatus(err.message, "err");
           $("authTokensList").textContent = "Failed to load keys.";
+        }
+      }
+
+      async function loadAuthUsers(){
+        setAuthUsersStatus("Loading users...", "");
+        const list = $("authUsersList");
+        if (list) list.textContent = "Loading...";
+        try{
+          const res = await fetch("/api/auth/tokens", {headers: {"X-API-Key": apiKeyEl.value.trim()}});
+          if (res.status === 401){
+            handleUnauthorized();
+            throw new Error("Unauthorized");
+          }
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error || "Failed");
+          renderAuthUsersList(data.tokens || []);
+          setAuthUsersStatus("Ready.", "ok");
+        }catch(err){
+          setAuthUsersStatus(err.message, "err");
+          if (list) list.textContent = "Failed to load users.";
         }
       }
 
@@ -3592,6 +3681,14 @@ This will block new games from being created in this event, but existing games c
         dashboardXivAuthBtn.addEventListener("click", () => {
           if (!ensureScope("admin:web", "Admin web access required.")) return;
           loadIframe("/user-area/manage");
+        });
+      }
+      const dashboardAuthUsersBtn = $("dashboardAuthUsers");
+      if (dashboardAuthUsersBtn){
+        dashboardAuthUsersBtn.addEventListener("click", () => {
+          if (!ensureScope("bingo:admin", "Admin access required.")) return;
+          $("authUsersModal").classList.add("show");
+          loadAuthUsers();
         });
       }
       
@@ -5631,6 +5728,16 @@ function getOwnerClaimStatus(ownerName){
         $("authTokensModal").classList.remove("show");
       });
       $("authTokensRefresh").addEventListener("click", () => loadAuthTokens());
+      const authUsersClose = $("authUsersClose");
+      if (authUsersClose){
+        authUsersClose.addEventListener("click", () => {
+          $("authUsersModal").classList.remove("show");
+        });
+      }
+      const authUsersRefresh = $("authUsersRefresh");
+      if (authUsersRefresh){
+        authUsersRefresh.addEventListener("click", () => loadAuthUsers());
+      }
       const authTempClose = $("authTempClose");
       if (authTempClose){
         authTempClose.addEventListener("click", () => {
