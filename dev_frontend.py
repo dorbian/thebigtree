@@ -248,7 +248,8 @@ async def main():
     logger.info("To change the API server, edit REMOTE_API_URL in dev_frontend.py")
     logger.info("")
     
-    app = web.Application()
+    # Increase max client payload size to 100MB for large file uploads
+    app = web.Application(client_max_size=100*1024*1024)
     
     # Routes
     app.router.add_get('/', serve_html)
