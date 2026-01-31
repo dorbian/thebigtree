@@ -7,7 +7,7 @@ import secrets
 import asyncio
 
 import bigtree
-from bigtree.inc.webserver import route, DynamicWebServer
+from bigtree.inc.webserver import route, frontend_route, DynamicWebServer
 from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
 from bigtree.modules import cardgames as cardgames_mod
@@ -103,7 +103,7 @@ def _apply_join_wallet_credit(db, ev: dict, user_id: int, is_guest: bool) -> Non
 # ---------------- public player flow ----------------
 
 
-@route("GET", "/events/{code}", allow_public=True)
+@frontend_route("GET", "/events/{code}", allow_public=True)
 async def event_join_page(req: web.Request) -> web.Response:
     code = _sanitize_event_code(req.match_info.get("code") or "")
     settings = getattr(bigtree, "settings", None)
@@ -791,7 +791,7 @@ def _resolve_admin_user_id(req: web.Request) -> Optional[int]:
         return None
 
 
-@route("GET", "/events/{code}/dashboard", allow_public=True)
+@frontend_route("GET", "/events/{code}/dashboard", allow_public=True)
 async def event_dashboard_page(req: web.Request) -> web.Response:
     code = _sanitize_event_code(req.match_info.get("code") or "")
     if not code:

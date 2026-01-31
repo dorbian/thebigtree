@@ -29,6 +29,16 @@ def route(method: str, path: str, *, scopes: List[str] | None = None, allow_publ
         return fn
     return deco
 
+def frontend_route(method: str, path: str, *, scopes: List[str] | None = None, allow_public: bool=False):
+    """Register a route only if frontend serving is enabled."""
+    method = method.upper()
+    def deco(fn):
+        cfg = _cfg()
+        if cfg.get("serve_frontend", True):
+            _registry.append(APIRoute(method, path, fn, set(scopes or []), allow_public))
+        return fn
+    return deco
+
 def _cfg():
     # Preferred: new settings loader
     st = getattr(bigtree, "settings", None)
@@ -42,12 +52,14 @@ def _cfg():
         api_keys = st.get("WEB.api_keys", [], cast="json")
         scopes   = st.get("WEB.api_key_scopes", {}, cast="json")
         max_mb = st.get("WEB.client_max_size_mb", 32, int)
+        serve_frontend = st.get("WEB.serve_frontend", True, bool)
         return {
             "host": host, "port": port, "base_url": base,
             "cors_origin": cors,
             "jwt_secret": jwt_secret, "jwt_algorithms": jwt_algs,
             "api_keys": api_keys, "api_key_scopes": scopes,
             "client_max_size": max(1, int(max_mb)) * 1024 * 1024,
+            "serve_frontend": serve_frontend,
         }
 
     # Fallback: legacy ConfigObj path (old code paths)
@@ -82,6 +94,7 @@ def _cfg():
         "cors_origin": "*", "jwt_secret": "", "jwt_algorithms": ["HS256"],
         "api_keys": [], "api_key_scopes": {},
         "client_max_size": 32 * 1024 * 1024,
+        "serve_frontend": True,
     }
 
 class DynamicWebServer:
@@ -112,6 +125,10 @@ class DynamicWebServer:
         self._registered.add(key)
         handler._bt_route = route_obj
         self.app.router.add_route(key[0], key[1], handler)
+    
+    def serves_frontend(self) -> bool:
+        """Check if frontend HTML/static serving is enabled."""
+        return self._cfg.get("serve_frontend", True)
     # ---------- Template loader ----------
     @staticmethod
     def render_template(relpath: str, mapping: Dict[str, str]) -> str:

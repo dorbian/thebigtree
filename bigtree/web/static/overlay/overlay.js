@@ -3693,6 +3693,21 @@ This will block new games from being created in this event, but existing games c
         suppressPanelSave = false;
       }
 
+      function openAuthDashboard(){
+        // Get current token from apiKeyEl or storage
+        const token = (apiKeyEl && apiKeyEl.value && apiKeyEl.value.trim()) ||
+          storage.getItem("bt_api_key") ||
+          (window.sessionStorage ? window.sessionStorage.getItem("bt_api_key") || "" : "");
+        
+        if (!token) {
+          alert("No authentication token found. Please log in first.");
+          return;
+        }
+        // Load admin dashboard in the iframe
+        const dashboardUrl = `/admin/dashboard?token=${encodeURIComponent(token)}`;
+        loadIframe(dashboardUrl);
+      }
+
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
       $("menuBingo").addEventListener("click", () => {
         showPanel("bingoSessions");
@@ -3710,9 +3725,9 @@ This will block new games from being created in this event, but existing games c
       const dashboardAuthUsersBtn = $("dashboardAuthUsers");
       if (dashboardAuthUsersBtn){
         dashboardAuthUsersBtn.addEventListener("click", () => {
-          if (!ensureScope("bingo:admin", "Admin access required.")) return;
-          $("authUsersModal").classList.add("show");
-          loadAuthUsers();
+          if (!ensureScope("admin:web", "Admin web access required.")) return;
+          // Open the BigTree admin dashboard in an iframe
+          openAuthDashboard();
         });
       }
       

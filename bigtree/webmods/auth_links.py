@@ -7,7 +7,7 @@ import os
 import time
 import json
 import bigtree
-from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.webserver import route, frontend_route, get_server, DynamicWebServer
 from bigtree.inc.logging import auth_logger
 from bigtree.inc import web_tokens
 from bigtree.inc import temp_links
@@ -188,7 +188,7 @@ async def create_temp_link(req: web.Request):
     })
 
 
-@route("GET", "/auth/temp/{token}", allow_public=True)
+@frontend_route("GET", "/auth/temp/{token}", allow_public=True)
 async def temp_login_page(req: web.Request):
     token = req.match_info.get("token") or ""
     srv: DynamicWebServer | None = get_server()

@@ -3,7 +3,7 @@ from aiohttp import web, WSMsgType
 from typing import Dict, Any
 import asyncio
 import json
-from bigtree.inc.webserver import route, get_server
+from bigtree.inc.webserver import route, frontend_route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
@@ -246,7 +246,7 @@ def _render_template(name: str, mapping: Dict[str, str]) -> str:
         return srv.render_template(name, mapping)
     return "<h1>Cardgames</h1>"
 
-@route("GET", "/cardgames/{game_id}/session/{join_code}", allow_public=True)
+@frontend_route("GET", "/cardgames/{game_id}/session/{join_code}", allow_public=True)
 async def cardgame_session_page(req: web.Request):
     game_id = str(req.match_info["game_id"] or "").strip().lower()
     join_code = req.match_info["join_code"]

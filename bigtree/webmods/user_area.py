@@ -16,7 +16,7 @@ from aiohttp import web
 import bigtree
 from bigtree.inc.database import get_database
 from bigtree.inc.logging import logger
-from bigtree.inc.webserver import DynamicWebServer, route
+from bigtree.inc.webserver import DynamicWebServer, route, frontend_route
 
 USER_TOKEN_HEADER = "X-Bigtree-User-Token"
 OAUTH_STATES: Dict[str, float] = {}
@@ -614,7 +614,7 @@ async def user_join_status(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "game": game})
 
 
-@route("GET", "/user-area", allow_public=True)
+@frontend_route("GET", "/user-area", allow_public=True)
 async def user_area_page(_req: web.Request) -> web.Response:
     settings = getattr(bigtree, "settings", None)
     base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"
@@ -622,7 +622,7 @@ async def user_area_page(_req: web.Request) -> web.Response:
     return web.Response(text=html, content_type="text/html")
 
 
-@route("GET", "/user-area/manage", allow_public=True)
+@frontend_route("GET", "/user-area/manage", allow_public=True)
 async def user_area_manage_page(_req: web.Request) -> web.Response:
     settings = getattr(bigtree, "settings", None)
     base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"

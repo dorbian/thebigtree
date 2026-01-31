@@ -1,6 +1,6 @@
 # bigtree/webmods/overlay.py
 from aiohttp import web
-from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.webserver import frontend_route, get_server, DynamicWebServer
 from bigtree.inc.database import get_database
 
 
@@ -19,12 +19,12 @@ def _render_overlay_page() -> str:
     return srv.render_template("overlay.html", {"ADMIN_BACKGROUND": admin_background}) if srv else "<h1>Overlay</h1>"
 
 
-@route("GET", "/elfministration", allow_public=True)
+@frontend_route("GET", "/elfministration", allow_public=True)
 async def elfministration_page(_req: web.Request):
     html = _render_overlay_page()
     return web.Response(text=html, content_type="text/html")
 
 
-@route("GET", "/overlay", allow_public=True)
+@frontend_route("GET", "/overlay", allow_public=True)
 async def overlay_page(_req: web.Request):
     raise web.HTTPFound("/elfministration")

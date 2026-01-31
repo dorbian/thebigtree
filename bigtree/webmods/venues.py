@@ -4,14 +4,14 @@ from __future__ import annotations
 from aiohttp import web
 
 import bigtree
-from bigtree.inc.webserver import route, DynamicWebServer
+from bigtree.inc.webserver import route, frontend_route, DynamicWebServer
 from bigtree.inc.database import get_database
 
 # Reuse the user resolver from user_area (Bearer user token)
 from bigtree.webmods.user_area import _resolve_user
 
 
-@route("GET", "/venues", allow_public=True)
+@frontend_route("GET", "/venues", allow_public=True)
 async def venues_page(_req: web.Request) -> web.Response:
     settings = getattr(bigtree, "settings", None)
     base_url = settings.get("WEB.base_url", "http://localhost:8443") if settings else "http://localhost:8443"

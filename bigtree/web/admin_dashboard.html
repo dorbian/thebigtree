@@ -382,13 +382,113 @@
         .routes-list div:last-child {
             border-bottom: none;
         }
+        
+        /* Modal & iframe styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10000;
+            animation: fadeIn 0.2s ease-out;
+        }
+        
+        .modal-overlay.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 90vw;
+            height: 90vh;
+            max-width: 1200px;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #667eea;
+            font-size: 1.3em;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-close:hover {
+            color: #333;
+        }
+        
+        .modal-body {
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .modal-body iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🌳 BigTree Admin Dashboard</h1>
-            <p class="subtitle">Manage web tokens, revoke access, and view permissions</p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🌳 BigTree Admin Dashboard</h1>
+                    <p class="subtitle">Manage web tokens, revoke access, and view permissions</p>
+                </div>
+                <button class="secondary" onclick="openAuthLogins()" style="white-space: nowrap;">👥 Auth Logins</button>
+            </div>
         </header>
         
         <div id="messages"></div>
@@ -418,6 +518,10 @@
                 <button onclick="issueNewToken()">Issue Token</button>
                 
                 <div class="section-title">Active Tokens</div>
+                <div class="checkbox-group" style="margin-bottom: 15px;">
+                    <input type="checkbox" id="showAllTokens" onchange="refreshTokens()">
+                    <label for="showAllTokens">Show expired and revoked tokens</label>
+                </div>
                 <div class="table-container">
                     <table id="tokensTable">
                         <thead>
@@ -447,6 +551,32 @@
                 <div id="scopesContainer" style="max-height: 600px; overflow-y: auto;">
                     <div style="text-align: center; color: #999; padding: 20px;">Loading scopes...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for Auth Logins iframe -->
+    <div id="authModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔑 Auth Logins & Token History</h3>
+                <button class="modal-close" onclick="closeAuthLogins()">×</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="authIframe" src=""></iframe>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for Auth Logins iframe -->
+    <div id="authModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔑 Auth Logins & Token History</h3>
+                <button class="modal-close" onclick="closeAuthLogins()">×</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="authIframe" src=""></iframe>
             </div>
         </div>
     </div>
@@ -510,7 +640,8 @@
         // Refresh tokens list
         async function refreshTokens() {
             try {
-                const res = await authFetch('/admin/tokens');
+                const showAll = document.getElementById('showAllTokens')?.checked || false;
+                const res = await authFetch(`/admin/tokens?include_expired=${showAll}`);
                 const data = await res.json();
                 
                 if (!data.ok) {
@@ -520,38 +651,62 @@
                 
                 const tbody = document.getElementById('tokensBody');
                 if (!data.tokens || data.tokens.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999; padding: 30px;">No active tokens</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999; padding: 30px;">No tokens found</td></tr>';
                     return;
                 }
                 
-                tbody.innerHTML = data.tokens.map(token => {
-                    const status = getTokenStatus(token);
-                    const statusColor = status === 'active' ? 'active' : status === 'expired' ? 'expired' : 'revoked';
-                    const scopes = Array.isArray(token.scopes) ? token.scopes : [token.scopes];
+                // Group tokens by user for better visibility
+                const userTokens = {};
+                data.tokens.forEach(token => {
+                    const userId = token.user_id || 'unknown';
+                    if (!userTokens[userId]) {
+                        userTokens[userId] = [];
+                    }
+                    userTokens[userId].push(token);
+                });
+                
+                let html = '';
+                for (const [userId, tokens] of Object.entries(userTokens)) {
+                    // Sort tokens by created_at descending (newest first)
+                    tokens.sort((a, b) => {
+                        const dateA = new Date(a.created_at || 0);
+                        const dateB = new Date(b.created_at || 0);
+                        return dateB - dateA;
+                    });
                     
-                    return `
-                        <tr>
-                            <td>
-                                <strong>${token.user_name || `User ${token.user_id}`}</strong>
-                                <br><small style="color: #999;">${token.token_masked}</small>
-                            </td>
-                            <td>
-                                ${scopes.map(s => `<span class="badge badge-scope">${s}</span>`).join(' ')}
-                            </td>
-                            <td><small>${formatDate(token.created_at)}</small></td>
-                            <td><small>${formatDate(token.expires_at) || 'Never'}</small></td>
-                            <td>
-                                <span class="status-indicator status-${statusColor}"></span>
-                                <span class="badge badge-${statusColor}">${status.toUpperCase()}</span>
-                            </td>
-                            <td>
-                                ${status !== 'revoked' ? `
-                                    <button class="small danger" onclick="revokeToken('${token.token}', '${token.user_name || token.user_id}')">Revoke</button>
-                                ` : '-'}
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                    tokens.forEach((token, idx) => {
+                        const status = getTokenStatus(token);
+                        const statusColor = status === 'active' ? 'active' : status === 'expired' ? 'expired' : 'revoked';
+                        const scopes = Array.isArray(token.scopes) ? token.scopes : [token.scopes];
+                        
+                        html += `
+                            <tr>
+                                <td>
+                                    <strong>${token.user_name || `User ${token.user_id}`}</strong>
+                                    ${idx === 0 ? '<span class="badge badge-scope" style="margin-left: 8px; font-size: 0.7em;">Latest</span>' : ''}
+                                    <br><small style="color: #999;">${token.token_masked}</small>
+                                </td>
+                                <td>
+                                    ${scopes.map(s => `<span class="badge badge-scope">${s}</span>`).join(' ')}
+                                </td>
+                                <td><small>${formatDate(token.created_at)}</small></td>
+                                <td><small>${formatDate(token.expires_at) || 'Never'}</small></td>
+                                <td>
+                                    <span class="status-indicator status-${statusColor}"></span>
+                                    <span class="badge badge-${statusColor}">${status.toUpperCase()}</span>
+                                    ${token.revoked_at ? `<br><small style="color: #999;">Revoked: ${formatDate(token.revoked_at)}</small>` : ''}
+                                </td>
+                                <td>
+                                    ${status === 'active' ? `
+                                        <button class="small danger" onclick="revokeToken('${token.token}', '${token.user_name || token.user_id}')">Revoke</button>
+                                    ` : '-'}
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+                
+                tbody.innerHTML = html;
             } catch (e) {
                 showMessage(`Error loading tokens: ${e.message}`, 'error');
             }
@@ -666,6 +821,36 @@
             loadScopes();
             // Refresh tokens every 30 seconds
             setInterval(refreshTokens, 30000);
+        });
+        
+        // Auth Logins modal functions
+        function openAuthLogins() {
+            const modal = document.getElementById('authModal');
+            const iframe = document.getElementById('authIframe');
+            // Load the dashboard in iframe with token forwarding
+            iframe.src = `${window.location.origin}/admin/dashboard?token=${TOKEN}`;
+            modal.classList.add('show');
+        }
+        
+        function closeAuthLogins() {
+            const modal = document.getElementById('authModal');
+            modal.classList.remove('show');
+            // Clear iframe source when closing
+            document.getElementById('authIframe').src = '';
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('authModal').addEventListener('click', (e) => {
+            if (e.target.id === 'authModal') {
+                closeAuthLogins();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAuthLogins();
+            }
         });
     </script>
 </body>

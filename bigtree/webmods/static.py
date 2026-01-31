@@ -1,14 +1,14 @@
 from __future__ import annotations
 from aiohttp import web
 from pathlib import Path
-from bigtree.inc.webserver import route
+from bigtree.inc.webserver import frontend_route
 
 
 def _static_root() -> Path:
     return Path(__file__).resolve().parents[1] / "web" / "static"
 
 
-@route("GET", "/static/{path:.*}", allow_public=True)
+@frontend_route("GET", "/static/{path:.*}", allow_public=True)
 async def static_file(req: web.Request):
     rel = req.match_info["path"]
     if not rel or rel.endswith("/"):

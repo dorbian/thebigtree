@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 import bigtree
 import discord
 from bigtree.inc.logging import logger
-from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.webserver import route, frontend_route, get_server, DynamicWebServer
 from bigtree.inc.database import get_database
 from bigtree.modules import bingo as bingo
 
@@ -542,13 +542,13 @@ async def bingo_asset(req: web.Request):
     return web.FileResponse(g["background_path"])
 
 # ---------- HTML pages (template-based) ----------
-@route("GET", "/bingo/play", allow_public=True)
+@frontend_route("GET", "/bingo/play", allow_public=True)
 async def bingo_page(_req: web.Request):
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("bingo_card.html", {}) if srv else "<h1>Bingo</h1>"
     return web.Response(text=html, content_type="text/html")
 
-@route("GET", "/bingo/owner", allow_public=True)
+@frontend_route("GET", "/bingo/owner", allow_public=True)
 async def bingo_owner_page(_req: web.Request):
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("bingo_owner.html", {}) if srv else "<h1>Bingo Owner</h1>"

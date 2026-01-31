@@ -14,7 +14,7 @@ from pathlib import Path
 import bigtree
 import discord
 from bigtree.inc.logging import upload_logger
-from bigtree.inc.webserver import route, get_server, DynamicWebServer
+from bigtree.inc.webserver import route, frontend_route, get_server, DynamicWebServer
 from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
 from bigtree.modules import tarot as tar
@@ -121,7 +121,7 @@ def _dummy_cards(deck_id: str, per_house: int, crown_count: int) -> list[dict]:
     return cards
 
 # ---- Pages ----
-@route("GET", "/tarot/session/{join_code}", allow_public=True)
+@frontend_route("GET", "/tarot/session/{join_code}", allow_public=True)
 async def tarot_session_page(req: web.Request):
     join_code = req.match_info["join_code"]
     view = _get_view(req)
@@ -130,13 +130,13 @@ async def tarot_session_page(req: web.Request):
     html = srv.render_template(tpl, {"JOIN": join_code}) if srv else "<h1>Tarot</h1>"
     return web.Response(text=html, content_type="text/html")
 
-@route("GET", "/", allow_public=True)
+@frontend_route("GET", "/", allow_public=True)
 async def tarot_gallery_root(_req: web.Request):
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("tarot_gallery.html", {}) if srv else "<h1>Tarot</h1>"
     return web.Response(text=html, content_type="text/html")
 
-@route("GET", "/gallery", allow_public=True)
+@frontend_route("GET", "/gallery", allow_public=True)
 async def gallery_page(_req: web.Request):
     """Forest Gallery (canonical URL)."""
     srv: DynamicWebServer | None = get_server()
@@ -144,12 +144,12 @@ async def gallery_page(_req: web.Request):
     return web.Response(text=html, content_type="text/html")
 
 
-@route("GET", "/tarot/gallery", allow_public=True)
+@frontend_route("GET", "/tarot/gallery", allow_public=True)
 async def tarot_gallery_page(_req: web.Request):
     """Backwards compatible redirect."""
     raise web.HTTPPermanentRedirect("/gallery")
 
-@route("GET", "/tarot/calendar", allow_public=True)
+@frontend_route("GET", "/tarot/calendar", allow_public=True)
 async def tarot_calendar_page(_req: web.Request):
     srv: DynamicWebServer | None = get_server()
     html = srv.render_template("tarot_calendar.html", {}) if srv else "<h1>Forest Calendar</h1>"
@@ -183,13 +183,13 @@ def _render_tarot_overlay_page(join_code: str) -> web.Response:
     return web.Response(text=html, content_type="text/html")
 
 
-@route("GET", "/elfministration/session/{join_code}", allow_public=True)
+@frontend_route("GET", "/elfministration/session/{join_code}", allow_public=True)
 async def tarot_elfministration_page(req: web.Request):
     join_code = req.match_info["join_code"]
     return _render_tarot_overlay_page(join_code)
 
 
-@route("GET", "/overlay/session/{join_code}", allow_public=True)
+@frontend_route("GET", "/overlay/session/{join_code}", allow_public=True)
 async def tarot_overlay_page(req: web.Request):
     join_code = req.match_info["join_code"]
     raise web.HTTPFound(f"/elfministration/session/{join_code}")
