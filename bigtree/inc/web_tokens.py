@@ -124,6 +124,43 @@ def issue_token(
     return doc
 
 
+def revoke_token(token: str) -> bool:
+    """Revoke a token (mark as revoked). Works with DB first, then JSON fallback."""
+    if not token:
+        return False
+    if _db_available():
+        try:
+            db = get_database()
+            return db.revoke_web_token(token)
+        except Exception:
+            pass
+    # JSON fallback: mark in file
+    tokens = load_tokens()
+    for t in tokens:
+        if t.get("token") == token:
+            t["revoked"] = True
+            t["revoked_at"] = int(time.time())
+            save_tokens(tokens)
+            return True
+    return False
+
+
+def list_tokens(include_expired: bool = False) -> list[Dict[str, Any]]:
+    """List all tokens. DB-first, falls back to JSON file."""
+    if _db_available():
+        try:
+            db = get_database()
+            return db.list_web_tokens(include_expired=include_expired)
+        except Exception:
+            pass
+    # JSON fallback
+    tokens = load_tokens()
+    if not include_expired:
+        now = int(time.time())
+        tokens = [t for t in tokens if not t.get("revoked") and (t.get("expires_at") or 0) > now]
+    return sorted(tokens, key=lambda t: t.get("created_at", 0), reverse=True)
+
+
 def validate_token(token: str, needed_scopes: Set[str]) -> bool:
     if not token:
         return False
@@ -143,6 +180,8 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
 
     for t in load_tokens():
         if t.get("token") != token:
+            continue
+        if t.get("revoked"):
             continue
         scopes = set(t.get("scopes") or [])
         if "*" in scopes:

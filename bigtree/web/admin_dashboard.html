@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BigTree Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 0.95em;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .section-title {
+            font-size: 1.2em;
+            color: #667eea;
+            margin-top: 20px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .section-title:first-child {
+            margin-top: 0;
+        }
+        
+        /* Forms */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        
+        .checkbox-group label {
+            margin-bottom: 0;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 11px 22px;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 2px solid #e0e0e0;
+        }
+        
+        button.secondary:hover {
+            background: #e8e8e8;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        button.danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        button.danger:hover {
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+        
+        button.small {
+            padding: 7px 14px;
+            font-size: 0.85em;
+        }
+        
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #667eea;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .token-preview {
+            font-family: "Monaco", "Courier", monospace;
+            font-size: 0.85em;
+            background: #f5f5f5;
+            padding: 8px 12px;
+            border-radius: 4px;
+            word-break: break-all;
+            color: #555;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        
+        .badge-scope {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .badge-active {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .badge-revoked {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .badge-warning {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        
+        .status-active { background: #4caf50; }
+        .status-revoked { background: #f44336; }
+        .status-expired { background: #ff9800; }
+        
+        /* Messages */
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .message.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+        
+        .message.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .close-btn {
+            float: right;
+            font-size: 1.2em;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        .close-btn:hover {
+            opacity: 1;
+        }
+        
+        /* Loading state */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
+            opacity: 0.3;
+        }
+        
+        .scope-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+        
+        .scope-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .scope-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .scope-description {
+            color: #777;
+            font-size: 0.9em;
+            margin-top: 3px;
+        }
+        
+        .routes-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: "Monaco", "Courier", monospace;
+            font-size: 0.8em;
+            color: #555;
+        }
+        
+        .routes-list div {
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .routes-list div:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌳 BigTree Admin Dashboard</h1>
+            <p class="subtitle">Manage web tokens, revoke access, and view permissions</p>
+        </header>
+        
+        <div id="messages"></div>
+        
+        <div class="main-grid">
+            <!-- Token Management Panel -->
+            <div class="card">
+                <h2>🔑 Token Management</h2>
+                
+                <div class="section-title">Issue New Token</div>
+                <div class="form-group">
+                    <label>User ID</label>
+                    <input type="number" id="newTokenUserId" placeholder="Discord user ID" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Scopes (comma-separated)</label>
+                    <input type="text" id="newTokenScopes" placeholder="tarot:admin, gallery:admin" value="*">
+                </div>
+                <div class="form-group">
+                    <label>TTL (hours)</label>
+                    <input type="number" id="newTokenTtl" value="24" min="1">
+                </div>
+                <div class="form-group">
+                    <label>User Name (optional)</label>
+                    <input type="text" id="newTokenName" placeholder="Display name">
+                </div>
+                <button onclick="issueNewToken()">Issue Token</button>
+                
+                <div class="section-title">Active Tokens</div>
+                <div class="table-container">
+                    <table id="tokensTable">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Scopes</th>
+                                <th>Issued</th>
+                                <th>Expires</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tokensBody">
+                            <tr><td colspan="6" style="text-align: center; color: #999;">Loading tokens...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button class="secondary" onclick="refreshTokens()" style="width: 100%;">↻ Refresh</button>
+            </div>
+            
+            <!-- Scope Reference Panel -->
+            <div class="card">
+                <h2>🔐 Scope Reference</h2>
+                <p style="color: #666; margin-bottom: 20px; font-size: 0.95em;">
+                    View all available scopes and which routes they grant access to.
+                </p>
+                <div id="scopesContainer" style="max-height: 600px; overflow-y: auto;">
+                    <div style="text-align: center; color: #999; padding: 20px;">Loading scopes...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Message notification system
+        function showMessage(text, type = 'info') {
+            const container = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type} show`;
+            msg.innerHTML = `
+                <span class="close-btn" onclick="this.parentElement.remove()">×</span>
+                ${text}
+            `;
+            container.appendChild(msg);
+            setTimeout(() => msg.classList.remove('show'), 5000);
+        }
+        
+        // Format ISO timestamp to readable format
+        function formatDate(isoString) {
+            if (!isoString) return 'N/A';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString();
+            } catch (e) {
+                return isoString;
+            }
+        }
+        
+        // Check token status
+        function getTokenStatus(token) {
+            if (token.revoked) return 'revoked';
+            if (token.expires_at) {
+                const expiry = new Date(token.expires_at);
+                if (expiry < new Date()) return 'expired';
+            }
+            return 'active';
+        }
+        
+        // Refresh tokens list
+        async function refreshTokens() {
+            try {
+                const res = await fetch('/admin/tokens');
+                const data = await res.json();
+                
+                if (!data.ok) {
+                    showMessage(`Error: ${data.error}`, 'error');
+                    return;
+                }
+                
+                const tbody = document.getElementById('tokensBody');
+                if (!data.tokens || data.tokens.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999; padding: 30px;">No active tokens</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.tokens.map(token => {
+                    const status = getTokenStatus(token);
+                    const statusColor = status === 'active' ? 'active' : status === 'expired' ? 'expired' : 'revoked';
+                    const scopes = Array.isArray(token.scopes) ? token.scopes : [token.scopes];
+                    
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${token.user_name || `User ${token.user_id}`}</strong>
+                                <br><small style="color: #999;">${token.token_masked}</small>
+                            </td>
+                            <td>
+                                ${scopes.map(s => `<span class="badge badge-scope">${s}</span>`).join(' ')}
+                            </td>
+                            <td><small>${formatDate(token.created_at)}</small></td>
+                            <td><small>${formatDate(token.expires_at) || 'Never'}</small></td>
+                            <td>
+                                <span class="status-indicator status-${statusColor}"></span>
+                                <span class="badge badge-${statusColor}">${status.toUpperCase()}</span>
+                            </td>
+                            <td>
+                                ${status !== 'revoked' ? `
+                                    <button class="small danger" onclick="revokeToken('${token.token}', '${token.user_name || token.user_id}')">Revoke</button>
+                                ` : '-'}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                showMessage(`Error loading tokens: ${e.message}`, 'error');
+            }
+        }
+        
+        // Issue new token
+        async function issueNewToken() {
+            const userId = document.getElementById('newTokenUserId').value.trim();
+            const scopes = document.getElementById('newTokenScopes').value.trim().split(',').map(s => s.trim()).filter(s => s);
+            const ttlHours = parseInt(document.getElementById('newTokenTtl').value) || 24;
+            const userName = document.getElementById('newTokenName').value.trim();
+            
+            if (!userId) {
+                showMessage('Please enter a User ID', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/admin/tokens', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: parseInt(userId),
+                        scopes: scopes.length ? scopes : ['*'],
+                        ttl_seconds: ttlHours * 60 * 60,
+                        user_name: userName || null,
+                    })
+                });
+                
+                const data = await res.json();
+                if (!data.ok) {
+                    showMessage(`Error: ${data.error}`, 'error');
+                    return;
+                }
+                
+                showMessage(`Token issued for ${userName || userId}: <code>${data.token}</code>`, 'success');
+                document.getElementById('newTokenUserId').value = '';
+                document.getElementById('newTokenScopes').value = '*';
+                document.getElementById('newTokenName').value = '';
+                refreshTokens();
+            } catch (e) {
+                showMessage(`Error: ${e.message}`, 'error');
+            }
+        }
+        
+        // Revoke token
+        async function revokeToken(token, userName) {
+            if (!confirm(`Revoke token for ${userName}? This cannot be undone.`)) return;
+            
+            try {
+                const res = await fetch(`/admin/tokens/${token}/revoke`, { method: 'POST' });
+                const data = await res.json();
+                
+                if (!data.ok) {
+                    showMessage(`Error: ${data.error}`, 'error');
+                    return;
+                }
+                
+                showMessage(`Token revoked for ${userName}`, 'success');
+                refreshTokens();
+            } catch (e) {
+                showMessage(`Error: ${e.message}`, 'error');
+            }
+        }
+        
+        // Load scopes reference
+        async function loadScopes() {
+            try {
+                const res = await fetch('/api/scopes');
+                const data = await res.json();
+                
+                if (!data.ok) {
+                    document.getElementById('scopesContainer').innerHTML = `<div class="error-state">Error loading scopes: ${data.error}</div>`;
+                    return;
+                }
+                
+                const scopes = Object.values(data.scopes || {}).sort((a, b) => a.scope.localeCompare(b.scope));
+                
+                const html = `
+                    <div style="margin-bottom: 20px;">
+                        <strong style="color: #667eea;">Total Scopes: ${scopes.length}</strong>
+                    </div>
+                    ${scopes.map(scope => `
+                        <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #f0f0f0;">
+                            <div style="margin-bottom: 5px;">
+                                <span class="badge badge-scope">${scope.scope}</span>
+                            </div>
+                            ${scope.description ? `
+                                <div class="scope-description">${scope.description}</div>
+                            ` : ''}
+                            ${scope.routes && scope.routes.length ? `
+                                <div style="margin-top: 8px;">
+                                    <small style="color: #999;">Routes (${scope.routes.length}):</small>
+                                    <div class="routes-list">
+                                        ${scope.routes.map(r => `<div>${r}</div>`).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('')}
+                `;
+                
+                document.getElementById('scopesContainer').innerHTML = html;
+            } catch (e) {
+                showMessage(`Error loading scopes: ${e.message}`, 'error');
+            }
+        }
+        
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            refreshTokens();
+            loadScopes();
+            // Refresh tokens every 30 seconds
+            setInterval(refreshTokens, 30000);
+        });
+    </script>
+</body>
+</html>

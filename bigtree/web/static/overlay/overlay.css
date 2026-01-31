@@ -1744,6 +1744,27 @@
       .preview-card.hover-flip:hover .meaning-line.reversed{
         opacity:.9;
       }
+      .scope-preview-overlay{
+        position:fixed;
+        inset:0;
+        z-index:1200;
+        display:flex;
+        justify-content:flex-end;
+        align-items:flex-start;
+        padding:16px;
+        pointer-events:none;
+        background:rgba(0,0,0,.12);
+        backdrop-filter: blur(1px);
+      }
+      .scope-preview-overlay.hidden{
+        display:none;
+      }
+      .scope-preview-overlay button{
+        pointer-events:auto;
+        background:rgba(8,12,10,.65);
+        border:1px solid rgba(255,255,255,.2);
+        color:var(--neutral);
+      }
       .contest-grid{
         display:grid;
         grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));

@@ -967,6 +967,20 @@ This will block new games from being created in this event, but existing games c
         }, 2400);
       }
 
+      function updateScopePreviewOverlay(){
+        const overlay = $("scopePreviewOverlay");
+        if (!overlay) return;
+        overlay.classList.toggle("hidden", !previewScopesActive);
+      }
+
+      function setPreviewScopes(scopes){
+        previewScopes = new Set(scopes || []);
+        previewScopesActive = previewScopes.size > 0;
+        updateScopePreviewOverlay();
+        applyScopeVisibility();
+        applyElfminVisibility();
+      }
+
       async function setMediaHidden(item, hidden){
         if (!item) return;
         const itemId = item.item_id || (item.name ? `media:${item.name}` : "");
@@ -1966,8 +1980,15 @@ This will block new games from being created in this event, but existing games c
         return set.has("*") || set.has("admin:web");
       }
 
+      function isEffectiveElfmin(){
+        if (previewScopesActive){
+          return previewScopes.has("*") || previewScopes.has("admin:web");
+        }
+        return !!authUserIsElfmin;
+      }
+
       function applyElfminVisibility(){
-        const isElfmin = !!authUserIsElfmin;
+        const isElfmin = isEffectiveElfmin();
         const authRolesBtn = $("menuAuthRoles");
         const authKeysBtn = $("menuAuthKeys");
         const authTempBtn = $("menuAuthTemp");
@@ -2020,6 +2041,8 @@ This will block new games from being created in this event, but existing games c
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
         if (dashboardAuthLink) dashboardAuthLink.classList.toggle("hidden", !canAdmin);
+        const dashboardAuthUsers = $("dashboardAuthUsers");
+        if (dashboardAuthUsers) dashboardAuthUsers.classList.toggle("hidden", !canBingo);
         const dashboardLogsWrap = $("dashboardLogsWrap");
         if (dashboardLogsWrap) dashboardLogsWrap.classList.toggle("hidden", !canAdmin);
 
@@ -2905,6 +2928,7 @@ This will block new games from being created in this event, but existing games c
       async function initAuthenticatedSession(){
         await loadAuthUser();
         applyScopeVisibility();
+        updateScopePreviewOverlay();
         const contestCategoryStatus = $("contestCategoryStatus");
         if (contestCategoryStatus){
           contestCategoryStatus.textContent = CONTEST_CATEGORY_ID;
@@ -5927,8 +5951,7 @@ function getOwnerClaimStatus(ownerName){
             $("authPreviewStatus").className = "status err";
             return;
           }
-          previewScopes = new Set(scopes);
-          previewScopesActive = true;
+          setPreviewScopes(scopes);
           $("authPreviewStatus").textContent = `Preview on: ${scopes.join(", ")}`;
           $("authPreviewStatus").className = "status ok";
           // Trigger any UI gates to re-evaluate
@@ -5940,8 +5963,17 @@ function getOwnerClaimStatus(ownerName){
       const authPreviewStop = $("authPreviewStop");
       if (authPreviewStop){
         authPreviewStop.addEventListener("click", () => {
-          previewScopesActive = false;
-          previewScopes = new Set();
+          setPreviewScopes([]);
+          $("authPreviewStatus").textContent = "Preview off.";
+          $("authPreviewStatus").className = "status";
+          loadEventsVenues(true);
+          loadGamesListVenues(true);
+        });
+      }
+      const scopePreviewExit = $("scopePreviewExit");
+      if (scopePreviewExit){
+        scopePreviewExit.addEventListener("click", () => {
+          setPreviewScopes([]);
           $("authPreviewStatus").textContent = "Preview off.";
           $("authPreviewStatus").className = "status";
           loadEventsVenues(true);

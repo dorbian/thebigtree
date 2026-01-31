@@ -441,6 +441,8 @@ class Database:
                 user_icon TEXT,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMPTZ,
+                revoked BOOLEAN DEFAULT FALSE,
+                revoked_at TIMESTAMPTZ,
                 metadata JSONB NOT NULL DEFAULT '{}'::jsonb
             )
             """,
@@ -2612,15 +2614,40 @@ class Database:
         if not tok:
             return None
         row = self._fetchone(
-            "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at FROM web_tokens WHERE token = %s",
+            "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at, revoked FROM web_tokens WHERE token = %s",
             (tok,),
         )
         if not row:
+            return None
+        if row.get("revoked"):
             return None
         expires_at = row.get("expires_at")
         if isinstance(expires_at, datetime) and expires_at <= datetime.utcnow():
             return None
         return self._json_safe_dict(row)
+
+    def revoke_web_token(self, token: str) -> bool:
+        """Mark a token as revoked. Returns True if successful."""
+        tok = str(token or "").strip()
+        if not tok:
+            return False
+        result = self._execute(
+            "UPDATE web_tokens SET revoked = TRUE, revoked_at = CURRENT_TIMESTAMP WHERE token = %s AND NOT revoked",
+            (tok,),
+        )
+        return bool(result)
+
+    def list_web_tokens(self, include_expired: bool = False) -> list[Dict[str, Any]]:
+        """List all web tokens, optionally including expired ones."""
+        if include_expired:
+            rows = self._fetchall("SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at, revoked, revoked_at FROM web_tokens ORDER BY created_at DESC")
+        else:
+            rows = self._fetchall(
+                "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at, revoked, revoked_at FROM web_tokens "
+                "WHERE (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) "
+                "ORDER BY created_at DESC"
+            )
+        return [self._json_safe_dict(row) for row in (rows or [])]
 
     def purge_expired_web_tokens(self) -> int:
         return int(self._execute("DELETE FROM web_tokens WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP") or 0)

@@ -70,6 +70,7 @@
 - Events: fix dashboard queries to use database fetch helper.
 - Dice: fix get_dice_set to read dict rows from the database cursor.
 - Overlay: add /auth logins modal under user management to list admin users + scopes.
+- Overlay: scope preview now masks features + shows a return-to-scope overlay.
 - Tarot: add template card API with tarot/playing templates and deck purpose metadata.
 - Overlay: add deck purpose controls and template card picker for new card creation.
 - Bingo: upsert new games into the games list for the admin archive.
