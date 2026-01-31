@@ -204,9 +204,49 @@ async def get_scopes(req: web.Request) -> web.Response:
         )
 
 
-@route("GET", "/admin/dashboard", scopes=["admin:*", "admin:web"], allow_public=False)
+@route("GET", "/admin/dashboard", scopes=["admin:*", "admin:web"], allow_public=True)
 async def dashboard_page(req: web.Request) -> web.Response:
-    """Serve the token management dashboard HTML."""
+    """Serve the token management dashboard HTML. Accepts token via ?token=... query param."""
+    # Check auth from query param if not in header
+    token = req.query.get("token")
+    if token:
+        # Validate token has admin access
+        try:
+            valid = web_tokens.validate_token(token, {"admin:web", "admin:*"})
+            if not valid:
+                return web.Response(
+                    text="<h1>Access Denied</h1><p>Invalid or insufficient token permissions. Need admin:web or admin:* scope.</p>",
+                    content_type="text/html",
+                    status=403
+                )
+        except Exception as e:
+            return web.Response(
+                text=f"<h1>Auth Error</h1><p>{e}</p>",
+                content_type="text/html",
+                status=500
+            )
+    else:
+        # No token in query param, check header (handled by middleware)
+        # If we got here with allow_public=True but no token, show login prompt
+        auth_header = req.headers.get("Authorization", "")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return web.Response(
+                text="""
+<!DOCTYPE html>
+<html>
+<head><title>Login Required</title></head>
+<body style="font-family: Arial; padding: 40px; text-align: center;">
+<h1>🔐 Authentication Required</h1>
+<p>Please provide your admin token to access the dashboard.</p>
+<p>Run <code>/auth</code> in Discord to get your token, then visit:</p>
+<p><code>http://localhost:8443/admin/dashboard?token=YOUR_TOKEN_HERE</code></p>
+</body>
+</html>
+                """,
+                content_type="text/html",
+                status=401
+            )
+    
     try:
         from importlib.resources import files as pkg_files, as_file
         

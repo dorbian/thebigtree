@@ -452,6 +452,27 @@
     </div>
     
     <script>
+        // Get token from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const TOKEN = urlParams.get('token') || '';
+        
+        if (!TOKEN) {
+            document.body.innerHTML = `
+                <div style="text-align: center; padding: 100px 20px;">
+                    <h1>🔐 No Token Provided</h1>
+                    <p>Run <code>/auth</code> in Discord to get your token, then visit:</p>
+                    <p><code>${window.location.origin}/admin/dashboard?token=YOUR_TOKEN_HERE</code></p>
+                </div>
+            `;
+        }
+        
+        // Add Authorization header to all fetch requests
+        function authFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = `Bearer ${TOKEN}`;
+            return fetch(url, options);
+        }
+        
         // Message notification system
         function showMessage(text, type = 'info') {
             const container = document.getElementById('messages');
@@ -489,7 +510,7 @@
         // Refresh tokens list
         async function refreshTokens() {
             try {
-                const res = await fetch('/admin/tokens');
+                const res = await authFetch('/admin/tokens');
                 const data = await res.json();
                 
                 if (!data.ok) {
@@ -549,7 +570,7 @@
             }
             
             try {
-                const res = await fetch('/admin/tokens', {
+                const res = await authFetch('/admin/tokens', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -581,7 +602,7 @@
             if (!confirm(`Revoke token for ${userName}? This cannot be undone.`)) return;
             
             try {
-                const res = await fetch(`/admin/tokens/${token}/revoke`, { method: 'POST' });
+                const res = await authFetch(`/admin/tokens/${token}/revoke`, { method: 'POST' });
                 const data = await res.json();
                 
                 if (!data.ok) {
@@ -599,7 +620,7 @@
         // Load scopes reference
         async function loadScopes() {
             try {
-                const res = await fetch('/api/scopes');
+                const res = await authFetch('/api/scopes');
                 const data = await res.json();
                 
                 if (!data.ok) {
