@@ -1,10 +1,22 @@
+"""
+Configuration validation and management for BigTree.
+Uses ConfigObj and Validator to load and validate config files against a schema.
+"""
+
 import bigtree
 import os
 from configobj import ConfigObj, ConfigObjError, flatten_errors
 from validate import Validator
 
+
 class ConfigCheck:
+    """
+    Loads and validates BigTree configuration from config.ini against spec.ini schema.
+    Automatically applies default values defined in the spec.
+    """
+    
     def __init__(self):
+        """Initialize configuration loader with path to config.ini and spec.ini."""
         self.configfile = bigtree.config_path
         self.config = None
         self.results = None
@@ -13,6 +25,10 @@ class ConfigCheck:
         self._spec_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spec.ini")
 
     def config_validate(self):
+        """
+        Load and validate configuration file.
+        Logs any validation failures and applies default values from spec.
+        """
         try:
             self.config = ConfigObj(self.configfile, configspec=self._spec_path, file_error=True, encoding="utf-8")
         except (ConfigObjError, IOError) as e:
@@ -39,4 +55,5 @@ class ConfigCheck:
         # self.config_write()
 
     def config_write(self):
+        """Write the current configuration to disk."""
         self.config.write()

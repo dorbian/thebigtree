@@ -132,18 +132,42 @@ class DynamicWebServer:
     # ---------- Template loader ----------
     @staticmethod
     def render_template(relpath: str, mapping: Dict[str, str]) -> str:
+        """
+        Load and render a template file with variable substitution.
+        
+        Args:
+            relpath: Relative path to template in bigtree.web.templates
+            mapping: Dictionary of variables to substitute in template
+        
+        Returns:
+            Rendered template string, or empty string if template not found
+        """
         pkg = "bigtree.web.templates"
         try:
             p = pkg_files(pkg).joinpath(relpath)
             with as_file(p) as fp:
                 txt = fp.read_text(encoding="utf-8")
-        except Exception as e:
-            log.error(f"[web] template load failed: {pkg}/{relpath}: {e}")
+        except FileNotFoundError as e:
+            log.error(f"[web] template not found: {pkg}/{relpath}")
             txt = ""
+        except (OSError, IOError) as e:
+            log.error(f"[web] template read error: {pkg}/{relpath}: {e}")
+            txt = ""
+        
+        if not txt:
+            return txt
+            
         try:
             return txt.format(**mapping)
-        except Exception:
-            # Fallback to simple token replacement for templates with braces.
+        except KeyError as e:
+            # Missing template variable - log and fallback
+            log.warning(f"[web] template missing variable {e}: {relpath}")
+            for key, val in (mapping or {}).items():
+                txt = txt.replace("{" + str(key) + "}", str(val))
+            return txt
+        except Exception as e:
+            # Other formatting errors - fallback to simple replacement
+            log.warning(f"[web] template format error: {relpath}: {e}")
             for key, val in (mapping or {}).items():
                 txt = txt.replace("{" + str(key) + "}", str(val))
             return txt

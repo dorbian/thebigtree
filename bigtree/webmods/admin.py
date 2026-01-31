@@ -85,6 +85,17 @@ def _admin_venue_scopes() -> list[str]:
 
 
 def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) -> list[str]:
+    """
+    Read the tail of a log file efficiently.
+    
+    Args:
+        path: Path to log file
+        max_lines: Maximum number of lines to return (0 = no limit)
+        max_bytes: Maximum bytes to read from file end
+    
+    Returns:
+        List of log lines, or empty list if file not found/readable
+    """
     if not path:
         return []
     if not os.path.exists(path):
@@ -103,7 +114,11 @@ def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) ->
         if max_lines > 0 and len(lines) > max_lines:
             lines = lines[-max_lines:]
         return lines
-    except Exception:
+    except (OSError, IOError) as e:
+        logger.warning("[admin] failed to read log file %s: %s", path, e)
+        return []
+    except UnicodeDecodeError as e:
+        logger.error("[admin] log file encoding error %s: %s", path, e)
         return []
 
 @route("GET", "/api/auth/me")
