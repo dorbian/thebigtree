@@ -89,9 +89,14 @@ def issue_token(
     ttl_seconds: int = TOKEN_TTL_SECONDS,
     user_name: Optional[str] = None,
     user_icon: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Issue a web token. DB-first; falls back to web_tokens.json."""
     scopes = scopes or ["*"]
+    metadata = metadata or {}
+    if "discord_id" not in metadata and user_id:
+        metadata["discord_id"] = int(user_id)
+
     if _db_available():
         try:
             db = get_database()
@@ -101,6 +106,7 @@ def issue_token(
                 ttl_seconds=int(ttl_seconds),
                 user_name=user_name,
                 user_icon=user_icon,
+                metadata=metadata,
             )
         except Exception:
             pass
@@ -113,6 +119,7 @@ def issue_token(
         "scopes": scopes,
         "created_at": now,
         "expires_at": now + int(ttl_seconds),
+        "metadata": metadata,
     }
     if user_name:
         doc["user_name"] = str(user_name)

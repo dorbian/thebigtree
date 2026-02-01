@@ -1012,10 +1012,39 @@ public partial class MainWindow : Window, IDisposable
 
     private void DrawHuntPanel()
     {
+        var accent = CategoryColor(SessionCategory.Party);
+        var cardBg = new Vector4(accent.X * 0.12f, accent.Y * 0.12f, accent.Z * 0.12f, 0.95f);
+        var cardBorder = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        
+        ImGui.BeginChild("HuntCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar);
+        var cardPos = ImGui.GetWindowPos();
+        var cardSize = ImGui.GetWindowSize();
+        var cardDraw = ImGui.GetWindowDrawList();
+        cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+        cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.Indent();
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+        if (SmallIconButton("\uf053", "<", "hunt-back"))
+        {
+            ImGui.PopStyleColor(3);
+            _controlSurfaceOpen = false;
+            SetRightPaneCollapsed(true);
+            ImGui.Unindent();
+            ImGui.EndChild();
+            return;
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.SameLine();
         ImGui.TextUnformatted("Staffed Scavenger Hunt");
-        ImGui.Separator();
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
+        ImGui.Spacing();
+        
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Host creates the hunt and manages the session. Staff claim checkpoints and confirm group check-ins on-site.");
@@ -1219,15 +1248,54 @@ public partial class MainWindow : Window, IDisposable
                 ImGui.TextUnformatted($"{ts}  {checkin.group_id} -> {checkin.checkpoint_id} (staff {checkin.staff_id})");
             }
         }
+        
+        ImGui.Unindent();
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.EndChild();
     }
 
     private void DrawMurderMysteryPanel()
     {
         var game = Plugin.Config.CurrentGame;
+        var accent = CategoryColor(SessionCategory.Party);
+        var cardBg = new Vector4(accent.X * 0.12f, accent.Y * 0.12f, accent.Z * 0.12f, 0.95f);
+        var cardBorder = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        
+        ImGui.BeginChild("MurderMysteryCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar);
+        var cardPos = ImGui.GetWindowPos();
+        var cardSize = ImGui.GetWindowSize();
+        var cardDraw = ImGui.GetWindowDrawList();
+        cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+        cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.Indent();
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+        if (SmallIconButton("\uf053", "<", "mm-back"))
+        {
+            ImGui.PopStyleColor(3);
+            _controlSurfaceOpen = false;
+            SetRightPaneCollapsed(true);
+            ImGui.Unindent();
+            ImGui.EndChild();
+            return;
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Murder Mystery");
+        ImGui.Spacing();
 
         if (game == null)
         {
             ImGui.TextDisabled("No murder mystery game selected. Create or select one on the left.");
+            ImGui.Unindent();
+            ImGui.Dummy(new Vector2(0, 6f));
+            ImGui.EndChild();
             return;
         }
         NormalizeMurderMysteryData(game);
@@ -1237,8 +1305,6 @@ public partial class MainWindow : Window, IDisposable
             ImGui.TextWrapped("Use the left player list to add/remove participants. Pick the killer, start the 5-minute voting window, and capture whispers. Timers below control the hint cadence.");
         }
 
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
         ImGui.TextDisabled("Murder Mystery Details");
         ImGui.Separator();
         ImGui.Spacing();
@@ -1399,6 +1465,10 @@ public partial class MainWindow : Window, IDisposable
         {
             DrawCountdownHint($"Hint {i + 1} Timer", game, i);
         }
+        
+        ImGui.Unindent();
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.EndChild();
     }
 
     private void DrawBingoAdminPanel()
@@ -4627,16 +4697,43 @@ private void DrawPermissionsStatusFooter()
     private void DrawRafflePanel()
     {
         var raffle = Plugin.Config.Raffle;
+        var accent = CategoryColor(SessionCategory.Draw);
+        var cardBg = new Vector4(accent.X * 0.12f, accent.Y * 0.12f, accent.Z * 0.12f, 0.95f);
+        var cardBorder = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        
+        ImGui.BeginChild("RaffleCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar);
+        var cardPos = ImGui.GetWindowPos();
+        var cardSize = ImGui.GetWindowSize();
+        var cardDraw = ImGui.GetWindowDrawList();
+        cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+        cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.Indent();
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+        if (SmallIconButton("\uf053", "<", "raffle-back"))
+        {
+            ImGui.PopStyleColor(3);
+            _controlSurfaceOpen = false;
+            SetRightPaneCollapsed(true);
+            ImGui.Unindent();
+            ImGui.EndChild();
+            return;
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Forest Raffle Roll");
+        ImGui.Spacing();
 
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Start a raffle, have players join with the join phrase, then close and draw winners.");
         }
-
-        ImGui.TextUnformatted("Forest Raffle Roll");
-        ImGui.Separator();
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
@@ -4758,6 +4855,10 @@ private void DrawPermissionsStatusFooter()
             foreach (var w in raffle.Winners)
                 ImGui.BulletText($"{w.Name} (#{w.TicketNumber})");
         }
+        
+        ImGui.Unindent();
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.EndChild();
     }
 
     // ========================= Spin Wheel =========================
@@ -4765,16 +4866,43 @@ private void DrawPermissionsStatusFooter()
     {
         var wheel = Plugin.Config.SpinWheel;
         EnsureWheelDefaults(wheel);
+        var accent = CategoryColor(SessionCategory.Draw);
+        var cardBg = new Vector4(accent.X * 0.12f, accent.Y * 0.12f, accent.Z * 0.12f, 0.95f);
+        var cardBorder = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        
+        ImGui.BeginChild("SpinWheelCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar);
+        var cardPos = ImGui.GetWindowPos();
+        var cardSize = ImGui.GetWindowSize();
+        var cardDraw = ImGui.GetWindowDrawList();
+        cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+        cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.Indent();
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+        if (SmallIconButton("\uf053", "<", "wheel-back"))
+        {
+            ImGui.PopStyleColor(3);
+            _controlSurfaceOpen = false;
+            SetRightPaneCollapsed(true);
+            ImGui.Unindent();
+            ImGui.EndChild();
+            return;
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Spin the Wheel");
+        ImGui.Spacing();
+        
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Spin a prompt for the party. Everyone does the prompt, or use punishments for the loser.");
         }
-
-
-        ImGui.TextUnformatted("Spin the Wheel");
-        ImGui.Separator();
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
@@ -4867,6 +4995,10 @@ private void DrawPermissionsStatusFooter()
         ImGui.TextWrapped(string.IsNullOrWhiteSpace(wheel.LastPrompt) ? "--" : wheel.LastPrompt);
         ImGui.SetWindowFontScale(1f);
         ImGui.EndChild();
+        
+        ImGui.Unindent();
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.EndChild();
     }
 
     // ========================= Glam Roulette =========================
@@ -4874,16 +5006,43 @@ private void DrawPermissionsStatusFooter()
     {
         var glam = Plugin.Config.GlamRoulette;
         EnsureGlamDefaults(glam);
+        var accent = CategoryColor(SessionCategory.Party);
+        var cardBg = new Vector4(accent.X * 0.12f, accent.Y * 0.12f, accent.Z * 0.12f, 0.95f);
+        var cardBorder = new Vector4(accent.X, accent.Y, accent.Z, 0.55f);
+        
+        ImGui.BeginChild("GlamCard", Vector2.Zero, false, ImGuiWindowFlags.NoScrollbar);
+        var cardPos = ImGui.GetWindowPos();
+        var cardSize = ImGui.GetWindowSize();
+        var cardDraw = ImGui.GetWindowDrawList();
+        cardDraw.AddRectFilled(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBg), 6f);
+        cardDraw.AddRect(cardPos, new Vector2(cardPos.X + cardSize.X, cardPos.Y + cardSize.Y),
+            ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
+
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.Indent();
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
+        if (SmallIconButton("\uf053", "<", "glam-back"))
+        {
+            ImGui.PopStyleColor(3);
+            _controlSurfaceOpen = false;
+            SetRightPaneCollapsed(true);
+            ImGui.Unindent();
+            ImGui.EndChild();
+            return;
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Glam Roulette");
+        ImGui.Spacing();
+        
         if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Contestants get a random theme and a short timer to build a glam. Open voting and collect chat votes with the keyword.");
         }
-
-
-        ImGui.TextUnformatted("Glam Roulette");
-        ImGui.Separator();
-        ImGui.TextUnformatted("Setup");
-        ImGui.Separator();
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
@@ -4971,6 +5130,10 @@ private void DrawPermissionsStatusFooter()
         {
             ImGui.BulletText($"{kv.Key}: {kv.Value}");
         }
+        
+        ImGui.Unindent();
+        ImGui.Dummy(new Vector2(0, 6f));
+        ImGui.EndChild();
     }
 
     // ========================= Cardgames (Host) =========================
@@ -5055,7 +5218,7 @@ private void DrawPermissionsStatusFooter()
                 ImGui.ColorConvertFloat4ToU32(cardBorder), 6f, 0, 1.2f);
 
             ImGui.Dummy(new Vector2(0, 6f));
-            ImGui.Indent(10f);
+            ImGui.Indent();
             ImGui.PushStyleColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new Vector4(0.85f, 0.65f, 0.20f, 0.95f)));
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.ColorConvertFloat4ToU32(new Vector4(0.92f, 0.70f, 0.25f, 1.0f)));
             ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImGui.ColorConvertFloat4ToU32(new Vector4(0.75f, 0.55f, 0.18f, 1.0f)));
@@ -5064,7 +5227,7 @@ private void DrawPermissionsStatusFooter()
                 ImGui.PopStyleColor(3);
                 _controlSurfaceOpen = false;
                 SetRightPaneCollapsed(true);
-                ImGui.Unindent(10f);
+                ImGui.Unindent();
                 ImGui.EndChild();
                 return;
             }
@@ -5203,7 +5366,7 @@ private void DrawPermissionsStatusFooter()
                 }
             }
 
-            ImGui.Unindent(10f);
+            ImGui.Unindent();
             ImGui.Dummy(new Vector2(0, 6f));
             ImGui.EndChild();
         }

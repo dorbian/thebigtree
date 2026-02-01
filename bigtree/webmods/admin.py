@@ -135,7 +135,10 @@ async def auth_me(req: web.Request):
     venue = None
     try:
         db = get_database()
-        raw_id = doc.get("user_id") if doc else None
+        raw_id = None
+        if doc:
+            meta = doc.get("metadata") or {}
+            raw_id = meta.get("discord_id") or doc.get("user_id")
         if raw_id is not None:
             venue = db.get_discord_venue(int(raw_id))
     except Exception:
@@ -163,10 +166,37 @@ async def admin_venues_list_scoped(_req: web.Request) -> web.Response:
 async def admin_venue_me(req: web.Request) -> web.Response:
     token = _extract_token(req)
     doc = _find_web_token(token)
-    if not doc or not doc.get("user_id"):
+    if not doc:
+        return web.json_response({"ok": False, "error": "user_id required"}, status=400)
+    raw_id = None
+    meta = doc.get("metadata") or {}
+    raw_id = meta.get("discord_id") or doc.get("user_id")
+    if not raw_id:
         return web.json_response({"ok": False, "error": "user_id required"}, status=400)
     db = get_database()
-    membership = db.get_discord_venue(int(doc.get("user_id")))
+    membership = db.get_discord_venue(int(raw_id))
+    if not membership:
+        try:
+            venue_id = db._find_venue_for_discord_admin(int(raw_id))
+        except Exception:
+            venue_id = None
+        if venue_id:
+            venue = db.get_venue(int(venue_id))
+            if venue:
+                membership = {
+                    "venue_id": int(venue.get("id")),
+                    "role": "admin",
+                    "membership_metadata": None,
+                    "id": int(venue.get("id")),
+                    "name": venue.get("name"),
+                    "currency_name": venue.get("currency_name"),
+                    "minimal_spend": venue.get("minimal_spend"),
+                    "background_image": venue.get("background_image"),
+                    "deck_id": venue.get("deck_id"),
+                    "metadata": venue.get("metadata"),
+                    "created_at": venue.get("created_at"),
+                    "updated_at": venue.get("updated_at"),
+                }
     if membership:
         membership = to_jsonable(membership)
     return web.json_response({"ok": True, "membership": membership})
@@ -176,7 +206,11 @@ async def admin_venue_me(req: web.Request) -> web.Response:
 async def admin_venue_assign(req: web.Request) -> web.Response:
     token = _extract_token(req)
     doc = _find_web_token(token)
-    if not doc or not doc.get("user_id"):
+    if not doc:
+        return web.json_response({"ok": False, "error": "user_id required"}, status=400)
+    meta = doc.get("metadata") or {}
+    raw_id = meta.get("discord_id") or doc.get("user_id")
+    if not raw_id:
         return web.json_response({"ok": False, "error": "user_id required"}, status=400)
     try:
         body = await req.json()
@@ -192,8 +226,8 @@ async def admin_venue_assign(req: web.Request) -> web.Response:
     venue = db.get_venue(venue_id)
     if not venue:
         return web.json_response({"ok": False, "error": "venue not found"}, status=404)
-    db.set_discord_venue(int(doc.get("user_id")), venue_id, role="admin")
-    membership = db.get_discord_venue(int(doc.get("user_id")))
+    db.set_discord_venue(int(raw_id), venue_id, role="admin")
+    membership = db.get_discord_venue(int(raw_id))
     if membership:
         membership = to_jsonable(membership)
     return web.json_response({"ok": True, "membership": membership})

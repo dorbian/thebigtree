@@ -130,6 +130,7 @@ async def issue_token(req: web.Request) -> web.Response:
         ttl_seconds = body.get("ttl_seconds", 24 * 60 * 60)
         user_name = body.get("user_name", "")
         user_icon = body.get("user_icon", "")
+        discord_id = body.get("discord_id")
         
         if not user_id:
             return web.json_response(
@@ -147,12 +148,19 @@ async def issue_token(req: web.Request) -> web.Response:
         except Exception:
             ttl_seconds = 24 * 60 * 60
         
+        metadata = {}
+        if discord_id is not None:
+            try:
+                metadata["discord_id"] = int(discord_id)
+            except Exception:
+                metadata["discord_id"] = str(discord_id)
         doc = web_tokens.issue_token(
             user_id=int(user_id),
             scopes=scopes,
             ttl_seconds=ttl_seconds,
             user_name=user_name or None,
             user_icon=user_icon or None,
+            metadata=metadata or None,
         )
         
         auth_logger.info(

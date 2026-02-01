@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-02-01
+- Auth: store discord_id in web token metadata and resolve venue by discord_id.
 - Forest: add event selector row and popup in sessions view, scoped to venue.
 - Forest: filter sessions list by active event.
 - Forest: show venue name next to sessions refresh when API key is set.
@@ -9,6 +10,7 @@
 - Forest: add event-scoped game creation (blackjack/slots) from the Events panel.
 - Forest: add venue selector and assignment in settings.
 - Forest: apply venue defaults when creating cardgame sessions.
+- Forest: apply card-style theming to all game panels (Hunt, MurderMystery, Raffle, SpinWheel, GlamRoulette) matching the polished blackjack appearance.
 - Events: include wallet balances in admin event player listings.
 - Auth: extend web token default TTL to 90 days.
 - Auth: add /auth/discord cookie login redirect and accept auth cookies across web auth extractors.

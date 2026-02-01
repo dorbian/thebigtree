@@ -2614,7 +2614,7 @@ class Database:
         if not tok:
             return None
         row = self._fetchone(
-            "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at, revoked FROM web_tokens WHERE token = %s",
+            "SELECT token, user_id, scopes, user_name, user_icon, created_at, expires_at, revoked, metadata FROM web_tokens WHERE token = %s",
             (tok,),
         )
         if not row:
