@@ -247,6 +247,7 @@ public partial class MainWindow : Window, IDisposable
         _rememberRightPaneState = Plugin.Config.RightPaneRemembered;
         _rightPaneCollapsed = true;
         _permissionsLastKey = Plugin.Config.BingoApiKey ?? "";
+        _activeEventCode = Plugin.Config.LastEventCode ?? "";
 
             // Load venue on startup if connected
             if (Plugin.Config.BingoConnected && Plugin.VenuesApi != null)
@@ -2833,6 +2834,13 @@ private void DrawSessionsList()
     if (SmallAccentIconButton("\uf021", "Refresh", "sessions-refresh"))
         RequestSessionsRefresh(true);
 
+    // Venue name (only when API key is present)
+    if (HasAdminKey() && !string.IsNullOrWhiteSpace(Plugin.Config.CurrentVenueName))
+    {
+        ImGui.SameLine();
+        ImGui.TextDisabled($"Venue: {Plugin.Config.CurrentVenueName}");
+    }
+
 	    // Right-aligned header buttons (Connect / New Game / Defaults / Settings)
 	    float rightEdge = ImGui.GetWindowContentRegionMax().X;
 	    // Add breathing room so the last button never hugs the far right edge.
@@ -2912,6 +2920,51 @@ private void DrawSessionsList()
         Plugin.ToggleConfigUI();
 
     ImGui.PopStyleColor(3);
+
+    // Event selector line
+    ImGui.Spacing();
+    if (HasAdminKey())
+    {
+        ImGui.TextDisabled("Event");
+        ImGui.SameLine();
+        if (string.IsNullOrWhiteSpace(_activeEventCode))
+        {
+            if (ImGui.SmallButton("Select Event"))
+            {
+                _eventSelectorOpen = true;
+                if (Plugin.EventsApi != null)
+                    _ = Events_LoadList();
+                ImGui.OpenPopup("Event Selector");
+            }
+        }
+        else
+        {
+            ImGui.TextUnformatted($"{_activeEventName} ({_activeEventCode})");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Change"))
+            {
+                _eventSelectorOpen = true;
+                if (Plugin.EventsApi != null)
+                    _ = Events_LoadList();
+                ImGui.OpenPopup("Event Selector");
+            }
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Clear"))
+            {
+                _activeEventCode = "";
+                _activeEventName = "";
+                _selectedEvent = null;
+                _eventGames.Clear();
+                Plugin.Config.LastEventCode = null;
+                Plugin.Config.Save();
+            }
+        }
+        DrawEventSelectorPopup();
+    }
+    else
+    {
+        ImGui.TextDisabled("Event (API key required)");
+    }
 
     // Defaults popup (unchanged)
     if (ImGui.BeginPopup("DefaultsPopup"))
@@ -3191,21 +3244,27 @@ private void DrawPermissionsStatusFooter()
     {
         var list = new List<SessionEntry>();
 
-        list.Add(new SessionEntry
+        bool hasApiKey = HasAdminKey();
+        bool filterByEvent = !string.IsNullOrWhiteSpace(_activeEventCode);
+        var eventCardgames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (filterByEvent)
         {
-            Id = "events",
-            Name = "Events",
-            Status = "Ready",
-            Category = SessionCategory.Party,
-            Managed = true,
-            TargetView = View.Events,
-            TypeIcon = TypeIcon(SessionCategory.Party),
-            CanClose = false
-        });
+            foreach (var g in _eventGames)
+            {
+                if (!string.Equals(g.Module, "cardgames", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(g.JoinCode))
+                    eventCardgames.Add(g.JoinCode);
+            }
+        }
 
         foreach (var s in _cardgamesSessions)
         {
             if (s is null) continue;
+            if (!hasApiKey)
+                continue;
+            if (filterByEvent && !eventCardgames.Contains(s.join_code))
+                continue;
             list.Add(new SessionEntry
             {
                 Id = $"cardgame-{s.session_id}",
@@ -3224,6 +3283,10 @@ private void DrawPermissionsStatusFooter()
 
         foreach (var g in _bingoGames)
         {
+            if (!hasApiKey)
+                continue;
+            if (filterByEvent)
+                continue;
             var id = g.game_id ?? "";
             var title = string.IsNullOrWhiteSpace(g.title) ? id : g.title;
             var label = string.IsNullOrWhiteSpace(title) ? "Bingo" : $"Bingo: {title}";
@@ -3243,6 +3306,10 @@ private void DrawPermissionsStatusFooter()
 
         if (_huntState?.hunt is not null)
         {
+            if (!hasApiKey)
+                return list.Where(ApplySessionFilters).ToList();
+            if (filterByEvent)
+                return list.Where(ApplySessionFilters).ToList();
             var hunt = _huntState.hunt;
             var status = hunt.active ? "Live" : hunt.ended ? "Finished" : "Waiting";
             list.Add(new SessionEntry
@@ -3262,6 +3329,8 @@ private void DrawPermissionsStatusFooter()
 
         if (Plugin.Config.CurrentGame is not null)
         {
+            if (filterByEvent)
+                return list.Where(ApplySessionFilters).ToList();
             var mm = Plugin.Config.CurrentGame;
             var status = mm.ActivePlayers?.Count > 0 ? "Live" : "Waiting";
             list.Add(new SessionEntry
@@ -3280,6 +3349,8 @@ private void DrawPermissionsStatusFooter()
 
         if (Plugin.Config.GlamRoulette is not null)
         {
+            if (filterByEvent)
+                return list.Where(ApplySessionFilters).ToList();
             var glam = Plugin.Config.GlamRoulette;
             var status = glam.RoundActive ? "Live" : "Waiting";
             list.Add(new SessionEntry
@@ -3297,6 +3368,8 @@ private void DrawPermissionsStatusFooter()
 
         if (Plugin.Config.Raffle is not null)
         {
+            if (filterByEvent)
+                return list.Where(ApplySessionFilters).ToList();
             var raffle = Plugin.Config.Raffle;
             var status = raffle.IsOpen ? "Live" : "Waiting";
             list.Add(new SessionEntry
@@ -3314,6 +3387,8 @@ private void DrawPermissionsStatusFooter()
 
         if (Plugin.Config.SpinWheel is not null)
         {
+            if (filterByEvent)
+                return list.Where(ApplySessionFilters).ToList();
             list.Add(new SessionEntry
             {
                 Id = "wheel",

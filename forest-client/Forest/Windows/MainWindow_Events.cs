@@ -21,13 +21,19 @@ public partial class MainWindow
     private bool _eventPlayersLoading = false;
     private string _eventStatus = "";
     private DateTime _eventsLastRefresh = DateTime.MinValue;
+    private string _activeEventCode = "";
+    private string _activeEventName = "";
+    private bool _eventSelectorOpen = false;
     
     // Create event form
     private string _eventCreateCode = "";
     private string _eventCreateName = "";
     private bool _eventCreateWalletEnabled = true;
-    private string _eventCreateEnabledGames = "blackjack,slots";
     private int _eventCreateJoinBonus = 1000;
+    private bool _eventCreateGameBlackjack = true;
+    private bool _eventCreateGameSlots = true;
+    private bool _eventCreateGameBingo = false;
+    private bool _eventCreateGameTarot = false;
 
     // Venue state
     private VenueMembership? _currentVenue = null;
@@ -51,6 +57,18 @@ public partial class MainWindow
             _events = await Plugin.EventsApi.ListEventsAsync(venueId, includeEnded: false);
             _eventsLastRefresh = DateTime.UtcNow;
             _eventStatus = $"Loaded {_events.Count} event(s)";
+
+            if (!string.IsNullOrWhiteSpace(_activeEventCode))
+            {
+                var match = _events.FirstOrDefault(e => string.Equals(e.Code, _activeEventCode, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    _selectedEvent = match;
+                    _activeEventName = match.Name;
+                    _ = Events_LoadGames(match);
+                    _ = Events_LoadPlayers(match);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -71,11 +89,11 @@ public partial class MainWindow
         _eventsLoading = true;
         try
         {
-            var enabledGames = _eventCreateEnabledGames
-                .Split(',')
-                .Select(g => g.Trim().ToLowerInvariant())
-                .Where(g => !string.IsNullOrWhiteSpace(g))
-                .ToList();
+            var enabledGames = new List<string>();
+            if (_eventCreateGameBlackjack) enabledGames.Add("blackjack");
+            if (_eventCreateGameSlots) enabledGames.Add("slots");
+            if (_eventCreateGameBingo) enabledGames.Add("bingo");
+            if (_eventCreateGameTarot) enabledGames.Add("tarot");
 
             var request = new CreateEventRequest
             {
@@ -94,7 +112,12 @@ public partial class MainWindow
                 _eventStatus = $"Created event: {created.Name} ({created.Code})";
                 Plugin.Config.LastEventCode = created.Code;
                 Plugin.Config.Save();
+                _activeEventCode = created.Code;
+                _activeEventName = created.Name;
+                _selectedEvent = created;
                 await Events_LoadList();
+                _ = Events_LoadGames(created);
+                _ = Events_LoadPlayers(created);
                 
                 // Clear form
                 _eventCreateCode = "";
@@ -461,13 +484,87 @@ public partial class MainWindow
                     _eventCreateJoinBonus = 0;
             }
             
-            ImGui.InputText("Enabled games (csv)", ref _eventCreateEnabledGames, 256);
+            ImGui.TextDisabled("Enabled games");
+            ImGui.Checkbox("Blackjack", ref _eventCreateGameBlackjack);
+            ImGui.SameLine();
+            ImGui.Checkbox("Slots", ref _eventCreateGameSlots);
+            ImGui.Checkbox("Bingo", ref _eventCreateGameBingo);
+            ImGui.SameLine();
+            ImGui.Checkbox("Tarot", ref _eventCreateGameTarot);
             
             using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(_eventCreateName) || _eventsLoading))
             {
                 if (ImGui.Button("Create Event"))
                     _ = Events_Create();
             }
+        }
+    }
+
+    private void DrawEventSelectorPopup()
+    {
+        if (ImGui.BeginPopupModal("Event Selector", ref _eventSelectorOpen, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted("Select an event for this venue");
+            ImGui.Separator();
+
+            if (_eventsLoading)
+            {
+                ImGui.TextDisabled("Loading events...");
+            }
+            else if (_events.Count == 0)
+            {
+                ImGui.TextDisabled("No events found.");
+            }
+            else
+            {
+                foreach (var ev in _events)
+                {
+                    if (ImGui.Selectable($"{ev.Name} ({ev.Code})", string.Equals(_activeEventCode, ev.Code, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _activeEventCode = ev.Code;
+                        _activeEventName = ev.Name;
+                        _selectedEvent = ev;
+                        Plugin.Config.LastEventCode = ev.Code;
+                        Plugin.Config.Save();
+                        _ = Events_LoadGames(ev);
+                        _ = Events_LoadPlayers(ev);
+                        ImGui.CloseCurrentPopup();
+                    }
+                }
+            }
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.TextUnformatted("Create New Event");
+
+            ImGui.InputText("Code (optional)", ref _eventCreateCode, 32);
+            ImGui.InputText("Name", ref _eventCreateName, 128);
+            ImGui.Checkbox("Enable wallet", ref _eventCreateWalletEnabled);
+            if (_eventCreateWalletEnabled)
+            {
+                ImGui.InputInt("Join bonus", ref _eventCreateJoinBonus);
+                if (_eventCreateJoinBonus < 0)
+                    _eventCreateJoinBonus = 0;
+            }
+            ImGui.TextDisabled("Enabled games");
+            ImGui.Checkbox("Blackjack", ref _eventCreateGameBlackjack);
+            ImGui.SameLine();
+            ImGui.Checkbox("Slots", ref _eventCreateGameSlots);
+            ImGui.Checkbox("Bingo", ref _eventCreateGameBingo);
+            ImGui.SameLine();
+            ImGui.Checkbox("Tarot", ref _eventCreateGameTarot);
+
+            using (var dis = ImRaii.Disabled(string.IsNullOrWhiteSpace(_eventCreateName) || _eventsLoading))
+            {
+                if (ImGui.Button("Create Event"))
+                    _ = Events_Create();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Close"))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
         }
     }
 }

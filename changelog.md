@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-02-01
+- Forest: add event selector row and popup in sessions view, scoped to venue.
+- Forest: filter sessions list by active event.
+- Forest: show venue name next to sessions refresh when API key is set.
 - Forest: add venues API client + models for venue metadata.
 - Forest: add events API client + models and events management panel.
 - Forest: add event-scoped game creation (blackjack/slots) from the Events panel.
