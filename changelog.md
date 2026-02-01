@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2026-02-01
+- Forest: add venues API client + models for venue metadata.
+- Forest: add events API client + models and events management panel.
+- Forest: add event-scoped game creation (blackjack/slots) from the Events panel.
+- Forest: add venue selector and assignment in settings.
+- Forest: apply venue defaults when creating cardgame sessions.
+- Events: include wallet balances in admin event player listings.
 - Auth: extend web token default TTL to 90 days.
 - Auth: add /auth/discord cookie login redirect and accept auth cookies across web auth extractors.
 - Admin: allow cookie-based tokens to access the admin dashboard without query params.

@@ -1,7 +1,10 @@
 ﻿using Dalamud.Bindings.ImGui; // API 13 ImGui bindings
 using Dalamud.Interface.Windowing;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using Forest.Features.Venues;
 using ImGuiCond = Dalamud.Bindings.ImGui.ImGuiCond;
 using ImGuiWindowFlags = Dalamud.Bindings.ImGui.ImGuiWindowFlags;
 
@@ -13,11 +16,14 @@ public class ConfigWindow : Window, IDisposable
     private ForestConfig Configuration;
     private bool _connecting = false;
     private bool _confirmDelete = false;
+    private List<Venue> _availableVenues = new();
+    private bool _venuesLoading = false;
+    private int _selectedVenueIndex = -1;
 
     public ConfigWindow(Plugin plugin) : base("Forest Settings###ForestConfigWindow")
     {
         Flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
-        Size = new Vector2(500, 260);
+        Size = new Vector2(500, 420);
         SizeCondition = ImGuiCond.FirstUseEver;
 
         Plugin = plugin;
@@ -111,6 +117,52 @@ public class ConfigWindow : Window, IDisposable
         }
 
         ImGui.Separator();
+        ImGui.TextDisabled("Venue & Events");
+        if (Plugin.Config.CurrentVenueId.HasValue && !string.IsNullOrWhiteSpace(Plugin.Config.CurrentVenueName))
+        {
+            ImGui.TextColored(new Vector4(0.5f, 1f, 0.6f, 1f), $"Current venue: {Plugin.Config.CurrentVenueName}");
+        }
+        else
+        {
+            ImGui.TextDisabled("No venue assigned");
+        }
+
+        if (Plugin.Config.BingoConnected && Plugin.VenuesApi != null)
+        {
+            if (_availableVenues.Count == 0)
+            {
+                if (!_venuesLoading && ImGui.Button("Load Venues"))
+                {
+                    _venuesLoading = true;
+                    _ = LoadVenuesAsync();
+                }
+                if (_venuesLoading)
+                    ImGui.TextDisabled("Loading venues...");
+            }
+            else
+            {
+                var venueNames = _availableVenues.Select(v => v.Name).ToArray();
+                ImGui.SetNextItemWidth(360);
+                if (ImGui.Combo("Select Venue", ref _selectedVenueIndex, venueNames, venueNames.Length))
+                {
+                    if (_selectedVenueIndex >= 0 && _selectedVenueIndex < _availableVenues.Count)
+                    {
+                        var venue = _availableVenues[_selectedVenueIndex];
+                        Plugin.Config.CurrentVenueId = venue.Id;
+                        Plugin.Config.CurrentVenueName = venue.Name;
+                        Plugin.Config.VenueLastFetched = DateTime.UtcNow;
+                        Plugin.Config.Save();
+                        Plugin.ChatGui.Print($"[Forest] Venue set to: {venue.Name}");
+                    }
+                }
+            }
+        }
+        else
+        {
+            ImGui.TextDisabled("Connect to server to manage venues.");
+        }
+
+        ImGui.Separator();
         ImGui.TextDisabled("Danger zone");
         ImGui.TextWrapped("Delete all Forest plugin data on this machine.");
         if (ImGui.Button("Delete all plugin data"))
@@ -147,5 +199,36 @@ public class ConfigWindow : Window, IDisposable
             ImGui.EndPopup();
         }
     }
+
+    private async System.Threading.Tasks.Task LoadVenuesAsync()
+    {
+        try
+        {
+            if (Plugin.VenuesApi != null)
+            {
+                _availableVenues = await Plugin.VenuesApi.ListVenuesAsync();
+                if (Plugin.Config.CurrentVenueId.HasValue)
+                {
+                    for (int i = 0; i < _availableVenues.Count; i++)
+                    {
+                        if (_availableVenues[i].Id == Plugin.Config.CurrentVenueId.Value)
+                        {
+                            _selectedVenueIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log?.Error(ex, "Failed to load venues");
+        }
+        finally
+        {
+            _venuesLoading = false;
+        }
+    }
+
 }
 

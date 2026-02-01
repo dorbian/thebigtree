@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj": {}
+    "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj": {}
   },
   "projects": {
-    "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj": {
+    "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj": {
       "version": "0.0.0.1",
       "restore": {
-        "projectUniqueName": "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
+        "projectUniqueName": "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
         "projectName": "Forest",
-        "projectPath": "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
+        "projectPath": "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
         "packagesPath": "C:\\Users\\dorbi\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\obj\\",
+        "outputPath": "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

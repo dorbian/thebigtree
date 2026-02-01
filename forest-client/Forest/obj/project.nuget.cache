@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "a7DgECd+fwk=",
+  "dgSpecHash": "S8yZlCWBhn4=",
   "success": true,
-  "projectFilePath": "C:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
+  "projectFilePath": "c:\\Users\\dorbi\\Documents\\Projects\\tbt\\thebigtree\\forest-client\\Forest\\Forest.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\dorbi\\.nuget\\packages\\dalamudpackager\\14.0.0\\dalamudpackager.14.0.0.nupkg.sha512",
     "C:\\Users\\dorbi\\.nuget\\packages\\dotnet.reproduciblebuilds\\1.2.39\\dotnet.reproduciblebuilds.1.2.39.nupkg.sha512",

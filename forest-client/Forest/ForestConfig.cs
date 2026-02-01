@@ -92,6 +92,12 @@ namespace Forest
         public bool RightPaneRemembered { get; set; } = false;
         public bool DisableNearbyScan { get; set; } = false;
 
+        // Venue & Events
+        public int? CurrentVenueId { get; set; } = null;
+        public string? CurrentVenueName { get; set; } = null;
+        public DateTime? VenueLastFetched { get; set; } = null;
+        public string? LastEventCode { get; set; } = null;
+
         // Example setting you can store
         public int MaxColumnWidth { get; set; } = 200;
 

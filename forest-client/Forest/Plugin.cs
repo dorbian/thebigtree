@@ -10,6 +10,8 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 
 using Forest.Windows;
+using Forest.Features.Venues;
+using Forest.Features.Events;
 
 namespace Forest;
 
@@ -33,6 +35,10 @@ public sealed class Plugin : IDalamudPlugin
 
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
+
+    // Venue & Event API clients
+    public VenuesApiClient? VenuesApi { get; private set; }
+    public EventsApiClient? EventsApi { get; private set; }
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
@@ -66,6 +72,27 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"Loaded {pluginInterface.Manifest.Name} {pluginInterface.Manifest.AssemblyVersion}");
 
         Config.BingoConnected = false;
+
+        // Initialize API clients
+        InitializeApiClients();
+    }
+
+    private void InitializeApiClients()
+    {
+        var baseUrl = Config.BingoApiBaseUrl?.Trim();
+        var apiKey = Config.BingoApiKey?.Trim();
+VenuesApi?.Dispose();
+        EventsApi?.Dispose();
+
+        
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            VenuesApi?.Dispose();
+            EventsApi?.Dispose();
+
+            VenuesApi = new VenuesApiClient(baseUrl, apiKey);
+            EventsApi = new EventsApiClient(baseUrl, apiKey);
+        }
     }
 
     public void Dispose()
@@ -179,6 +206,8 @@ public sealed class Plugin : IDalamudPlugin
 
             SetConn(true, "connected");
             ChatGui.Print("[Forest] Connected to Bingo server.");
+            // Reinitialize API clients with fresh credentials
+            InitializeApiClients();
             return true;
         }
         catch (Exception ex)

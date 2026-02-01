@@ -36,12 +36,12 @@ using ImGuiWindowFlags = Dalamud.Bindings.ImGui.ImGuiWindowFlags;
 
 namespace Forest.Windows;
 
-public class MainWindow : Window, IDisposable
+public partial class MainWindow : Window, IDisposable
 {
     private readonly Plugin Plugin;
 
     // ---------- View switch ----------
-    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam, Cardgames }
+    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam, Cardgames, Events }
     private enum TopView { Sessions, Games, Players }
     private enum SessionCategory { All, Party, Casino, Draw }
     private enum SessionStatusFilter { All, Live, Waiting, Finished }
@@ -247,6 +247,12 @@ public class MainWindow : Window, IDisposable
         _rememberRightPaneState = Plugin.Config.RightPaneRemembered;
         _rightPaneCollapsed = true;
         _permissionsLastKey = Plugin.Config.BingoApiKey ?? "";
+
+            // Load venue on startup if connected
+            if (Plugin.Config.BingoConnected && Plugin.VenuesApi != null)
+            {
+                _ = Venue_LoadCurrent();
+            }
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -2318,7 +2324,7 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
             "full" => 2,
             _ => -1,
         };
-    }/
+    }
 
     private static string FormatBingoStageLabel(string? stage)
     {
@@ -3185,6 +3191,18 @@ private void DrawPermissionsStatusFooter()
     {
         var list = new List<SessionEntry>();
 
+        list.Add(new SessionEntry
+        {
+            Id = "events",
+            Name = "Events",
+            Status = "Ready",
+            Category = SessionCategory.Party,
+            Managed = true,
+            TargetView = View.Events,
+            TypeIcon = TypeIcon(SessionCategory.Party),
+            CanClose = false
+        });
+
         foreach (var s in _cardgamesSessions)
         {
             if (s is null) continue;
@@ -3358,6 +3376,12 @@ private void DrawPermissionsStatusFooter()
             _huntId = entry.GameId;
             _ = Hunt_LoadState();
         }
+        else if (entry.TargetView == View.Events)
+        {
+            if (_currentVenue == null)
+                _ = Venue_LoadCurrent();
+            _ = Events_LoadList();
+        }
         else if (entry.TargetView == View.MurderMystery && entry.Index.HasValue)
         {
             Plugin.Config.CurrentGameIndex = entry.Index.Value;
@@ -3476,9 +3500,30 @@ private void DrawPermissionsStatusFooter()
         return defaults;
     }
 
+        private ForestConfig.GameDefaults GetEffectiveDefaults()
+        {
+            // Start with character defaults
+            var defaults = GetCharacterDefaults();
+        
+            // Override with venue defaults if available
+            if (_currentVenue != null)
+            {
+                if (!string.IsNullOrWhiteSpace(_currentVenue.CurrencyName))
+                    defaults.CurrencyLabel = _currentVenue.CurrencyName;
+            
+                if (_currentVenue.MinimalSpend.HasValue && _currentVenue.MinimalSpend.Value > 0)
+                    defaults.RequiredAmount = _currentVenue.MinimalSpend.Value;
+            
+                if (!string.IsNullOrWhiteSpace(_currentVenue.BackgroundImage))
+                    defaults.BackgroundImageUrl = _currentVenue.BackgroundImage;
+            }
+        
+            return defaults;
+        }
+
     private void LoadCharacterDefaults()
     {
-        var defaults = GetCharacterDefaults();
+            var defaults = GetEffectiveDefaults();
         _cardgamesPot = defaults.RequiredAmount;
         _cardgamesCurrency = defaults.CurrencyLabel ?? "gil";
         _cardgamesBackgroundUrl = defaults.BackgroundImageUrl ?? "";
@@ -3793,6 +3838,7 @@ private void DrawPermissionsStatusFooter()
             case View.Raffle: DrawRafflePanel(); break;
             case View.SpinWheel: DrawSpinWheelPanel(); break;
             case View.Glam: DrawGlamRoulettePanel(); break;
+                case View.Events: DrawEventsPanel(); break;
             default: ImGui.TextDisabled("Select a session."); break;
         }
 
@@ -6436,12 +6482,38 @@ private void DrawPermissionsStatusFooter()
         _cardgamesLoading = true;
         try
         {
+            var pot = _cardgamesPot;
+            var currency = _cardgamesCurrency;
+            var deckId = _cardgamesSelectedDeckId;
+            var backgroundUrl = _cardgamesBackgroundUrl;
+
+            if (_currentVenue != null)
+            {
+                if (pot <= 0 && _currentVenue.MinimalSpend.HasValue)
+                    pot = _currentVenue.MinimalSpend.Value;
+                if (string.IsNullOrWhiteSpace(currency) && !string.IsNullOrWhiteSpace(_currentVenue.CurrencyName))
+                    currency = _currentVenue.CurrencyName;
+                if (string.IsNullOrWhiteSpace(deckId) && !string.IsNullOrWhiteSpace(_currentVenue.DeckId))
+                    deckId = _currentVenue.DeckId;
+
+                if (_currentVenue.Metadata?.GameBackgrounds != null
+                    && _currentVenue.Metadata.GameBackgrounds.TryGetValue(_cardgamesGameId, out var venueGameBg)
+                    && !string.IsNullOrWhiteSpace(venueGameBg))
+                {
+                    backgroundUrl = venueGameBg;
+                }
+                else if (string.IsNullOrWhiteSpace(backgroundUrl) && !string.IsNullOrWhiteSpace(_currentVenue.BackgroundImage))
+                {
+                    backgroundUrl = _currentVenue.BackgroundImage;
+                }
+            }
+
             var resp = await _cardgamesApi!.CreateSessionAsync(
                 _cardgamesGameId,
-                _cardgamesPot,
-                _cardgamesSelectedDeckId,
-                _cardgamesCurrency,
-                _cardgamesBackgroundUrl,
+                pot,
+                deckId,
+                currency,
+                backgroundUrl,
                 draft
             );
             if (!resp.ok || resp.session is null)

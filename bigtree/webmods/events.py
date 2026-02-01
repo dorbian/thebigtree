@@ -692,7 +692,20 @@ async def admin_event_players(req: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "event not found"}, status=404)
     players = db.get_event_players(int(event_id), limit=5000)
     # Only expose minimal fields.
-    minimal = [{"xiv_username": p.get("xiv_username"), "joined_at": p.get("joined_at")} for p in players]
+    minimal = []
+    wallet_enabled = bool(ev.get("wallet_enabled"))
+    for p in players:
+        row = {
+            "user_id": p.get("user_id"),
+            "xiv_username": p.get("xiv_username"),
+            "joined_at": p.get("joined_at"),
+        }
+        if wallet_enabled and p.get("user_id"):
+            try:
+                row["wallet_balance"] = db.get_event_wallet_balance(int(event_id), int(p.get("user_id")))
+            except Exception:
+                row["wallet_balance"] = None
+        minimal.append(row)
     return web.json_response({"ok": True, "event_id": event_id, "players": minimal})
 
 @route("GET", "/admin/events/{event_id}/summary", scopes=["admin:web", "event:host"])
