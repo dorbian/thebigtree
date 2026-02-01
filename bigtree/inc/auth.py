@@ -22,6 +22,8 @@ except Exception:  # pragma: no cover
     jwt = None
     InvalidTokenError = Exception
 
+TOKEN_COOKIE_NAME = "bt_api_key"
+
 @dataclass
 class _Cfg:
     api_keys: Set[str]
@@ -59,7 +61,11 @@ def _extract_token(req: web.Request) -> Optional[str]:
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key")
+    token = req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key")
+    if token:
+        return token
+    cookie = req.cookies.get(TOKEN_COOKIE_NAME) if req.cookies else None
+    return cookie or None
 
 def _split_scopes(s: str | None) -> Set[str]:
     if not s:

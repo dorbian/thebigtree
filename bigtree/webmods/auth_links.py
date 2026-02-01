@@ -86,7 +86,10 @@ def _extract_token(req: web.Request) -> str:
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    token = req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    if token:
+        return token
+    return (req.cookies.get(auth_mod.TOKEN_COOKIE_NAME) if req.cookies else None) or ""
 
 def _jwt_scopes(token: str) -> Optional[Set[str]]:
     cfg = auth_mod._cfg()
@@ -186,6 +189,40 @@ async def create_temp_link(req: web.Request):
         "expires_at": doc.get("expires_at"),
         "scopes": resolved,
     })
+
+
+@route("GET", "/auth/discord", allow_public=True)
+async def discord_cookie_login(req: web.Request) -> web.StreamResponse:
+    token = (req.query.get("token") or "").strip()
+    if not token:
+        return web.Response(text="Missing token.", status=400)
+
+    doc = web_tokens.find_token(token) or {}
+    if not doc:
+        return web.Response(text="Invalid or expired token.", status=401)
+    try:
+        expires_at = int(doc.get("expires_at") or 0)
+    except Exception:
+        expires_at = 0
+    now = int(time.time())
+    if expires_at and expires_at <= now:
+        return web.Response(text="Token expired.", status=401)
+
+    redirect = (req.query.get("redirect") or "/overlay").strip()
+    if not redirect.startswith("/"):
+        redirect = "/overlay"
+    max_age = max(60, (expires_at - now)) if expires_at else web_tokens.TOKEN_TTL_SECONDS
+    resp = web.HTTPFound(location=redirect)
+    resp.set_cookie(
+        auth_mod.TOKEN_COOKIE_NAME,
+        token,
+        max_age=max_age,
+        httponly=True,
+        samesite="Lax",
+        secure=(req.scheme == "https"),
+        path="/",
+    )
+    return resp
 
 
 @frontend_route("GET", "/auth/temp/{token}", allow_public=True)

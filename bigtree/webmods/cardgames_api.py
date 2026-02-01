@@ -7,6 +7,7 @@ from bigtree.inc.webserver import route, frontend_route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
 from bigtree.inc import web_tokens
+from bigtree.inc.auth import TOKEN_COOKIE_NAME
 from bigtree.modules import tarot
 from bigtree.webmods.user_area import _resolve_user
 
@@ -24,7 +25,10 @@ def _extract_admin_token(req: web.Request) -> str:
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    token = req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    if token:
+        return token
+    return (req.cookies.get(TOKEN_COOKIE_NAME) if req.cookies else None) or ""
 
 async def _send_ws_state(ws: web.WebSocketResponse, session: Dict[str, Any], view: str, token: str):
     state = cg.get_state(session, view=view, token=token)

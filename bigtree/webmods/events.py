@@ -774,7 +774,11 @@ def _extract_token(req: web.Request) -> str:
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    token = req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    if token:
+        return token
+    from bigtree.inc.auth import TOKEN_COOKIE_NAME
+    return (req.cookies.get(TOKEN_COOKIE_NAME) if req.cookies else None) or ""
 
 
 def _resolve_admin_user_id(req: web.Request) -> Optional[int]:

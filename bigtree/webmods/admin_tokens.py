@@ -13,6 +13,7 @@ from bigtree.inc import web_tokens
 from bigtree.inc.scope_registry import get_scope_registry, scope_to_dict
 from bigtree.inc.database import get_database
 from bigtree.inc.logging import auth_logger
+from bigtree.inc.auth import TOKEN_COOKIE_NAME
 
 import bigtree
 
@@ -207,7 +208,7 @@ async def get_scopes(req: web.Request) -> web.Response:
 @route("GET", "/admin/dashboard", scopes=["admin:*", "admin:web"], allow_public=True)
 async def dashboard_page(req: web.Request) -> web.Response:
     """Serve the token management dashboard HTML. Accepts token via ?token=... query param."""
-    # Check auth from query param if not in header
+    # Check auth from query param if not in header/cookie
     token = req.query.get("token")
     if token:
         # Validate token has admin access
@@ -229,7 +230,23 @@ async def dashboard_page(req: web.Request) -> web.Response:
         # No token in query param, check header (handled by middleware)
         # If we got here with allow_public=True but no token, show login prompt
         auth_header = req.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        cookie_token = req.cookies.get(TOKEN_COOKIE_NAME) if req.cookies else None
+        if cookie_token:
+            try:
+                valid = web_tokens.validate_token(cookie_token, {"admin:web", "admin:*"})
+                if not valid:
+                    return web.Response(
+                        text="<h1>Access Denied</h1><p>Invalid or insufficient token permissions. Need admin:web or admin:* scope.</p>",
+                        content_type="text/html",
+                        status=403
+                    )
+            except Exception as e:
+                return web.Response(
+                    text=f"<h1>Auth Error</h1><p>{e}</p>",
+                    content_type="text/html",
+                    status=500
+                )
+        elif not auth_header or not auth_header.startswith("Bearer "):
             return web.Response(
                 text="""
 <!DOCTYPE html>

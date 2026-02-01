@@ -11,6 +11,7 @@ import bigtree
 from bigtree.inc.plogon import get_with_leaf_path
 from bigtree.inc.webserver import route
 from bigtree.inc import web_tokens
+from bigtree.inc.auth import TOKEN_COOKIE_NAME
 from bigtree.inc.settings import load_settings
 from bigtree.inc.database import get_database
 from bigtree.inc.jsonutil import to_jsonable
@@ -32,7 +33,10 @@ def _extract_token(req: web.Request) -> str:
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth.split(" ", 1)[1].strip()
-    return req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    token = req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or ""
+    if token:
+        return token
+    return (req.cookies.get(TOKEN_COOKIE_NAME) if req.cookies else None) or ""
 
 def _find_web_token(token: str) -> Dict[str, Any]:
     if not token:

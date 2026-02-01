@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-02-01
+- Discord: add a persistent overlay login button for channel 1467111868391751700 with per-user token issuance.
+- Auth: add /auth/discord cookie login redirect and accept auth cookies across web auth extractors.
+- Admin: allow cookie-based tokens to access the admin dashboard without query params.
+
 ## 2026-01-26
 - Editor: add Dice Sets editor with full CRUD operations for dice configurations.
 - Editor: add Slot Machines editor with full CRUD operations for slot machine configurations.

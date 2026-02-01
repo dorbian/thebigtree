@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import urllib.parse
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -12,6 +13,13 @@ from bigtree.inc.database import get_database
 from bigtree.inc.logging import auth_logger
 
 bot = bigtree.bot
+
+OVERLAY_LOGIN_CHANNEL_ID = 1467111868391751700
+OVERLAY_PANEL_STATE_FILE = "overlay_login_panel.json"
+OVERLAY_PANEL_MESSAGE = (
+    "Click the button below to log into the overlay. "
+    "It will set a secure login cookie in your browser."
+)
 
 
 def _settings_get(section: str, key: str, default=None):
@@ -151,6 +159,17 @@ def _build_overlay_url(token: str) -> str:
     return f"{base}/overlay?token={token}"
 
 
+def _build_overlay_cookie_url(token: str, redirect: str = "/overlay") -> str:
+    if not token:
+        return ""
+    base = _settings_get("WEB", "base_url", "http://localhost:8443") or "http://localhost:8443"
+    base = base.rstrip("/")
+    if not redirect.startswith("/"):
+        redirect = "/overlay"
+    redirect_q = urllib.parse.quote(redirect, safe="/")
+    return f"{base}/auth/discord?token={token}&redirect={redirect_q}"
+
+
 def _get_scopes_for_member(member: discord.Member) -> list[str]:
     role_map, configured = _get_role_scope_map()
     roles = {r.id for r in getattr(member, "roles", [])}
@@ -168,9 +187,141 @@ def _get_scopes_for_member(member: discord.Member) -> list[str]:
     return []
 
 
+def _panel_state_path() -> Path | None:
+    base = _settings_get("BOT", "DATA_DIR", None) or getattr(bigtree, "datadir", None)
+    if not base:
+        return None
+    return Path(base) / OVERLAY_PANEL_STATE_FILE
+
+
+def _load_panel_state() -> dict:
+    path = _panel_state_path()
+    if not path or not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_panel_state(channel_id: int, message_id: int) -> None:
+    path = _panel_state_path()
+    if not path:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"channel_id": str(channel_id), "message_id": str(message_id)}
+    path.write_text(json.dumps(payload, indent=2), "utf-8")
+
+
+class _OverlayLoginView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Login to overlay",
+        style=discord.ButtonStyle.primary,
+        custom_id="bigtree:overlay_login",
+    )
+    async def overlay_login(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not interaction.guild:
+            await interaction.response.send_message("This button only works inside the server.", ephemeral=True)
+            return
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
+        scopes = _get_scopes_for_member(member) if member else []
+        if not member or not scopes:
+            auth_logger.warning("[auth] overlay-login denied user=%s", getattr(interaction.user, "id", "unknown"))
+            await interaction.response.send_message("Not allowed.", ephemeral=True)
+            return
+        display_name = member.display_name or member.name
+        avatar_url = getattr(member, "display_avatar", None)
+        avatar_url = getattr(avatar_url, "url", None)
+        doc = web_tokens.issue_token(
+            user_id=member.id,
+            scopes=scopes,
+            user_name=display_name,
+            user_icon=avatar_url,
+        )
+        try:
+            get_database().upsert_discord_user(
+                member.id,
+                name=getattr(member, "name", None),
+                display_name=display_name,
+                global_name=getattr(member, "global_name", None),
+                metadata={"scopes": scopes},
+            )
+        except Exception:
+            pass
+        auth_logger.info(
+            "[auth] overlay-login issued user=%s scopes=%s",
+            member.id,
+            ",".join(doc.get("scopes") or []),
+        )
+        expires_at = datetime.fromtimestamp(doc["expires_at"], tz=timezone.utc)
+        overlay_url = _build_overlay_cookie_url(doc["token"])
+        view = discord.ui.View()
+        if overlay_url:
+            view.add_item(discord.ui.Button(label="Open overlay (login)", style=discord.ButtonStyle.link, url=overlay_url))
+        await interaction.response.send_message(
+            f"Open the overlay to complete login. Token expires: {expires_at.isoformat()}",
+            view=view,
+            ephemeral=True,
+        )
+
+
 class AuthCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        if not getattr(bot, "_overlay_login_view_added", False):
+            bot.add_view(_OverlayLoginView())
+            bot._overlay_login_view_added = True
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if getattr(self.bot, "_overlay_login_panel_ready", False):
+            return
+        self.bot._overlay_login_panel_ready = True
+        await self._ensure_overlay_panel()
+
+    async def _ensure_overlay_panel(self) -> None:
+        channel_id = int(OVERLAY_LOGIN_CHANNEL_ID or 0)
+        if not channel_id:
+            return
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+            except Exception:
+                return
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            return
+
+        state = _load_panel_state()
+        message = None
+        if state and str(state.get("channel_id")) == str(channel_id):
+            try:
+                msg_id = int(state.get("message_id") or 0)
+            except Exception:
+                msg_id = 0
+            if msg_id:
+                try:
+                    message = await channel.fetch_message(msg_id)
+                except Exception:
+                    message = None
+
+        view = _OverlayLoginView()
+        if message:
+            try:
+                await message.edit(content=OVERLAY_PANEL_MESSAGE, view=view)
+                return
+            except Exception:
+                pass
+        try:
+            message = await channel.send(content=OVERLAY_PANEL_MESSAGE, view=view)
+            _save_panel_state(channel_id, message.id)
+        except Exception:
+            return
 
     class _TokenView(discord.ui.View):
         def __init__(self, token: str, overlay_url: str):
