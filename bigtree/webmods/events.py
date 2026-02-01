@@ -9,6 +9,7 @@ import asyncio
 import bigtree
 from bigtree.inc.webserver import route, frontend_route, DynamicWebServer
 from bigtree.inc.database import get_database
+from bigtree.inc.jsonutil import to_jsonable
 from bigtree.inc import web_tokens
 from bigtree.modules import cardgames as cardgames_mod
 
@@ -884,7 +885,7 @@ async def event_dashboard_players(req: web.Request) -> web.Response:
     
     return web.json_response({
         "ok": True,
-        "players": players or []
+        "players": to_jsonable(players or [])
     })
 
 
