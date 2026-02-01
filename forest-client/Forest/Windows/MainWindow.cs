@@ -1043,18 +1043,16 @@ public partial class MainWindow : Window, IDisposable
         ImGui.PopStyleColor(3);
         ImGui.SameLine();
         ImGui.TextUnformatted("Staffed Scavenger Hunt");
-        ImGui.Spacing();
         
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("What is this?"))
         {
             ImGui.TextWrapped("Host creates the hunt and manages the session. Staff claim checkpoints and confirm group check-ins on-site.");
         }
 
-        ImGui.Spacing();
-
         if (string.IsNullOrWhiteSpace(_huntStaffName))
             _huntStaffName = Plugin.ClientState.LocalPlayer?.Name.TextValue ?? "Staff";
 
+        ImGui.Spacing();
         string[] modes = { "Host", "Staff" };
         ImGui.SetNextItemWidth(180f);
         ImGui.Combo("Mode", ref _huntMode, modes, modes.Length);
@@ -1068,9 +1066,6 @@ public partial class MainWindow : Window, IDisposable
         ImGui.Spacing();
         if (_huntMode == 0)
         {
-            ImGui.TextDisabled("Host");
-            ImGui.Separator();
-
             if (_huntList.Count == 0)
             {
                 ImGui.TextDisabled("No hunts loaded. Click Refresh list.");
@@ -1107,9 +1102,6 @@ public partial class MainWindow : Window, IDisposable
             if (_huntState?.hunt != null)
             {
                 var hunt = _huntState.hunt;
-                ImGui.Spacing();
-                ImGui.TextUnformatted("Live");
-                ImGui.Separator();
                 ImGui.Spacing();
                 ImGui.Text($"Hunt: {hunt.title} ({hunt.hunt_id})");
                 ImGui.Text($"Join code: {hunt.join_code}");
@@ -1288,7 +1280,6 @@ public partial class MainWindow : Window, IDisposable
         ImGui.PopStyleColor(3);
         ImGui.SameLine();
         ImGui.TextUnformatted("Murder Mystery");
-        ImGui.Spacing();
 
         if (game == null)
         {
@@ -1300,15 +1291,12 @@ public partial class MainWindow : Window, IDisposable
         }
         NormalizeMurderMysteryData(game);
 
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("What is this?"))
         {
             ImGui.TextWrapped("Use the left player list to add/remove participants. Pick the killer, start the 5-minute voting window, and capture whispers. Timers below control the hint cadence.");
         }
 
-        ImGui.TextDisabled("Murder Mystery Details");
-        ImGui.Separator();
         ImGui.Spacing();
-
         // Title
         string title = game.Title ?? "";
         ImGui.TextUnformatted("Title");
@@ -1329,9 +1317,6 @@ public partial class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextUnformatted("Live");
-        ImGui.Separator();
         ImGui.Text("Voting Period:");
 
         if (_votingStartTime.HasValue)
@@ -4728,13 +4713,11 @@ private void DrawPermissionsStatusFooter()
         ImGui.PopStyleColor(3);
         ImGui.SameLine();
         ImGui.TextUnformatted("Forest Raffle Roll");
-        ImGui.Spacing();
 
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("What is this?"))
         {
             ImGui.TextWrapped("Start a raffle, have players join with the join phrase, then close and draw winners.");
         }
-        ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
         string title = raffle.Title ?? "";
@@ -4897,13 +4880,11 @@ private void DrawPermissionsStatusFooter()
         ImGui.PopStyleColor(3);
         ImGui.SameLine();
         ImGui.TextUnformatted("Spin the Wheel");
-        ImGui.Spacing();
         
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("What is this?"))
         {
             ImGui.TextWrapped("Spin a prompt for the party. Everyone does the prompt, or use punishments for the loser.");
         }
-        ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
         string title = wheel.Title ?? "";
@@ -5037,13 +5018,11 @@ private void DrawPermissionsStatusFooter()
         ImGui.PopStyleColor(3);
         ImGui.SameLine();
         ImGui.TextUnformatted("Glam Roulette");
-        ImGui.Spacing();
         
-        if (ImGui.CollapsingHeader("What is this?", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("What is this?"))
         {
             ImGui.TextWrapped("Contestants get a random theme and a short timer to build a glam. Open voting and collect chat votes with the keyword.");
         }
-        ImGui.Spacing();
 
         ImGui.SetNextItemWidth(300);
         string title = glam.Title ?? "";
