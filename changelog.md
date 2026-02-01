@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-02-01
-- Discord: add a persistent overlay login button for channel 1467111868391751700 with per-user token issuance.
+- Auth: extend web token default TTL to 90 days.
 - Auth: add /auth/discord cookie login redirect and accept auth cookies across web auth extractors.
 - Admin: allow cookie-based tokens to access the admin dashboard without query params.
 

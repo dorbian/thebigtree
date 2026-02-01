@@ -16,7 +16,7 @@ try:
 except Exception:
     get_database = None  # type: ignore
 
-TOKEN_TTL_SECONDS = 24 * 60 * 60
+TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60
 
 
 def _settings_get(section: str, key: str, default=None):
