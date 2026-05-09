@@ -122,7 +122,7 @@ def create_request(
             return {"ok": False, "error": "insert failed"}
         return {"ok": True, "id": row["id"], "created_at": str(row["created_at"])}
 
-    return db._with_retry(_do)()
+    return db._with_retry(_do)
 
 
 def list_requests(
@@ -190,7 +190,7 @@ def update_request_status(
         row = result[0] if result else None
         return {"ok": bool(row), "id": request_id, "status": status}
 
-    return db._with_retry(_do)()
+    return db._with_retry(_do)
 
 
 def mark_posted(request_id: int) -> dict:
@@ -214,7 +214,7 @@ def mark_posted(request_id: int) -> dict:
         row = result[0] if result else None
         return {"ok": bool(row), "id": request_id}
 
-    return db._with_retry(_do)()
+    return db._with_retry(_do)
 
 
 def delete_request(request_id: int) -> dict:
