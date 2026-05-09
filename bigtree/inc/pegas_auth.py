@@ -210,7 +210,7 @@ def pegas_auth_middleware(app):
         if not is_pegas_request(request.headers):
             return await handler(request)
 
-        valid, err, user_id = validate_pegas_request(request)
+        valid, err, user_id = await validate_pegas_request(request)
         if not valid:
             logger.warning(f"[pegas_auth] Rejected: {err} | path={request.path}")
             return web.Response(status=401, text=f"Pegas auth failed: {err}")
