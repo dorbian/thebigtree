@@ -194,12 +194,7 @@ def auth_middleware() -> Callable:
             is_pegas_request = None
             validate_pegas_request = None
 
-        _pegas_ok = is_pegas_request and callable(is_pegas_request) and is_pegas_request(request.headers)
-        if _pegas_ok:
-            auth_logger.warning("[auth] DEBUG PEGAS OK path=%s method=%s scopes=%s",
-                request.path, request.method,
-                ",".join(sorted(needed_scopes)) if needed_scopes else "-",
-            )
+        if is_pegas_request and callable(is_pegas_request) and is_pegas_request(request.headers):
             if validate_pegas_request and callable(validate_pegas_request):
                 valid, err, user_id = await validate_pegas_request(request)
                 if valid:
@@ -212,10 +207,8 @@ def auth_middleware() -> Callable:
                     return web.json_response({"ok": False, "error": f"Pegas auth failed: {err}"}, status=401)
 
         cfg = _cfg()
-        auth_logger.warning("[auth] DEBUG cfg api_keys=%s scopes_map=%s", cfg.api_keys, cfg.scopes_map)
         needed_scopes: Set[str] = getattr(route_obj, "scopes", set()) or set()
         token = _extract_token(request)
-        auth_logger.warning("[auth] DEBUG token=%s", repr(token) if token else "NONE")
 
         valid = False
         scope_ok = False
