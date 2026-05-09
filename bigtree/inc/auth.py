@@ -162,7 +162,7 @@ def auth_middleware() -> Callable:
 
         if is_pegas_request and callable(is_pegas_request) and is_pegas_request(request.headers):
             if validate_pegas_request and callable(validate_pegas_request):
-                valid, err, user_id = validate_pegas_request(request)
+                valid, err, user_id = await validate_pegas_request(request)
                 if valid:
                     auth_logger.info("[auth] Pegas HMAC auth success for user_id=%s path=%s", user_id, request.path)
                     request["pegas_authenticated"] = True
