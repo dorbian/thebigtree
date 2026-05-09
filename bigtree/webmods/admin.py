@@ -371,17 +371,20 @@ async def discord_create_channel(req: web.Request) -> web.Response:
     try:
         category = None
         if category_id:
+            cat_id_str = str(category_id)
             for c in guild.categories:
-                if str(c.id) == str(category_id):
+                cid_str = str(c.id)
+                if cid_str == cat_id_str:
                     category = c
                     break
 
-        # Debug: log category resolution
+        # Debug: log ALL categories and the lookup
+        cats_info = [f"{c.id}({c.name})" for c in guild.categories]
         logger.warning(
-            "[create_channel] name=%s category_id=%s guild=%s found_category=%s categories_count=%d",
-            name, category_id, guild.name,
+            "[create_channel] name=%s category_id=%r guild=%s cat_id_str=%s found_category=%s all_cats=%s",
+            name, category_id, guild.name, cat_id_str if category_id else "EMPTY",
             category.name if category else "NOT FOUND",
-            len(list(guild.categories)),
+            cats_info,
         )
 
         new_channel = await guild.create_text_channel(
