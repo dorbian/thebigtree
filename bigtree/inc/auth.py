@@ -43,11 +43,23 @@ def _cfg() -> _Cfg:
         if hasattr(bigtree, "settings") and bigtree.settings:
             sec = bigtree.settings.section("WEB")
             if sec is not None:
-                # ConfigObj Section: use .get() method to safely extract values
-                # DO NOT use dict(sec) — ConfigObj iterates string chars when cast to dict
+                # ConfigObj Section: values from .get() are JSON-encoded strings — parse them
+                import json as _json
+                raw_keys = sec.get("api_keys") or []
+                raw_scopes = sec.get("api_key_scopes") or {}
+                if isinstance(raw_keys, str):
+                    try:
+                        raw_keys = _json.loads(raw_keys)
+                    except Exception:
+                        raw_keys = []
+                if isinstance(raw_scopes, str):
+                    try:
+                        raw_scopes = _json.loads(raw_scopes)
+                    except Exception:
+                        raw_scopes = {}
                 c = {
-                    "api_keys": sec.get("api_keys") or [],
-                    "api_key_scopes": sec.get("api_key_scopes") or {},
+                    "api_keys": raw_keys,
+                    "api_key_scopes": raw_scopes,
                     "jwt_secret": sec.get("jwt_secret") or None,
                     "jwt_algorithms": sec.get("jwt_algorithms") or ["HS256"],
                 }
