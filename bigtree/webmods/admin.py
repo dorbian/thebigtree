@@ -490,6 +490,65 @@ async def discord_create_role(req: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
+@route("PATCH", "/discord/roles/{role_id}", scopes=["bingo:admin", "tarot:admin"])
+async def discord_update_role(req: web.Request) -> web.Response:
+    """Update a role's color and/or name."""
+    from bigtree.inc.auth import _extract_token, _cfg
+    token = _extract_token(req)
+    cfg = _cfg()
+    if not token or token not in cfg.api_keys:
+        return web.json_response({"ok": False, "error": "admin API key required"}, status=401)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    role_id = req.match_info.get("role_id")
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    guild_id = body.get("guild_id")
+    if not guild_id:
+        return web.json_response({"ok": False, "error": "guild_id required"}, status=400)
+
+    guild = None
+    for g in bot.guilds or []:
+        if str(g.id) == str(guild_id):
+            guild = g
+            break
+    if not guild:
+        return web.json_response({"ok": False, "error": "guild not found"}, status=404)
+
+    role = next((r for r in getattr(guild, "roles", []) or [] if str(r.id) == str(role_id)), None)
+    if not role:
+        return web.json_response({"ok": False, "error": "role not found"}, status=404)
+
+    try:
+        kwargs = {}
+        if "name" in body:
+            kwargs["name"] = str(body["name"]).strip()
+        if "color" in body:
+            hex_str = str(body["color"]).lstrip("#")
+            kwargs["color"] = discord.Color(int(hex_str, 16))
+        if kwargs:
+            await role.edit(**kwargs)
+        return web.json_response({
+            "ok": True,
+            "role": {
+                "id": str(role.id),
+                "name": role.name,
+                "guild_id": str(guild.id),
+                "color": role.color.value if hasattr(role, "color") else 0,
+                "position": role.position,
+            }
+        })
+    except discord.Forbidden:
+        return web.json_response({"ok": False, "error": "bot lacks permission"}, status=403)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
 @route("POST", "/discord/roles/reorder", scopes=["bingo:admin", "tarot:admin"])
 async def discord_reorder_roles(req: web.Request) -> web.Response:
     """
