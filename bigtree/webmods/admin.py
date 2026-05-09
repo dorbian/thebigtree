@@ -490,6 +490,64 @@ async def discord_create_role(req: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
+@route("POST", "/discord/roles/reorder", scopes=["bingo:admin", "tarot:admin"])
+async def discord_reorder_roles(req: web.Request) -> web.Response:
+    """
+    Reorder roles by passing a list of role IDs in desired position order (highest first).
+    Discord role positions are relative — roles are moved to just above the previous role in the list.
+    Pass a single role ID to move it to the top of its category.
+    """
+    from bigtree.inc.auth import _extract_token, _cfg
+    token = _extract_token(req)
+    cfg = _cfg()
+    if not token or token not in cfg.api_keys:
+        return web.json_response({"ok": False, "error": "admin API key required"}, status=401)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    role_ids = body.get("role_ids", [])
+    guild_id = body.get("guild_id")
+    if not role_ids:
+        return web.json_response({"ok": False, "error": "role_ids required"}, status=400)
+    if not guild_id:
+        return web.json_response({"ok": False, "error": "guild_id required"}, status=400)
+
+    guild = None
+    for g in bot.guilds or []:
+        if str(g.id) == str(guild_id):
+            guild = g
+            break
+    if not guild:
+        return web.json_response({"ok": False, "error": "guild not found"}, status=404)
+
+    role_map = {str(r.id): r for r in getattr(guild, "roles", []) or []}
+
+    # Position the first role at the very top, then chain each subsequent role just above the previous
+    try:
+        for i, rid in enumerate(role_ids):
+            role = role_map.get(str(rid))
+            if not role:
+                return web.json_response({"ok": False, "error": f"role {rid} not found in guild"}, status=404)
+            # Role at index 0 goes to position 1 (just above everyone), then each next goes just above the previous
+            if i == 0:
+                target_pos = role.position - 1  # just above @everyone
+            else:
+                prev_role = role_map.get(str(role_ids[i - 1]))
+                target_pos = prev_role.position - 1
+            await role.edit(position=target_pos)
+        return web.json_response({"ok": True, "reordered": role_ids})
+    except discord.Forbidden:
+        return web.json_response({"ok": False, "error": "bot lacks permission to manage roles"}, status=403)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
 def _settings_path() -> Path:
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
