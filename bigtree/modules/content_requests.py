@@ -23,6 +23,7 @@ except Exception:
 
 class RequestStatus(Enum):
     DRAFT = "draft"        # Pegas is drafting
+    NEEDS_REVISION = "needs_revision"  # Flagged as needing work
     PENDING = "pending"    # Sent for review, awaiting Dorbian
     APPROVED = "approved"  # Dorbian approved, ready to post
     REJECTED = "rejected"  # Dorbian rejected
