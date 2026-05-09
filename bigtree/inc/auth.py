@@ -143,7 +143,7 @@ def auth_middleware() -> Callable:
     """
     Aiohttp middleware:
       - Lets public routes / OPTIONS pass
-      - Otherwise, accepts either a valid API key or a valid JWT
+      - Otherwise, accepts either a valid API key, JWT, dynamic token, or Pegas HMAC auth
     Expects handler to carry attribute '_bt_route' with fields: allow_public, scopes (Set[str])
     """
     @web.middleware
@@ -152,6 +152,25 @@ def auth_middleware() -> Callable:
         route_obj = getattr(handler, "_bt_route", None)
         if not route_obj or route_obj.allow_public or request.method == "OPTIONS":
             return await handler(request)
+
+        # ---- Pegas HMAC auth (bypasses normal token auth) ----
+        try:
+            from bigtree.inc.pegas_auth import is_pegas_request, validate_pegas_request, get_sender_id
+        except Exception:
+            is_pegas_request = None
+            validate_pegas_request = None
+
+        if is_pegas_request and callable(is_pegas_request) and is_pegas_request(request.headers):
+            if validate_pegas_request and callable(validate_pegas_request):
+                valid, err, user_id = validate_pegas_request(request)
+                if valid:
+                    auth_logger.info("[auth] Pegas HMAC auth success for user_id=%s path=%s", user_id, request.path)
+                    request["pegas_authenticated"] = True
+                    request["pegas_user_id"] = user_id
+                    return await handler(request)
+                else:
+                    auth_logger.warning("[auth] Pegas HMAC rejected: %s path=%s", err, request.path)
+                    return web.json_response({"ok": False, "error": f"Pegas auth failed: {err}"}, status=401)
 
         cfg = _cfg()
         needed_scopes: Set[str] = getattr(route_obj, "scopes", set()) or set()

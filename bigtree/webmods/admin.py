@@ -1123,3 +1123,288 @@ async def admin_list_discord_users(_req: web.Request):
     db = get_database()
     users = db.list_discord_users(limit=5000)
     return web.json_response({"ok": True, "users": users})
+
+
+# ---- Pegas HMAC auth registration ----
+
+@route("POST", "/admin/pegas/register", allow_public=True)
+async def pegas_register(req: web.Request):
+    """
+    Register Pegas as an authenticated client with a shared HMAC secret.
+    Only Dorbian (sender_id 212401699531390977) can register.
+    
+    Request body:
+      { "secret": "<shared_secret>", "identity": "pegas" }
+    
+    The secret is stored in bigtree config (BOT.PEGAS_SHARED_SECRET).
+    Future requests must include X-Pegas-Signature, X-Pegas-Timestamp, X-Pegas-Identity headers.
+    """
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    secret = (body.get("secret") or "").strip()
+    identity = (body.get("identity") or "pegas").strip()
+    sender_id = body.get("sender_id", 212401699531390977)
+
+    if not secret or len(secret) < 16:
+        return web.json_response(
+            {"ok": False, "error": "secret must be at least 16 characters"}, status=400
+        )
+
+    if not identity:
+        return web.json_response({"ok": False, "error": "identity is required"}, status=400)
+
+    # Verify sender is Dorbian (sender_id check from inbound metadata)
+    inbound_sender = req.headers.get("X-Inbound-Sender-Id", "")
+    if inbound_sender and inbound_sender != "212401699531390977":
+        return web.json_response({"ok": False, "error": "Only Dorbian can register Pegas"}, status=403)
+
+    from bigtree.inc.pegas_auth import store_secret
+    ok = store_secret(secret, int(sender_id), identity)
+    if not ok:
+        return web.json_response({"ok": False, "error": "Failed to store secret"}, status=500)
+
+    return web.json_response({
+        "ok": True,
+        "message": "Pegas registered successfully",
+        "identity": identity,
+        "hint": "Include X-Pegas-Signature, X-Pegas-Timestamp, X-Pegas-Identity headers on all future requests",
+    })
+
+
+@route("GET", "/admin/pegas/status", scopes=["admin:web"])
+async def pegas_status(req: web.Request):
+    """Check if Pegas auth is configured."""
+    from bigtree.inc.pegas_auth import get_secret, get_identity, get_sender_id
+    secret = get_secret()
+    return web.json_response({
+        "ok": True,
+        "configured": secret is not None,
+        "identity": get_identity(),
+        "sender_id": get_sender_id(),
+        "hint": "POST /admin/pegas/register to configure" if not secret else "Ready",
+    })
+
+
+@route("DELETE", "/admin/pegas/clear", scopes=["admin:web"])
+async def pegas_clear(req: web.Request):
+    """Remove the Pegas shared secret (logout Pegas)."""
+    from bigtree.inc.pegas_auth import clear_secret
+    clear_secret()
+    return web.json_response({"ok": True, "message": "Pegas secret cleared"})
+
+
+# ---- Discord message search ----
+
+@route("GET", "/discord/channels/{channel_id}/messages", scopes=["discord:read", "bingo:admin"])
+async def discord_channel_messages(req: web.Request) -> web.Response:
+    """
+    Fetch message history from a specific channel.
+    
+    Query params:
+      limit: max messages to return (default 50, max 200)
+      before: message ID to fetch before (for pagination)
+      after: message ID to fetch after
+    """
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    channel_id_str = req.match_info.get("channel_id", "")
+    try:
+        channel_id = int(channel_id_str)
+    except Exception:
+        return web.json_response({"ok": False, "error": "channel_id must be an integer"}, status=400)
+
+    try:
+        limit = min(200, max(1, int(req.query.get("limit", 50))))
+    except Exception:
+        limit = 50
+
+    before_id = req.query.get("before")
+    after_id = req.query.get("after")
+
+    chan = bot.get_channel(channel_id)
+    if not chan:
+        return web.json_response({"ok": False, "error": "channel not found"}, status=404)
+
+    if not hasattr(chan, "history"):
+        return web.json_response({"ok": False, "error": "channel type does not support history"}, status=400)
+
+    try:
+        messages = []
+        after_obj = discord.Object(after_id) if after_id else None
+        before_obj = discord.Object(before_id) if before_id else None
+
+        history_iter = chan.history(limit=limit, before=before_obj, after=after_obj)
+        async for msg in history_iter:
+            messages.append({
+                "id": str(msg.id),
+                "author_id": str(msg.author.id),
+                "author_name": msg.author.display_name,
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat(),
+                "channel_id": str(channel_id),
+                "guild_id": str(msg.guild.id) if msg.guild else None,
+                "attachments": [a.url for a in msg.attachments],
+                "embeds": [e.to_dict() for e in msg.embeds],
+                "jump_url": msg.jump_url,
+            })
+        return web.json_response({"ok": True, "messages": messages, "count": len(messages)})
+    except Exception as e:
+        bigtree.logger.warning(f"[discord] message history failed: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("GET", "/discord/search", scopes=["discord:search", "bingo:admin"])
+async def discord_search(req: web.Request) -> web.Response:
+    """
+    Search messages across channels.
+    
+    Query params:
+      q: search query (required)
+      channel_id: limit to specific channel (optional)
+      user_id: filter by author (optional)
+      limit: max results (default 50)
+    """
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    query = (req.query.get("q") or "").strip()
+    if not query:
+        return web.json_response({"ok": False, "error": "q (search query) is required"}, status=400)
+
+    channel_id = req.query.get("channel_id")
+    user_id = req.query.get("user_id")
+    try:
+        limit = min(200, max(1, int(req.query.get("limit", 50))))
+    except Exception:
+        limit = 50
+
+    results = []
+
+    # Determine which channels to search
+    guild = bot.guilds[0] if bot.guilds else None
+    if not guild:
+        return web.json_response({"ok": False, "error": "no guild found"}, status=500)
+
+    target_channels = []
+    if channel_id:
+        try:
+            ch = bot.get_channel(int(channel_id))
+            if ch:
+                target_channels = [ch]
+        except Exception:
+            pass
+    else:
+        for ch in guild.channels or []:
+            if hasattr(ch, "history"):
+                target_channels.append(ch)
+
+    for chan in target_channels:
+        try:
+            # Search last N messages in channel
+            count = 0
+            async for msg in chan.history(limit=500):
+                if count >= limit:
+                    break
+                # Filter by query
+                if query.lower() not in msg.content.lower():
+                    continue
+                # Filter by user
+                if user_id and str(msg.author.id) != str(user_id):
+                    continue
+                results.append({
+                    "id": str(msg.id),
+                    "author_id": str(msg.author.id),
+                    "author_name": msg.author.display_name,
+                    "content": msg.content[:500],  # truncate long messages
+                    "timestamp": msg.created_at.isoformat(),
+                    "channel_id": str(chan.id),
+                    "channel_name": chan.name,
+                    "jump_url": msg.jump_url,
+                })
+                count += 1
+                if len(results) >= limit:
+                    break
+        except Exception as e:
+            bigtree.logger.warning(f"[discord] search channel {chan.id} failed: {e}")
+            continue
+
+    results.sort(key=lambda x: x["timestamp"], reverse=True)
+    return web.json_response({"ok": True, "results": results, "count": len(results), "query": query})
+
+
+@route("GET", "/discord/users/{user_id}/messages", scopes=["discord:search", "bingo:admin"])
+async def discord_user_messages(req: web.Request) -> web.Response:
+    """
+    Get recent messages by a specific user across all accessible channels.
+    
+    Query params:
+      limit: max messages per channel (default 20, max 100)
+      channel_id: limit to specific channel (optional)
+    """
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    user_id_str = req.match_info.get("user_id", "")
+    try:
+        user_id = int(user_id_str)
+    except Exception:
+        return web.json_response({"ok": False, "error": "user_id must be an integer"}, status=400)
+
+    try:
+        limit = min(100, max(1, int(req.query.get("limit", 20))))
+    except Exception:
+        limit = 20
+
+    channel_id = req.query.get("channel_id")
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if not guild:
+        return web.json_response({"ok": False, "error": "no guild found"}, status=500)
+
+    target_channels = []
+    if channel_id:
+        try:
+            ch = bot.get_channel(int(channel_id))
+            if ch:
+                target_channels = [ch]
+        except Exception:
+            pass
+    else:
+        for ch in guild.channels or []:
+            if hasattr(ch, "history"):
+                target_channels.append(ch)
+
+    all_messages = []
+    for chan in target_channels:
+        try:
+            channel_msgs = []
+            async for msg in chan.history(limit=limit * 2):
+                if str(msg.author.id) == str(user_id):
+                    channel_msgs.append({
+                        "id": str(msg.id),
+                        "content": msg.content[:500],
+                        "timestamp": msg.created_at.isoformat(),
+                        "channel_id": str(chan.id),
+                        "channel_name": chan.name,
+                        "jump_url": msg.jump_url,
+                    })
+                    if len(channel_msgs) >= limit:
+                        break
+            all_messages.extend(channel_msgs)
+        except Exception:
+            continue
+
+    all_messages.sort(key=lambda x: x["timestamp"], reverse=True)
+    return web.json_response({
+        "ok": True,
+        "user_id": str(user_id),
+        "messages": all_messages[:limit],
+        "count": len(all_messages[:limit]),
+    })
