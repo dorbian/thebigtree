@@ -147,7 +147,7 @@ def is_pegas_request(headers) -> bool:
     )
 
 
-def validate_pegas_request(request) -> tuple[bool, str, int]:
+async def validate_pegas_request(request) -> tuple[bool, str, int]:
     """
     Validate a Pegas-authenticated request.
     Returns (success, error_message, effective_user_id).
@@ -179,14 +179,11 @@ def validate_pegas_request(request) -> tuple[bool, str, int]:
     if abs(now - ts) > PEGAS_TIMESTAMP_TTL:
         return False, f"Timestamp expired or too far in future (delta={abs(now-ts)}s, max={PEGAS_TIMESTAMP_TTL}s)", 0
 
-    # Reconstruct body
+    # Reconstruct body (aiohttp body is async stream, must await)
     body = ""
     try:
-        body_bytes = request.body
-        if hasattr(body_bytes, "read"):
-            body = body_bytes.read().decode("utf-8")
-        else:
-            body = str(body_bytes or "")
+        body_bytes = await request.read()
+        body = body_bytes.decode("utf-8")
     except Exception:
         body = ""
 
