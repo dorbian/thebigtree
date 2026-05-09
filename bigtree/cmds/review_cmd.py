@@ -1,6 +1,10 @@
 """
 Content Submission and Review via Discord Modal.
-Dorbian drafts with Pegas → submits → bot posts to review channel → buttons handle approve/needswork/reject → posted to target.
+Dorbian drafts with Pegas → submits → bot posts to review channel → Review button opens a modal to edit/confirm → post.
+
+Flow:
+  /submit-content (modal) → review channel (simple card + "Review" button)
+  "Review" button → Review modal → edit content + notes → "Post It" / "Needs Work" / "Reject"
 """
 
 from __future__ import annotations
@@ -18,7 +22,6 @@ from bigtree.modules.content_requests import (
     approve_request,
     reject_request,
     update_request_status,
-    RequestStatus,
 )
 
 REVIEW_CHANNEL_ID = 1224486271557173318  # bot-logs
@@ -26,8 +29,11 @@ REVIEW_CHANNEL_ID = 1224486271557173318  # bot-logs
 bot = getattr(bigtree, "bot", None)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Submission Modal (Step 1)
+# ─────────────────────────────────────────────────────────────────────────────
+
 class ContentSubmitModal(discord.ui.Modal, title="📝 Submit Content for Review"):
-    """Modal presented to Dorbian to enter content details before submission."""
 
     title_input = discord.ui.TextInput(
         label="Title",
@@ -51,18 +57,17 @@ class ContentSubmitModal(discord.ui.Modal, title="📝 Submit Content for Review
     )
     target_channel_id_input = discord.ui.TextInput(
         label="Target Channel ID (optional)",
-        placeholder="Leave blank to post to elf-art (1232148205773394021)",
+        placeholder="Leave blank for elf-art (1232148205773394021)",
         required=False,
         max_length=20,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        rtype = self.title_input.value or "art_contest"
+        rtype = self.request_type_input.value or "art_contest"
         body = self.body_input.value or ""
         title = self.title_input.value or "Content Submission"
         target_cid_str = self.target_channel_id_input.value or ""
 
-        # Resolve target channel
         target_cid = None
         target_ch = None
         if target_cid_str.strip():
@@ -73,13 +78,11 @@ class ContentSubmitModal(discord.ui.Modal, title="📝 Submit Content for Review
                 pass
 
         if not target_ch:
-            # Default to elf-art
-            target_cid = 1232148205773394021
+            target_cid = 1232148205773394021  # elf-art default
             target_ch = interaction.client.get_channel(target_cid)
 
         ch_name = target_ch.name if target_ch else str(target_cid)
 
-        # Create the content request
         result = create_request(
             request_type=rtype.strip(),
             title=title,
@@ -95,37 +98,40 @@ class ContentSubmitModal(discord.ui.Modal, title="📝 Submit Content for Review
 
         request_id = result["id"]
 
-        # Build the review embed
-        status_color = 0xF39C12  # orange = pending
         embed = discord.Embed(
             title=f"📋 Content Review | #{request_id}",
             description=body[:4096],
-            color=status_color,
+            color=0xF39C12,
         )
         embed.add_field(name="Type", value=rtype, inline=True)
         embed.add_field(name="Target", value=f"#{ch_name} ({target_cid})", inline=True)
         embed.add_field(name="Status", value="⏳ Pending Review", inline=True)
-        embed.set_footer(text=f"Request #{request_id} | Use buttons below to act")
+        embed.set_footer(text=f"Request #{request_id} | Click Review to open editor")
 
-        # Send to review channel with action buttons
         review_ch = interaction.client.get_channel(REVIEW_CHANNEL_ID)
         if not review_ch:
             return await interaction.response.send_message(
                 f"❌ Could not find review channel <#{REVIEW_CHANNEL_ID}>", ephemeral=True,
             )
 
-        view = ContentReviewView(request_id=request_id, target_channel_id=target_cid)
+        view = ReviewEntryView(request_id=request_id, target_channel_id=target_cid)
         review_msg = await review_ch.send(embed=embed, view=view)
 
-        # Store the review message ID on the request
-        from bigtree.modules.content_requests import get_database
-        if get_database:
-            db = get_database()
-            db._execute(
-                "UPDATE content_requests SET metadata = metadata || %s WHERE id = %s",
-                (f'{{"review_message_id": "{review_msg.id}", "review_channel_id": {REVIEW_CHANNEL_ID}}}',
-                 request_id),
-            )
+        # Attach review message metadata to the request
+        try:
+            from bigtree.modules.content_requests import get_database
+            if get_database:
+                db = get_database()
+                meta_patch = json.dumps({
+                    "review_message_id": str(review_msg.id),
+                    "review_channel_id": REVIEW_CHANNEL_ID,
+                })
+                db._execute(
+                    "UPDATE content_requests SET metadata = metadata || %s WHERE id = %s",
+                    (meta_patch, request_id),
+                )
+        except Exception:
+            pass
 
         await interaction.response.send_message(
             f"✅ Submitted! Review request #{request_id} posted to <#{REVIEW_CHANNEL_ID}>",
@@ -133,117 +139,228 @@ class ContentSubmitModal(discord.ui.Modal, title="📝 Submit Content for Review
         )
 
 
-class ContentReviewView(discord.ui.View):
-    """
-    Persistent view shown in the review channel.
-    Three buttons:
-      OK       → post to target, mark approved+posted
-      Needs Work → mark needs_revision, notify
-      NO        → mark rejected
-    """
+# ─────────────────────────────────────────────────────────────────────────────
+# Review Channel Card View (Step 2 — simple entry point)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReviewEntryView(discord.ui.View):
+    """Shown in the review channel. Review button opens editor modal.
+    OK and Needs Work are also buttons on the card for quick actions."""
 
     def __init__(self, request_id: int, target_channel_id: int):
         super().__init__(timeout=None)
         self.request_id = request_id
         self.target_channel_id = target_channel_id
 
-    @discord.ui.button(label="✅ OK — Post It", style=discord.ButtonStyle.success, custom_id=f"cr_ok_{request_id}")
-    async def ok_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="🔍 Review / Edit",
+        style=discord.ButtonStyle.primary,
+        custom_id=f"cr_review_{request_id}",
+    )
+    async def review_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        req = get_request(self.request_id)
+        if not req:
+            return await interaction.response.send_message(
+                "❌ Request not found.", ephemeral=True,
+            )
+        modal = ContentReviewModal(
+            request_id=self.request_id,
+            target_channel_id=self.target_channel_id,
+            initial_title=req.get("title", ""),
+            initial_body=req.get("body", ""),
+            initial_type=req.get("request_type", "art_contest"),
+        )
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(
+        label="✅ Post Now",
+        style=discord.ButtonStyle.success,
+        custom_id=f"cr_post_{request_id}",
+    )
+    async def post_now_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Quick-post: grabs current content and sends straight to target."""
         req = get_request(self.request_id)
         if not req:
             return await interaction.response.send_message("❌ Request not found.", ephemeral=True)
 
-        # Post to target channel
-        bot = interaction.client
-        target_ch = bot.get_channel(self.target_channel_id)
+        target_ch = interaction.client.get_channel(self.target_channel_id)
         if not target_ch:
             return await interaction.response.send_message(
-                f"❌ Target channel <#{self.target_channel_id}> not found.",
-                ephemeral=True,
+                f"❌ Target channel <#{self.target_channel_id}> not found.", ephemeral=True,
             )
 
-        body = req.get("body", "")
         try:
-            msg = await target_ch.send(body)
+            msg = await target_ch.send(req.get("body", ""))
+            jump = f"[Jump]({msg.jump_url})"
+        except Exception as e:
+            return await interaction.response.send_message(f"❌ Failed to post: {e}", ephemeral=True)
+
+        approve_request(self.request_id, reviewed_by=interaction.user.id, notes="Quick-posted via button")
+        mark_posted(self.request_id)
+
+        embed = discord.Embed(title=f"✅ Posted | #{self.request_id}", color=0x2ECC71)
+        embed.add_field(name="Target", value=f"<#{self.target_channel_id}>", inline=True)
+        embed.add_field(name="Jump", value=jump, inline=True)
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="🔧 Needs Work",
+        style=discord.ButtonStyle.secondary,
+        custom_id=f"cr_needswork_{request_id}",
+    )
+    async def needswork_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = ContentNeedsWorkModal(request_id=self.request_id)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(
+        label="❌ Reject",
+        style=discord.ButtonStyle.danger,
+        custom_id=f"cr_reject_{request_id}",
+    )
+    async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        reject_request(self.request_id, reviewed_by=interaction.user.id, notes="Rejected via button")
+        embed = discord.Embed(title=f"❌ Rejected | #{self.request_id}", color=0xE74C3C)
+        embed.add_field(name="Status", value="❌ Rejected", inline=True)
+        embed.add_field(name="Reviewed by", value=f"<@{interaction.user.id}>", inline=True)
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.followup.send(f"❌ Request #{self.request_id} rejected.", ephemeral=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Review Modal (Step 3 — full edit + confirm)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ContentReviewModal(discord.ui.Modal, title="🔍 Review Content"):
+
+    def __init__(
+        self,
+        request_id: int,
+        target_channel_id: int,
+        initial_title: str = "",
+        initial_body: str = "",
+        initial_type: str = "art_contest",
+    ):
+        super().__init__(timeout=None)
+        self.request_id = request_id
+        self.target_channel_id = target_channel_id
+
+        self.title_field = discord.ui.TextInput(
+            label="Title",
+            default=initial_title,
+            max_length=200,
+            required=True,
+        )
+        self.body_field = discord.ui.TextInput(
+            label="Content",
+            default=initial_body,
+            style=discord.TextStyle.long,
+            max_length=2000,
+            required=True,
+        )
+        self.notes_field = discord.ui.TextInput(
+            label="Review Notes (optional)",
+            placeholder="Any adjustments needed before posting...",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False,
+        )
+
+        self.add_item(self.title_field)
+        self.add_item(self.body_field)
+        self.add_item(self.notes_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        updated_body = self.body_field.value or ""
+        updated_title = self.title_field.value or ""
+        notes = self.notes_field.value or ""
+
+        bot = interaction.client
+        target_ch = bot.get_channel(self.target_channel_id)
+
+        if not target_ch:
+            return await interaction.response.send_message(
+                f"❌ Target channel <#{self.target_channel_id}> not found.", ephemeral=True,
+            )
+
+        # Post to target channel
+        try:
+            msg = await target_ch.send(updated_body)
             jump = f"[Jump]({msg.jump_url})"
         except Exception as e:
             return await interaction.response.send_message(
                 f"❌ Failed to post: {e}", ephemeral=True,
             )
 
-        # Mark as approved + posted
-        approve_request(self.request_id, reviewed_by=interaction.user.id, notes="Approved via review button")
+        # Mark as approved and posted
+        approve_request(
+            self.request_id,
+            reviewed_by=interaction.user.id,
+            notes=f"Approved via review modal. Notes: {notes}",
+        )
         mark_posted(self.request_id)
 
-        # Update the review message
-        approve_embed = discord.Embed(
+        # Acknowledge in the review channel
+        posted_embed = discord.Embed(
             title=f"✅ Posted | #{self.request_id}",
-            description=body[:4096],
+            description=f"**{updated_title}**\n\n{updated_body[:1024]}",
             color=0x2ECC71,
         )
-        approve_embed.add_field(name="Status", value="✅ Posted to target", inline=True)
-        approve_embed.add_field(name="Target", value=f"<#{self.target_channel_id}>", inline=True)
-        approve_embed.add_field(name="Jump", value=jump, inline=True)
+        posted_embed.add_field(name="Target", value=f"<#{self.target_channel_id}>", inline=True)
+        posted_embed.add_field(name="Jump", value=jump, inline=True)
+        if notes:
+            posted_embed.add_field(name="Review notes", value=notes, inline=False)
 
-        # Disable all buttons
-        for item in self.children:
-            item.disabled = True
-
-        await interaction.response.edit_message(embed=approve_embed, view=self)
-        await interaction.followup.send(
-            f"✅ Content #{self.request_id} posted to <#{self.target_channel_id}>!",
+        await interaction.response.send_message(
+            embed=posted_embed,
             ephemeral=True,
         )
 
-    @discord.ui.button(label="🔧 Needs Work", style=discord.ButtonStyle.secondary, custom_id=f"cr_needswork_{request_id}")
-    async def needswork_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Review needs-work modal (re-use same modal but with different button label)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ContentNeedsWorkModal(discord.ui.Modal, title="🔧 Needs Work — Add Notes"):
+
+    def __init__(self, request_id: int):
+        super().__init__(timeout=None)
+        self.request_id = request_id
+
+        self.notes_field = discord.ui.TextInput(
+            label="What needs to change?",
+            placeholder="Describe what adjustments are needed...",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=True,
+        )
+        self.add_item(self.notes_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        notes = self.notes_field.value or "Flagged as needing revision"
+
         update_request_status(
             self.request_id,
             status="needs_revision",
             reviewed_by=interaction.user.id,
-            review_notes="Flagged as needing revision",
+            review_notes=notes,
         )
 
-        needswork_embed = discord.Embed(
-            title=f"🔧 Needs Revision | #{self.request_id}",
-            color=0xE67E22,
-        )
-        needswork_embed.add_field(
-            name="What to do",
-            value="Revise the content and submit a new request with the improved version.",
-            inline=False,
-        )
-        needswork_embed.add_field(name="Reviewed by", value=f"<@{interaction.user.id}>", inline=True)
-
-        for item in self.children:
-            item.disabled = True
-
-        await interaction.response.edit_message(embed=needswork_embed, view=self)
-        await interaction.followup.send(
-            f"🔧 Request #{self.request_id} marked as needing revision.",
+        await interaction.response.send_message(
+            f"🔧 Request #{self.request_id} marked as needing work.\n"
+            f"Notes: {notes}",
             ephemeral=True,
         )
 
-    @discord.ui.button(label="❌ NO — Reject", style=discord.ButtonStyle.danger, custom_id=f"cr_no_{request_id}")
-    async def no_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        reject_request(self.request_id, reviewed_by=interaction.user.id, notes="Rejected via review button")
 
-        reject_embed = discord.Embed(
-            title=f"❌ Rejected | #{self.request_id}",
-            color=0xE74C3C,
-        )
-        reject_embed.add_field(name="Status", value="❌ Rejected", inline=True)
-        reject_embed.add_field(name="Reviewed by", value=f"<@{interaction.user.id}>", inline=True)
-
-        for item in self.children:
-            item.disabled = True
-
-        await interaction.response.edit_message(embed=reject_embed, view=self)
-        await interaction.followup.send(
-            f"❌ Request #{self.request_id} rejected.",
-            ephemeral=True,
-        )
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Cog
+# ─────────────────────────────────────────────────────────────────────────────
 
 class ReviewCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -259,19 +376,40 @@ class ReviewCog(commands.Cog):
         await interaction.response.send_modal(ContentSubmitModal())
 
     async def cog_load(self):
-        # Re-attach persistent views after bot restart so button callbacks still fire
+        # Restore persistent views on restart so button callbacks survive restart
         review_ch = self.bot.get_channel(REVIEW_CHANNEL_ID)
-        if review_ch:
-            async for msg in review_ch.history(limit=50):
-                if msg.author.id == self.bot.user.id and msg.embeds:
-                    embed = msg.embeds[0]
-                    if embed.title and "Content Review" in embed.title:
-                        # Extract request_id from title like "📋 Content Review | #123"
-                        try:
-                            rid = int(embed.title.split("#")[-1])
-                            self.bot.add_view(ContentReviewView(request_id=rid, target_channel_id=0), message_id=msg.id)
-                        except Exception:
-                            pass
+        if not review_ch:
+            return
+
+        async for msg in review_ch.history(limit=100):
+            if msg.author.id != self.bot.user.id:
+                continue
+            if not msg.embeds:
+                continue
+            embed = msg.embeds[0]
+            if not (embed.title and "Content Review" in embed.title):
+                continue
+            try:
+                rid = int(embed.title.split("#")[-1])
+            except Exception:
+                continue
+
+            # Try to get target_channel_id from content field
+            target_cid = 1232148205773394021
+            for field in (embed.fields or []):
+                if field.name == "Target":
+                    import re
+                    m = re.search(r"\((\d+)\)", field.value)
+                    if m:
+                        target_cid = int(m.group(1))
+
+            self.bot.add_view(
+                ReviewEntryView(request_id=rid, target_channel_id=target_cid),
+                message_id=msg.id,
+            )
+
+
+import json  # needed for meta patch in on_submit
 
 
 async def setup(bot: commands.Bot):
