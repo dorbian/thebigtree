@@ -817,6 +817,307 @@ async def update_with_leaf(req: web.Request):
 
 
 @route("GET", "/admin/discord-users", scopes=["admin:web"])
+@route("GET", "/admin/gpose/status")
+async def gpose_status(req: web.Request):
+    """Get current G-Pose contest state."""
+    try:
+        from bigtree.modules.gpose_contest import get_current_week, get_submissions, get_state
+        state = get_state()
+        week = get_current_week()
+        submissions = get_submissions()
+        return web.json_response({
+            "ok": True,
+            "has_active_contest": week is not None,
+            "current_week": week.to_dict() if week else None,
+            "submission_count": len(submissions),
+            "state": state,
+        })
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("GET", "/admin/gpose/config")
+async def gpose_config(req: web.Request):
+    """Get G-Pose contest configuration (role IDs, channel IDs)."""
+    try:
+        from bigtree.modules.gpose_contest import get_config
+        cfg = get_config()
+        return web.json_response({"ok": True, "config": cfg})
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/config")
+async def gpose_config_update(req: web.Request):
+    """Update G-Pose contest configuration."""
+    try:
+        from bigtree.modules.gpose_contest import set_config, get_config
+        body = await req.json()
+        allowed_keys = {
+            "weekly_role_id", "monthly_role_id", "yearly_role_id",
+            "submitter_role_id", "submissions_channel_id",
+            "announcements_channel_id", "posers_hall_channel_id",
+            "planning_channel_id", "voting_emoji",
+        }
+        updates = {k: v for k, v in body.items() if k in allowed_keys}
+        # Convert string IDs to int
+        int_fields = {"weekly_role_id", "monthly_role_id", "yearly_role_id",
+                      "submitter_role_id", "submissions_channel_id",
+                      "announcements_channel_id", "posers_hall_channel_id",
+                      "planning_channel_id"}
+        for k in int_fields:
+            if k in updates:
+                try:
+                    updates[k] = int(updates[k])
+                except (ValueError, TypeError):
+                    updates[k] = None
+        result = set_config(**updates)
+        return web.json_response({"ok": True, "config": result})
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/start")
+async def gpose_start(req: web.Request):
+    """Start a new G-Pose contest week."""
+    try:
+        from bigtree.modules.gpose_contest import start_contest, get_current_week
+        if get_current_week() is not None:
+            return web.json_response({"ok": False, "error": "A contest is already in progress"}, status=409)
+        body = await req.json()
+        theme = (body.get("theme") or "Open").strip()
+        if not theme:
+            return web.json_response({"ok": False, "error": "theme is required"}, status=400)
+        duration_days = float(body.get("duration_days", 7.0))
+        week = body.get("week")
+        month = body.get("month")
+        year = body.get("year")
+        result = start_contest(
+            theme=theme,
+            week=int(week) if week else None,
+            month=int(month) if month else None,
+            year=int(year) if year else None,
+            duration_days=duration_days,
+        )
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/submit")
+async def gpose_submit(req: web.Request):
+    """Record a G-Pose submission for the current contest."""
+    try:
+        from bigtree.modules.gpose_contest import submit_entry
+        body = await req.json()
+        message_id = str(body.get("message_id") or "").strip()
+        user_id = body.get("user_id")
+        user_name = (body.get("user_name") or "unknown").strip()
+        if not message_id:
+            return web.json_response({"ok": False, "error": "message_id is required"}, status=400)
+        if not user_id:
+            return web.json_response({"ok": False, "error": "user_id is required"}, status=400)
+        result = submit_entry(message_id, int(user_id), user_name)
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/end")
+async def gpose_end(req: web.Request):
+    """End the current G-Pose contest (move to voting or close)."""
+    try:
+        from bigtree.modules.gpose_contest import end_contest
+        body = await req.json()
+        winner_user_id = body.get("winner_user_id")
+        winner_message_id = body.get("winner_message_id")
+        result = end_contest(
+            winner_user_id=int(winner_user_id) if winner_user_id else None,
+            winner_message_id=str(winner_message_id) if winner_message_id else None,
+        )
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/winner")
+async def gpose_set_winner(req: web.Request):
+    """Set the winner for a contest in voting state."""
+    try:
+        from bigtree.modules.gpose_contest import set_winner
+        body = await req.json()
+        user_id = body.get("user_id")
+        message_id = str(body.get("message_id") or "").strip()
+        if not user_id:
+            return web.json_response({"ok": False, "error": "user_id is required"}, status=400)
+        result = set_winner(int(user_id), message_id)
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("GET", "/admin/gpose/leaderboard")
+async def gpose_leaderboard(req: web.Request):
+    """Get weekly, monthly, and yearly winners."""
+    try:
+        from bigtree.modules.gpose_contest import get_leaderboard
+        limit = int(req.query.get("limit") or 50)
+        result = get_leaderboard(limit=limit)
+        return web.json_response({"ok": True, **result})
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("GET", "/admin/gpose/submissions")
+async def gpose_submissions(req: web.Request):
+    """Get current contest submissions (for voting)."""
+    try:
+        from bigtree.modules.gpose_contest import get_submissions, get_current_week
+        week = get_current_week()
+        submissions = get_submissions()
+        return web.json_response({
+            "ok": True,
+            "submissions": submissions,
+            "count": len(submissions),
+            "week": week.to_dict() if week else None,
+        })
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/grant-role")
+async def gpose_grant_role(req: web.Request):
+    """
+    Grant or revoke a Discord role to a user.
+    Request body: { "user_id": int, "role_id": int, "action": "add" | "remove" }
+    """
+    body = await req.json()
+    user_id = body.get("user_id")
+    role_id = body.get("role_id")
+    action = (body.get("action") or "add").strip().lower()
+
+    if not user_id or not role_id:
+        return web.json_response({"ok": False, "error": "user_id and role_id are required"}, status=400)
+    if action not in ("add", "remove"):
+        return web.json_response({"ok": False, "error": "action must be 'add' or 'remove'"}, status=400)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if not guild:
+        return web.json_response({"ok": False, "error": "no guild found"}, status=500)
+
+    member = guild.get_member(int(user_id))
+    if not member:
+        return web.json_response({"ok": False, "error": "member not found in guild"}, status=404)
+
+    role = guild.get_role(int(role_id))
+    if not role:
+        return web.json_response({"ok": False, "error": "role not found"}, status=404)
+
+    try:
+        if action == "add":
+            await member.add_roles(role, reason="G-Pose contest award")
+        else:
+            await member.remove_roles(role, reason="G-Pose contest cleanup")
+        return web.json_response({
+            "ok": True,
+            "action": action,
+            "user_id": int(user_id),
+            "role_id": int(role_id),
+            "role_name": role.name,
+        })
+    except Exception as e:
+        bigtree.logger.warning(f"[gpose] grant_role failed: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("POST", "/admin/gpose/reset", scopes=["admin:web"])
+async def gpose_reset(req: web.Request):
+    """Reset all G-Pose contest state. Admin only."""
+    try:
+        from bigtree.modules.gpose_contest import reset_state
+        result = reset_state()
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+
+@route("POST", "/admin/gpose/message")
+async def gpose_send_message(req: web.Request):
+    """
+    Send a G-Pose contest announcement message via the bot.
+    Uses the configured announcements_channel_id unless overridden.
+    Request body: { "content": str, "channel_id"?: int }
+    """
+    try:
+        from bigtree.modules.gpose_contest import get_config
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+    body = await req.json()
+    content = (body.get("content") or "").strip()
+    if not content:
+        return web.json_response({"ok": False, "error": "content is required"}, status=400)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    channel_id = body.get("channel_id")
+    if not channel_id:
+        cfg = get_config()
+        channel_id = cfg.get("announcements_channel_id")
+
+    if not channel_id:
+        return web.json_response({"ok": False, "error": "channel_id not configured"}, status=400)
+
+    try:
+        channel_id = int(channel_id)
+    except (ValueError, TypeError):
+        return web.json_response({"ok": False, "error": "invalid channel_id"}, status=400)
+
+    chan = bot.get_channel(channel_id)
+    if not chan:
+        return web.json_response({"ok": False, "error": "channel not found or not cached"}, status=404)
+
+    try:
+        msg = await chan.send(content)
+        return web.json_response({"ok": True, "message_id": str(msg.id), "channel_id": channel_id})
+    except Exception as e:
+        bigtree.logger.warning(f"[gpose] message send failed: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("GET", "/admin/gpose/monthly-candidates")
+async def gpose_monthly_candidates(req: web.Request):
+    """
+    Get the 4 weekly winners for a given month — used to kick off monthly vote.
+    Query params: year, month
+    """
+    try:
+        from bigtree.modules.gpose_contest import get_weekly_winners_for_month
+    except ImportError:
+        return web.json_response({"ok": False, "error": "gpose_contest module not found"}, status=500)
+
+    try:
+        year = int(req.query.get("year") or datetime.now().year)
+        month = int(req.query.get("month") or datetime.now().month)
+    except (ValueError, TypeError):
+        return web.json_response({"ok": False, "error": "invalid year/month"}, status=400)
+
+    winners = get_weekly_winners_for_month(year, month)
+    return web.json_response({
+        "ok": True,
+        "year": year,
+        "month": month,
+        "weekly_winners": winners,
+        "ready_for_monthly": len(winners) >= 4,
+    })
+
+
 async def admin_list_discord_users(_req: web.Request):
     """List all Discord users that have ever used /auth (or were observed) for use in UI pickers."""
     db = get_database()

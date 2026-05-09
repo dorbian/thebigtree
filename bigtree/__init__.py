@@ -175,7 +175,9 @@ def initialize():
 
         # Load command extensions (safe to do here; initialize runs before bot loop)
         for cmd_file in view_dir.glob("*.py"):
-            if cmd_file.name != "__init__.py":
+            if cmd_file.name not in ("__init__.py", "gpose_cmd.py"):
                 asyncio.run(bot.load_extension(f"bigtree.cmds.{cmd_file.name[:-3]}"))
+        # G-Pose contest cog — loaded after others so it registers cleanly
+        asyncio.run(bot.load_extension("bigtree.cmds.gpose_cmd"))
 
     return True
