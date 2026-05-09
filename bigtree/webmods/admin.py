@@ -328,6 +328,72 @@ async def discord_channels(req: web.Request):
     channels.sort(key=lambda c: (c.get("guild_name") or "", c.get("category") or "", c.get("position") or 0, c.get("name") or ""))
     return web.json_response({"ok": True, "channels": channels})
 
+@route("POST", "/discord/channels", scopes=["bingo:admin", "tarot:admin"])
+async def discord_create_channel(req: web.Request) -> web.Response:
+    """Create a text channel. Only available to admins via API key auth (not Pegas)."""
+    # Gate: require API key auth, reject Pegas auth (Pegas is read-only identity)
+    from bigtree.inc.auth import _extract_token, _cfg
+    token = _extract_token(req)
+    cfg = _cfg()
+    if not token or token not in cfg.api_keys:
+        return web.json_response({"ok": False, "error": "admin API key required"}, status=401)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    name = str(body.get("name", "")).strip()
+    category_id = body.get("category_id")
+    guild_id = body.get("guild_id")
+
+    if not name:
+        return web.json_response({"ok": False, "error": "name required"}, status=400)
+    if len(name) > 100:
+        return web.json_response({"ok": False, "error": "name too long (max 100)"}, status=400)
+    # disallow @everyone mention in name
+    if "@everyone" in name or "@here" in name:
+        return web.json_response({"ok": False, "error": "invalid channel name"}, status=400)
+
+    guild = None
+    for g in bot.guilds or []:
+        if str(g.id) == str(guild_id):
+            guild = g
+            break
+    if not guild:
+        return web.json_response({"ok": False, "error": "guild not found"}, status=404)
+
+    overwrites = []
+    try:
+        category = None
+        if category_id:
+            for c in guild.categories:
+                if str(c.id) == str(category_id):
+                    category = c
+                    break
+
+        new_channel = await guild.create_text_channel(
+            name=name,
+            category=category,
+        )
+        return web.json_response({
+            "ok": True,
+            "channel": {
+                "id": str(new_channel.id),
+                "name": new_channel.name,
+                "guild_id": str(guild.id),
+                "category": category.name if category else "",
+            }
+        })
+    except discord.Forbidden:
+        return web.json_response({"ok": False, "error": "bot lacks permission to create channels"}, status=403)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
 @route("GET", "/discord/roles", scopes=["bingo:admin", "tarot:admin"])
 async def discord_roles(req: web.Request):
     bot = getattr(bigtree, "bot", None)
