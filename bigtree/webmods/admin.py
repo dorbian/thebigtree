@@ -536,11 +536,13 @@ async def discord_reorder_roles(req: web.Request) -> web.Response:
             if not role:
                 return web.json_response({"ok": False, "error": f"role {rid} not found in guild"}, status=404)
             # Role at index 0 goes to position 1 (just above everyone), then each next goes just above the previous
+            # First role: move to very high position (just below bot's highest role)
+            # Subsequent: move just above the previous role
             if i == 0:
-                target_pos = role.position - 1  # just above @everyone
+                target_pos = 999  # high number = top of role list
             else:
                 prev_role = role_map.get(str(role_ids[i - 1]))
-                target_pos = prev_role.position - 1
+                target_pos = max(1, prev_role.position - 1)
             await role.edit(position=target_pos)
         return web.json_response({"ok": True, "reordered": role_ids})
     except discord.Forbidden:
