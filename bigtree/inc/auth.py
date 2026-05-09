@@ -43,6 +43,16 @@ def _cfg() -> _Cfg:
             c = {}
     except Exception:
         c = {}
+    # Fallback: try settings.get (handles ConfigObj sections that aren't dict-like)
+    if not c:
+        try:
+            if hasattr(bigtree, "settings") and bigtree.settings:
+                raw_keys = bigtree.settings.get("WEB.api_keys", [], cast="json")
+                raw_scopes = bigtree.settings.get("WEB.api_key_scopes", {}, cast="json")
+                if raw_keys or raw_scopes:
+                    c = {"api_keys": raw_keys, "api_key_scopes": raw_scopes}
+        except Exception:
+            pass
     if not c:
         try:
             cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
