@@ -538,8 +538,11 @@ async def discord_reorder_roles(req: web.Request) -> web.Response:
             # Role at index 0 goes to position 1 (just above everyone), then each next goes just above the previous
             # First role: move to very high position (just below bot's highest role)
             # Subsequent: move just above the previous role
+            # First role: move to just below the highest-role the bot can manage.
+            # Bot can only move roles up to (its_top_role_position - 1).
+            # For a clean placement, put the first new role just below Forest Guardian (pos 54).
             if i == 0:
-                target_pos = 999  # high number = top of role list
+                target_pos = 53  # just below Forest Guardian (pos 54)
             else:
                 prev_role = role_map.get(str(role_ids[i - 1]))
                 target_pos = max(1, prev_role.position - 1)
