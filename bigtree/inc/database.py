@@ -137,6 +137,9 @@ class Database:
         rows = self._execute(sql, params, fetch=True)
         return rows[0] if rows else None
 
+    def _fetchall(self, sql: str, params: Optional[Sequence] = None) -> List[Dict[str, Any]]:
+        return self._execute(sql, params, fetch=True) or []
+
     def _ensure_column(self, conn: psycopg2.extensions.connection, table: str, column: str, definition: str) -> bool:
         with conn.cursor() as cur:
             cur.execute(
