@@ -421,6 +421,75 @@ async def discord_roles(req: web.Request):
     roles.sort(key=lambda r: (r.get("guild_name") or "", -(r.get("position") or 0), r.get("name") or ""))
     return web.json_response({"ok": True, "roles": roles})
 
+@route("POST", "/discord/roles", scopes=["bingo:admin", "tarot:admin"])
+async def discord_create_role(req: web.Request) -> web.Response:
+    """Create a role in a guild. Requires admin API key auth."""
+    from bigtree.inc.auth import _extract_token, _cfg
+    token = _extract_token(req)
+    cfg = _cfg()
+    if not token or token not in cfg.api_keys:
+        return web.json_response({"ok": False, "error": "admin API key required"}, status=401)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    name = str(body.get("name", "")).strip()
+    guild_id = body.get("guild_id")
+    color_hex = body.get("color")  # "#08e201" or "08e201"
+    hoist = bool(body.get("hoist", False))  # show separately in online list
+
+    if not name:
+        return web.json_response({"ok": False, "error": "name required"}, status=400)
+    if len(name) > 100:
+        return web.json_response({"ok": False, "error": "name too long (max 100)"}, status=400)
+
+    guild = None
+    for g in bot.guilds or []:
+        if str(g.id) == str(guild_id):
+            guild = g
+            break
+    if not guild:
+        return web.json_response({"ok": False, "error": "guild not found"}, status=404)
+
+    try:
+        color_value = 0
+        if color_hex:
+            hex_str = color_hex.lstrip("#")
+            color_value = int(hex_str, 16)
+            color = discord.Color(color_value)
+        else:
+            color = discord.Color.default()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid color"}, status=400)
+
+    try:
+        new_role = await guild.create_role(
+            name=name,
+            color=color,
+            hoist=hoist,
+        )
+        return web.json_response({
+            "ok": True,
+            "role": {
+                "id": str(new_role.id),
+                "name": new_role.name,
+                "guild_id": str(guild.id),
+                "color": new_role.color.value if hasattr(new_role, "color") else 0,
+                "position": new_role.position,
+                "hoist": new_role.hoist,
+            }
+        })
+    except discord.Forbidden:
+        return web.json_response({"ok": False, "error": "bot lacks permission to create roles"}, status=403)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
 def _settings_path() -> Path:
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
