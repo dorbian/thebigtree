@@ -225,8 +225,15 @@ class RequestReviewView(discord.ui.View):
     def __init__(self, request_id: int):
         super().__init__(timeout=None)
         self.request_id = request_id
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                label = child.label or ""
+                if "Approve" in label or "✅" in label:
+                    child.custom_id = f"req_approve_{request_id}"
+                elif "Reject" in label or "❌" in label:
+                    child.custom_id = f"req_reject_{request_id}"
 
-    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success, custom_id=f"req_approve_{self.request_id}")
+    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success)
     async def approve_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         from bigtree.modules.content_requests import approve_request
         approve_request(self.request_id, reviewed_by=interaction.user.id, notes="Approved via Discord")
@@ -236,7 +243,7 @@ class RequestReviewView(discord.ui.View):
             view=None,
         )
 
-    @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger, custom_id=f"req_reject_{self.request_id}")
+    @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
     async def reject_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         from bigtree.modules.content_requests import reject_request
         reject_request(self.request_id, reviewed_by=interaction.user.id, notes="Rejected via Discord")
