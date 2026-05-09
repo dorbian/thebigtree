@@ -31,26 +31,34 @@ class _Cfg:
     jwt_secret: Optional[str]
     jwt_algorithms: tuple[str, ...] = ("HS256",)
 
+_AUTH_CFG: Optional[_Cfg] = None
+
+
 def _cfg() -> _Cfg:
+    global _AUTH_CFG
+    if _AUTH_CFG is not None:
+        return _AUTH_CFG
+    c: Dict[str, Any] = {}
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
             sec = bigtree.settings.section("WEB")
             if isinstance(sec, dict):
-                c = sec
+                c = dict(sec)
             else:
                 c = {}
         else:
             c = {}
     except Exception:
         c = {}
-    # Fallback: try settings.get (handles ConfigObj sections that aren't dict-like)
+    # Fallback: load settings directly (avoids reliance on bigtree.settings being set)
     if not c:
         try:
-            if hasattr(bigtree, "settings") and bigtree.settings:
-                raw_keys = bigtree.settings.get("WEB.api_keys", [], cast="json")
-                raw_scopes = bigtree.settings.get("WEB.api_key_scopes", {}, cast="json")
-                if raw_keys or raw_scopes:
-                    c = {"api_keys": raw_keys, "api_key_scopes": raw_scopes}
+            from bigtree.inc.settings import load_settings
+            s = load_settings()
+            raw_keys = s.get("WEB.api_keys", [], cast="json")
+            raw_scopes = s.get("WEB.api_key_scopes", {}, cast="json")
+            if raw_keys or raw_scopes:
+                c = {"api_keys": raw_keys, "api_key_scopes": raw_scopes}
         except Exception:
             pass
     if not c:
@@ -59,12 +67,13 @@ def _cfg() -> _Cfg:
             c = cfg.get("WEB", {}) or {}
         except Exception:
             c = {}
-    return _Cfg(
+    _AUTH_CFG = _Cfg(
         api_keys=set(c.get("api_keys", []) or []),
         scopes_map=c.get("api_key_scopes", {}) or {},
         jwt_secret=(c.get("jwt_secret") or None),
         jwt_algorithms=tuple(c.get("jwt_algorithms", ["HS256"])),
     )
+    return _AUTH_CFG
 
 def _extract_token(req: web.Request) -> Optional[str]:
     # Priority: Authorization: Bearer <token>, fallback to X-Bigtree-Key / X-API-Key
