@@ -243,7 +243,7 @@ def pending_requests() -> list[dict]:
 
 
 def _row(raw: dict) -> dict:
-    """Convert DB row to plain dict."""
+    """Convert DB row to plain dict with JSON-safe values."""
     if not raw:
         return {}
     out = dict(raw)
@@ -252,6 +252,10 @@ def _row(raw: dict) -> dict:
             out["metadata"] = json.loads(out["metadata"])
         except Exception:
             out["metadata"] = {}
+    # Convert datetime objects to ISO strings
+    for k, v in list(out.items()):
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
     return out
 
 
