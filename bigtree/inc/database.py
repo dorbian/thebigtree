@@ -140,6 +140,17 @@ class Database:
     def _fetchall(self, sql: str, params: Optional[Sequence] = None) -> List[Dict[str, Any]]:
         return self._execute(sql, params, fetch=True) or []
 
+    def _with_retry(self, fn):
+        """Run a function with a single DB retry on connection failure."""
+        try:
+            return fn()
+        except psycopg2.OperationalError:
+            self._initialized = False
+            try:
+                return fn()
+            except psycopg2.OperationalError:
+                raise
+
     def _ensure_column(self, conn: psycopg2.extensions.connection, table: str, column: str, definition: str) -> bool:
         with conn.cursor() as cur:
             cur.execute(
