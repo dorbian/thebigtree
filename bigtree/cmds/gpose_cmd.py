@@ -1,6 +1,7 @@
 """
 G-Pose Contest Slash Commands for BigTree.
 A Discord cog that registers all /gpose-* slash commands.
+Uses bot.tree.command() for guild-scoped slash commands.
 """
 
 import time as _time
@@ -10,9 +11,6 @@ from discord.ext import commands
 
 import bigtree
 from bigtree.modules.permissions import is_bigtree_operator
-
-bot = getattr(bigtree, "bot", None)
-GUILD = discord.Object(id=getattr(bigtree, "guildid", 0))
 
 
 def _status_embed():
@@ -53,16 +51,112 @@ class GposeCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # --- Public commands ---
+    # --- Public commands (registered via bot.tree.command for guild scoping) ---
 
-    @app_commands.command(name="gpose-status", description="Show current G-Pose contest status", guild=GUILD)
-    async def status(self, interaction: discord.Interaction):
+    @commands.Cog.listener()
+    async def on_ready(self):
+        guild_id = getattr(bigtree, "guildid", 0)
+        if not guild_id:
+            return
+
+        # Register public commands
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-status",
+                description="Show current G-Pose contest status",
+                callback=self._status_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-submit",
+                description="Register your G-Pose submission for the current contest",
+                callback=self._submit_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-view",
+                description="See current contest submissions",
+                callback=self._view_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-leaderboard",
+                description="Show weekly, monthly, and yearly G-Pose champions",
+                callback=self._leaderboard_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        # Operator commands
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-start",
+                description="Start a new G-Pose contest week",
+                callback=self._start_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-end",
+                description="End the current contest (moves to voting or declares winner)",
+                callback=self._end_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-winner",
+                description="Set winner for a contest in voting state",
+                callback=self._winner_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-announce",
+                description="Send a G-Pose contest announcement",
+                callback=self._announce_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-config",
+                description="View G-Pose contest configuration",
+                callback=self._config_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-monthly",
+                description="Check if a month is ready for the monthly vote",
+                callback=self._monthly_check_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
+    # ---- Public command callbacks ----
+
+    async def _status_cmd(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=_status_embed(), ephemeral=True)
 
-    @app_commands.command(name="gpose-submit", description="Register your G-Pose submission for the current contest",
-                         guild=GUILD)
-    @app_commands.describe(message_id="The Discord message ID of your G-Pose post")
-    async def submit(self, interaction: discord.Interaction, message_id: str):
+    async def _submit_cmd(self, interaction: discord.Interaction, message_id: str):
         from bigtree.modules.gpose_contest import submit_entry, get_current_week
 
         week = get_current_week()
@@ -86,8 +180,7 @@ class GposeCog(commands.Cog):
         embed.set_footer(text="Good luck! 🍀")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-view", description="See current contest submissions", guild=GUILD)
-    async def view(self, interaction: discord.Interaction):
+    async def _view_cmd(self, interaction: discord.Interaction):
         from bigtree.modules.gpose_contest import get_submissions, get_current_week
 
         week = get_current_week()
@@ -119,10 +212,7 @@ class GposeCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-leaderboard", description="Show weekly, monthly, and yearly G-Pose champions",
-                         guild=GUILD)
-    @app_commands.describe(limit="Number of weekly entries to show (default: 20)")
-    async def leaderboard(self, interaction: discord.Interaction, limit: int = 20):
+    async def _leaderboard_cmd(self, interaction: discord.Interaction, limit: int = 20):
         from bigtree.modules.gpose_contest import get_leaderboard
 
         data = get_leaderboard(limit=limit)
@@ -149,15 +239,10 @@ class GposeCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # --- Operator commands ---
+    # ---- Operator command callbacks ----
 
-    @app_commands.command(name="gpose-start", description="Start a new G-Pose contest week", guild=GUILD)
     @is_bigtree_operator()
-    @app_commands.describe(
-        theme="The contest theme (e.g. 'Open', 'Duo', 'Mood')",
-        duration_days="How many days the contest runs (default: 7)",
-    )
-    async def start(self, interaction: discord.Interaction, theme: str = "Open", duration_days: float = 7.0):
+    async def _start_cmd(self, interaction: discord.Interaction, theme: str = "Open", duration_days: float = 7.0):
         from bigtree.modules.gpose_contest import start_contest, get_current_week
 
         if get_current_week() is not None:
@@ -188,14 +273,8 @@ class GposeCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-end", description="End the current contest (moves to voting or declares winner)",
-                         guild=GUILD)
     @is_bigtree_operator()
-    @app_commands.describe(
-        winner_user_id="Discord user ID of the winner (omit to move to voting first)",
-        winner_message_id="Message ID of the winning post",
-    )
-    async def end(self, interaction: discord.Interaction, winner_user_id: str = "", winner_message_id: str = ""):
+    async def _end_cmd(self, interaction: discord.Interaction, winner_user_id: str = "", winner_message_id: str = ""):
         from bigtree.modules.gpose_contest import end_contest
 
         wid = int(winner_user_id) if winner_user_id else None
@@ -223,13 +302,8 @@ class GposeCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-winner", description="Set winner for a contest in voting state", guild=GUILD)
     @is_bigtree_operator()
-    @app_commands.describe(
-        user_id="Discord user ID of the winner",
-        message_id="Message ID of the winning post",
-    )
-    async def winner(self, interaction: discord.Interaction, user_id: str, message_id: str):
+    async def _winner_cmd(self, interaction: discord.Interaction, user_id: str, message_id: str):
         from bigtree.modules.gpose_contest import set_winner
 
         result = set_winner(int(user_id), str(message_id))
@@ -247,13 +321,8 @@ class GposeCog(commands.Cog):
         embed.add_field(name="Week", value=str(record.get("week")), inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-announce", description="Send a G-Pose contest announcement", guild=GUILD)
     @is_bigtree_operator()
-    @app_commands.describe(
-        content="The announcement text to send",
-        channel_id="Channel ID to post in (optional — uses configured announcements channel)",
-    )
-    async def announce(self, interaction: discord.Interaction, content: str, channel_id: str = ""):
+    async def _announce_cmd(self, interaction: discord.Interaction, content: str, channel_id: str = ""):
         from bigtree.modules.gpose_contest import get_config
 
         cfg = get_config()
@@ -280,9 +349,8 @@ class GposeCog(commands.Cog):
         except Exception as e:
             await interaction.response.send_message(f"Failed to send: {e}", ephemeral=True)
 
-    @app_commands.command(name="gpose-config", description="View G-Pose contest configuration", guild=GUILD)
     @is_bigtree_operator()
-    async def config_cmd(self, interaction: discord.Interaction):
+    async def _config_cmd(self, interaction: discord.Interaction):
         from bigtree.modules.gpose_contest import get_config
 
         cfg = get_config()
@@ -303,14 +371,8 @@ class GposeCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="gpose-monthly", description="Check if a month is ready for the monthly vote",
-                         guild=GUILD)
     @is_bigtree_operator()
-    @app_commands.describe(
-        year="Year (default: current year)",
-        month="Month (default: current month)",
-    )
-    async def monthly_check(self, interaction: discord.Interaction, year: int = 0, month: int = 0):
+    async def _monthly_check_cmd(self, interaction: discord.Interaction, year: int = 0, month: int = 0):
         from bigtree.modules.gpose_contest import get_weekly_winners_for_month
 
         now = _time.localtime()
