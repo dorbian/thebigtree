@@ -180,6 +180,12 @@ def auth_middleware() -> Callable:
             validate_pegas_request = None
 
         if is_pegas_request and callable(is_pegas_request) and is_pegas_request(request.headers):
+            _dbg_t = _extract_token(request)
+            auth_logger.warning("[auth] DEBUG path=%s method=%s scopes=%s token=%s",
+                request.path, request.method,
+                ",".join(sorted(needed_scopes)) if needed_scopes else "-",
+                repr(_dbg_t) if _dbg_t else "NONE",
+            )
             if validate_pegas_request and callable(validate_pegas_request):
                 valid, err, user_id = await validate_pegas_request(request)
                 if valid:
