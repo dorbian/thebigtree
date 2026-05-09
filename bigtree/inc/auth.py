@@ -42,16 +42,19 @@ def _cfg() -> _Cfg:
     try:
         if hasattr(bigtree, "settings") and bigtree.settings:
             sec = bigtree.settings.section("WEB")
-            if isinstance(sec, dict):
-                c = dict(sec)
-            else:
-                c = {}
-        else:
-            c = {}
+            if sec is not None:
+                # ConfigObj Section: use .get() method to safely extract values
+                # DO NOT use dict(sec) — ConfigObj iterates string chars when cast to dict
+                c = {
+                    "api_keys": sec.get("api_keys") or [],
+                    "api_key_scopes": sec.get("api_key_scopes") or {},
+                    "jwt_secret": sec.get("jwt_secret") or None,
+                    "jwt_algorithms": sec.get("jwt_algorithms") or ["HS256"],
+                }
     except Exception:
         c = {}
     # Fallback: load settings directly (avoids reliance on bigtree.settings being set)
-    if not c:
+    if not c or (not c.get("api_keys") and not c.get("api_key_scopes")):
         try:
             from bigtree.inc.settings import load_settings
             s = load_settings()
@@ -61,7 +64,7 @@ def _cfg() -> _Cfg:
                 c = {"api_keys": raw_keys, "api_key_scopes": raw_scopes}
         except Exception:
             pass
-    if not c:
+    if not c or (not c.get("api_keys") and not c.get("api_key_scopes")):
         try:
             cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
             c = cfg.get("WEB", {}) or {}
