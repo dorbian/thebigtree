@@ -151,18 +151,26 @@ class ReviewEntryView(discord.ui.View):
         super().__init__(timeout=None)
         self.request_id = request_id
         self.target_channel_id = target_channel_id
+        self._set_custom_ids()
 
-    @discord.ui.button(
-        label="🔍 Review / Edit",
-        style=discord.ButtonStyle.primary,
-        custom_id=f"cr_review_{request_id}",
-    )
+    def _set_custom_ids(self):
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                label = child.label or ""
+                if "Review" in label or "🔍" in label:
+                    child.custom_id = f"cr_review_{self.request_id}"
+                elif "Post" in label or "✅" in label:
+                    child.custom_id = f"cr_post_{self.request_id}"
+                elif "Needs Work" in label or "🔧" in label:
+                    child.custom_id = f"cr_needswork_{self.request_id}"
+                elif "Reject" in label or "❌" in label:
+                    child.custom_id = f"cr_reject_{self.request_id}"
+
+    @discord.ui.button(label="🔍 Review / Edit", style=discord.ButtonStyle.primary)
     async def review_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         req = get_request(self.request_id)
         if not req:
-            return await interaction.response.send_message(
-                "❌ Request not found.", ephemeral=True,
-            )
+            return await interaction.response.send_message("❌ Request not found.", ephemeral=True)
         modal = ContentReviewModal(
             request_id=self.request_id,
             target_channel_id=self.target_channel_id,
@@ -172,60 +180,42 @@ class ReviewEntryView(discord.ui.View):
         )
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(
-        label="✅ Post Now",
-        style=discord.ButtonStyle.success,
-        custom_id=f"cr_post_{request_id}",
-    )
+    @discord.ui.button(label="✅ Post Now", style=discord.ButtonStyle.success)
     async def post_now_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Quick-post: grabs current content and sends straight to target."""
         req = get_request(self.request_id)
         if not req:
             return await interaction.response.send_message("❌ Request not found.", ephemeral=True)
-
         target_ch = interaction.client.get_channel(self.target_channel_id)
         if not target_ch:
             return await interaction.response.send_message(
                 f"❌ Target channel <#{self.target_channel_id}> not found.", ephemeral=True,
             )
-
         try:
             msg = await target_ch.send(req.get("body", ""))
             jump = f"[Jump]({msg.jump_url})"
         except Exception as e:
             return await interaction.response.send_message(f"❌ Failed to post: {e}", ephemeral=True)
-
         approve_request(self.request_id, reviewed_by=interaction.user.id, notes="Quick-posted via button")
         mark_posted(self.request_id)
-
         embed = discord.Embed(title=f"✅ Posted | #{self.request_id}", color=0x2ECC71)
         embed.add_field(name="Target", value=f"<#{self.target_channel_id}>", inline=True)
         embed.add_field(name="Jump", value=jump, inline=True)
-
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(
-        label="🔧 Needs Work",
-        style=discord.ButtonStyle.secondary,
-        custom_id=f"cr_needswork_{request_id}",
-    )
+    @discord.ui.button(label="🔧 Needs Work", style=discord.ButtonStyle.secondary)
     async def needswork_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = ContentNeedsWorkModal(request_id=self.request_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(
-        label="❌ Reject",
-        style=discord.ButtonStyle.danger,
-        custom_id=f"cr_reject_{request_id}",
-    )
+    @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         reject_request(self.request_id, reviewed_by=interaction.user.id, notes="Rejected via button")
         embed = discord.Embed(title=f"❌ Rejected | #{self.request_id}", color=0xE74C3C)
         embed.add_field(name="Status", value="❌ Rejected", inline=True)
         embed.add_field(name="Reviewed by", value=f"<@{interaction.user.id}>", inline=True)
-
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
