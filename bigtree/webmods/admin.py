@@ -1408,3 +1408,242 @@ async def discord_user_messages(req: web.Request) -> web.Response:
         "messages": all_messages[:limit],
         "count": len(all_messages[:limit]),
     })
+
+
+# ---- Content Request API (Pegas → Dorbian approval workflow) ----
+
+@route("GET", "/admin/content/requests", scopes=["admin:web", "gpose:admin"])
+async def list_content_requests(req: web.Request) -> web.Response:
+    """
+    List content requests, optionally filtered.
+    Query params: status, type, limit
+    """
+    status = req.query.get("status")
+    rtype = req.query.get("type")
+    try:
+        limit = min(100, int(req.query.get("limit", 50)))
+    except Exception:
+        limit = 50
+
+    try:
+        from bigtree.modules.content_requests import list_requests
+        results = list_requests(status=status, request_type=rtype, limit=limit)
+        return web.json_response({"ok": True, "requests": results, "count": len(results)})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("GET", "/admin/content/requests/pending", scopes=["admin:web", "gpose:admin"])
+async def pending_content_requests(req: web.Request) -> web.Response:
+    """List all pending (awaiting review) content requests."""
+    try:
+        from bigtree.modules.content_requests import pending_requests
+        results = pending_requests()
+        return web.json_response({"ok": True, "requests": results, "count": len(results)})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("GET", "/admin/content/requests/{request_id}", scopes=["admin:web", "gpose:admin"])
+async def get_content_request(req: web.Request) -> web.Response:
+    """Get a single content request by ID."""
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        from bigtree.modules.content_requests import get_request
+        result = get_request(rid)
+        if not result:
+            return web.json_response({"ok": False, "error": "not found"}, status=404)
+        return web.json_response({"ok": True, "request": result})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("POST", "/admin/content/requests", scopes=["admin:web", "gpose:admin"])
+async def create_content_request(req: web.Request) -> web.Response:
+    """
+    Create a new content request (Pegas proposes, status=pending).
+    Body: { request_type, title, body, target_channel_id, target_channel_name, metadata }
+    """
+    try:
+        data = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    rtype = data.get("request_type", "")
+    title = data.get("title", "")
+    body = data.get("body", "")
+    target_channel_id = data.get("target_channel_id")
+    target_channel_name = data.get("target_channel_name", "")
+    metadata = data.get("metadata", {})
+
+    if not rtype or not title:
+        return web.json_response({"ok": False, "error": "request_type and title required"}, status=400)
+
+    try:
+        from bigtree.modules.content_requests import create_request
+        result = create_request(
+            request_type=rtype,
+            title=title,
+            body=body,
+            target_channel_id=int(target_channel_id) if target_channel_id else None,
+            target_channel_name=target_channel_name,
+            metadata=metadata,
+        )
+        return web.json_response(result, status=201 if result.get("ok") else 400)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("PATCH", "/admin/content/requests/{request_id}/status", scopes=["admin:web", "gpose:admin"])
+async def update_content_request_status(req: web.Request) -> web.Response:
+    """
+    Update a request's status (approve/reject/cancel).
+    Body: { status, reviewed_by (user_id), review_notes }
+    """
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        data = await req.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+
+    status = data.get("status", "")
+    reviewed_by = data.get("reviewed_by")
+    review_notes = data.get("review_notes", "")
+
+    if not status:
+        return web.json_response({"ok": False, "error": "status required"}, status=400)
+
+    try:
+        from bigtree.modules.content_requests import update_request_status
+        result = update_request_status(
+            request_id=rid,
+            status=status,
+            reviewed_by=int(reviewed_by) if reviewed_by else None,
+            review_notes=review_notes,
+        )
+        return web.json_response(result, status=200 if result.get("ok") else 400)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("POST", "/admin/content/requests/{request_id}/approve", scopes=["admin:web", "gpose:admin"])
+async def approve_content_request(req: web.Request) -> web.Response:
+    """
+    Approve a request for posting.
+    Body: { reviewed_by (user_id), review_notes }
+    """
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        data = await req.json()
+    except Exception:
+        data = {}
+    reviewed_by = data.get("reviewed_by")
+    notes = data.get("review_notes", "")
+
+    try:
+        from bigtree.modules.content_requests import approve_request
+        result = approve_request(rid, reviewed_by=int(reviewed_by) if reviewed_by else None, notes=notes)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("POST", "/admin/content/requests/{request_id}/reject", scopes=["admin:web", "gpose:admin"])
+async def reject_content_request(req: web.Request) -> web.Response:
+    """
+    Reject a request.
+    Body: { reviewed_by (user_id), review_notes }
+    """
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        data = await req.json()
+    except Exception:
+        data = {}
+    reviewed_by = data.get("reviewed_by")
+    notes = data.get("review_notes", "")
+
+    try:
+        from bigtree.modules.content_requests import reject_request
+        result = reject_request(rid, reviewed_by=int(reviewed_by) if reviewed_by else None, notes=notes)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("POST", "/admin/content/requests/{request_id}/post", scopes=["admin:web", "gpose:admin"])
+async def post_content_request(req: web.Request) -> web.Response:
+    """
+    Post an approved request to its target channel via the bot.
+    Body (optional): { force: true } to skip approved check.
+    """
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        from bigtree.modules.content_requests import get_request, mark_posted
+
+        req_data = get_request(rid)
+        if not req_data:
+            return web.json_response({"ok": False, "error": "request not found"}, status=404)
+
+        status = req_data.get("status", "")
+        target_cid = req_data.get("target_channel_id")
+        body = req_data.get("body", "")
+
+        if not target_cid:
+            return web.json_response({"ok": False, "error": "no target channel configured"}, status=400)
+
+        bot = getattr(bigtree, "bot", None)
+        if not bot:
+            return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+        chan = bot.get_channel(int(target_cid))
+        if not chan:
+            return web.json_response({"ok": False, "error": "target channel not found"}, status=404)
+
+        # Send the message
+        msg = await chan.send(body)
+        mark_posted(rid)
+
+        return web.json_response({
+            "ok": True,
+            "message": f"Posted to <#{target_cid}>",
+            "jump_url": msg.jump_url,
+            "message_id": str(msg.id),
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+@route("DELETE", "/admin/content/requests/{request_id}", scopes=["admin:web", "gpose:admin"])
+async def delete_content_request(req: web.Request) -> web.Response:
+    """Delete a draft or cancelled request."""
+    try:
+        rid = int(req.match_info.get("request_id", 0))
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid ID"}, status=400)
+
+    try:
+        from bigtree.modules.content_requests import delete_request
+        result = delete_request(rid)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
