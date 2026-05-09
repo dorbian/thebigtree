@@ -96,6 +96,15 @@ class GposeCog(commands.Cog):
             guild=discord.Object(id=guild_id),
         )
 
+        self.bot.tree.add_command(
+            app_commands.Command(
+                name="gpose-refresh",
+                description="Refresh the leaderboard with latest treeheart counts",
+                callback=self._refresh_lb_cmd,
+            ),
+            guild=discord.Object(id=guild_id),
+        )
+
         # Operator commands
         self.bot.tree.add_command(
             app_commands.Command(
@@ -238,6 +247,28 @@ class GposeCog(commands.Cog):
             embed.add_field(name="No winners yet", value="Be the first! 🏃", inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _refresh_lb_cmd(self, interaction: discord.Interaction):
+        """Manually trigger a leaderboard refresh — fetches latest treeheart counts."""
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            from bigtree.modules.gpose_leaderboard import run_leaderboard_check
+            result = await run_leaderboard_check(self.bot)
+            if result.get("ok"):
+                top = result.get("top_score", 0)
+                entries = result.get("entries", 0)
+                await interaction.followup.send(
+                    f"✅ Leaderboard refreshed! **{entries}** entries scanned. "
+                    f"Current top score: **{top}** ❤️",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ Failed: {result.get('error', 'unknown error')}",
+                    ephemeral=True,
+                )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
     # ---- Operator command callbacks ----
 

@@ -30,6 +30,7 @@ _ROLE_SUBMITTER = "GPOSE_SUBMITTER_ROLE_ID"
 _CHAN_SUBMISSIONS = "GPOSE_SUBMISSIONS_CHANNEL_ID"
 _CHAN_ANNOUNCEMENTS = "GPOSE_ANNOUNCEMENTS_CHANNEL_ID"
 _CHAN_POSERS_HALL = "GPOSE_POSERS_HALL_CHANNEL_ID"
+_CHAN_LEADERBOARD = "GPOSE_LEADERBOARD_CHANNEL_ID"
 _CHAN_PLANNING = "GPOSE_PLANNING_CHANNEL_ID"
 
 # ---- State file ----
@@ -208,6 +209,7 @@ def get_config() -> Dict[str, Any]:
         "planning_channel_id": _get_config(_CHAN_PLANNING),
         "voting_emoji": _get_config("VOTING_EMOJI", "📸"),
         "submission_open": state.current_week is not None and state.current_week.get("status") == "open",
+        "leaderboard_channel_id": _get_config(_CHAN_LEADERBOARD),
     }
 
 

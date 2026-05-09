@@ -605,6 +605,27 @@ async def discord_reorder_roles(req: web.Request) -> web.Response:
     except discord.Forbidden:
         return web.json_response({"ok": False, "error": "bot lacks permission to manage roles"}, status=403)
     except Exception as e:
+
+@route("POST", "/gpose/leaderboard", scopes=["bingo:admin", "tarot:admin"])
+async def gpose_leaderboard_update(req: web.Request) -> web.Response:
+    """Trigger a leaderboard refresh — fetches treeheart counts and updates the leaderboard message."""
+    from bigtree.inc.auth import _extract_token, _cfg
+    token = _extract_token(req)
+    cfg = _cfg()
+    if not token or token not in cfg.api_keys:
+        return web.json_response({"ok": False, "error": "admin API key required"}, status=401)
+
+    bot = getattr(bigtree, "bot", None)
+    if not bot:
+        return web.json_response({"ok": False, "error": "bot not ready"}, status=503)
+
+    try:
+        from bigtree.modules.gpose_leaderboard import run_leaderboard_check
+        result = await run_leaderboard_check(bot)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 def _settings_path() -> Path:
