@@ -19,7 +19,12 @@ except Exception:
     logger = print
 
 # ---- Config ----
-_SUBMISSION_CHANNELS_KEY = "LAUREATES_SUBMISSION_CHANNEL_IDS"  # JSON list of channel IDs
+_SUBMISSION_CHANNEL_KEYS = [
+    "LAUREATES_SUBMISSIONS_CHANNEL_ID",
+    "LAUREATES_PHOTOS_CHANNEL_ID",
+    "LAUREATES_STORIES_CHANNEL_ID",
+    "LAUREATES_CREATIVE_CHANNEL_ID",
+]
 _LEADERBOARD_CHANNEL_KEY = "LAUREATES_LEADERBOARD_CHANNEL_ID"
 _LEADERBOARD_MESSAGE_KEY = "LAUREATES_LEADERBOARD_MESSAGE_ID"
 _TREEHEART_EMOJI = "<:treeheart:1321831300088463452>"
@@ -54,19 +59,13 @@ def _get_config(key: str, default: Any = None) -> Any:
     return os.getenv(f"BIGTREE__LAUREATES__{key}", default)
 
 def _get_submission_channels() -> List[str]:
-    """Returns list of submission channel IDs from config."""
-    raw = _get_config(_SUBMISSION_CHANNELS_KEY)
-    if not raw:
-        return []
-    if isinstance(raw, list):
-        return [str(c) for c in raw]
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return [str(c) for c in parsed]
-    except Exception:
-        pass
-    return [str(raw)]
+    """Returns list of submission channel IDs from individual config keys."""
+    channels = []
+    for key in _SUBMISSION_CHANNEL_KEYS:
+        val = _get_config(key)
+        if val:
+            channels.append(str(val).strip())
+    return channels
 
 async def fetch_treehearts(
     bot,
@@ -193,7 +192,7 @@ async def update_leaderboard_message(bot) -> Dict[str, Any]:
     leaderboard_channel_id = _get_config(_LEADERBOARD_CHANNEL_KEY)
 
     if not submission_channel_ids:
-        return {"ok": False, "error": "no submission channels configured (LAUREATES_SUBMISSION_CHANNEL_IDS)"}
+        return {"ok": False, "error": "no submission channels configured"}
     if not leaderboard_channel_id:
         return {"ok": False, "error": "leaderboard channel not configured (LAUREATES_LEADERBOARD_CHANNEL_ID)"}
 
