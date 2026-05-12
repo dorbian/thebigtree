@@ -50,6 +50,15 @@ def _save_lb_config(cfg: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
+def _scores_changed(old: List[Dict], new: List[Dict]) -> bool:
+    """Return True if the leaderboard rankings or scores differ from the last run."""
+    if len(old) != len(new):
+        return True
+    for a, b in zip(old, new):
+        if a["author_id"] != b["author_id"] or a["score"] != b["score"]:
+            return True
+    return False
+
 def _get_config(key: str, default: Any = None) -> Any:
     try:
         if bigtree and hasattr(bigtree, "settings") and bigtree.settings:
@@ -233,11 +242,21 @@ async def update_leaderboard_message(bot) -> Dict[str, Any]:
 
     lb_cfg = _load_lb_config()
     msg_id = lb_cfg.get("leaderboard_message_id")
+    prev_entries = lb_cfg.get("last_entries", [])
 
     edited = False
     if msg_id:
         try:
             msg = await lb_channel.fetch_message(int(msg_id))
+            if not _scores_changed(prev_entries, entries):
+                logger.info(f"[leaderboard] scores unchanged, skipping edit of message {msg_id}")
+                return {
+                    "ok": True,
+                    "entries": len(entries),
+                    "message_id": msg_id,
+                    "updated": False,
+                    "top_score": entries[0]["score"] if entries else 0,
+                }
             await msg.edit(embed=embed)
             edited = True
             logger.info(f"[leaderboard] updated existing message {msg_id}")
@@ -247,14 +266,17 @@ async def update_leaderboard_message(bot) -> Dict[str, Any]:
     if not edited:
         sent_msg = await lb_channel.send(embed=embed)
         msg_id = str(sent_msg.id)
-        lb_cfg["leaderboard_message_id"] = msg_id
-        _save_lb_config(lb_cfg)
         logger.info(f"[leaderboard] posted new leaderboard message {msg_id}")
+
+    lb_cfg["leaderboard_message_id"] = msg_id
+    lb_cfg["last_entries"] = entries
+    _save_lb_config(lb_cfg)
 
     return {
         "ok": True,
         "entries": len(entries),
         "message_id": msg_id,
+        "updated": True,
         "top_score": entries[0]["score"] if entries else 0,
     }
 
