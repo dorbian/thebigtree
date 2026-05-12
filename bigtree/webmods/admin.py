@@ -605,6 +605,8 @@ async def discord_reorder_roles(req: web.Request) -> web.Response:
     except discord.Forbidden:
         return web.json_response({"ok": False, "error": "bot lacks permission to manage roles"}, status=403)
     except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
 
 @route("POST", "/gpose/leaderboard", scopes=["bingo:admin", "tarot:admin"])
 async def gpose_leaderboard_update(req: web.Request) -> web.Response:
@@ -626,7 +628,6 @@ async def gpose_leaderboard_update(req: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
-        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 def _settings_path() -> Path:
     try:
