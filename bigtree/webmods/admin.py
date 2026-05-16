@@ -1334,8 +1334,11 @@ async def gpose_send_message(req: web.Request):
 
     body = await req.json()
     content = (body.get("content") or "").strip()
-    if not content:
-        return web.json_response({"ok": False, "error": "content is required"}, status=400)
+    embed_data = body.get("embed")
+    ping = body.get("ping", False)
+
+    if not content and not embed_data:
+        return web.json_response({"ok": False, "error": "content or embed is required"}, status=400)
 
     bot = getattr(bigtree, "bot", None)
     if not bot:
@@ -1359,7 +1362,23 @@ async def gpose_send_message(req: web.Request):
         return web.json_response({"ok": False, "error": "channel not found or not cached"}, status=404)
 
     try:
-        msg = await chan.send(content)
+        kwargs = {}
+        if embed_data:
+            em = discord.Embed(
+                title=embed_data.get("title", ""),
+                description=embed_data.get("description", ""),
+                color=discord.Colour.green()
+            )
+            for f in embed_data.get("fields", []):
+                em.add_field(name=f.get("name", "")[:256], value=f.get("value", "")[:1024], inline=False)
+            if embed_data.get("footer"):
+                em.set_footer(text=str(embed_data["footer"]))
+            kwargs["embed"] = em
+        if content:
+            kwargs["content"] = "@everyone" if ping else content
+        elif ping:
+            kwargs["content"] = "@everyone"
+        msg = await chan.send(**kwargs)
         return web.json_response({"ok": True, "message_id": str(msg.id), "channel_id": channel_id})
     except Exception as e:
         bigtree.logger.warning(f"[gpose] message send failed: {e}")
