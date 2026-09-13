@@ -10,7 +10,7 @@ import psycopg2
 from psycopg2.extras import Json
 
 from bigtree.inc.database import get_database
-from . import engine
+from . import engine, server_config
 
 Mutator = Callable[[Dict[str, Any]], Dict[str, Any] | None]
 
@@ -32,9 +32,29 @@ class ConclaveStore:
         host_user_id: int,
         dedicated_channel: bool,
     ) -> Dict[str, Any]:
+        config = server_config.get_config(self.db)
+        if not config.get("enabled", True):
+            raise engine.GameError(
+                "Verdant Conclave is disabled for this server.",
+                "disabled",
+            )
         existing = self.get_active_by_channel(channel_id)
         if existing:
             raise engine.GameError("This channel already has an active Conclave.", "channel_busy")
+
+        active_for_guild = sum(
+            1
+            for current in self.list_active(500)
+            if int(current.get("guild_id") or 0) == int(guild_id)
+        )
+        max_games = int(config.get("max_concurrent_games") or 4)
+        if active_for_guild >= max_games:
+            raise engine.GameError(
+                f"This server already has {active_for_guild} active Conclave(s); "
+                f"the configured limit is {max_games}.",
+                "concurrent_limit",
+            )
+
         game_id = self._new_id()
         state = engine.new_state(
             game_id,
@@ -44,6 +64,7 @@ class ConclaveStore:
             host_user_id=host_user_id,
             dedicated_channel=dedicated_channel,
         )
+        server_config.apply_to_state(state, config)
         try:
             self.db.upsert_game(
                 game_id=game_id,

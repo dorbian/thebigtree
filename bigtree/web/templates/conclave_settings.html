@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1611">
+  <title>Verdant Conclave · Elfministration</title>
+  <style>
+    :root{color-scheme:dark;--bg:#09120e;--card:#101d16;--line:#294334;--text:#e5f0e8;--muted:#9cb2a3;--accent:#79b98a;--bad:#d88686;--warn:#d9bd72}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#16261c,var(--bg) 52%);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+    main{max-width:1180px;margin:auto;padding:28px}.header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:22px}
+    h1,h2{margin:.15em 0}.eyebrow{color:var(--accent);text-transform:uppercase;letter-spacing:.12em;font-size:11px}.muted,small{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{background:rgba(16,29,22,.94);border:1px solid var(--line);border-radius:14px;padding:18px}
+    .wide{grid-column:1/-1}.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}label{display:grid;gap:6px;margin:10px 0}
+    input,select,button{font:inherit;color:inherit}input,select{background:#0a1510;border:1px solid var(--line);border-radius:8px;padding:9px}
+    button{background:#245b36;border:1px solid #3e7a50;border-radius:8px;padding:9px 13px;cursor:pointer}button.ghost{background:#14231a}button.danger{background:#502525;border-color:#7f3c3c}
+    .switch{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 0}.switch input{width:18px;height:18px}
+    .status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{padding:12px;border:1px solid var(--line);border-radius:10px;background:#0b1611}.metric strong{display:block;font-size:18px}
+    .permissions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.permission{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding:6px 0}
+    .notice{margin:12px 0;padding:10px;border-radius:8px;background:#16271d;border:1px solid var(--line)}.hidden{display:none}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+    .ok{color:#9bd3a8}.bad{color:var(--bad)}.warn{color:var(--warn)}code{font-family:ui-monospace,monospace;color:#bde0c5}
+    table{width:100%;border-collapse:collapse;margin-top:10px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-size:12px}
+    .room-list{font-size:12px;color:var(--muted)}.identity-box{margin-top:12px;padding:12px;background:#08100c;border:1px solid var(--line);border-radius:8px;white-space:pre-wrap;overflow:auto;max-height:280px}
+    @media(max-width:800px){.grid,.row,.status-grid{grid-template-columns:1fr}.wide{grid-column:auto}.header{display:block}.permissions{grid-template-columns:1fr}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="header">
+    <div>
+      <div class="eyebrow">Elfministration · server system</div>
+      <h1>Verdant Conclave</h1>
+      <p class="muted">Server policy, Forest identities, Discord relay health and game-space repair. Webhook tokens are never displayed or persisted here.</p>
+    </div>
+    <div class="actions"><button class="ghost" id="refresh">Refresh</button><button id="save">Save settings</button></div>
+  </header>
+
+  <div id="notice" class="notice hidden"></div>
+
+  <section class="status-grid">
+    <div class="metric"><span>Server readiness</span><strong id="ready">—</strong><small id="guild">Discord —</small></div>
+    <div class="metric"><span>Identity mode</span><strong id="relay">—</strong><small id="relayDetail">Not checked</small></div>
+    <div class="metric"><span>Hub webhook</span><strong id="hook">—</strong><small id="hookDetail">Optional diagnostic</small></div>
+    <div class="metric"><span>Active games</span><strong id="activeGames">—</strong><small id="gameLimit">Limit —</small></div>
+  </section>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card">
+      <div class="eyebrow">Discord home</div><h2>Verdant hub</h2>
+      <p class="muted">Used for server capability checks and games explicitly bound here. Dedicated game channels receive their own managed Verdant webhook so concurrent games remain isolated.</p>
+      <label>Hub text channel<select id="channel"><option value="">Choose a channel…</option></select></label>
+      <label class="switch"><span><strong>Verdant enabled</strong><small>Allow this server to create Conclaves.</small></span><input id="enabled" type="checkbox"></label>
+      <label>Maximum concurrent games<input id="maxGames" type="number" min="1" max="20"></label>
+      <div class="actions"><button id="ensureHook">Create / repair hub webhook</button><button class="danger" id="deleteHook">Remove hub webhook</button></div>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">Forest identity</div><h2>Aliases</h2>
+      <label class="switch"><span><strong>Forest aliases</strong><small>Keep Discord identity internal to the game.</small></span><input id="aliases" type="checkbox"></label>
+      <label>Conversation mode<select id="aliasMode"><option value="immersive">Immersive · relay normal chat</option><option value="sealed">Sealed · private input only</option></select></label>
+      <label>Player naming<select id="aliasChoice"><option value="both">Generated or custom</option><option value="generated">Generated only</option><option value="custom">Custom only</option></select></label>
+      <label>DM delivery<select id="dmDelivery"><option value="optional">Player opt-in</option><option value="off">Off</option><option value="on">Always attempt</option></select></label>
+      <label class="switch"><span><strong>Auto-manage game webhooks</strong><small>Create or rediscover one Verdant webhook in every actual game parent channel.</small></span><input id="autoHook" type="checkbox"></label>
+    </section>
+
+    <section class="card wide">
+      <div class="eyebrow">Diagnostics</div><h2>Hub Discord capabilities</h2>
+      <p class="muted">Immersive aliasing additionally needs Manage Messages and the Message Content intent because the original user message must be received and removed before it can be relayed. Sealed mode does not rely on raw user messages.</p>
+      <div class="permissions" id="permissions"></div>
+    </section>
+
+    <section class="card wide">
+      <div class="eyebrow">Operations</div>
+      <div class="header" style="margin-bottom:4px"><div><h2>Active Conclaves</h2><p class="muted">Room registry, panel and per-game relay health. Repair is idempotent and safe to run after a bot restart.</p></div><button class="ghost" id="refreshGames">Refresh games</button></div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>Game</th><th>Phase</th><th>Channel</th><th>Relay</th><th>Rooms</th><th>Health</th><th>Actions</th></tr></thead>
+          <tbody id="gamesBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="identityBox" class="identity-box hidden"></div>
+    </section>
+
+    <section class="card wide">
+      <div class="eyebrow">Foundation contract</div><h2>What Pass A owns</h2>
+      <p>Every game snapshots server identity policy, owns a generic <code>rooms</code> registry, and records a per-game relay webhook ID without storing the webhook token. Living Circle and Lost Forest remain compatibility fields while also registering as ordinary managed rooms.</p>
+      <p class="muted">Moderator identity resolution is deliberately separate from game-host controls, requires <code>admin:web</code>, excludes secret roles, and writes an audit entry to the server log.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  function authKey(){try{return window.parent?.localStorage?.getItem("bt_api_key")||localStorage.getItem("bt_api_key")||""}catch(_e){return ""}}
+  async function request(path,options={}){
+    const opts={...options,headers:{...(options.headers||{})}},key=authKey();
+    if(key){opts.headers["X-API-Key"]=key;opts.headers.Authorization=`Bearer ${key}`}
+    if(opts.body&&!opts.headers["Content-Type"])opts.headers["Content-Type"]="application/json";
+    const res=await fetch(path,opts),text=await res.text();let payload={};
+    try{payload=text?JSON.parse(text):{}}catch(_e){throw new Error(`Unexpected response (${res.status})`)}
+    if(!res.ok||payload.ok===false)throw new Error(payload.error||`HTTP ${res.status}`);return payload;
+  }
+  function escapeHtml(v){return String(v??"").replace(/[&<>'"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]))}
+  function notice(text,kind=""){const el=$("notice");el.textContent=text||"";el.className=text?`notice ${kind}`:"notice hidden"}
+  async function loadChannels(){
+    const data=await request("/admin/verdant/channels"),current=$("channel").value;
+    $("channel").innerHTML='<option value="">Choose a channel…</option>'+data.channels.map(c=>`<option value="${c.id}">${escapeHtml(c.category?c.category+" / ":"")}#${escapeHtml(c.name)}</option>`).join("");
+    if(current)$("channel").value=current;
+  }
+  function renderStatus(data){
+    const c=data.config||{},p=data.permissions||{};
+    $("enabled").checked=c.enabled!==false;$("channel").value=c.parent_channel_id||"";$("maxGames").value=c.max_concurrent_games||4;
+    $("aliases").checked=c.aliases_enabled!==false;$("aliasMode").value=c.alias_mode||"immersive";$("aliasChoice").value=c.alias_choice||"both";$("dmDelivery").value=c.dm_delivery||"optional";$("autoHook").checked=c.auto_manage_webhook!==false;
+    $("ready").textContent=data.ready?"Ready":"Needs attention";$("ready").className=data.ready?"ok":"warn";$("guild").textContent=data.guild?.name||"Discord unavailable";
+    $("hook").textContent=data.webhook?.configured?"Connected":"Optional";$("hook").className=data.webhook?.configured?"ok":"warn";$("hookDetail").textContent=data.webhook?.configured?`${data.webhook.name} · ${data.webhook.id}`:"No managed webhook in the configured hub";
+    const mode=c.alias_mode||"immersive",modeReady=mode==="sealed"?data.sealed_alias_ready:data.immersive_alias_ready;
+    $("relay").textContent=modeReady?"Ready":"Blocked";$("relay").className=modeReady?"ok":"warn";$("relayDetail").textContent=`${mode} · message-content intent ${data.message_content_intent?"on":"off"}`;
+    $("activeGames").textContent=String(data.active_games??0);$("gameLimit").textContent=`Limit ${data.max_concurrent_games??c.max_concurrent_games??4}`;
+    const labels={view_channel:"View channel",send_messages:"Send messages",read_message_history:"Read history",manage_messages:"Manage messages",manage_webhooks:"Manage webhooks",create_private_threads:"Create private threads",manage_threads:"Manage threads"};
+    $("permissions").innerHTML=Object.entries(labels).map(([k,l])=>`<div class="permission"><span>${l}</span><strong class="${p[k]?"ok":"bad"}">${p[k]?"OK":"Missing"}</strong></div>`).join("");
+  }
+  function roomSummary(game){
+    const rooms=game.rooms||[];if(!rooms.length)return '<span class="warn">none</span>';
+    return `<div class="room-list">${rooms.map(r=>`${r.exists?"✓":"✗"} ${escapeHtml(r.key)}${r.archived?" (archived)":""}`).join("<br>")}</div>`;
+  }
+  function renderGames(games){
+    const body=$("gamesBody");if(!games?.length){body.innerHTML='<tr><td colspan="7" class="muted">No active Conclaves.</td></tr>';return}
+    body.innerHTML=games.map(g=>`<tr>
+      <td><strong>${escapeHtml(g.title||g.game_id)}</strong><br><small>${escapeHtml(g.game_id)}</small></td>
+      <td>${escapeHtml(g.phase||"—")}</td>
+      <td>${g.channel_id?`<#${g.channel_id}>`:"—"}</td>
+      <td class="${g.webhook?.exists?"ok":"warn"}">${g.webhook?.exists?"ready":"missing"}</td>
+      <td>${roomSummary(g)}</td>
+      <td class="${g.healthy?"ok":"warn"}">${g.healthy?"Healthy":"Needs repair"}${g.error?`<br><small>${escapeHtml(g.error)}</small>`:""}</td>
+      <td><div class="actions" style="margin:0"><button data-repair="${escapeHtml(g.game_id)}">Repair</button><button class="ghost" data-identities="${escapeHtml(g.game_id)}">Resolve identities</button></div></td>
+    </tr>`).join("");
+    body.querySelectorAll("[data-repair]").forEach(btn=>btn.onclick=()=>repairGame(btn.dataset.repair));
+    body.querySelectorAll("[data-identities]").forEach(btn=>btn.onclick=()=>showIdentities(btn.dataset.identities));
+  }
+  async function loadGames(){try{const data=await request("/admin/verdant/games");renderGames(data.games||[])}catch(e){$("gamesBody").innerHTML=`<tr><td colspan="7" class="bad">${escapeHtml(e.message)}</td></tr>`}}
+  async function repairGame(id){try{notice(`Repairing ${id}…`);await request(`/admin/verdant/games/${encodeURIComponent(id)}/repair`,{method:"POST"});notice(`Repaired ${id}.`,"ok");await loadGames();await loadStatus()}catch(e){notice(e.message,"bad")}}
+  async function showIdentities(id){
+    if(!confirm("Resolve Forest aliases to Discord identities? This moderator action is audited."))return;
+    try{const data=await request(`/admin/verdant/games/${encodeURIComponent(id)}/identities`);const box=$("identityBox");box.classList.remove("hidden");box.textContent=`Moderator identity map · ${id}\n${data.identities.map(x=>`${x.forest_name||"(not chosen)"} → ${x.discord_display_name||"Unknown"} · ${x.discord_user_id}${x.synthetic?" · synthetic":""}`).join("\n")}\n\n${data.audit||""}`}catch(e){notice(e.message,"bad")}
+  }
+  async function loadStatus(){const data=await request("/admin/verdant/status");renderStatus(data)}
+  async function refresh(){try{await loadChannels();await Promise.all([loadStatus(),loadGames()]);notice("")}catch(e){notice(e.message,"bad")}}
+  $("refresh").onclick=refresh;$("refreshGames").onclick=loadGames;
+  $("save").onclick=async()=>{try{const body={enabled:$("enabled").checked,parent_channel_id:$("channel").value||null,max_concurrent_games:Number($("maxGames").value||4),aliases_enabled:$("aliases").checked,alias_mode:$("aliasMode").value,alias_choice:$("aliasChoice").value,dm_delivery:$("dmDelivery").value,auto_manage_webhook:$("autoHook").checked};const data=await request("/admin/verdant/config",{method:"POST",body:JSON.stringify(body)});renderStatus(data);notice("Verdant settings saved.","ok");await loadGames()}catch(e){notice(e.message,"bad")}};
+  $("ensureHook").onclick=async()=>{try{const data=await request("/admin/verdant/webhook",{method:"POST"});renderStatus(data);notice("Hub webhook is ready.","ok")}catch(e){notice(e.message,"bad")}};
+  $("deleteHook").onclick=async()=>{if(!confirm("Remove only the managed Verdant webhook in the configured hub channel? Active dedicated-game webhooks are untouched."))return;try{const data=await request("/admin/verdant/webhook",{method:"DELETE"});renderStatus(data);notice("Hub webhook removed.","warn")}catch(e){notice(e.message,"bad")}};
+  refresh();
+})();
+</script>
+</body>
+</html>

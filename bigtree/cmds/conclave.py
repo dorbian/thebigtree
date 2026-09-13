@@ -17,7 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bigtree
-from bigtree.games.conclave import engine
+from bigtree.games.conclave import engine, server_config
 from bigtree.games.conclave.store import ConclaveStore
 from bigtree.inc.logging import logger
 from bigtree.inc import access_control
@@ -668,6 +668,189 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
     async def mutate_game(self, game_id: str, mutator) -> dict:
         return await asyncio.to_thread(self.store.mutate, game_id, mutator)
 
+    async def _server_config(self) -> dict:
+        return await asyncio.to_thread(server_config.get_config, self.store.db)
+
+    async def _apply_server_policy(self, state: dict, config: Optional[dict] = None) -> dict:
+        config = config or await self._server_config()
+        identity = state.get("identity")
+        policy = state.get("server_policy")
+        identity_complete = isinstance(identity, dict) and all(
+            key in identity for key in ("aliases_enabled", "mode", "choice")
+        )
+        policy_complete = isinstance(policy, dict) and all(
+            key in policy for key in ("dm_delivery", "auto_manage_webhook")
+        )
+        if identity_complete and policy_complete:
+            return state
+
+        def apply(current: dict) -> dict:
+            return server_config.apply_to_state(current, config, overwrite=False)
+
+        return await asyncio.to_thread(
+            self.store.mutate,
+            str(state.get("game_id") or ""),
+            apply,
+        )
+
+    async def _parent_text_channel(self, state: dict) -> Optional[discord.TextChannel]:
+        channel_id = int(state.get("channel_id") or 0)
+        if not channel_id:
+            return None
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return None
+        return channel if isinstance(channel, discord.TextChannel) else None
+
+    async def _locate_relay_webhook(
+        self,
+        channel: discord.TextChannel,
+        state: dict,
+        config: dict,
+    ) -> Optional[discord.Webhook]:
+        relay = state.get("relay") or {}
+        wanted_ids = []
+        for raw in (relay.get("webhook_id"),):
+            try:
+                value = int(raw or 0)
+            except Exception:
+                value = 0
+            if value:
+                wanted_ids.append(value)
+        if int(config.get("parent_channel_id") or 0) == int(channel.id):
+            try:
+                hub_id = int(config.get("webhook_id") or 0)
+            except Exception:
+                hub_id = 0
+            if hub_id:
+                wanted_ids.append(hub_id)
+        try:
+            hooks = await channel.webhooks()
+        except (discord.Forbidden, discord.HTTPException):
+            return None
+        for wanted in wanted_ids:
+            for hook in hooks:
+                if int(hook.id) == wanted:
+                    return hook
+        for hook in hooks:
+            if hook.name == server_config.WEBHOOK_NAME:
+                return hook
+        return None
+
+    async def ensure_game_webhook(self, state: dict, config: Optional[dict] = None) -> dict:
+        """Discover or create the relay webhook in this game's actual parent channel."""
+        if not state or state.get("phase") == engine.PHASE_ENDED:
+            return state
+        config = config or await self._server_config()
+        identity = state.get("identity") or {}
+        if not bool(identity.get("aliases_enabled", config.get("aliases_enabled", True))):
+            return state
+        channel = await self._parent_text_channel(state)
+        if channel is None:
+            raise engine.GameError(
+                "The Conclave parent channel is unavailable for its identity relay.",
+                "channel_unavailable",
+            )
+
+        hook = await self._locate_relay_webhook(channel, state, config)
+        policy = state.get("server_policy") or {}
+        auto_manage = bool(
+            policy.get("auto_manage_webhook", config.get("auto_manage_webhook", True))
+        )
+        if hook is None and auto_manage:
+            try:
+                hook = await channel.create_webhook(
+                    name=server_config.WEBHOOK_NAME,
+                    reason=f"Verdant Conclave identity relay for {state.get('game_id')}",
+                )
+            except discord.Forbidden as exc:
+                raise engine.GameError(
+                    "Verdant aliases require Manage Webhooks in the game channel.",
+                    "webhook_forbidden",
+                ) from exc
+            except discord.HTTPException as exc:
+                raise engine.GameError(
+                    f"Discord rejected the Verdant game webhook: {exc}",
+                    "webhook_failed",
+                ) from exc
+        if hook is None:
+            return state
+
+        relay = state.get("relay") or {}
+        if (
+            int(relay.get("channel_id") or 0) == int(channel.id)
+            and int(relay.get("webhook_id") or 0) == int(hook.id)
+        ):
+            return state
+
+        def persist(current: dict) -> dict:
+            current["relay"] = {
+                "channel_id": int(channel.id),
+                "webhook_id": int(hook.id),
+            }
+            return current
+
+        return await asyncio.to_thread(
+            self.store.mutate,
+            str(state.get("game_id") or ""),
+            persist,
+        )
+
+    async def _register_core_rooms(
+        self,
+        state: dict,
+        living: Optional[discord.Thread],
+        lost: Optional[discord.Thread],
+    ) -> dict:
+        rooms = state.get("rooms") or {}
+        living_id = int(living.id) if living is not None else 0
+        lost_id = int(lost.id) if lost is not None else 0
+        current_living = int(((rooms.get("living") or {}).get("channel_id")) or 0)
+        current_lost = int(((rooms.get("lost") or {}).get("channel_id")) or 0)
+        if current_living == living_id and current_lost == lost_id:
+            return state
+
+        def apply(current: dict) -> dict:
+            if living_id:
+                engine.register_room(
+                    current,
+                    "living",
+                    living_id,
+                    purpose="Living Circle",
+                    lifecycle="game",
+                    private=True,
+                )
+            if lost_id:
+                engine.register_room(
+                    current,
+                    "lost",
+                    lost_id,
+                    purpose="Lost in the Forest",
+                    lifecycle="game",
+                    private=True,
+                )
+            return current
+
+        return await asyncio.to_thread(
+            self.store.mutate,
+            str(state.get("game_id") or ""),
+            apply,
+        )
+
+    async def ensure_game_foundation(self, state: dict) -> dict:
+        """Reconcile persisted server policy, relay webhook and core game rooms."""
+        if not state or state.get("phase") == engine.PHASE_ENDED:
+            return state
+        # The enable switch gates new sessions in ConclaveStore.create. Existing
+        # sessions remain recoverable if an operator disables new games.
+        config = await self._server_config()
+        state = await self._apply_server_policy(state, config)
+        state = await self.ensure_game_webhook(state, config)
+        return await self.ensure_game_spaces(state)
+
     async def _fetch_thread(self, thread_id: int | str | None) -> Optional[discord.Thread]:
         try:
             value = int(thread_id or 0)
@@ -718,7 +901,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         living = await self._fetch_thread(state.get("living_thread_id"))
         lost = await self._fetch_thread(state.get("lost_thread_id"))
         if living is not None and lost is not None:
-            return state
+            return await self._register_core_rooms(state, living, lost)
 
         channel_id = int(state.get("channel_id") or 0)
         parent = self.bot.get_channel(channel_id)
@@ -770,6 +953,10 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 current.update(created)
                 return current
             state = await asyncio.to_thread(self.store.mutate, str(state.get("game_id")), apply_spaces)
+
+        living = living or await self._fetch_thread(state.get("living_thread_id"))
+        lost = lost or await self._fetch_thread(state.get("lost_thread_id"))
+        state = await self._register_core_rooms(state, living, lost)
         return state
 
     async def sync_game_spaces(self, state: dict, *, removed_user_ids=None) -> dict:
@@ -777,7 +964,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         if not state:
             return state
         if state.get("phase") != engine.PHASE_ENDED:
-            state = await self.ensure_game_spaces(state)
+            state = await self.ensure_game_foundation(state)
 
         living = await self._fetch_thread(state.get("living_thread_id"))
         lost = await self._fetch_thread(state.get("lost_thread_id"))
@@ -838,6 +1025,112 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 except (discord.Forbidden, discord.HTTPException):
                     pass
         return state
+
+    async def inspect_game_health(self, game_id: str) -> dict:
+        """Return moderator-safe Discord foundation health for one session."""
+        state = await asyncio.to_thread(self.store.get, str(game_id))
+        if not state:
+            raise engine.GameError("Conclave session not found.", "not_found")
+
+        parent = await self._parent_text_channel(state)
+        config = await self._server_config()
+        rooms = dict(state.get("rooms") or {})
+        if state.get("living_thread_id") and "living" not in rooms:
+            rooms["living"] = {
+                "channel_id": int(state.get("living_thread_id")),
+                "purpose": "Living Circle",
+                "lifecycle": "game",
+                "private": True,
+            }
+        if state.get("lost_thread_id") and "lost" not in rooms:
+            rooms["lost"] = {
+                "channel_id": int(state.get("lost_thread_id")),
+                "purpose": "Lost in the Forest",
+                "lifecycle": "game",
+                "private": True,
+            }
+
+        room_health = []
+        by_key = {}
+        for key, metadata in sorted(rooms.items()):
+            meta = metadata if isinstance(metadata, dict) else {}
+            try:
+                channel_id = int(meta.get("channel_id") or 0)
+            except Exception:
+                channel_id = 0
+            channel = self.bot.get_channel(channel_id) if channel_id else None
+            if channel is None and channel_id:
+                try:
+                    channel = await self.bot.fetch_channel(channel_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    channel = None
+            entry = {
+                "key": str(key),
+                "channel_id": channel_id or None,
+                "purpose": meta.get("purpose") or str(key),
+                "lifecycle": meta.get("lifecycle") or "game",
+                "private": bool(meta.get("private", True)),
+                "exists": channel is not None,
+                "archived": bool(getattr(channel, "archived", False)) if channel is not None else False,
+            }
+            room_health.append(entry)
+            by_key[str(key)] = entry
+
+        hook = None
+        if parent is not None:
+            hook = await self._locate_relay_webhook(parent, state, config)
+
+        panel_exists = False
+        panel_id = int(state.get("panel_message_id") or 0)
+        if parent is not None and panel_id:
+            try:
+                await parent.fetch_message(panel_id)
+                panel_exists = True
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                panel_exists = False
+
+        active = state.get("phase") != engine.PHASE_ENDED
+        missing = []
+        if active and parent is None:
+            missing.append("parent channel")
+        if active and not bool((by_key.get("living") or {}).get("exists")):
+            missing.append("Living Circle")
+        if active and not bool((by_key.get("lost") or {}).get("exists")):
+            missing.append("Lost Forest")
+        if active and not panel_exists:
+            missing.append("control panel")
+        aliases_enabled = bool((state.get("identity") or {}).get("aliases_enabled", True))
+        if active and aliases_enabled and hook is None:
+            missing.append("identity relay webhook")
+
+        return {
+            "game_id": state.get("game_id"),
+            "title": state.get("title"),
+            "phase": state.get("phase"),
+            "channel_id": state.get("channel_id"),
+            "panel_message_id": state.get("panel_message_id"),
+            "panel_exists": panel_exists,
+            "rooms": room_health,
+            "webhook": {
+                "exists": hook is not None,
+                "id": int(hook.id) if hook is not None else None,
+                "channel_id": int(parent.id) if parent is not None else None,
+            },
+            "identity_mode": str((state.get("identity") or {}).get("mode") or "immersive"),
+            "healthy": not missing,
+            "error": ("Missing: " + ", ".join(missing)) if missing else None,
+        }
+
+    async def repair_game_foundation(self, game_id: str) -> dict:
+        state = await asyncio.to_thread(self.store.get, str(game_id))
+        if not state:
+            raise engine.GameError("Conclave session not found.", "not_found")
+        if state.get("phase") != engine.PHASE_ENDED:
+            state = await self.ensure_game_foundation(state)
+            health = await self.inspect_game_health(str(game_id))
+            if not health.get("panel_exists"):
+                await self.recreate_game_panel(str(game_id))
+        return await self.inspect_game_health(str(game_id))
 
     def is_host_or_operator(self, interaction: discord.Interaction, state: dict) -> bool:
         if int(state.get("host_user_id") or 0) == int(interaction.user.id):
@@ -953,6 +1246,13 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             return await interaction.response.send_message("This game can only be created inside the server.", ephemeral=True)
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        config = await self._server_config()
+        if not bool(config.get("enabled", True)):
+            return await interaction.followup.send(
+                "Verdant Conclave is disabled in Elfministration for this server.",
+                ephemeral=True,
+            )
+
         created_channel: Optional[discord.TextChannel] = None
         target_channel = channel or interaction.channel
         bind_existing = bool(channel is not None or use_current_channel)
@@ -967,7 +1267,12 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             slug = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-") or "verdant-conclave"
             slug = slug[:70]
             try:
-                category = getattr(interaction.channel, "category", None)
+                configured_hub = self.bot.get_channel(int(config.get("parent_channel_id") or 0))
+                category = (
+                    configured_hub.category
+                    if isinstance(configured_hub, discord.TextChannel)
+                    else getattr(interaction.channel, "category", None)
+                )
                 overwrites = {
                     interaction.guild.default_role: discord.PermissionOverwrite(
                         view_channel=True,
@@ -979,6 +1284,9 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     overwrites[bot_member] = discord.PermissionOverwrite(
                         view_channel=True,
                         send_messages=True,
+                        read_message_history=True,
+                        manage_messages=True,
+                        manage_webhooks=True,
                         create_private_threads=True,
                         send_messages_in_threads=True,
                         manage_threads=True,
@@ -1018,7 +1326,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     )
             except Exception as exc:
                 logger.warning("[conclave] unable to persist resource host assignment: %s", exc)
-            state = await self.ensure_game_spaces(state)
+            state = await self.ensure_game_foundation(state)
             panel_message = await target_channel.send(embed=build_public_embed(state), view=self.panel)
             state = await asyncio.to_thread(self.store.set_panel_message, state["game_id"], panel_message.id)
             await panel_message.edit(embed=build_public_embed(state), view=self.panel)

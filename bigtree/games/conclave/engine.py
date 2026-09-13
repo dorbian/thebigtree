@@ -110,6 +110,16 @@ def new_state(
         "panel_message_id": None,
         "living_thread_id": None,
         "lost_thread_id": None,
+        "rooms": {},
+        "identity": {
+            "aliases_enabled": True,
+            "mode": "immersive",
+            "choice": "both",
+        },
+        "relay": {
+            "channel_id": None,
+            "webhook_id": None,
+        },
         "test_mode": False,
         "phase": PHASE_LOBBY,
         "night": 0,
@@ -167,6 +177,7 @@ def add_player(state: Dict[str, Any], user_id: int, display_name: str) -> Dict[s
     players[key] = {
         "user_id": int(user_id),
         "display_name": (display_name or f"Elf {user_id}")[:80],
+        "forest_name": None,
         "alive": True,
         "role": None,
         "faction": None,
@@ -174,6 +185,69 @@ def add_player(state: Dict[str, Any], user_id: int, display_name: str) -> Dict[s
         "private_notes": [],
         "last_will": "",
     }
+    state["updated_at"] = _now()
+    return state
+
+
+def set_forest_name(state: Dict[str, Any], user_id: int, forest_name: str) -> Dict[str, Any]:
+    """Persist one game-local public identity without changing Discord identity."""
+    if state.get("phase") != PHASE_LOBBY:
+        raise GameError("Forest names can only be changed while the Conclave is gathering.", "started")
+    player_obj = player(state, user_id)
+    if player_obj is None:
+        raise GameError("Join the Conclave before choosing a Forest name.", "not_joined")
+    name = " ".join(str(forest_name or "").strip().split())
+    if len(name) < 2 or len(name) > 32:
+        raise GameError("Forest names must be between 2 and 32 characters.", "bad_forest_name")
+    folded = name.casefold()
+    for other in _players(state).values():
+        if int(other.get("user_id") or 0) == int(user_id):
+            continue
+        if str(other.get("forest_name") or "").strip().casefold() == folded:
+            raise GameError("That Forest name is already in use in this Conclave.", "forest_name_taken")
+    player_obj["forest_name"] = name
+    state["updated_at"] = _now()
+    return state
+
+
+def public_player_name(player_obj: Optional[Dict[str, Any]]) -> str:
+    """Return the game-facing name while retaining the Discord name internally."""
+    obj = player_obj or {}
+    return str(obj.get("forest_name") or obj.get("display_name") or f"Elf {obj.get('user_id') or '?'}")
+
+
+def register_room(
+    state: Dict[str, Any],
+    room_key: str,
+    channel_id: int,
+    *,
+    purpose: str,
+    lifecycle: str = "game",
+    private: bool = True,
+) -> Dict[str, Any]:
+    """Register a Discord space owned by this game."""
+    key = str(room_key or "").strip().lower()
+    if not key:
+        raise GameError("Room key is required.", "bad_room")
+    rooms = state.setdefault("rooms", {})
+    if not isinstance(rooms, dict):
+        rooms = {}
+        state["rooms"] = rooms
+    rooms[key] = {
+        "channel_id": int(channel_id),
+        "purpose": str(purpose or key)[:80],
+        "lifecycle": str(lifecycle or "game")[:24],
+        "private": bool(private),
+        "registered_at": _now(),
+    }
+    state["updated_at"] = _now()
+    return state
+
+
+def unregister_room(state: Dict[str, Any], room_key: str) -> Dict[str, Any]:
+    rooms = state.setdefault("rooms", {})
+    if isinstance(rooms, dict):
+        rooms.pop(str(room_key or "").strip().lower(), None)
     state["updated_at"] = _now()
     return state
 
