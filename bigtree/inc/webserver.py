@@ -1,6 +1,6 @@
 # bigtree/inc/webserver.py
 from __future__ import annotations
-import asyncio, importlib, pkgutil, logging
+import asyncio, importlib, pkgutil, logging, os, re, time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Any, List, Set, Optional
 from aiohttp import web, WSMsgType, WSCloseCode
@@ -10,6 +10,25 @@ import bigtree
 from bigtree.inc.auth import auth_middleware  # <-- NEW
 
 log = getattr(getattr(bigtree, "loch", None), "logger", logging.getLogger("bigtree"))
+
+
+def _build_asset_version() -> str:
+    """Return one browser-cache identity for every static asset in this process.
+
+    Production images already carry BIGTREE_BUILD_SHA.  A runtime nonce keeps
+    local/dev launches safe when that build argument is unavailable.
+    """
+    raw = str(os.getenv("BIGTREE_BUILD_SHA") or "").strip()
+    if raw and raw.lower() != "unknown":
+        safe = "".join(ch for ch in raw if ch.isalnum() or ch in "._-")
+        if safe:
+            return safe[:64]
+    return f"runtime-{time.time_ns()}"
+
+
+_ASSET_VERSION = _build_asset_version()
+_STATIC_VERSION_RE = re.compile(r'(/static/[^"\'\s)]+)\?v=[A-Za-z0-9._-]+')
+
 
 @dataclass
 class APIRoute:
@@ -164,6 +183,16 @@ class DynamicWebServer:
         # named token replacement, so implement exactly that instead.
         for key, val in (mapping or {}).items():
             txt = txt.replace("{" + str(key) + "}", str(val))
+
+        # Static files are deliberately cacheable/immutable for Pi efficiency.
+        # Hand-maintained ?v= dates can therefore leave a new HTML shell paired
+        # with an older cached JS bundle after a container rollout.  Rewrite
+        # every already-versioned /static asset to the immutable container
+        # build identity so HTML and JS/CSS always come from the same revision.
+        txt = _STATIC_VERSION_RE.sub(
+            lambda match: f"{match.group(1)}?v={_ASSET_VERSION}",
+            txt,
+        )
         return txt
 
     # ---------- CORS ----------
