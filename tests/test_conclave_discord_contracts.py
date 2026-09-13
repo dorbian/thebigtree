@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CMD = ROOT / "bigtree" / "cmds" / "conclave.py"
 API = ROOT / "bigtree" / "webmods" / "conclave.py"
 ENGINE = ROOT / "bigtree" / "games" / "conclave" / "engine.py"
+IDENTITY = ROOT / "bigtree" / "games" / "conclave" / "discord_identity.py"
 AUTH = ROOT / "bigtree" / "inc" / "auth.py"
 OVERLAY = ROOT / "bigtree" / "web" / "static" / "overlay" / "overlay.js"
 HTML = ROOT / "bigtree" / "web" / "templates" / "overlay.html"
@@ -52,6 +53,41 @@ class ConclaveDiscordContractTests(unittest.TestCase):
         self.assertIn('request["bt_auth"]', auth)
         self.assertIn('id="conclaveJoinSelf"', html)
         self.assertIn('conclaveJoinSelf()', js)
+
+    def test_forest_identity_is_native_player_experience(self):
+        source = CMD.read_text("utf-8")
+        engine = ENGINE.read_text("utf-8")
+        self.assertIn('class _ForestNameModal', source)
+        self.assertIn('custom_id="conclave:name"', source)
+        self.assertIn('custom_id="conclave:speak"', source)
+        self.assertIn('engine.generate_forest_name', source)
+        self.assertIn('engine.game_player_name', source)
+        self.assertIn('"forest_name": p.get("forest_name")', engine)
+
+    def test_immersive_relay_hides_discord_mentions_and_avatar(self):
+        source = CMD.read_text("utf-8")
+        relay = IDENTITY.read_text("utf-8")
+        self.assertIn('async def on_message', source)
+        self.assertIn('message.webhook_id is not None', source)
+        self.assertIn('discord_identity.relay_message', source)
+        self.assertIn('discord.AllowedMentions.none()', relay)
+        self.assertIn('@someone outside the Conclave', relay)
+        self.assertNotIn('avatar_url=', relay)
+
+    def test_sealed_mode_uses_speak_modal_and_pinned_guidance(self):
+        source = CMD.read_text("utf-8")
+        self.assertIn('class _SpeakModal', source)
+        self.assertIn('if mode == "sealed"', source)
+        self.assertIn('await message.delete()', source)
+        self.assertIn('await intro.pin(', source)
+        self.assertIn('brief original-message relay window', source)
+
+    def test_forced_dm_delivery_sends_identity_and_role_without_being_required(self):
+        source = CMD.read_text("utf-8")
+        self.assertIn('maybe_send_identity_dm', source)
+        self.assertIn('deliver_role_dms', source)
+        self.assertIn('!= "on"', source)
+        self.assertIn('except (discord.Forbidden, discord.HTTPException)', source)
 
 
 if __name__ == "__main__":

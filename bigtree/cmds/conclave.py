@@ -17,7 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bigtree
-from bigtree.games.conclave import engine, server_config
+from bigtree.games.conclave import discord_identity, engine, server_config
 from bigtree.games.conclave.store import ConclaveStore
 from bigtree.inc.logging import logger
 from bigtree.inc import access_control
@@ -113,6 +113,7 @@ def build_public_embed(state: dict) -> discord.Embed:
 
     players = public.get("players") or []
     lines = []
+    aliases_enabled = bool(public.get("aliases_enabled"))
     accused = int(public.get("on_trial") or 0)
     for p in players:
         uid = int(p.get("user_id") or 0)
@@ -121,7 +122,12 @@ def build_public_embed(state: dict) -> discord.Embed:
         marker = "🌱" if alive else "🍂"
         trial = " ⚖️" if uid == accused else ""
         role = f" — {p.get('role')}" if p.get("role") else ""
-        identity = f"🧪 {p.get('display_name') or 'Test Elf'}" if synthetic else f"<@{uid}>"
+        if synthetic:
+            identity = f"🧪 {p.get('display_name') or 'Test Elf'}"
+        elif aliases_enabled:
+            identity = f"**{p.get('display_name') or 'Unnamed elf'}**"
+        else:
+            identity = f"<@{uid}>"
         lines.append(f"{marker} {identity}{trial}{role}")
     embed.add_field(
         name=f"Gathered elves · {sum(1 for p in players if p.get('alive', True))}/{len(players)} living",
@@ -169,9 +175,12 @@ def build_public_embed(state: dict) -> discord.Embed:
             inline=False,
         )
 
-    embed.set_footer(
-        text=f"Session {public.get('game_id')} · Discord-channel locked · Host {public.get('host_user_id')}"
-    )
+    footer = f"Session {public.get('game_id')} · Discord-channel locked"
+    if aliases_enabled:
+        footer += " · Forest identities active"
+    else:
+        footer += f" · Host {public.get('host_user_id')}"
+    embed.set_footer(text=footer)
     return embed
 
 
@@ -189,6 +198,8 @@ def build_private_embed(state: dict, user_id: int) -> discord.Embed:
         description=str(info.get("description") or ""),
         colour=discord.Colour.green() if info.get("faction") == engine.FACTION_CONCORD else discord.Colour.dark_red(),
     )
+    if info.get("forest_name"):
+        embed.add_field(name="Known as", value=f"**{info.get('forest_name')}** in this Conclave", inline=False)
     embed.add_field(name="Allegiance", value=faction_label, inline=False)
     allies = info.get("allies") or []
     if allies:
@@ -339,7 +350,7 @@ class _TargetSelect(discord.ui.Select):
             placeholder = "Choose an elf to nominate…"
         options = [
             discord.SelectOption(
-                label=str(p.get("display_name") or p.get("user_id"))[:100],
+                label=engine.game_player_name(state, p)[:100],
                 value=str(p.get("user_id")),
             )
             for p in targets[:25]
@@ -438,6 +449,100 @@ class _LastWillModal(discord.ui.Modal, title="Last will"):
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
 
 
+class _ForestNameModal(discord.ui.Modal, title="Choose your Forest name"):
+    forest_name = discord.ui.TextInput(
+        label="Forest name",
+        required=True,
+        min_length=2,
+        max_length=32,
+        placeholder="Ashleaf",
+    )
+
+    def __init__(
+        self,
+        cog: "ConclaveCog",
+        state: dict,
+        actor_id: int,
+        *,
+        join_if_missing: bool,
+        suggestion: str = "",
+    ):
+        super().__init__()
+        self.cog = cog
+        self.actor_id = int(actor_id)
+        self.join_if_missing = bool(join_if_missing)
+        if suggestion:
+            self.forest_name.default = str(suggestion)[:32]
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.channel_id is None or interaction.user.id != self.actor_id:
+            return await interaction.response.send_message("This Forest name choice is not yours.", ephemeral=True)
+        try:
+            def apply(current: dict) -> dict:
+                if engine.player(current, self.actor_id) is None:
+                    if not self.join_if_missing:
+                        raise engine.GameError("Join the Conclave before choosing a Forest name.", "not_joined")
+                    engine.add_player(
+                        current,
+                        self.actor_id,
+                        interaction.user.display_name,
+                    )
+                return engine.set_forest_name(
+                    current,
+                    self.actor_id,
+                    str(self.forest_name.value or ""),
+                )
+
+            state = await self.cog.mutate_channel(interaction.channel_id, apply)
+            state = await self.cog.sync_game_spaces(state)
+            player_obj = engine.player(state, self.actor_id)
+            alias = engine.game_player_name(state, player_obj)
+            living_thread_id = int(state.get("living_thread_id") or 0)
+            destination = f" Continue in <#{living_thread_id}>." if living_thread_id else ""
+            await interaction.response.send_message(
+                f"🌿 Within this Conclave, you are **{alias}**.{destination}",
+                ephemeral=True,
+            )
+            await self.cog.maybe_send_identity_dm(interaction.user, state, alias)
+            await self.cog.refresh_channel_panel(interaction.channel_id, state)
+        except engine.GameError as exc:
+            await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+
+
+class _SpeakModal(discord.ui.Modal, title="Speak through the Forest"):
+    words = discord.ui.TextInput(
+        label="Your words",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1900,
+        placeholder="The Forest will carry these words under your game name…",
+    )
+
+    def __init__(self, cog: "ConclaveCog", actor_id: int):
+        super().__init__()
+        self.cog = cog
+        self.actor_id = int(actor_id)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.channel_id is None or interaction.user.id != self.actor_id:
+            return await interaction.response.send_message("This speaking panel is not yours.", ephemeral=True)
+        state = await self.cog.get_channel_state(interaction.channel_id)
+        if not state:
+            return await interaction.response.send_message("This Conclave is no longer active.", ephemeral=True)
+        try:
+            alias, room = await self.cog.send_as_forest_name(
+                state,
+                self.actor_id,
+                str(self.words.value or ""),
+            )
+            await interaction.response.send_message(
+                f"🌿 Sent to **{room}** as **{alias}**.",
+                ephemeral=True,
+            )
+        except engine.GameError as exc:
+            await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+
+
 class _JudgementView(discord.ui.View):
     def __init__(self, cog: "ConclaveCog", actor_id: int):
         super().__init__(timeout=120)
@@ -519,18 +624,49 @@ class ConclavePanel(discord.ui.View):
 
     @discord.ui.button(label="Join", emoji="🌱", style=discord.ButtonStyle.success, custom_id="conclave:join", row=0)
     async def join(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        state = await self._state(interaction)
+        if not state:
+            return await interaction.response.send_message("This Conclave is no longer active.", ephemeral=True)
         try:
+            identity = state.get("identity") or {}
+            if bool(identity.get("aliases_enabled", False)):
+                choice = str(identity.get("choice") or "both")
+                current = engine.player(state, interaction.user.id)
+                suggestion = (
+                    str(current.get("forest_name") or "")
+                    if current
+                    else ""
+                )
+                if choice in {"custom", "both"}:
+                    if not suggestion and choice == "both":
+                        suggestion = engine.generate_forest_name(state)
+                    return await interaction.response.send_modal(
+                        _ForestNameModal(
+                            self.cog,
+                            state,
+                            interaction.user.id,
+                            join_if_missing=True,
+                            suggestion=suggestion,
+                        )
+                    )
+
             state = await self.cog.mutate_channel(
                 interaction.channel_id,
-                lambda s: engine.add_player(s, interaction.user.id, interaction.user.display_name),
+                lambda s: self.cog.add_player_with_identity(
+                    s,
+                    interaction.user.id,
+                    interaction.user.display_name,
+                ),
             )
             state = await self.cog.sync_game_spaces(state)
             living_thread_id = int(state.get("living_thread_id") or 0)
             destination = f" Your game conversation is <#{living_thread_id}>." if living_thread_id else ""
+            alias = engine.game_player_name(state, engine.player(state, interaction.user.id))
             await interaction.response.send_message(
-                f"🌱 You joined the Verdant Conclave.{destination}",
+                f"🌱 You joined the Verdant Conclave as **{alias}**.{destination}",
                 ephemeral=True,
             )
+            await self.cog.maybe_send_identity_dm(interaction.user, state, alias)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
@@ -612,6 +748,42 @@ class ConclavePanel(discord.ui.View):
             ephemeral=True,
         )
 
+    @discord.ui.button(label="Forest name", emoji="🌿", style=discord.ButtonStyle.secondary, custom_id="conclave:name", row=2)
+    async def forest_name(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        state = await self._state(interaction)
+        if not state:
+            return await interaction.response.send_message("This Conclave is no longer active.", ephemeral=True)
+        player_obj = engine.player(state, interaction.user.id)
+        if not player_obj:
+            return await interaction.response.send_message("Join the Conclave first.", ephemeral=True)
+        identity = state.get("identity") or {}
+        if not bool(identity.get("aliases_enabled", False)):
+            return await interaction.response.send_message("Forest aliases are disabled for this Conclave.", ephemeral=True)
+        if str(identity.get("choice") or "both") == "generated":
+            alias = engine.game_player_name(state, player_obj)
+            return await interaction.response.send_message(
+                f"🌿 Your generated Forest name is **{alias}**.",
+                ephemeral=True,
+            )
+        await interaction.response.send_modal(
+            _ForestNameModal(
+                self.cog,
+                state,
+                interaction.user.id,
+                join_if_missing=False,
+                suggestion=str(player_obj.get("forest_name") or ""),
+            )
+        )
+
+    @discord.ui.button(label="Speak", emoji="💬", style=discord.ButtonStyle.secondary, custom_id="conclave:speak", row=2)
+    async def speak(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        state = await self._state(interaction)
+        if not state or not engine.player(state, interaction.user.id):
+            return await interaction.response.send_message("Join this Conclave before speaking through the Forest.", ephemeral=True)
+        if not bool((state.get("identity") or {}).get("aliases_enabled", False)):
+            return await interaction.response.send_message("Forest aliases are disabled for this Conclave.", ephemeral=True)
+        await interaction.response.send_modal(_SpeakModal(self.cog, interaction.user.id))
+
     @discord.ui.button(label="Start", style=discord.ButtonStyle.success, custom_id="conclave:start", row=1)
     async def start(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
@@ -622,6 +794,7 @@ class ConclavePanel(discord.ui.View):
             state = await self.cog.sync_game_spaces(state)
             await interaction.response.send_message("🌙 Roles have been dealt privately. Night has begun.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
+            await self.cog.deliver_role_dms(state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
 
@@ -654,10 +827,172 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         self.bot = bot
         self.store = ConclaveStore()
         self.panel = ConclavePanel(self)
+        self._relay_webhooks: dict[str, discord.Webhook] = {}
         self._restored = False
 
     async def cog_load(self):
         self.bot.add_view(self.panel)
+
+    @staticmethod
+    def add_player_with_identity(state: dict, user_id: int, display_name: str) -> dict:
+        engine.add_player(state, user_id, display_name)
+        if bool((state.get("identity") or {}).get("aliases_enabled", False)):
+            engine.ensure_forest_name(state, user_id)
+        return state
+
+    async def maybe_send_identity_dm(
+        self,
+        member: discord.Member | discord.User,
+        state: dict,
+        alias: str,
+    ) -> None:
+        if str((state.get("server_policy") or {}).get("dm_delivery") or "optional") != "on":
+            return
+        try:
+            await member.send(
+                f"🌿 In **{state.get('title') or 'Verdant Conclave'}** you are known as **{alias}**. "
+                "Your ordinary Discord identity is unchanged outside the game."
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+    async def deliver_role_dms(self, state: dict) -> None:
+        if str((state.get("server_policy") or {}).get("dm_delivery") or "optional") != "on":
+            return
+        guild = self.bot.get_guild(int(state.get("guild_id") or 0))
+        if guild is None:
+            return
+        for player_obj in (state.get("players") or {}).values():
+            if player_obj.get("synthetic"):
+                continue
+            member = await self._fetch_member(guild, int(player_obj.get("user_id") or 0))
+            if member is None:
+                continue
+            try:
+                await member.send(embed=build_private_embed(state, int(player_obj["user_id"])))
+            except (discord.Forbidden, discord.HTTPException):
+                continue
+
+    async def _relay_webhook(self, state: dict) -> Optional[discord.Webhook]:
+        game_id = str(state.get("game_id") or "")
+        wanted_id = int(((state.get("relay") or {}).get("webhook_id")) or 0)
+        cached = self._relay_webhooks.get(game_id)
+        if cached is not None and (not wanted_id or int(cached.id) == wanted_id):
+            return cached
+        parent = await self._parent_text_channel(state)
+        if parent is None:
+            return None
+        config = await self._server_config()
+        hook = await self._locate_relay_webhook(parent, state, config)
+        if hook is None:
+            state = await self.ensure_game_webhook(state, config)
+            hook = await self._locate_relay_webhook(parent, state, config)
+        if hook is not None:
+            self._relay_webhooks[game_id] = hook
+        return hook
+
+    async def send_as_forest_name(
+        self,
+        state: dict,
+        user_id: int,
+        content: str,
+    ) -> tuple[str, str]:
+        if not bool((state.get("identity") or {}).get("aliases_enabled", False)):
+            raise engine.GameError("Forest aliases are disabled for this Conclave.", "aliases_disabled")
+        player_obj = engine.player(state, user_id)
+        if not player_obj or player_obj.get("synthetic"):
+            raise engine.GameError("You are not a player in this Conclave.", "not_player")
+        if not str(player_obj.get("forest_name") or "").strip():
+            state = await self.mutate_game(
+                str(state.get("game_id") or ""),
+                lambda current: engine.ensure_forest_name(current, user_id),
+            )
+            player_obj = engine.player(state, user_id)
+        room_key = "living" if player_obj.get("alive", True) else "lost"
+        thread_id = int(
+            state.get("living_thread_id" if room_key == "living" else "lost_thread_id")
+            or 0
+        )
+        thread = await self._fetch_thread(thread_id)
+        if thread is None:
+            raise engine.GameError("Your Conclave conversation space is unavailable.", "room_unavailable")
+        webhook = await self._relay_webhook(state)
+        if webhook is None:
+            raise engine.GameError("The Forest identity relay is unavailable.", "webhook_unavailable")
+        await discord_identity.relay_text(webhook, thread, state, player_obj, content)
+        return engine.game_player_name(state, player_obj), (
+            "Living Circle" if room_key == "living" else "Lost in the Forest"
+        )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Relay enrolled-player conversation under game-local Forest names."""
+        if (
+            message.author.bot
+            or message.webhook_id is not None
+            or not isinstance(message.channel, discord.Thread)
+        ):
+            return
+        parent_id = int(message.channel.parent_id or 0)
+        if not parent_id:
+            return
+        state = await self.get_channel_state(parent_id)
+        if not state or not bool((state.get("identity") or {}).get("aliases_enabled", False)):
+            return
+        room_key = discord_identity.room_key_for_channel(state, int(message.channel.id))
+        player_obj = engine.player(state, int(message.author.id))
+        if not discord_identity.player_can_speak_in_room(state, player_obj, room_key):
+            return
+
+        if not str(player_obj.get("forest_name") or "").strip():
+            state = await self.mutate_game(
+                str(state.get("game_id") or ""),
+                lambda current: engine.ensure_forest_name(current, int(message.author.id)),
+            )
+            player_obj = engine.player(state, int(message.author.id))
+
+        mode = str((state.get("identity") or {}).get("mode") or "immersive")
+        if mode == "sealed":
+            try:
+                await message.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+            try:
+                await message.author.send(
+                    "🌿 This Conclave uses **Sealed** Forest identities. "
+                    "Use the **Speak** button on the game panel so your Discord identity never appears in the shared thread."
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            return
+
+        try:
+            webhook = await self._relay_webhook(state)
+            if webhook is None:
+                raise engine.GameError("The Forest identity relay is unavailable.", "webhook_unavailable")
+            await discord_identity.relay_message(webhook, message.channel, state, player_obj, message)
+            await message.delete()
+        except (engine.GameError, discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
+            logger.warning(
+                "[conclave] alias relay failed game=%s user=%s: %s",
+                state.get("game_id"),
+                message.author.id,
+                exc,
+            )
+            # Fail closed: an alias-enabled room must not leave the real Discord
+            # identity sitting in the shared game transcript after relay failure.
+            try:
+                await message.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+            try:
+                excerpt = str(message.content or "")[:1400]
+                await message.author.send(
+                    "⚠️ Your Forest message could not be relayed, so it was removed rather than exposing your Discord identity."
+                    + (f"\n\nYour unsent text:\n{excerpt}" if excerpt else "")
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                pass
 
     async def get_channel_state(self, channel_id: int) -> Optional[dict]:
         return await asyncio.to_thread(self.store.get_active_by_channel, int(channel_id))
@@ -925,10 +1260,22 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     reason=f"Living discussion for {state.get('game_id')}",
                 )
                 created["living_thread_id"] = int(living.id)
-                await living.send(
-                    f"🌿 **Living Circle** — only enrolled living players may speak here. "
-                    f"Game controls remain in <#{channel_id}>."
+                mode = str((state.get("identity") or {}).get("mode") or "immersive")
+                intro = await living.send(
+                    "🌿 **Living Circle**\n"
+                    "Within this circle, players are known by their **Forest names**. "
+                    f"Game controls and the **Speak** button remain in <#{channel_id}>.\n"
+                    + (
+                        "**Sealed identities:** type through **Speak**; direct thread posts are removed."
+                        if mode == "sealed"
+                        else "**Immersive identities:** ordinary thread messages are replaced by the Forest relay. "
+                             "Use **Speak** when you do not want even the brief original-message relay window."
+                    )
                 )
+                try:
+                    await intro.pin(reason=f"Verdant Conclave guidance for {state.get('game_id')}")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
             if lost is None:
                 lost = await parent.create_thread(
                     name=f"🍂 {title} · Lost in the Forest"[:100],
@@ -938,10 +1285,16 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     reason=f"Lost-player discussion for {state.get('game_id')}",
                 )
                 created["lost_thread_id"] = int(lost.id)
-                await lost.send(
-                    "🍂 **Lost in the Forest** — voices here cannot be heard by the living. "
-                    "Only lost players and configured Keepers of the Lost may enter."
+                intro = await lost.send(
+                    "🍂 **Lost in the Forest**\n"
+                    "Voices here cannot be heard by the living. Fallen players keep the same **Forest name** "
+                    "they used while alive. Only lost players and configured Keepers of the Lost may enter.\n"
+                    f"Game controls and **Speak** remain in <#{channel_id}>."
                 )
+                try:
+                    await intro.pin(reason=f"Verdant Conclave guidance for {state.get('game_id')}")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
         except (discord.Forbidden, discord.HTTPException) as exc:
             raise engine.GameError(
                 f"I could not create the private Conclave discussion spaces: {exc}",

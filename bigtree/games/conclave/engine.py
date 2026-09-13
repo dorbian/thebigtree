@@ -22,6 +22,17 @@ TEST_PLAYER_NAMES = (
     "Fern", "Moss", "Willow", "Bramble", "Clover", "Juniper", "Rowan",
     "Hazel", "Thistle", "Laurel", "Sorrel", "Ivy", "Alder", "Reed", "Sage",
 )
+FOREST_NAMES = (
+    "Ashleaf", "Alder", "Bramble", "Clover", "Fern", "Hazel", "Juniper",
+    "Laurel", "Moss", "Rowan", "Sage", "Silverfern", "Sorrel", "Thistle",
+    "Willow", "Yarrow", "Moonfern", "Oakshade", "Reed", "Ivy", "Dewleaf",
+    "Pine", "Birch", "Hawthorn", "Foxglove", "Nettle", "Mallow", "Sloe",
+    "Elder", "Heather", "Linden", "Elm", "Beech", "Larch", "Holly", "Wren",
+)
+FOREST_RESERVED_NAMES = {
+    "everyone", "here", "admin", "moderator", "host", "thebigtree", "the big tree",
+    "concord", "thornbound", "living circle", "lost in the forest", "the tree",
+}
 
 PHASE_LOBBY = "lobby"
 PHASE_NIGHT = "night"
@@ -197,9 +208,18 @@ def set_forest_name(state: Dict[str, Any], user_id: int, forest_name: str) -> Di
     if player_obj is None:
         raise GameError("Join the Conclave before choosing a Forest name.", "not_joined")
     name = " ".join(str(forest_name or "").strip().split())
-    if len(name) < 2 or len(name) > 32:
+    if len(name) < 2 or len(name) > 32 or not any(ch.isalpha() for ch in name):
         raise GameError("Forest names must be between 2 and 32 characters.", "bad_forest_name")
+    if any(ch in name for ch in "@#`<>\\"):
+        raise GameError("That Forest name contains characters the Conclave cannot safely use.", "bad_forest_name")
     folded = name.casefold()
+    reserved = set(FOREST_RESERVED_NAMES)
+    reserved.update(
+        str(definition.get("name") or "").strip().casefold()
+        for definition in ROLE_DEFINITIONS.values()
+    )
+    if folded in reserved:
+        raise GameError("That Forest name is reserved by the Conclave.", "forest_name_reserved")
     for other in _players(state).values():
         if int(other.get("user_id") or 0) == int(user_id):
             continue
@@ -210,10 +230,58 @@ def set_forest_name(state: Dict[str, Any], user_id: int, forest_name: str) -> Di
     return state
 
 
+def generate_forest_name(
+    state: Dict[str, Any],
+    *,
+    rng: Optional[random.Random] = None,
+) -> str:
+    """Choose a short, memorable game-local name that is not already in use."""
+    used = {
+        str(p.get("forest_name") or "").strip().casefold()
+        for p in _players(state).values()
+        if str(p.get("forest_name") or "").strip()
+    }
+    available = [name for name in FOREST_NAMES if name.casefold() not in used]
+    if not available:
+        raise GameError("The Forest has run out of unique names for this Conclave.", "forest_names_exhausted")
+    chooser = rng if rng is not None else secrets.SystemRandom()
+    return str(chooser.choice(available))
+
+
+def ensure_forest_name(
+    state: Dict[str, Any],
+    user_id: int,
+    *,
+    rng: Optional[random.Random] = None,
+) -> Dict[str, Any]:
+    player_obj = player(state, user_id)
+    if player_obj is None:
+        raise GameError("Join the Conclave before receiving a Forest name.", "not_joined")
+    if player_obj.get("synthetic") or str(player_obj.get("forest_name") or "").strip():
+        return state
+    # Recovery may need to backfill a legacy player after the lobby has ended.
+    # Generated names are trusted input, so do not route this through the
+    # lobby-only custom rename guard in set_forest_name().
+    player_obj["forest_name"] = generate_forest_name(state, rng=rng)
+    state["updated_at"] = _now()
+    return state
+
+
 def public_player_name(player_obj: Optional[Dict[str, Any]]) -> str:
     """Return the game-facing name while retaining the Discord name internally."""
     obj = player_obj or {}
     return str(obj.get("forest_name") or obj.get("display_name") or f"Elf {obj.get('user_id') or '?'}")
+
+
+def game_player_name(state: Dict[str, Any], player_obj: Optional[Dict[str, Any]]) -> str:
+    """Name allowed to appear in game-facing text for this session."""
+    obj = player_obj or {}
+    if obj.get("synthetic"):
+        return str(obj.get("display_name") or "Test Elf")
+    aliases = bool((state.get("identity") or {}).get("aliases_enabled", False))
+    if aliases:
+        return str(obj.get("forest_name") or "Unnamed elf")
+    return str(obj.get("display_name") or f"Elf {obj.get('user_id') or '?'}")
 
 
 def register_room(
@@ -453,6 +521,12 @@ def start_game(state: Dict[str, Any], *, rng: Optional[random.Random] = None) ->
     players = list(_players(state).values())
     if len(players) < int((state.get("rules") or {}).get("min_players") or MIN_PLAYERS):
         raise GameError(f"At least {MIN_PLAYERS} players are required.", "too_few_players")
+    if bool((state.get("identity") or {}).get("aliases_enabled", False)):
+        # Never begin an aliased match with a Discord identity as the fallback.
+        # Players who did not choose a name receive a short generated one.
+        for p in players:
+            if not p.get("synthetic") and not str(p.get("forest_name") or "").strip():
+                ensure_forest_name(state, int(p["user_id"]))
     deck = _role_deck(len(players))
     shuffler = rng if rng is not None else secrets.SystemRandom()
     shuffler.shuffle(deck)
@@ -579,7 +653,7 @@ def _kill(state: Dict[str, Any], target: Dict[str, Any], cause: str) -> str:
     role = role_definition(target.get("role"))
     reveal = bool((state.get("rules") or {}).get("reveal_roles_on_death", True))
     role_text = f" They were a **{role.get('name', 'Unknown')}**." if reveal else ""
-    result = f"{target.get('display_name', 'An elf')} fell {cause}.{role_text}"
+    result = f"{game_player_name(state, target)} fell {cause}.{role_text}"
     reveal_will = bool((state.get("rules") or {}).get("reveal_last_will_on_death", True))
     last_will = str(target.get("last_will") or "").strip()
     if reveal_will and last_will:
@@ -659,15 +733,15 @@ def _resolve_night(state: Dict[str, Any]) -> List[str]:
         if action == "inspect":
             faction = target.get("faction")
             aura = "Thornbound" if faction == FACTION_THORNBOUND else "Concord"
-            _append_private(actor, f"Night {state.get('night')}: {target.get('display_name')} carries a **{aura}** aura.")
+            _append_private(actor, f"Night {state.get('night')}: {game_player_name(state, target)} carries a **{aura}** aura.")
         elif action == "track":
             target_action = actions.get(str(int(target_id)))
             if int(target_id) in blocked or target_action is None:
                 detail = "visited no one"
             else:
                 visited = players.get(str(target_action))
-                detail = f"visited **{visited.get('display_name')}**" if visited else "vanished beyond your trail"
-            _append_private(actor, f"Night {state.get('night')}: {target.get('display_name')} {detail}.")
+                detail = f"visited **{game_player_name(state, visited)}**" if visited else "vanished beyond your trail"
+            _append_private(actor, f"Night {state.get('night')}: {game_player_name(state, target)} {detail}.")
         elif action == "watch":
             visitors: List[str] = []
             for visitor_id, visited_id in actions.items():
@@ -687,10 +761,10 @@ def _resolve_night(state: Dict[str, Any]) -> List[str]:
                     continue
                 visitor = players.get(str(visitor_id))
                 if visitor and visitor.get("alive") and visitor_int != int(actor_id):
-                    visitors.append(visitor.get("display_name") or str(visitor_id))
+                    visitors.append(game_player_name(state, visitor))
             visitors = sorted(set(visitors), key=str.lower)
             detail = ", ".join(f"**{name}**" for name in visitors) if visitors else "no one"
-            _append_private(actor, f"Night {state.get('night')}: you saw {detail} visit {target.get('display_name')}.")
+            _append_private(actor, f"Night {state.get('night')}: you saw {detail} visit {game_player_name(state, target)}.")
 
     if attacks:
         counts = Counter(attacks)
@@ -740,7 +814,7 @@ def submit_nomination(state: Dict[str, Any], voter_id: int, target_id: int) -> D
         state["phase"] = PHASE_TRIAL
         state["judgement_votes"] = {}
         accused = player(state, target)
-        state["public_events"] = [f"{accused.get('display_name')} has been called before the Conclave for trial."] if accused else []
+        state["public_events"] = [f"{game_player_name(state, accused)} has been called before the Conclave for trial."] if accused else []
     state["updated_at"] = _now()
     return state
 
@@ -793,7 +867,7 @@ def _resolve_judgement(state: Dict[str, Any]) -> List[str]:
     if accused and accused.get("alive") and guilty > innocent:
         public.append(_kill(state, accused, "by decree of the Conclave"))
     elif accused:
-        public.append(f"{accused.get('display_name')} is released from trial.")
+        public.append(f"{game_player_name(state, accused)} is released from trial.")
     state["on_trial"] = None
     state["nomination_votes"] = {}
     state["judgement_votes"] = {}
@@ -869,6 +943,7 @@ def public_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "on_trial": state.get("on_trial"),
         "public_events": list(state.get("public_events") or []),
         "role_roster": role_roster(state),
+        "aliases_enabled": bool((state.get("identity") or {}).get("aliases_enabled", False)),
         "players": [],
     }
     reveal = bool((state.get("rules") or {}).get("reveal_roles_on_death", True))
@@ -876,14 +951,15 @@ def public_state(state: Dict[str, Any]) -> Dict[str, Any]:
     for p in _players(state).values():
         item = {
             "user_id": p.get("user_id"),
-            "display_name": p.get("display_name"),
+            "display_name": game_player_name(state, p),
+            "forest_name": p.get("forest_name"),
             "alive": bool(p.get("alive", True)),
             "synthetic": is_test_player(p),
         }
         if reveal_all or (not item["alive"] and reveal):
             item["role"] = role_definition(p.get("role")).get("name")
         data["players"].append(item)
-    data["players"].sort(key=lambda p: str(p.get("display_name") or "").lower())
+    data["players"].sort(key=lambda p: str(p.get("display_name") or "").casefold())
     if state.get("phase") == PHASE_NIGHT:
         data["readiness"] = dict(zip(("ready", "required"), night_readiness(state)))
     elif state.get("phase") == PHASE_NOMINATION:
@@ -903,14 +979,15 @@ def private_player_state(state: Dict[str, Any], user_id: int) -> Dict[str, Any]:
     allies: List[str] = []
     if p.get("faction") == FACTION_THORNBOUND:
         allies = [
-            other.get("display_name") or str(other.get("user_id"))
+            game_player_name(state, other)
             for other in _players(state).values()
             if other.get("faction") == FACTION_THORNBOUND
             and int(other.get("user_id")) != int(user_id)
         ]
     return {
         "user_id": p.get("user_id"),
-        "display_name": p.get("display_name"),
+        "display_name": game_player_name(state, p),
+        "forest_name": p.get("forest_name"),
         "alive": bool(p.get("alive", True)),
         "role_id": p.get("role"),
         "role_name": role.get("name") if role else None,

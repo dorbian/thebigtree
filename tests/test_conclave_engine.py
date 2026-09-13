@@ -125,8 +125,8 @@ class ConclaveEngineTests(unittest.TestCase):
         engine.advance_phase(state)
         tracker_notes = engine.private_player_state(state, tracker["user_id"])["notes"]
         watcher_notes = engine.private_player_state(state, watcher["user_id"])["notes"]
-        self.assertTrue(any(target["display_name"] in note["text"] for note in tracker_notes))
-        self.assertTrue(any(blade["display_name"] in note["text"] for note in watcher_notes))
+        self.assertTrue(any(engine.game_player_name(state, target) in note["text"] for note in tracker_notes))
+        self.assertTrue(any(engine.game_player_name(state, blade) in note["text"] for note in watcher_notes))
 
     def test_boughwatcher_tolerates_other_players_passing(self):
         state = self.make_lobby(9)
@@ -272,6 +272,43 @@ class ConclaveEngineTests(unittest.TestCase):
         self.assertTrue(any("closed" in x.lower() for x in state["public_events"]))
         public = engine.public_state(state)
         self.assertTrue(all(p.get("role") for p in public["players"]))
+
+    def test_forest_names_are_unique_safe_and_public_in_alias_mode(self):
+        state = self.make_lobby(5)
+        first = engine.player(state, 1)
+        second = engine.player(state, 2)
+        engine.set_forest_name(state, 1, "Ashleaf")
+        with self.assertRaises(engine.GameError) as duplicate:
+            engine.set_forest_name(state, 2, "ashleaf")
+        self.assertEqual("forest_name_taken", duplicate.exception.code)
+        with self.assertRaises(engine.GameError) as reserved:
+            engine.set_forest_name(state, 2, "Thornbound")
+        self.assertEqual("forest_name_reserved", reserved.exception.code)
+        engine.set_forest_name(state, 2, "Silverfern")
+        public = engine.public_state(state)
+        by_id = {int(p["user_id"]): p for p in public["players"]}
+        self.assertEqual("Ashleaf", by_id[1]["display_name"])
+        self.assertEqual("Silverfern", by_id[2]["display_name"])
+        self.assertNotEqual(first["display_name"], by_id[1]["display_name"])
+
+    def test_start_backfills_missing_forest_names_without_affecting_role_rng(self):
+        state = self.make_lobby(6)
+        engine.set_forest_name(state, 1, "Ashleaf")
+        engine.start_game(state, rng=random.Random(73))
+        real_players = [p for p in state["players"].values() if not p.get("synthetic")]
+        aliases = [str(p.get("forest_name") or "") for p in real_players]
+        self.assertTrue(all(aliases))
+        self.assertEqual(len(aliases), len({name.casefold() for name in aliases}))
+
+    def test_public_death_text_uses_forest_name(self):
+        state = self.make_lobby(5)
+        engine.set_forest_name(state, 1, "Ashleaf")
+        target = engine.player(state, 1)
+        target["role"] = "grovewarden"
+        target["faction"] = engine.FACTION_CONCORD
+        event = engine._kill(state, target, "beneath the old boughs")
+        self.assertIn("Ashleaf", event)
+        self.assertNotIn("Elf 1", event)
 
 
 if __name__ == "__main__":
