@@ -65,7 +65,37 @@ COPY . .
 
 # Compress cacheable web assets once during the image build. The runtime
 # server serves these sidecars only when a browser advertises gzip support.
-RUN python tools/precompress_static.py
+# Keep this build step self-contained: tools/ is intentionally excluded from
+# the Docker build context, so the image build must not depend on helper files
+# from that directory.
+RUN python - <<'PY'
+import gzip
+from pathlib import Path
+
+root = Path("/opt/thebigtree/bigtree/web/static")
+compressible = {".css", ".js", ".json", ".svg", ".txt", ".md"}
+written = before = after = 0
+
+if root.exists():
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in compressible:
+            continue
+        data = path.read_bytes()
+        if len(data) < 1024:
+            continue
+        packed = gzip.compress(data, compresslevel=9, mtime=0)
+        target = path.with_name(path.name + ".gz")
+        if len(packed) >= int(len(data) * 0.95):
+            target.unlink(missing_ok=True)
+            continue
+        target.write_bytes(packed)
+        written += 1
+        before += len(data)
+        after += len(packed)
+
+saving = 0.0 if before <= 0 else (1.0 - (after / before)) * 100.0
+print(f"precompressed {written} static assets: {before} -> {after} bytes ({saving:.1f}% smaller)")
+PY
 
 RUN useradd -m -u 1000 bigtree \
     && mkdir -p /data/contest \
