@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-09-13
+- Runtime: persist one-time bootstrap/import completion in PostgreSQL so container replacements no longer rescan tarot decks, media, game JSON backups, legacy state, and legacy contests on every launch.
+- Runtime: adopt already-populated PostgreSQL media/deck/import state without one more full scan, batch schema DDL into one transaction, and log startup-step timings for restart diagnostics.
 - Language Services: add MiniMax M3 as a first-class provider with Token Plan/PAYG credential detection, explicit quota checks, provider-specific diagnostics, and configurable M3 adaptive/direct reasoning mode.
 - Communion: preserve the existing Discord Priest/authorised-speaker gate as the only reply gate, then apply configurable benevolent divine reverence/ritual etiquette with emergency override and optional Priest familiarity.
 - Memory: keep persistent language state in PostgreSQL only, cap each conversation item to 4 KB, cap recent per-user history, prune by age, enforce an installation-wide conversation-row ceiling, and never copy Discord history to a local archive.

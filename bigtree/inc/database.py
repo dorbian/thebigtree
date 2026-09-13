@@ -87,15 +87,111 @@ class Database:
         with self._lock:
             if self._initialized:
                 return
-            self._ensure_tables()
-            self._import_ini_configs()
-            self._sync_tarot_decks()
-            self._migrate_media_items()
-            self._migrate_json_backups()
-            self._migrate_legacy_state_files()
-            self._migrate_legacy_contests()
-            self._report_legacy_import_sources()
+
+            started = time.perf_counter()
+            self._timed_startup_step("schema", self._ensure_tables)
+            self._timed_startup_step("config seed", self._import_ini_configs)
+
+            # Legacy/bootstrap importers used to run on every process start. In a
+            # container that meant every replacement rescanned persistent media
+            # and JSON directories even after PostgreSQL already held the data.
+            # Completion lives in PostgreSQL so it survives disposable containers.
+            import_work = False
+            import_work |= self._run_startup_import(
+                "tarot_deck_seed_v1",
+                self._sync_tarot_decks,
+                adopt_if=lambda: self._count_rows("deck_files") > 0,
+            )
+            import_work |= self._run_startup_import(
+                "media_import_v1",
+                self._migrate_media_items,
+                adopt_if=lambda: self._count_rows("media_items") > 0,
+                force_env="BIGTREE_RECONCILE_MEDIA_ON_START",
+            )
+            import_work |= self._run_startup_import(
+                "game_json_import_v1",
+                self._migrate_json_backups,
+                adopt_if=self._has_imported_games,
+            )
+            import_work |= self._run_startup_import(
+                "legacy_state_import_v1", self._migrate_legacy_state_files
+            )
+            import_work |= self._run_startup_import(
+                "legacy_contest_import_v1", self._migrate_legacy_contests
+            )
+
+            if import_work or self._env_true("BIGTREE_STARTUP_IMPORT_REPORT"):
+                self._timed_startup_step("legacy import report", self._report_legacy_import_sources)
+
             self._initialized = True
+            logger.info(
+                "[database] initialization complete in %.1f ms",
+                (time.perf_counter() - started) * 1000.0,
+            )
+
+    @staticmethod
+    def _env_true(name: str) -> bool:
+        return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _timed_startup_step(self, name: str, fn):
+        started = time.perf_counter()
+        result = fn()
+        logger.info(
+            "[database] startup step %s finished in %.1f ms",
+            name,
+            (time.perf_counter() - started) * 1000.0,
+        )
+        return result
+
+    def _has_imported_games(self) -> bool:
+        row = self._fetchone(
+            "SELECT 1 AS value FROM games WHERE run_source = 'import' LIMIT 1"
+        )
+        return bool(row)
+
+    def _run_startup_import(
+        self,
+        name: str,
+        fn,
+        *,
+        adopt_if=None,
+        force_env: Optional[str] = None,
+    ) -> bool:
+        force = self._env_true("BIGTREE_FORCE_STARTUP_IMPORTS") or bool(
+            force_env and self._env_true(force_env)
+        )
+        if not force and self.is_startup_migration_complete(name):
+            logger.debug("[database] startup import %s already complete; skipping", name)
+            return False
+
+        # Existing installations have already paid the cost of these importers
+        # many times. If their destination contains data, adopt it and persist
+        # the completion marker without forcing one more full scan.
+        if not force and adopt_if is not None:
+            try:
+                if bool(adopt_if()):
+                    self.mark_startup_migration(name, {"adopted_existing": True})
+                    logger.info(
+                        "[database] startup import %s adopted existing PostgreSQL state", name
+                    )
+                    return False
+            except Exception as exc:
+                logger.warning(
+                    "[database] startup import %s adoption check failed: %s", name, exc
+                )
+
+        started = time.perf_counter()
+        logger.info("[database] running one-time startup import %s", name)
+        fn()
+        duration_ms = round((time.perf_counter() - started) * 1000.0, 1)
+        self.mark_startup_migration(
+            name,
+            {"duration_ms": duration_ms, "forced": bool(force)},
+        )
+        logger.info(
+            "[database] startup import %s complete in %.1f ms", name, duration_ms
+        )
+        return True
 
     # ---------------- connection helpers ----------------
     def _build_connection_info(self) -> Tuple[Dict[str, Any], int, float]:
@@ -520,6 +616,13 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS startup_migrations (
+                name TEXT PRIMARY KEY,
+                completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS gallery_hidden (
                 item_id TEXT PRIMARY KEY,
                 hidden BOOLEAN NOT NULL DEFAULT TRUE,
@@ -594,8 +697,12 @@ class Database:
             )
             """,
         ]
-        for stmt in statements:
-            self._execute(stmt)
+        # Execute schema DDL in one transaction/pooled connection instead of
+        # opening and committing one transaction per statement. This materially
+        # reduces cold-start round trips on the Raspberry Pi/PostgreSQL setup.
+        with self.transaction() as cur:
+            for stmt in statements:
+                cur.execute(stmt)
         with self._connection() as conn:
             self._ensure_column(conn, "discord_users", "name", "TEXT")
             self._ensure_column(conn, "discord_users", "display_name", "TEXT")
@@ -655,6 +762,45 @@ class Database:
             if not data:
                 continue
             self.update_system_config(key, data)
+
+# ---------------- persistent startup migration tracking ----------------
+    def is_startup_migration_complete(self, name: str) -> bool:
+        key = str(name or "").strip()
+        if not key:
+            return False
+        row = self._fetchone(
+            "SELECT name FROM startup_migrations WHERE name = %s", (key,)
+        )
+        return bool(row)
+
+    def mark_startup_migration(
+        self, name: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        key = str(name or "").strip()
+        if not key:
+            return
+        payload = metadata if isinstance(metadata, dict) else {}
+        self._execute(
+            """
+            INSERT INTO startup_migrations (name, completed_at, metadata)
+            VALUES (%s, CURRENT_TIMESTAMP, %s)
+            ON CONFLICT (name) DO UPDATE
+              SET completed_at = EXCLUDED.completed_at,
+                  metadata = EXCLUDED.metadata
+            """,
+            (key, Json(payload)),
+        )
+
+    def get_startup_migrations(self) -> List[Dict[str, Any]]:
+        rows = self._execute(
+            """
+            SELECT name, completed_at, metadata
+            FROM startup_migrations
+            ORDER BY completed_at DESC, name ASC
+            """,
+            fetch=True,
+        ) or []
+        return [self._json_safe_dict(dict(row)) for row in rows]
 
 # ---------------- public helpers ----------------
     def get_system_config(self, name: str) -> Dict[str, Any]:
@@ -3183,7 +3329,8 @@ class Database:
 
         TinyDB remains supported only as an import source.
         """
-        # Always attempt a light sync; it's idempotent.
+        # Called by the persistent one-time startup migration wrapper. Operators
+        # can explicitly force a reconciliation with BIGTREE_RECONCILE_MEDIA_ON_START=1.
         try:
             from bigtree.modules import media as media_mod
         except Exception:

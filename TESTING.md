@@ -188,3 +188,11 @@ For a manual smoke test:
 10. Disable **Priest chat** and verify Priest DMs/mentions no longer invoke the language provider.
 
 Language memory is PostgreSQL-backed and intentionally bounded for the container deployment: conversation entries are truncated to 4 KB, per-user recent history is capped, default retention is 90 days, and the default installation-wide unpinned conversation ceiling is 5,000 rows. Pinned operator notes have their own 1,000-row hard limit. Discord search is live/on-demand and does not build a local message archive. The UI exposes the actual stored text byte count and includes an explicit prune action.
+
+## Container restart / persistent startup migration smoke test
+
+1. Deploy the patch with the existing persistent PostgreSQL database and restart the application container.
+2. On the first patched start, existing `deck_files`, `media_items`, and imported `games` should be adopted into `startup_migrations` without a full rescan where data already exists. Legacy state/contest migration may perform one final bounded pass before being marked complete.
+3. Restart the application container again. Logs should show normal schema/config timing but no `running one-time startup import ...` lines for completed imports.
+4. Confirm `startup_migrations` is stored in PostgreSQL; no marker file is required in the disposable application container.
+5. For deliberate repair only, `BIGTREE_RECONCILE_MEDIA_ON_START=1` reruns media reconciliation, while `BIGTREE_FORCE_STARTUP_IMPORTS=1` reruns all bootstrap importers. Remove these flags after maintenance. `BIGTREE_STARTUP_IMPORT_REPORT=1` enables the legacy import report without forcing imports.
