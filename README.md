@@ -45,3 +45,11 @@ The main container workflow cancels superseded builds on the same branch so an o
 Static CSS/JavaScript is gzip-precompressed once during image creation by `tools/precompress_static.py`. The runtime server negotiates those sidecars and keeps versioned assets immutable, reducing both transfer size and Pi CPU. Generated `.gz` files are build artifacts and are not kept in source.
 
 Cardgame state mutations are serialized in-process and protected by PostgreSQL row locks/transactions. Event publication is committed with the state update, wallet actions use idempotency keys, and finished-session maintenance is throttled instead of running a cleanup query for every page refresh.
+
+## Language Services
+
+Elfministration exposes **System → Language Services** for TheBigTree's conversation provider, divine persona, bounded memory, and optional Discord knowledge retrieval. OpenAI remains supported and MiniMax M3 is a first-class provider. MiniMax Token Plan (`sk-cp-…`) and pay-as-you-go (`sk-api-…`) credentials can be stored through the admin UI; provider secrets are persisted in PostgreSQL and are only returned to the browser as masked fingerprints.
+
+The existing Discord Priest/authorised-speaker check remains the authoritative communion gate. Reverence rules run only *after* that check and therefore cannot grant access. By default an authorised Priest who addresses the deity too casually is corrected before receiving substantive knowledge, while genuine emergencies can suspend ceremony without bypassing authorization.
+
+Conversation memory is also PostgreSQL-only: no local language-memory files or Discord-history mirror are created inside the replaceable application container. Recent exchanges are truncated and bounded per user, pruned by age, and limited by an installation-wide row cap; pinned operator notes use a separate hard cap. Discord knowledge is fetched on demand only from channels the bot can already read.

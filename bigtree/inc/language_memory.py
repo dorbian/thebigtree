@@ -4,9 +4,15 @@ from typing import Any, Dict, List, Optional
 
 from bigtree.inc.database import get_database
 
+# Memory is intentionally small and database-only. Even at every hard cap this
+# remains measured in tens of MB, not an ever-growing Discord archive.
 _MAX_CONTENT = 4000
 _DEFAULT_RECENT_MESSAGES = 12
 _MAX_RECENT_MESSAGES = 40
+_DEFAULT_RETENTION_DAYS = 90
+_DEFAULT_GLOBAL_CONVERSATION_ROWS = 5000
+_MAX_GLOBAL_CONVERSATION_ROWS = 20000
+_MAX_PINNED_ROWS = 1000
 
 
 def _clean_content(value: Any) -> str:
@@ -23,6 +29,14 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
         if value is not None and hasattr(value, "isoformat"):
             data[key] = value.isoformat()
     return data
+
+
+def _bounded(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = default
+    return max(minimum, min(parsed, maximum))
 
 
 def add_memory(
@@ -54,6 +68,13 @@ def add_memory(
 
     db = get_database()
     with db.transaction() as cur:
+        if pinned:
+            cur.execute("SELECT COUNT(*)::int AS value FROM language_memories WHERE pinned = TRUE")
+            row = cur.fetchone() or {}
+            if int(row.get("value") or 0) >= _MAX_PINNED_ROWS:
+                raise ValueError(
+                    f"pinned memory limit reached ({_MAX_PINNED_ROWS}); remove an old note first"
+                )
         cur.execute(
             """
             INSERT INTO language_memories
@@ -86,11 +107,7 @@ def list_memories(
         clauses.append("kind = %s")
         params.append(str(kind).lower())
 
-    try:
-        limit = max(1, min(int(limit), 500))
-    except Exception:
-        limit = 100
-
+    limit = _bounded(limit, 100, 1, 500)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     sql = f"""
         SELECT id, scope_type, scope_id, kind, role, content, source,
@@ -133,15 +150,72 @@ def clear_conversation_memory(user_id: Optional[int] = None) -> int:
         return max(0, int(cur.rowcount or 0))
 
 
-def record_exchange(user_id: int, prompt: str, reply: str, keep_messages: int = _DEFAULT_RECENT_MESSAGES) -> None:
+def prune_conversation_memory(
+    *,
+    retention_days: int = _DEFAULT_RETENTION_DAYS,
+    global_row_cap: int = _DEFAULT_GLOBAL_CONVERSATION_ROWS,
+    cursor=None,
+) -> int:
+    """Prune unpinned conversation rows by age and a global hard cap.
+
+    Pinned/operator memories are never removed here. Supplying a cursor lets
+    record_exchange do insertion and pruning in one transaction.
+    """
+    retention_days = _bounded(retention_days, _DEFAULT_RETENTION_DAYS, 1, 365)
+    global_row_cap = _bounded(
+        global_row_cap,
+        _DEFAULT_GLOBAL_CONVERSATION_ROWS,
+        100,
+        _MAX_GLOBAL_CONVERSATION_ROWS,
+    )
+    db = get_database()
+
+    def _run(cur) -> int:
+        deleted = 0
+        cur.execute(
+            """
+            DELETE FROM language_memories
+            WHERE kind = 'conversation' AND pinned = FALSE
+              AND created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+            """,
+            (retention_days,),
+        )
+        deleted += max(0, int(cur.rowcount or 0))
+        cur.execute(
+            """
+            DELETE FROM language_memories
+            WHERE id IN (
+                SELECT id
+                FROM language_memories
+                WHERE kind = 'conversation' AND pinned = FALSE
+                ORDER BY created_at DESC, id DESC
+                OFFSET %s
+            )
+            """,
+            (global_row_cap,),
+        )
+        deleted += max(0, int(cur.rowcount or 0))
+        return deleted
+
+    if cursor is not None:
+        return _run(cursor)
+    with db.transaction() as cur:
+        return _run(cur)
+
+
+def record_exchange(
+    user_id: int,
+    prompt: str,
+    reply: str,
+    keep_messages: int = _DEFAULT_RECENT_MESSAGES,
+    retention_days: int = _DEFAULT_RETENTION_DAYS,
+    global_row_cap: int = _DEFAULT_GLOBAL_CONVERSATION_ROWS,
+) -> None:
     prompt = _clean_content(prompt)
     reply = _clean_content(reply)
     if not prompt and not reply:
         return
-    try:
-        keep_messages = max(2, min(int(keep_messages), _MAX_RECENT_MESSAGES))
-    except Exception:
-        keep_messages = _DEFAULT_RECENT_MESSAGES
+    keep_messages = _bounded(keep_messages, _DEFAULT_RECENT_MESSAGES, 2, _MAX_RECENT_MESSAGES)
 
     sid = str(user_id)
     db = get_database()
@@ -164,8 +238,7 @@ def record_exchange(user_id: int, prompt: str, reply: str, keep_messages: int = 
                 """,
                 (sid, reply),
             )
-        # Bound raw conversation memory per user. Pinned memories are never
-        # pruned by this maintenance path.
+        # First bound each individual user's working history.
         cur.execute(
             """
             DELETE FROM language_memories
@@ -180,13 +253,17 @@ def record_exchange(user_id: int, prompt: str, reply: str, keep_messages: int = 
             """,
             (sid, keep_messages),
         )
+        # Then bound the entire installation so thousands of one-off users can
+        # never turn conversation memory into an unbounded database archive.
+        prune_conversation_memory(
+            retention_days=retention_days,
+            global_row_cap=global_row_cap,
+            cursor=cur,
+        )
 
 
 def recent_history(user_id: int, limit: int = _DEFAULT_RECENT_MESSAGES) -> List[Dict[str, str]]:
-    try:
-        limit = max(2, min(int(limit), _MAX_RECENT_MESSAGES))
-    except Exception:
-        limit = _DEFAULT_RECENT_MESSAGES
+    limit = _bounded(limit, _DEFAULT_RECENT_MESSAGES, 2, _MAX_RECENT_MESSAGES)
     db = get_database()
     with db.transaction() as cur:
         cur.execute(
@@ -213,10 +290,7 @@ def recent_history(user_id: int, limit: int = _DEFAULT_RECENT_MESSAGES) -> List[
 
 
 def pinned_context(user_id: int, limit: int = 12) -> List[str]:
-    try:
-        limit = max(1, min(int(limit), 50))
-    except Exception:
-        limit = 12
+    limit = _bounded(limit, 12, 1, 50)
     db = get_database()
     with db.transaction() as cur:
         cur.execute(
@@ -247,7 +321,8 @@ def memory_stats() -> Dict[str, int]:
               COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE pinned = TRUE)::int AS pinned,
               COUNT(*) FILTER (WHERE kind = 'conversation')::int AS conversation,
-              COUNT(DISTINCT scope_id) FILTER (WHERE scope_type = 'user')::int AS users
+              COUNT(DISTINCT scope_id) FILTER (WHERE scope_type = 'user')::int AS users,
+              COALESCE(SUM(octet_length(content)), 0)::bigint AS content_bytes
             FROM language_memories
             """
         )
@@ -257,4 +332,7 @@ def memory_stats() -> Dict[str, int]:
         "pinned": int(row.get("pinned") or 0),
         "conversation": int(row.get("conversation") or 0),
         "users": int(row.get("users") or 0),
+        "content_bytes": int(row.get("content_bytes") or 0),
+        "pinned_row_cap": _MAX_PINNED_ROWS,
+        "conversation_hard_cap": _MAX_GLOBAL_CONVERSATION_ROWS,
     }

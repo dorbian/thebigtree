@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-09-13
+- Language Services: add MiniMax M3 as a first-class provider with Token Plan/PAYG credential detection, explicit quota checks, provider-specific diagnostics, and configurable M3 adaptive/direct reasoning mode.
+- Communion: preserve the existing Discord Priest/authorised-speaker gate as the only reply gate, then apply configurable benevolent divine reverence/ritual etiquette with emergency override and optional Priest familiarity.
+- Memory: keep persistent language state in PostgreSQL only, cap each conversation item to 4 KB, cap recent per-user history, prune by age, enforce an installation-wide conversation-row ceiling, and never copy Discord history to a local archive.
 - Language Services: replace the hidden vendor-specific OpenAI form with an integrated Elfministration workspace for provider configuration, runtime diagnostics, prompt logic, and the active TheBigTree persona context.
 - Language Services: add bounded PostgreSQL-backed Priest conversation memory plus operator-pinned global/user notes with review, deletion, and conversation-clear controls.
 - Language Services: add relevance-ranked Discord knowledge search and optional answer-time retrieval from explicitly selected readable channels; retrieved Discord content is treated as untrusted context and cannot override the system prompt.

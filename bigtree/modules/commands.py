@@ -236,6 +236,7 @@ def _should_handle_public(message, bot):
 
 async def _ask_tree(user_id: int, prompt: str) -> str:
     cfg = ai.get_language_config()
+    communion = ai.assess_reverence(prompt, cfg)
     history = []
     memory_notes = []
     knowledge = []
@@ -244,15 +245,19 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
     memory_turns = max(1, min(int(cfg.get("memory_turns", 6) or 6), 20))
     if memory_enabled:
         try:
-            history, memory_notes = await asyncio.gather(
-                asyncio.to_thread(language_memory.recent_history, user_id, memory_turns * 2),
-                asyncio.to_thread(language_memory.pinned_context, user_id, 12),
-            )
+            # Pinned relationship/lore memory may still color a ritual correction,
+            # but expensive conversation/knowledge retrieval is skipped when the
+            # configured reverence policy says not to answer the underlying request.
+            memory_notes = await asyncio.to_thread(language_memory.pinned_context, user_id, 12)
+            if communion.get("allow_knowledge", True):
+                history = await asyncio.to_thread(
+                    language_memory.recent_history, user_id, memory_turns * 2
+                )
         except Exception:
             bigtree.loch.logger.exception("Language memory retrieval failed")
             history, memory_notes = [], []
 
-    if bool(cfg.get("discord_context_enabled")):
+    if communion.get("allow_knowledge", True) and bool(cfg.get("discord_context_enabled")):
         channel_ids = cfg.get("discord_context_channel_ids") or []
         if channel_ids:
             try:
@@ -270,6 +275,7 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
         history=history,
         memory_notes=memory_notes,
         knowledge=knowledge,
+        communion=communion,
     )
 
     if memory_enabled:
@@ -280,6 +286,8 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
                 prompt,
                 reply,
                 memory_turns * 2,
+                int(cfg.get("memory_retention_days", 90) or 90),
+                int(cfg.get("memory_global_row_cap", 5000) or 5000),
             )
         except Exception:
             bigtree.loch.logger.exception("Language memory persistence failed")
@@ -428,7 +436,7 @@ async def priest_chat_router(message):
                 try:
                     reply = await _ask_tree(message.author.id, prompt)
                 except Exception:
-                    bigtree.loch.logger.exception("Priest DM OpenAI failure")
+                    bigtree.loch.logger.exception("Priest DM language-provider failure")
                     reply = "🍂 The winds falter—my roots feel some trouble reaching the beyond. Try again soon."
                 await message.channel.send(reply)
             return
@@ -442,7 +450,7 @@ async def priest_chat_router(message):
                 try:
                     reply = await _ask_tree(message.author.id, prompt)
                 except Exception:
-                    bigtree.loch.logger.exception("Priest public OpenAI failure")
+                    bigtree.loch.logger.exception("Priest public language-provider failure")
                     reply = "🌬️ I hear you, but the spirit channel crackles. Whisper again in a moment."
                 await message.reply(reply, mention_author=False)
     except Exception:

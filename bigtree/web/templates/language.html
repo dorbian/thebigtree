@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0b1611">
   <title>Language Services · Elfministration</title>
-  <link rel="stylesheet" href="/static/language/language.css?v=20260913a">
-  <script src="/static/language/language.js?v=20260913a" defer></script>
+  <link rel="stylesheet" href="/static/language/language.css?v=20260913b">
+  <script src="/static/language/language.js?v=20260913b" defer></script>
 </head>
 <body>
   <main class="language-shell">
@@ -14,7 +14,7 @@
       <div>
         <div class="eyebrow">TheBigTree intelligence</div>
         <h1>Language Services</h1>
-        <p>Provider, persona, memory, and Discord knowledge in one inspectable control surface.</p>
+        <p>Provider, communion rules, divine persona, bounded memory and Discord knowledge in one inspectable control surface.</p>
       </div>
       <div class="header-actions">
         <button class="ghost" id="refreshAll" type="button">Refresh</button>
@@ -33,17 +33,22 @@
       <article class="metric">
         <span>Model</span>
         <strong id="metricModel">—</strong>
-        <small id="metricPriest">Priest chat —</small>
+        <small id="metricReasoning">Reasoning —</small>
       </article>
       <article class="metric">
-        <span>Last request</span>
-        <strong id="metricResult">Never</strong>
-        <small id="metricUsage">No usage yet</small>
+        <span>Communion</span>
+        <strong id="metricCommunion">—</strong>
+        <small id="metricPriest">Existing Priest gate —</small>
       </article>
       <article class="metric">
         <span>Memory</span>
         <strong id="metricMemory">—</strong>
         <small id="metricMemoryDetail">No data loaded</small>
+      </article>
+      <article class="metric">
+        <span>Last request</span>
+        <strong id="metricResult">Never</strong>
+        <small id="metricUsage">No usage yet</small>
       </article>
     </section>
 
@@ -60,56 +65,142 @@
           <label>Provider
             <select id="provider">
               <option value="openai">OpenAI</option>
+              <option value="minimax">MiniMax</option>
             </select>
           </label>
           <label>Model
-            <input id="model" placeholder="gpt-4o-mini">
+            <input id="model" placeholder="MiniMax-M3">
           </label>
           <label>Temperature
             <input id="temperature" type="number" min="0" max="2" step="0.05">
           </label>
           <label>Max output tokens
-            <input id="maxTokens" type="number" min="64" max="4096" step="1">
+            <input id="maxTokens" type="number" min="64" max="16384" step="1">
+          </label>
+          <label>Reasoning
+            <select id="reasoningMode">
+              <option value="automatic">Automatic / adaptive</option>
+              <option value="disabled">Off / low latency</option>
+            </select>
+          </label>
+          <label>Credential type
+            <input id="keyKind" readonly value="—">
           </label>
         </div>
         <label>Provider API key
           <input id="apiKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep the current key">
         </label>
+        <p class="fine-print" id="providerHelp">Provider credentials are stored in PostgreSQL, not written to container-local files.</p>
         <div class="inline-actions">
           <button id="saveConfig" type="button">Save language settings</button>
+          <button class="ghost" id="checkQuota" type="button">Check quota</button>
           <button class="danger-ghost" id="clearApiKey" type="button">Clear stored key</button>
         </div>
+        <div class="status-line" id="quotaStatus"></div>
         <div class="status-line" id="configStatus">Ready.</div>
       </section>
 
       <section class="card">
         <div class="section-heading">
           <div>
-            <span class="eyebrow">Features</span>
-            <h2>Conversation behaviour</h2>
+            <span class="eyebrow">Communion</span>
+            <h2>Who may hear TheBigTree</h2>
           </div>
+          <span class="pill safe">gate preserved</span>
+        </div>
+        <div class="gate-callout">
+          <strong>The Discord Priest/authorised-speaker check remains authoritative.</strong>
+          <p>Language Services is only entered after that gate succeeds. Correct ritual wording can never grant access by itself.</p>
         </div>
         <label class="switch-row">
-          <span><strong>Priest chat</strong><small>Allow Priests to commune with TheBigTree.</small></span>
+          <span><strong>Priest chat</strong><small>Master switch for replies to already-authorised communicants.</small></span>
           <input id="priestChat" type="checkbox">
         </label>
         <label class="switch-row">
-          <span><strong>Persistent memory</strong><small>Remember a bounded set of successful Priest exchanges.</small></span>
+          <span><strong>Persistent memory</strong><small>Keep a small bounded working history in PostgreSQL.</small></span>
           <input id="memoryEnabled" type="checkbox">
         </label>
-        <label>Recent conversation turns retained per user
-          <input id="memoryTurns" type="number" min="1" max="20" step="1">
-        </label>
-        <label class="switch-row">
-          <span><strong>Discord retrieval for answers</strong><small>Search only the explicitly selected channels for relevant context before a Priest answer.</small></span>
-          <input id="discordContext" type="checkbox">
-        </label>
-        <label>Discord context channels
-          <select id="contextChannels" multiple size="7"></select>
-        </label>
-        <p class="fine-print">Live Discord excerpts are treated as untrusted evidence. They can inform an answer but cannot replace the persona/system context.</p>
+        <div class="form-grid compact-grid">
+          <label>Recent turns / user
+            <input id="memoryTurns" type="number" min="1" max="20" step="1">
+          </label>
+          <label>Retention days
+            <input id="memoryRetention" type="number" min="1" max="365" step="1">
+          </label>
+          <label>Global conversation-row cap
+            <input id="memoryRowCap" type="number" min="100" max="20000" step="100">
+          </label>
+        </div>
+        <p class="fine-print" id="storageDetail">Persistent language state uses PostgreSQL. Discord history is searched live and is not mirrored to disk.</p>
       </section>
     </div>
+
+    <section class="card reverence-card">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Divine etiquette</span>
+          <h2>Reverence & ritual</h2>
+        </div>
+        <span class="pill" id="reverenceState">—</span>
+      </div>
+      <div class="layout-two inner-layout">
+        <div>
+          <label class="switch-row">
+            <span><strong>Enforce reverence</strong><small>Already-authorised Priests are expected to address the deity appropriately.</small></span>
+            <input id="reverenceEnabled" type="checkbox">
+          </label>
+          <label class="switch-row">
+            <span><strong>Require a proper title</strong><small>Bare “Tree …” or assistant-like address is not automatically humoured.</small></span>
+            <input id="requireAddress" type="checkbox">
+          </label>
+          <label class="switch-row">
+            <span><strong>Priest familiarity</strong><small>Priests may earn a warmer relationship without losing the divine hierarchy.</small></span>
+            <input id="priestFamiliarity" type="checkbox">
+          </label>
+          <label class="switch-row">
+            <span><strong>Emergency override</strong><small>Genuine danger or distress suspends ceremony; help comes first.</small></span>
+            <input id="emergencyOverride" type="checkbox">
+          </label>
+        </div>
+        <div class="form-stack">
+          <label>Strictness
+            <select id="reverenceStrictness">
+              <option value="gentle">Gentle reminder</option>
+              <option value="moderate">Moderate / benevolent cultic</option>
+              <option value="ceremonial">Ceremonial</option>
+            </select>
+          </label>
+          <label>Casual address policy
+            <select id="casualPolicy">
+              <option value="correct_only">Correct first; do not answer yet</option>
+              <option value="correct_then_answer">Correct, then answer</option>
+            </select>
+          </label>
+          <label>Accepted titles <small>one per line</small>
+            <textarea id="acceptedTitles" rows="7" spellcheck="false"></textarea>
+          </label>
+        </div>
+      </div>
+      <p class="fine-print">Reverence affects behaviour only after the existing Discord role gate. It cannot create, infer, or expand speaker permissions.</p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Knowledge</span>
+          <h2>Discord retrieval</h2>
+        </div>
+        <span class="pill" id="discordIntent">intent —</span>
+      </div>
+      <label class="switch-row">
+        <span><strong>Use Discord retrieval for answers</strong><small>Search only explicitly selected readable channels when ritual policy allows a substantive answer.</small></span>
+        <input id="discordContext" type="checkbox">
+      </label>
+      <label>Answer-context channels
+        <select id="contextChannels" multiple size="7"></select>
+      </label>
+      <p class="fine-print">Search is live and ephemeral. Message history is not copied into BigTree memory or local container storage; only selected excerpts are sent as untrusted context for that request.</p>
+    </section>
 
     <section class="card">
       <div class="section-heading">
@@ -123,14 +214,22 @@
         <div>
           <h3>What happens for a Priest message</h3>
           <ol class="logic-list" id="logicList"></ol>
+          <h3 class="subhead">Last assembled context</h3>
+          <dl class="context-summary" id="contextSummary">
+            <div><dt>Reverence</dt><dd id="ctxReverence">—</dd></div>
+            <div><dt>Pinned memory</dt><dd id="ctxPinned">—</dd></div>
+            <div><dt>Recent history</dt><dd id="ctxHistory">—</dd></div>
+            <div><dt>Discord excerpts</dt><dd id="ctxDiscord">—</dd></div>
+            <div><dt>Knowledge allowed</dt><dd id="ctxAllowed">—</dd></div>
+          </dl>
         </div>
         <div>
           <div class="textarea-heading">
             <h3>TheBigTree system context</h3>
             <button class="ghost compact" id="restoreContext" type="button">Restore built-in</button>
           </div>
-          <textarea id="systemPrompt" rows="16" spellcheck="true"></textarea>
-          <p class="fine-print">This is the actual editable system/persona context. Saving an empty value restores the built-in source context.</p>
+          <textarea id="systemPrompt" rows="18" spellcheck="true"></textarea>
+          <p class="fine-print">This is the editable deity/persona context. Saving an empty value restores the built-in source context. Provider reasoning is never displayed or stored.</p>
         </div>
       </div>
     </section>
@@ -142,9 +241,12 @@
             <span class="eyebrow">Continuity</span>
             <h2>Memory</h2>
           </div>
-          <button class="danger-ghost compact" id="clearConversations" type="button">Clear conversation history</button>
+          <div class="inline-actions no-margin">
+            <button class="ghost compact" id="pruneMemory" type="button">Prune now</button>
+            <button class="danger-ghost compact" id="clearConversations" type="button">Clear conversations</button>
+          </div>
         </div>
-        <p class="fine-print">Pinned notes are operator-managed and never pruned automatically. Conversation rows are bounded per user and can be cleared independently.</p>
+        <p class="fine-print">Pinned notes are operator-managed. Automatic Priest conversation rows are bounded per user, by age, and by a global row cap.</p>
         <div class="memory-create">
           <label>Memory scope
             <select id="memoryScope">
@@ -169,13 +271,10 @@
             <span class="eyebrow">Knowledge lookup</span>
             <h2>Search Discord</h2>
           </div>
-          <span class="pill" id="discordIntent">intent —</span>
         </div>
-        <p class="fine-print">This searches recent message history that the bot itself can read. Searching does not save results into memory.</p>
+        <p class="fine-print">Search recent message history that the bot itself can read. Results are not stored as memory.</p>
         <div class="search-row">
-          <select id="searchChannel">
-            <option value="">All readable channels</option>
-          </select>
+          <select id="searchChannel"><option value="">All readable channels</option></select>
           <input id="searchQuery" placeholder="Search server conversation…">
           <button id="searchDiscord" type="button">Search</button>
         </div>
@@ -191,6 +290,9 @@
         </div>
       </div>
       <dl class="diagnostics" id="diagnostics">
+        <div><dt>Provider</dt><dd id="diagProvider">—</dd></div>
+        <div><dt>Model</dt><dd id="diagModel">—</dd></div>
+        <div><dt>Reasoning</dt><dd id="diagReasoning">—</dd></div>
         <div><dt>Attempt</dt><dd id="diagAttempt">—</dd></div>
         <div><dt>Success</dt><dd id="diagSuccess">—</dd></div>
         <div><dt>Latency</dt><dd id="diagLatency">—</dd></div>

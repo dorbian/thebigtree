@@ -177,10 +177,14 @@ python -m unittest -v tests.test_language_services_contracts
 For a manual smoke test:
 
 1. Open Language Services and confirm the provider key is masked rather than returned to the browser.
-2. Use **Test provider** and verify the request status/token counters update (this performs one billable provider request).
-3. Pin a global memory, refresh, and verify it survives. Delete it again.
-4. Search Discord with and without a specific channel. Results should link back to Discord and are not stored as memory.
-5. If answer-time Discord retrieval is desired, select one or more channels and explicitly enable **Discord retrieval for answers**. It is off by default.
-6. Disable **Priest chat** and verify Priest DMs/mentions no longer invoke the language provider.
+2. Select **MiniMax**, enter an `sk-cp-…` Token Plan or `sk-api-…` PAYG key, keep `MiniMax-M3`, save, and use **Test provider**. The request diagnostics should identify MiniMax without ever returning the raw key.
+3. For an `sk-cp-…` key, use **Check quota** and verify the MiniMax Token Plan response is shown only on demand; the service does not poll quota in the background.
+4. Confirm the existing Discord Priest/authorised-speaker gate still blocks non-Priests before any language-provider call. Correct ritual wording must never grant communion.
+5. With reverence enforcement enabled and **Correct first; withhold the answer** selected, an authorised Priest saying only `Tree, who did X?` should receive an in-character etiquette correction rather than the requested knowledge. Addressing TheBigTree with an accepted title should allow the normal answer.
+6. Confirm the emergency override helps an already-authorised communicant first rather than insisting on ceremony. It must not bypass the Priest gate.
+7. Pin a global memory, refresh, and verify it survives. Delete it again.
+8. Search Discord with and without a specific channel. Results should link back to Discord and are not stored as memory.
+9. If answer-time Discord retrieval is desired, select one or more channels and explicitly enable **Discord retrieval for answers**. It is off by default.
+10. Disable **Priest chat** and verify Priest DMs/mentions no longer invoke the language provider.
 
-Conversation memory stores only a bounded set of successful Priest exchanges per user. Pinned notes are retained until an operator deletes them; clearing conversation history leaves pinned notes intact.
+Language memory is PostgreSQL-backed and intentionally bounded for the container deployment: conversation entries are truncated to 4 KB, per-user recent history is capped, default retention is 90 days, and the default installation-wide unpinned conversation ceiling is 5,000 rows. Pinned operator notes have their own 1,000-row hard limit. Discord search is live/on-demand and does not build a local message archive. The UI exposes the actual stored text byte count and includes an explicit prune action.
