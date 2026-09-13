@@ -80,7 +80,7 @@ class ConclaveDiscordContractTests(unittest.TestCase):
         self.assertIn('if mode == "sealed"', source)
         self.assertIn('await message.delete()', source)
         self.assertIn('await intro.pin(', source)
-        self.assertIn('brief original-message relay window', source)
+        self.assertIn('To speak here, return to the Conclave altar and use **Speak**.', source)
 
     def test_forced_dm_delivery_sends_identity_and_role_without_being_required(self):
         source = CMD.read_text("utf-8")
@@ -88,6 +88,24 @@ class ConclaveDiscordContractTests(unittest.TestCase):
         self.assertIn('deliver_role_dms', source)
         self.assertIn('!= "on"', source)
         self.assertIn('except (discord.Forbidden, discord.HTTPException)', source)
+
+    def test_player_copy_avoids_development_language(self):
+        source = CMD.read_text("utf-8")
+        self.assertIn('label="My Calling"', source)
+        self.assertIn('label="My Name"', source)
+        for leaked_copy in (
+            "🧪 Test circle",
+            "synthetic elf/elves are present",
+            "Discord-channel locked",
+            "You do not need a DM manual",
+            "ephemeral/private",
+            "configured Keepers of the Lost",
+            "brief original-message relay window",
+            "Your ordinary Discord identity",
+            "Existing channel bound without changing its normal permissions",
+            "A dedicated read-only lobby channel was created",
+        ):
+            self.assertNotIn(leaked_copy, source)
 
 
 if __name__ == "__main__":

@@ -74,17 +74,17 @@ def _phase_label(phase: str) -> str:
 def _phase_guidance(state: dict) -> str:
     phase = state.get("phase")
     if phase == engine.PHASE_LOBBY:
-        return "Join the gathering. The host starts once at least five elves are present. Roles remain secret."
+        return "Take your place in the gathering. Once at least five elves are present, the Conclave may begin."
     if phase == engine.PHASE_NIGHT:
-        return "Night roles choose their targets privately with **My role / action**. The host advances when ready."
+        return "Night has fallen. If your calling can act, make your choice in **My Calling**."
     if phase == engine.PHASE_DAY:
-        return "Discuss what happened during the night. When discussion is complete, the host opens nominations."
+        return "Dawn breaks. Speak in the Living Circle, share what you choose, and decide whom you trust."
     if phase == engine.PHASE_NOMINATION:
-        return "Living players use **Vote / nominate**. A strict majority immediately calls one elf to trial."
+        return "Choose an elf to call before the Conclave. A strict majority sends them to trial."
     if phase == engine.PHASE_TRIAL:
-        return "The accused may make their defence. The host opens judgement when the defence is complete."
+        return "The accused now speaks in their defence. Listen carefully; judgement follows."
     if phase == engine.PHASE_JUDGEMENT:
-        return "Living players except the accused cast a private guilty, innocent, or abstain judgement."
+        return "Cast your judgement: guilty, innocent, or abstain. The accused has no vote."
     winner = state.get("winner")
     if winner == engine.FACTION_CONCORD:
         return "🌿 **The Concord has prevailed.**"
@@ -123,7 +123,7 @@ def build_public_embed(state: dict) -> discord.Embed:
         trial = " ⚖️" if uid == accused else ""
         role = f" — {p.get('role')}" if p.get("role") else ""
         if synthetic:
-            identity = f"🧪 {p.get('display_name') or 'Test Elf'}"
+            identity = f"**{p.get('display_name') or 'Elf'}**"
         elif aliases_enabled:
             identity = f"**{p.get('display_name') or 'Unnamed elf'}**"
         else:
@@ -143,7 +143,7 @@ def build_public_embed(state: dict) -> discord.Embed:
         ]
         if lost_thread_id:
             spaces.append(
-                f"🍂 **Lost in the Forest:** <#{lost_thread_id}> — private to lost players and configured Keepers of the Lost."
+                f"🍂 **Lost in the Forest:** <#{lost_thread_id}> — where the fallen and Keepers of the Lost may speak."
             )
         embed.add_field(name="Where the voices gather", value="\n".join(spaces), inline=False)
 
@@ -159,8 +159,8 @@ def build_public_embed(state: dict) -> discord.Embed:
     required = int(ready.get("required") or 0)
     if required:
         embed.add_field(
-            name="Readiness",
-            value=f"**{int(ready.get('ready') or 0)} / {required}** required choices received.",
+            name="Choices made",
+            value=f"**{int(ready.get('ready') or 0)} / {required}** have chosen.",
             inline=False,
         )
 
@@ -168,19 +168,6 @@ def build_public_embed(state: dict) -> discord.Embed:
     if events:
         embed.add_field(name="The boughs whisper", value="\n".join(events[-4:])[:1024], inline=False)
 
-    if public.get("test_mode"):
-        embed.add_field(
-            name="🧪 Test circle",
-            value=f"{int(public.get('test_player_count') or 0)} synthetic elf/elves are present. They are not Discord users and never receive secret messages.",
-            inline=False,
-        )
-
-    footer = f"Session {public.get('game_id')} · Discord-channel locked"
-    if aliases_enabled:
-        footer += " · Forest identities active"
-    else:
-        footer += f" · Host {public.get('host_user_id')}"
-    embed.set_footer(text=footer)
     return embed
 
 
@@ -189,7 +176,7 @@ def build_private_embed(state: dict, user_id: int) -> discord.Embed:
     if not info.get("role_name"):
         return discord.Embed(
             title="🌿 Your place in the Conclave",
-            description="Your role will be revealed when the host starts the game.",
+            description="Your calling will be revealed when the Conclave begins.",
             colour=discord.Colour.green(),
         )
     faction_label = "The Concord" if info.get("faction") == engine.FACTION_CONCORD else "The Thornbound"
@@ -217,7 +204,7 @@ def build_private_embed(state: dict, user_id: int) -> discord.Embed:
     if state.get("phase") == engine.PHASE_NIGHT and info.get("ability"):
         embed.add_field(
             name="Night choice",
-            value="✅ Recorded — you can change it before resolution." if info.get("night_choice_recorded") else "⏳ Waiting for your choice.",
+            value="✅ Chosen — you may still change it before dawn." if info.get("night_choice_recorded") else "⏳ Your choice is still waiting.",
             inline=False,
         )
     if not info.get("alive"):
@@ -225,7 +212,7 @@ def build_private_embed(state: dict, user_id: int) -> discord.Embed:
     elif state.get("phase") == engine.PHASE_NIGHT and info.get("ability"):
         embed.set_footer(text="Choose a target or intentionally pass. You may change the choice until night resolves.")
     else:
-        embed.set_footer(text="Secret information — this panel is visible only to you.")
+        embed.set_footer(text="Only you can see your calling and private revelations.")
     return embed
 
 
@@ -238,20 +225,20 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
         embed = discord.Embed(
             title="🌿 Verdant Conclave guide · Controls",
             description=(
-                "The public game panel is the control altar. Its buttons never expose your secret information to the channel."
+                "The Conclave altar holds the choices you make outside the Living Circle."
             ),
             colour=colour,
         )
         embed.add_field(name="Join / Leave", value="Join or leave only while the Conclave is gathering.", inline=False)
-        embed.add_field(name="My role / action", value="Shows your role privately and, at Night, offers your legal target or a deliberate pass.", inline=False)
-        embed.add_field(name="Vote / nominate", value="Used privately during nominations and judgement.", inline=False)
+        embed.add_field(name="My Calling", value="Shows your calling, revelations, and anything you may choose right now.", inline=False)
+        embed.add_field(name="Vote", value="Calls an elf to trial during nominations, then records your judgement when judgement opens.", inline=False)
         embed.add_field(name="Last will", value="Up to 500 characters. It is revealed only if you fall.", inline=False)
         return embed
     if page == "phases":
         embed = discord.Embed(title="🌿 Verdant Conclave guide · The cycle", colour=colour)
         embed.description = (
             "**Gathering** → players join.\n"
-            "**Night** → gifted roles act privately.\n"
+            "**Night** → callings with a night gift make their choice.\n"
             "**Dawn Council** → living players discuss.\n"
             "**Nominations** → a strict majority may call an elf to trial.\n"
             "**Trial** → the accused gives their defence.\n"
@@ -284,13 +271,13 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
         if lost_thread_id:
             embed.add_field(
                 name="The Lost Forest",
-                value=f"Your afterlife conversation is <#{lost_thread_id}>. Only other lost players and configured Keepers of the Lost may enter.",
+                value=f"Your afterlife conversation is <#{lost_thread_id}>. Only the fallen and Keepers of the Lost may enter.",
                 inline=False,
             )
         else:
             embed.add_field(
                 name="The Lost Forest",
-                value="The private lost-player space is prepared by TheBigTree when the game is created.",
+                value="When you fall, the path to the Lost Forest will be shown to you.",
                 inline=False,
             )
         embed.add_field(
@@ -303,25 +290,25 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
     embed = discord.Embed(
         title="🌿 Verdant Conclave guide",
         description=(
-            "You do not need a DM manual. This private guide stays inside Discord and only the person who opened it can see it."
+            "Use this guide whenever you need to remember where to speak, what the cycle allows, or what a calling can do."
         ),
         colour=colour,
     )
-    lobby = f"<#{int(state.get('channel_id') or 0)}>" if state.get("channel_id") else "the game panel channel"
-    living = f"<#{living_thread_id}>" if living_thread_id else "the private Living Circle"
-    lost = f"<#{lost_thread_id}>" if lost_thread_id else "the private Lost in the Forest space"
+    lobby = f"<#{int(state.get('channel_id') or 0)}>" if state.get("channel_id") else "the Conclave altar"
+    living = f"<#{living_thread_id}>" if living_thread_id else "the Living Circle"
+    lost = f"<#{lost_thread_id}>" if lost_thread_id else "the Lost Forest"
     embed.add_field(
         name="Where is what?",
         value=(
-            f"**Game panel:** {lobby} — join, role/action, voting, last will, refresh and host controls.\n"
-            f"**Living conversation:** {living} — only enrolled living players can enter or speak.\n"
-            f"**After you fall:** {lost} — only lost players and configured Keepers of the Lost."
+            f"**Conclave altar:** {lobby} — your calling, choices, votes, will and guide.\n"
+            f"**Living Circle:** {living} — where the living speak.\n"
+            f"**Lost in the Forest:** {lost} — where the fallen gather."
         ),
         inline=False,
     )
     embed.add_field(
-        name="Privacy",
-        value="Roles, night choices, votes and this guide are ephemeral/private. The public panel only shows information every participant may know.",
+        name="What remains yours",
+        value="Your calling, night choices and judgement are shown only to you. Your last will remains hidden until you fall.",
         inline=False,
     )
     try:
@@ -330,9 +317,9 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
         info = None
     if info:
         role_text = info.get("role_name") or "not dealt yet"
-        embed.add_field(name="Your place", value=f"You are enrolled. Current calling: **{role_text}**.", inline=False)
+        embed.add_field(name="Your place", value=f"Your calling is **{role_text}**.", inline=False)
     else:
-        embed.add_field(name="Your place", value="You have not joined this Conclave yet.", inline=False)
+        embed.add_field(name="Your place", value="Take a place in the gathering with **Join**.", inline=False)
     embed.set_footer(text="Use the selector below for controls, phases, callings, or the Lost Forest.")
     return embed
 
@@ -660,7 +647,7 @@ class ConclavePanel(discord.ui.View):
             )
             state = await self.cog.sync_game_spaces(state)
             living_thread_id = int(state.get("living_thread_id") or 0)
-            destination = f" Your game conversation is <#{living_thread_id}>." if living_thread_id else ""
+            destination = f" The Living Circle is <#{living_thread_id}>." if living_thread_id else ""
             alias = engine.game_player_name(state, engine.player(state, interaction.user.id))
             await interaction.response.send_message(
                 f"🌱 You joined the Verdant Conclave as **{alias}**.{destination}",
@@ -679,12 +666,12 @@ class ConclavePanel(discord.ui.View):
                 lambda s: engine.remove_player(s, interaction.user.id),
             )
             state = await self.cog.sync_game_spaces(state, removed_user_ids=[interaction.user.id])
-            await interaction.response.send_message("You left the gathering and its private game spaces.", ephemeral=True)
+            await interaction.response.send_message("🍂 You have left the gathering.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
 
-    @discord.ui.button(label="My role / action", emoji="🌙", style=discord.ButtonStyle.primary, custom_id="conclave:role", row=0)
+    @discord.ui.button(label="My Calling", emoji="🌙", style=discord.ButtonStyle.primary, custom_id="conclave:role", row=0)
     async def role(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
         if not state:
@@ -700,7 +687,7 @@ class ConclavePanel(discord.ui.View):
                 view = candidate_view
         await interaction.response.send_message(embed=build_private_embed(state, interaction.user.id), view=view, ephemeral=True)
 
-    @discord.ui.button(label="Vote / nominate", emoji="⚖️", style=discord.ButtonStyle.primary, custom_id="conclave:vote", row=0)
+    @discord.ui.button(label="Vote", emoji="⚖️", style=discord.ButtonStyle.primary, custom_id="conclave:vote", row=0)
     async def vote(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
         if not state:
@@ -748,7 +735,7 @@ class ConclavePanel(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Forest name", emoji="🌿", style=discord.ButtonStyle.secondary, custom_id="conclave:name", row=2)
+    @discord.ui.button(label="My Name", emoji="🌿", style=discord.ButtonStyle.secondary, custom_id="conclave:name", row=2)
     async def forest_name(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
         if not state:
@@ -758,11 +745,11 @@ class ConclavePanel(discord.ui.View):
             return await interaction.response.send_message("Join the Conclave first.", ephemeral=True)
         identity = state.get("identity") or {}
         if not bool(identity.get("aliases_enabled", False)):
-            return await interaction.response.send_message("Forest aliases are disabled for this Conclave.", ephemeral=True)
+            return await interaction.response.send_message("This Conclave knows you by your usual name.", ephemeral=True)
         if str(identity.get("choice") or "both") == "generated":
             alias = engine.game_player_name(state, player_obj)
             return await interaction.response.send_message(
-                f"🌿 Your generated Forest name is **{alias}**.",
+                f"🌿 The Forest knows you as **{alias}**.",
                 ephemeral=True,
             )
         await interaction.response.send_modal(
@@ -781,7 +768,7 @@ class ConclavePanel(discord.ui.View):
         if not state or not engine.player(state, interaction.user.id):
             return await interaction.response.send_message("Join this Conclave before speaking through the Forest.", ephemeral=True)
         if not bool((state.get("identity") or {}).get("aliases_enabled", False)):
-            return await interaction.response.send_message("Forest aliases are disabled for this Conclave.", ephemeral=True)
+            return await interaction.response.send_message("Speak in the Living Circle as yourself.", ephemeral=True)
         await interaction.response.send_modal(_SpeakModal(self.cog, interaction.user.id))
 
     @discord.ui.button(label="Start", style=discord.ButtonStyle.success, custom_id="conclave:start", row=1)
@@ -792,13 +779,13 @@ class ConclavePanel(discord.ui.View):
         try:
             state = await self.cog.mutate_channel(interaction.channel_id, engine.start_game)
             state = await self.cog.sync_game_spaces(state)
-            await interaction.response.send_message("🌙 Roles have been dealt privately. Night has begun.", ephemeral=True)
+            await interaction.response.send_message("🌙 Night falls. Your calling is now known to you.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
             await self.cog.deliver_role_dms(state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
 
-    @discord.ui.button(label="Advance", style=discord.ButtonStyle.primary, custom_id="conclave:advance", row=1)
+    @discord.ui.button(label="Continue", style=discord.ButtonStyle.primary, custom_id="conclave:advance", row=1)
     async def advance(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
         if not state or not self.cog.is_host_or_operator(interaction, state):
@@ -806,7 +793,7 @@ class ConclavePanel(discord.ui.View):
         try:
             state = await self.cog.mutate_channel(interaction.channel_id, engine.advance_phase)
             state = await self.cog.sync_game_spaces(state)
-            await interaction.response.send_message(f"Advanced to **{_phase_label(state.get('phase'))}**.", ephemeral=True)
+            await interaction.response.send_message(f"The Conclave enters **{_phase_label(state.get('phase'))}**.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
@@ -850,8 +837,8 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             return
         try:
             await member.send(
-                f"🌿 In **{state.get('title') or 'Verdant Conclave'}** you are known as **{alias}**. "
-                "Your ordinary Discord identity is unchanged outside the game."
+                f"🌿 **{state.get('title') or 'Verdant Conclave'}** knows you as **{alias}**. "
+                "Within the Conclave, that is the name the Forest carries."
             )
         except (discord.Forbidden, discord.HTTPException):
             pass
@@ -898,7 +885,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         content: str,
     ) -> tuple[str, str]:
         if not bool((state.get("identity") or {}).get("aliases_enabled", False)):
-            raise engine.GameError("Forest aliases are disabled for this Conclave.", "aliases_disabled")
+            raise engine.GameError("This Conclave knows you by your usual name.", "aliases_disabled")
         player_obj = engine.player(state, user_id)
         if not player_obj or player_obj.get("synthetic"):
             raise engine.GameError("You are not a player in this Conclave.", "not_player")
@@ -918,7 +905,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             raise engine.GameError("Your Conclave conversation space is unavailable.", "room_unavailable")
         webhook = await self._relay_webhook(state)
         if webhook is None:
-            raise engine.GameError("The Forest identity relay is unavailable.", "webhook_unavailable")
+            raise engine.GameError("The Forest cannot carry your words right now.", "webhook_unavailable")
         await discord_identity.relay_text(webhook, thread, state, player_obj, content)
         return engine.game_player_name(state, player_obj), (
             "Living Circle" if room_key == "living" else "Lost in the Forest"
@@ -959,8 +946,8 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 return
             try:
                 await message.author.send(
-                    "🌿 This Conclave uses **Sealed** Forest identities. "
-                    "Use the **Speak** button on the game panel so your Discord identity never appears in the shared thread."
+                    "🌿 Your voice must pass through the Forest here. "
+                    "Use **Speak** on the Conclave altar."
                 )
             except (discord.Forbidden, discord.HTTPException):
                 pass
@@ -969,7 +956,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         try:
             webhook = await self._relay_webhook(state)
             if webhook is None:
-                raise engine.GameError("The Forest identity relay is unavailable.", "webhook_unavailable")
+                raise engine.GameError("The Forest cannot carry your words right now.", "webhook_unavailable")
             await discord_identity.relay_message(webhook, message.channel, state, player_obj, message)
             await message.delete()
         except (engine.GameError, discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
@@ -988,8 +975,8 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             try:
                 excerpt = str(message.content or "")[:1400]
                 await message.author.send(
-                    "⚠️ Your Forest message could not be relayed, so it was removed rather than exposing your Discord identity."
-                    + (f"\n\nYour unsent text:\n{excerpt}" if excerpt else "")
+                    "⚠️ The Forest could not carry your words, so they were not spoken."
+                    + (f"\n\nYour words were:\n{excerpt}" if excerpt else "")
                 )
             except (discord.Forbidden, discord.HTTPException):
                 pass
@@ -1264,12 +1251,12 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 intro = await living.send(
                     "🌿 **Living Circle**\n"
                     "Within this circle, players are known by their **Forest names**. "
-                    f"Game controls and the **Speak** button remain in <#{channel_id}>.\n"
+                    f"Your calling, choices and **Speak** are waiting in <#{channel_id}>.\n"
                     + (
-                        "**Sealed identities:** type through **Speak**; direct thread posts are removed."
+                        "To speak here, return to the Conclave altar and use **Speak**."
                         if mode == "sealed"
-                        else "**Immersive identities:** ordinary thread messages are replaced by the Forest relay. "
-                             "Use **Speak** when you do not want even the brief original-message relay window."
+                        else "Speak here as you normally would; the Forest carries your words under your Forest name. "
+                             "You may also use **Speak** from the Conclave altar."
                     )
                 )
                 try:
@@ -1288,8 +1275,8 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 intro = await lost.send(
                     "🍂 **Lost in the Forest**\n"
                     "Voices here cannot be heard by the living. Fallen players keep the same **Forest name** "
-                    "they used while alive. Only lost players and configured Keepers of the Lost may enter.\n"
-                    f"Game controls and **Speak** remain in <#{channel_id}>."
+                    "they used while alive. Only the fallen and Keepers of the Lost may enter.\n"
+                    f"Your will, guide and **Speak** remain in <#{channel_id}>."
                 )
                 try:
                     await intro.pin(reason=f"Verdant Conclave guidance for {state.get('game_id')}")
@@ -1580,11 +1567,11 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         except Exception as exc:
             logger.warning("[conclave] panel restore failed: %s", exc)
 
-    @app_commands.command(name="conclave-create", description="Create a channel-locked Verdant Conclave social-deduction game.")
+    @app_commands.command(name="conclave-create", description="Open a new Verdant Conclave.")
     @app_commands.describe(
-        title="Name shown on the game panel",
-        channel="Bind to an existing text channel instead of creating a dedicated one",
-        use_current_channel="Use the channel where this command is run",
+        title="Name of this Conclave",
+        channel="Where the Conclave should gather",
+        use_current_channel="Gather here",
     )
     @app_commands.guilds(discord.Object(id=int(bigtree.guildid)))
     @requires_capability("game.conclave.host")
@@ -1613,7 +1600,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             return await interaction.followup.send("The selected channel must belong to this Discord server.", ephemeral=True)
         if not isinstance(target_channel, discord.TextChannel):
             return await interaction.followup.send(
-                "Choose a normal text channel for the Conclave lobby; TheBigTree creates private game threads beneath it.",
+                "Choose a text channel where the Conclave can gather.",
                 ephemeral=True,
             )
         if not bind_existing:
@@ -1647,7 +1634,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 created_channel = await interaction.guild.create_text_channel(
                     f"{slug}-{str(interaction.id)[-4:]}",
                     category=category,
-                    topic="Verdant Conclave · lobby/control panel · managed by TheBigTree",
+                    topic="Verdant Conclave · the gathering waits beneath these boughs",
                     overwrites=overwrites,
                     reason=f"Verdant Conclave created by {interaction.user}",
                 )
@@ -1691,14 +1678,14 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 not bind_existing,
             )
             channel_note = (
-                "Existing channel bound without changing its normal permissions."
+                "The Conclave gathers here."
                 if bind_existing else
-                "A dedicated read-only lobby channel was created."
+                "A fresh grove has been opened for this gathering."
             )
             await interaction.followup.send(
-                f"🌿 Verdant Conclave created in {target_channel.mention}. {channel_note} "
-                f"Players opt in with **Join**; enrolled living players speak only in <#{state.get('living_thread_id')}>. "
-                f"Lost players move to <#{state.get('lost_thread_id')}>.",
+                f"🌿 **{state.get('title') or 'Verdant Conclave'}** is ready in {target_channel.mention}. {channel_note} "
+                f"Players may now take their place with **Join**. The living gather in <#{state.get('living_thread_id')}>, "
+                f"and the fallen will find <#{state.get('lost_thread_id')}>.",
                 ephemeral=True,
             )
         except Exception as exc:

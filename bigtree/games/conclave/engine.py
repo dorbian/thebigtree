@@ -277,7 +277,10 @@ def game_player_name(state: Dict[str, Any], player_obj: Optional[Dict[str, Any]]
     """Name allowed to appear in game-facing text for this session."""
     obj = player_obj or {}
     if obj.get("synthetic"):
-        return str(obj.get("display_name") or "Test Elf")
+        name = str(obj.get("display_name") or "Elf")
+        if "·" in name:
+            name = name.split("·", 1)[1].strip()
+        return name or "Elf"
     aliases = bool((state.get("identity") or {}).get("aliases_enabled", False))
     if aliases:
         return str(obj.get("forest_name") or "Unnamed elf")
