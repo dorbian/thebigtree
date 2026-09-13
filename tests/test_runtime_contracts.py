@@ -23,7 +23,23 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertNotIn("build-essential", runtime)
         self.assertNotIn("libpq-dev", runtime)
         self.assertIn("libwebp7", runtime)
-        self.assertIn("python tools/precompress_static.py", runtime)
+        # The build may invoke the checked-in helper or keep the tiny gzip
+        # implementation inline so tools/ can stay outside the image context.
+        # Assert the behavior we need rather than one implementation detail.
+        uses_helper = "python tools/precompress_static.py" in runtime
+        uses_inline_gzip = all(
+            marker in runtime
+            for marker in (
+                'Path("/opt/thebigtree/bigtree/web/static")',
+                "gzip.compress",
+                "mtime=0",
+                'path.name + ".gz"',
+            )
+        )
+        self.assertTrue(
+            uses_helper or uses_inline_gzip,
+            "runtime stage must reproducibly precompress cacheable static assets",
+        )
         self.assertIn("urllib.request.urlopen", runtime)
 
     def test_static_precompression_is_reproducible_and_effective(self):
