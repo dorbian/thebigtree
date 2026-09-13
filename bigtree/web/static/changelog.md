@@ -23,6 +23,7 @@
 - CI: run Python tests/compile checks before container publication and add Go validation to the overlay-client workflow.
 
 ## Unreleased
+- Conclave: keep actual game speech inside private living/lost Discord threads, move fallen players into a hidden **Lost in the Forest** space, allow an explicitly configured Keeper-of-the-Lost priest role to witness that space, add an ephemeral in-Discord guide, and let a Discord-backed Elfministration session join the game as itself.
 - Wallet: show event wallet balances as amount + currency and clean up the event list columns.
 - Wallet: improve bingo player links by falling back to the owner name when tokens are missing.
 - Gallery: render text-only inspiration entries without images, artists, or watermarks.

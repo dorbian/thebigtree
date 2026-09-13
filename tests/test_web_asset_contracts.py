@@ -32,6 +32,9 @@ class WebAssetContractTests(unittest.TestCase):
         self.assertIn('id="conclaveTestFill"', html)
         self.assertIn('id="conclaveTestAct"', html)
         self.assertIn('id="conclaveRepairPanel"', html)
+        self.assertIn('id="conclaveJoinSelf"', html)
+        self.assertIn('id="conclaveOpenLiving"', html)
+        self.assertIn('id="conclaveOpenLost"', html)
         self.assertIn("Secret roles and private actions stay in Discord", html)
         self.assertIn("bind an existing text channel", html)
 

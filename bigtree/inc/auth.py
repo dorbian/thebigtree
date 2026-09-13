@@ -246,5 +246,24 @@ def auth_middleware() -> Callable:
             )
             return web.json_response({"ok": False, "error": "forbidden"}, status=403)
 
+        # Dynamic /auth tokens represent a Discord-backed human identity.  Keep
+        # authorization and identity distinct: routes may use this metadata for
+        # an explicit "act as myself" action, while static service keys remain
+        # intentionally anonymous.
+        if token:
+            try:
+                doc = web_tokens.find_token(token)
+            except Exception:
+                doc = None
+            if isinstance(doc, dict):
+                metadata = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
+                user_id = doc.get("user_id") or metadata.get("discord_id")
+                request["bt_auth"] = {
+                    "kind": "discord_token",
+                    "user_id": int(user_id) if str(user_id or "").isdigit() else None,
+                    "user_name": str(doc.get("user_name") or ""),
+                    "principal_id": metadata.get("principal_id"),
+                }
+
         return await handler(request)
     return _mw

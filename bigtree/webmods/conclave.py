@@ -64,6 +64,58 @@ async def get_session(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "session": engine.public_state(state)})
 
 
+@route("POST", "/admin/conclave/{game_id}/join-self", scopes=["game.conclave.host"])
+async def join_self(req: web.Request) -> web.Response:
+    """Join the authenticated Discord-backed Elfministration user as a real player."""
+    game_id = req.match_info.get("game_id") or ""
+    auth = req.get("bt_auth") or {}
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except Exception:
+        user_id = 0
+    if not user_id:
+        return web.json_response(
+            {
+                "ok": False,
+                "error": "This Elfministration credential is not linked to a Discord user. Open Elfministration through /auth and try again.",
+            },
+            status=409,
+        )
+
+    state = await _store_call(_store().get, game_id)
+    if not state:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+
+    display_name = str(auth.get("user_name") or f"Discord user {user_id}")[:80]
+    bot = getattr(bigtree, "bot", None)
+    guild = bot.get_guild(int(state.get("guild_id") or 0)) if bot else None
+    if guild is not None:
+        member = guild.get_member(user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(user_id)
+            except Exception:
+                member = None
+        if member is not None:
+            display_name = str(member.display_name or member.name or display_name)[:80]
+
+    try:
+        state = await _store_call(
+            _store().mutate,
+            game_id,
+            lambda current: engine.add_player(current, user_id, display_name),
+        )
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    await _refresh_panel(game_id, state)
+    refreshed = await _store_call(_store().get, game_id) or state
+    return web.json_response({
+        "ok": True,
+        "joined_user_id": user_id,
+        "session": engine.public_state(refreshed),
+    })
+
+
 async def _mutate(req: web.Request, action: str) -> web.Response:
     game_id = req.match_info.get("game_id") or ""
     store = _store()

@@ -218,3 +218,7 @@ Language memory is PostgreSQL-backed and intentionally bounded for the container
 - Verify legacy web tokens with `admin:*` satisfy routes requiring `admin:web`; existing exact legacy scopes continue to work.
 - With an admin token, inspect `GET /admin/access/catalog` and use `POST /admin/access/evaluate` with a Discord user ID and capability to see an explainable allow/deny decision.
 - Confirm PostgreSQL contains the `access_*` tables and that no IAM state files are created inside the application container.
+
+### Verdant Conclave private conversation spaces
+
+Create or select an active Conclave and verify **Join as myself** from Elfministration adds the `/auth` Discord identity as a real player. In Discord, **Guide** must open an ephemeral paged manual rather than sending DMs. The bound channel is the lobby/control surface; enrolled living players are added to the private **Living Circle** thread. After a player falls, verify they lose the Living Circle and gain the private **Lost in the Forest** thread. Living players must not be able to see that thread. If `BOT.conclave_lost_priest_role_ids` contains a role, members of that role may also enter the Lost Forest. Synthetic test elves never receive Discord thread membership. Existing bound channels must keep their ordinary channel permissions unchanged.

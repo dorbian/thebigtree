@@ -55,6 +55,7 @@ CAPABILITY_DESCRIPTIONS: Dict[str, str] = {
     "game.manage": "Administer games globally or for an assigned resource.",
     "game.bingo.host": "Host Bingo.",
     "game.conclave.host": "Host Verdant Conclave.",
+    "game.conclave.lost_witness": "Enter the private Lost in the Forest space for Verdant Conclave.",
     "game.gpose.host": "Host GPose activities.",
     "game.tarot.manage": "Administer Tarot content and sessions.",
     "game.cardgames.manage": "Administer card games.",
@@ -123,6 +124,11 @@ BUILTIN_ROLES: Dict[str, Dict[str, Any]] = {
         "description": "Hosts an assigned Verdant Conclave session.",
         "capabilities": ["game.host", "game.conclave.host"],
     },
+    "conclave_lost_priest": {
+        "name": "Keeper of the Lost",
+        "description": "Priestly witness allowed to enter Verdant Conclave's Lost in the Forest space.",
+        "capabilities": ["game.conclave.lost_witness"],
+    },
     "player": {
         "name": "Player",
         "description": "Plays a joined game/session.",
@@ -133,7 +139,7 @@ BUILTIN_ROLES: Dict[str, Dict[str, Any]] = {
 # Some permissions are identity/ritual entitlements rather than administrative
 # authority. They must be granted explicitly and are intentionally not covered
 # by global wildcards. This preserves the historical Priest-only Tree audience.
-EXPLICIT_ONLY_CAPABILITIES: Set[str] = {"tree.address"}
+EXPLICIT_ONLY_CAPABILITIES: Set[str] = {"tree.address", "game.conclave.lost_witness"}
 
 _CATALOG_LOCK = threading.RLock()
 _CATALOG_READY = False

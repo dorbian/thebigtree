@@ -1,3 +1,4 @@
+- Conclave: keep actual game speech inside private living/lost Discord threads, move fallen players into a hidden **Lost in the Forest** space, allow an explicitly configured Keeper-of-the-Lost priest role to witness that space, add an ephemeral in-Discord guide, and let a Discord-backed Elfministration session join the game as itself.
 # Changelog
 
 ## 2026-09-13

@@ -3660,12 +3660,26 @@ This will block new games from being created in this event, but existing games c
         if ($("conclaveMeta")) $("conclaveMeta").textContent = `${cycle} · Discord channel ${session.channel_id || "?"}${winner}${testSuffix}`;
         if ($("conclaveGuidance")) $("conclaveGuidance").textContent = conclaveGuidance(session);
         const discordLink = $("conclaveOpenDiscord");
+        const livingLink = $("conclaveOpenLiving");
+        const lostLink = $("conclaveOpenLost");
+        const guildId = String(session.guild_id || "");
+        const channelId = String(session.channel_id || "");
+        const livingThreadId = String(session.living_thread_id || "");
+        const lostThreadId = String(session.lost_thread_id || "");
         if (discordLink){
-          const guildId = String(session.guild_id || "");
-          const channelId = String(session.channel_id || "");
           const available = /^\d+$/.test(guildId) && /^\d+$/.test(channelId);
           discordLink.classList.toggle("hidden", !available);
           discordLink.href = available ? `https://discord.com/channels/${guildId}/${channelId}` : "#";
+        }
+        if (livingLink){
+          const available = /^\d+$/.test(guildId) && /^\d+$/.test(livingThreadId);
+          livingLink.classList.toggle("hidden", !available);
+          livingLink.href = available ? `https://discord.com/channels/${guildId}/${livingThreadId}` : "#";
+        }
+        if (lostLink){
+          const available = /^\d+$/.test(guildId) && /^\d+$/.test(lostThreadId);
+          lostLink.classList.toggle("hidden", !available);
+          lostLink.href = available ? `https://discord.com/channels/${guildId}/${lostThreadId}` : "#";
         }
 
         const readiness = session.readiness || {ready:0, required:0};
@@ -3726,6 +3740,7 @@ This will block new games from being created in this event, but existing games c
         }
 
         const phase = String(session.phase || "");
+        const joinSelf = $("conclaveJoinSelf");
         const start = $("conclaveStart");
         const advance = $("conclaveAdvance");
         const end = $("conclaveEnd");
@@ -3734,6 +3749,7 @@ This will block new games from being created in this event, but existing games c
         const addTest = $("conclaveTestAdd");
         const clearTest = $("conclaveTestClear");
         const actTest = $("conclaveTestAct");
+        if (joinSelf) joinSelf.disabled = phase !== "lobby";
         if (start) start.disabled = phase !== "lobby";
         if (advance) advance.disabled = ["lobby", "ended"].includes(phase);
         if (end) end.disabled = phase === "ended";
@@ -3838,6 +3854,29 @@ This will block new games from being created in this event, but existing games c
           setConclaveStatus("Discord panel posted.", "ok");
         }catch(err){
           setConclaveStatus(err.message || "Unable to recreate the Discord panel.", "err");
+        }finally{
+          if (button) button.disabled = false;
+        }
+      }
+
+      async function conclaveJoinSelf(){
+        if (!conclaveSelectedGameId) return;
+        const button = $("conclaveJoinSelf");
+        if (button) button.disabled = true;
+        setConclaveStatus("Joining this Conclave as your Discord identity…", "");
+        try{
+          const data = await jsonFetch(`/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}/join-self`, {method:"POST"});
+          const session = data.session || null;
+          if (session){
+            const idx = conclaveSessionsCache.findIndex((item) => String(item.game_id) === conclaveSelectedGameId);
+            if (idx >= 0) conclaveSessionsCache[idx] = session;
+            renderConclaveSessions();
+            renderConclaveDetail(session);
+          }
+          setConclaveStatus("Joined as your authenticated Discord user.", "ok");
+          await loadConclaveSessions(true);
+        }catch(err){
+          setConclaveStatus(err.message || "Unable to join as this Elfministration user.", "err");
         }finally{
           if (button) button.disabled = false;
         }
@@ -4175,6 +4214,7 @@ This will block new games from being created in this event, but existing games c
       on("conclaveAdvance", "click", () => conclaveHostAction("advance"));
       on("conclaveEnd", "click", () => conclaveHostAction("end"));
       on("conclaveRepairPanel", "click", () => conclaveRepairPanel());
+      on("conclaveJoinSelf", "click", () => conclaveJoinSelf());
       on("conclaveTestFill", "click", () => conclaveTestAction("fill"));
       on("conclaveTestAdd", "click", () => conclaveTestAction("add"));
       on("conclaveTestClear", "click", () => conclaveTestAction("clear"));

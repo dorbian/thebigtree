@@ -13,6 +13,7 @@ data:
     adminid=0000000000000000000
     priest_role_ids=[]
     elfministrator_role_ids=[]
+    conclave_lost_priest_role_ids=[]
     tarot_db=/data/tarot.json
 
     [openai]

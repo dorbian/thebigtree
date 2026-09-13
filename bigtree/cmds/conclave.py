@@ -1,12 +1,14 @@
 """Discord control surface for Verdant Conclave.
 
-Game play is hard-bound to the session's Discord channel.  Secret roles and
-night actions are only returned in ephemeral interactions; the public panel
-contains only information that every player is allowed to know.
+The control panel is hard-bound to the session's Discord lobby channel. Actual
+player conversation lives in private managed threads: living players cannot be
+heard by outsiders, and fallen players move to a separate Lost Forest. Secret
+roles and actions remain ephemeral/private.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from typing import Optional
 
@@ -20,6 +22,41 @@ from bigtree.games.conclave.store import ConclaveStore
 from bigtree.inc.logging import logger
 from bigtree.inc import access_control
 from bigtree.modules.permissions import requires_capability
+
+
+def _configured_role_ids(key: str) -> set[int]:
+    raw = None
+    try:
+        settings = getattr(bigtree, "settings", None)
+        if settings is not None:
+            raw = settings.get(f"BOT.{key}", None)
+    except Exception:
+        raw = None
+    if raw is None:
+        try:
+            cfg = getattr(getattr(bigtree, "config", None), "config", None) or {}
+            raw = (cfg.get("BOT", {}) or {}).get(key, [])
+        except Exception:
+            raw = []
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            raw = []
+        else:
+            try:
+                parsed = json.loads(text)
+                raw = parsed if isinstance(parsed, list) else [text]
+            except Exception:
+                raw = [item.strip() for item in text.split(",") if item.strip()]
+    if not isinstance(raw, (list, tuple, set)):
+        raw = [raw]
+    out: set[int] = set()
+    for value in raw:
+        try:
+            out.add(int(value))
+        except Exception:
+            continue
+    return out
 
 
 def _phase_label(phase: str) -> str:
@@ -91,6 +128,18 @@ def build_public_embed(state: dict) -> discord.Embed:
         value="\n".join(lines) if lines else "No one has joined yet.",
         inline=False,
     )
+
+    living_thread_id = int(public.get("living_thread_id") or 0)
+    lost_thread_id = int(public.get("lost_thread_id") or 0)
+    if living_thread_id:
+        spaces = [
+            f"🌿 **Living Circle:** <#{living_thread_id}> — only enrolled living players may enter and speak.",
+        ]
+        if lost_thread_id:
+            spaces.append(
+                f"🍂 **Lost in the Forest:** <#{lost_thread_id}> — private to lost players and configured Keepers of the Lost."
+            )
+        embed.add_field(name="Where the voices gather", value="\n".join(spaces), inline=False)
 
     roster = public.get("role_roster") or []
     if roster:
@@ -166,6 +215,114 @@ def build_private_embed(state: dict, user_id: int) -> discord.Embed:
         embed.set_footer(text="Choose a target or intentionally pass. You may change the choice until night resolves.")
     else:
         embed.set_footer(text="Secret information — this panel is visible only to you.")
+    return embed
+
+
+def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> discord.Embed:
+    page = str(page or "overview")
+    living_thread_id = int(state.get("living_thread_id") or 0)
+    lost_thread_id = int(state.get("lost_thread_id") or 0)
+    colour = discord.Colour.from_rgb(52, 112, 74)
+    if page == "controls":
+        embed = discord.Embed(
+            title="🌿 Verdant Conclave guide · Controls",
+            description=(
+                "The public game panel is the control altar. Its buttons never expose your secret information to the channel."
+            ),
+            colour=colour,
+        )
+        embed.add_field(name="Join / Leave", value="Join or leave only while the Conclave is gathering.", inline=False)
+        embed.add_field(name="My role / action", value="Shows your role privately and, at Night, offers your legal target or a deliberate pass.", inline=False)
+        embed.add_field(name="Vote / nominate", value="Used privately during nominations and judgement.", inline=False)
+        embed.add_field(name="Last will", value="Up to 500 characters. It is revealed only if you fall.", inline=False)
+        return embed
+    if page == "phases":
+        embed = discord.Embed(title="🌿 Verdant Conclave guide · The cycle", colour=colour)
+        embed.description = (
+            "**Gathering** → players join.\n"
+            "**Night** → gifted roles act privately.\n"
+            "**Dawn Council** → living players discuss.\n"
+            "**Nominations** → a strict majority may call an elf to trial.\n"
+            "**Trial** → the accused gives their defence.\n"
+            "**Judgement** → everyone living except the accused votes guilty, innocent, or abstain.\n"
+            "The cycle returns to Night until one faction wins."
+        )
+        return embed
+    if page == "roles":
+        embed = discord.Embed(
+            title="🌿 Verdant Conclave guide · Callings",
+            description="The exact composition depends on player count; your own calling stays private.",
+            colour=colour,
+        )
+        concord = []
+        thorn = []
+        for role_id, definition in engine.ROLE_DEFINITIONS.items():
+            line = f"**{definition.get('name', role_id)}** — {definition.get('description', '')}"
+            (thorn if definition.get("faction") == engine.FACTION_THORNBOUND else concord).append(line)
+        embed.add_field(name="🌿 Concord", value="\n".join(concord)[:1024], inline=False)
+        embed.add_field(name="🥀 Thornbound", value="\n".join(thorn)[:1024], inline=False)
+        return embed
+    if page == "lost":
+        embed = discord.Embed(
+            title="🍂 Verdant Conclave guide · Lost in the Forest",
+            description=(
+                "When you fall, you leave the Living Circle. You can no longer act, nominate, judge, or speak with the living players."
+            ),
+            colour=discord.Colour.from_rgb(87, 87, 87),
+        )
+        if lost_thread_id:
+            embed.add_field(
+                name="The Lost Forest",
+                value=f"Your afterlife conversation is <#{lost_thread_id}>. Only other lost players and configured Keepers of the Lost may enter.",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="The Lost Forest",
+                value="The private lost-player space is prepared by TheBigTree when the game is created.",
+                inline=False,
+            )
+        embed.add_field(
+            name="No messages from beyond",
+            value="The living cannot see the Lost Forest, and lost players cannot return to the Living Circle.",
+            inline=False,
+        )
+        return embed
+
+    embed = discord.Embed(
+        title="🌿 Verdant Conclave guide",
+        description=(
+            "You do not need a DM manual. This private guide stays inside Discord and only the person who opened it can see it."
+        ),
+        colour=colour,
+    )
+    lobby = f"<#{int(state.get('channel_id') or 0)}>" if state.get("channel_id") else "the game panel channel"
+    living = f"<#{living_thread_id}>" if living_thread_id else "the private Living Circle"
+    lost = f"<#{lost_thread_id}>" if lost_thread_id else "the private Lost in the Forest space"
+    embed.add_field(
+        name="Where is what?",
+        value=(
+            f"**Game panel:** {lobby} — join, role/action, voting, last will, refresh and host controls.\n"
+            f"**Living conversation:** {living} — only enrolled living players can enter or speak.\n"
+            f"**After you fall:** {lost} — only lost players and configured Keepers of the Lost."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Privacy",
+        value="Roles, night choices, votes and this guide are ephemeral/private. The public panel only shows information every participant may know.",
+        inline=False,
+    )
+    try:
+        info = engine.private_player_state(state, user_id)
+    except engine.GameError:
+        info = None
+    if info:
+        role_text = info.get("role_name") or "not dealt yet"
+        embed.add_field(name="Your place", value=f"You are enrolled. Current calling: **{role_text}**.", inline=False)
+    else:
+        embed.add_field(name="Your place", value="You have not joined this Conclave yet.", inline=False)
+    embed.set_footer(text="Use the selector below for controls, phases, callings, or the Lost Forest.")
     return embed
 
 
@@ -313,6 +470,41 @@ class _JudgementView(discord.ui.View):
         await self._vote(interaction, "abstain")
 
 
+class _GuideSelect(discord.ui.Select):
+    def __init__(self, cog: "ConclaveCog", user_id: int):
+        super().__init__(
+            placeholder="Choose a guide page…",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label="Where is what?", value="overview", emoji="🌿"),
+                discord.SelectOption(label="Controls", value="controls", emoji="🎛️"),
+                discord.SelectOption(label="Phases", value="phases", emoji="🌙"),
+                discord.SelectOption(label="Callings / roles", value="roles", emoji="📖"),
+                discord.SelectOption(label="Lost in the Forest", value="lost", emoji="🍂"),
+            ],
+        )
+        self.cog = cog
+        self.user_id = int(user_id)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id or interaction.channel_id is None:
+            return await interaction.response.send_message("This private guide is not yours.", ephemeral=True)
+        state = await self.cog.get_channel_state(interaction.channel_id)
+        if not state:
+            return await interaction.response.edit_message(content="This Conclave is no longer active.", embed=None, view=None)
+        await interaction.response.edit_message(
+            embed=build_guide_embed(state, self.user_id, self.values[0]),
+            view=self.view,
+        )
+
+
+class _GuideView(discord.ui.View):
+    def __init__(self, cog: "ConclaveCog", user_id: int):
+        super().__init__(timeout=300)
+        self.add_item(_GuideSelect(cog, user_id))
+
+
 class ConclavePanel(discord.ui.View):
     """One persistent view works for every session; channel id selects state."""
 
@@ -332,7 +524,13 @@ class ConclavePanel(discord.ui.View):
                 interaction.channel_id,
                 lambda s: engine.add_player(s, interaction.user.id, interaction.user.display_name),
             )
-            await interaction.response.send_message("🌱 You joined the Verdant Conclave.", ephemeral=True)
+            state = await self.cog.sync_game_spaces(state)
+            living_thread_id = int(state.get("living_thread_id") or 0)
+            destination = f" Your game conversation is <#{living_thread_id}>." if living_thread_id else ""
+            await interaction.response.send_message(
+                f"🌱 You joined the Verdant Conclave.{destination}",
+                ephemeral=True,
+            )
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
@@ -344,7 +542,8 @@ class ConclavePanel(discord.ui.View):
                 interaction.channel_id,
                 lambda s: engine.remove_player(s, interaction.user.id),
             )
-            await interaction.response.send_message("You left the gathering.", ephemeral=True)
+            state = await self.cog.sync_game_spaces(state, removed_user_ids=[interaction.user.id])
+            await interaction.response.send_message("You left the gathering and its private game spaces.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
@@ -402,6 +601,17 @@ class ConclavePanel(discord.ui.View):
             return await interaction.response.send_message("This Conclave is no longer active.", ephemeral=True)
         await interaction.response.edit_message(embed=build_public_embed(state), view=self)
 
+    @discord.ui.button(label="Guide", emoji="📖", style=discord.ButtonStyle.secondary, custom_id="conclave:guide", row=1)
+    async def guide(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        state = await self._state(interaction)
+        if not state:
+            return await interaction.response.send_message("This Conclave is no longer active.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=build_guide_embed(state, interaction.user.id),
+            view=_GuideView(self.cog, interaction.user.id),
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Start", style=discord.ButtonStyle.success, custom_id="conclave:start", row=1)
     async def start(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
@@ -409,6 +619,7 @@ class ConclavePanel(discord.ui.View):
             return await interaction.response.send_message("Only the host may start this Conclave.", ephemeral=True)
         try:
             state = await self.cog.mutate_channel(interaction.channel_id, engine.start_game)
+            state = await self.cog.sync_game_spaces(state)
             await interaction.response.send_message("🌙 Roles have been dealt privately. Night has begun.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
@@ -421,6 +632,7 @@ class ConclavePanel(discord.ui.View):
             return await interaction.response.send_message("Only the host may advance the Conclave.", ephemeral=True)
         try:
             state = await self.cog.mutate_channel(interaction.channel_id, engine.advance_phase)
+            state = await self.cog.sync_game_spaces(state)
             await interaction.response.send_message(f"Advanced to **{_phase_label(state.get('phase'))}**.", ephemeral=True)
             await self.cog.refresh_panel_from_interaction(interaction, state)
         except engine.GameError as exc:
@@ -432,6 +644,7 @@ class ConclavePanel(discord.ui.View):
         if not state or not self.cog.is_host_or_operator(interaction, state):
             return await interaction.response.send_message("Only the host may end this Conclave.", ephemeral=True)
         state = await self.cog.mutate_channel(interaction.channel_id, engine.end_game)
+        state = await self.cog.sync_game_spaces(state)
         await interaction.response.send_message("The Verdant Conclave has been closed.", ephemeral=True)
         await self.cog.refresh_panel_from_interaction(interaction, state)
 
@@ -454,6 +667,177 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
 
     async def mutate_game(self, game_id: str, mutator) -> dict:
         return await asyncio.to_thread(self.store.mutate, game_id, mutator)
+
+    async def _fetch_thread(self, thread_id: int | str | None) -> Optional[discord.Thread]:
+        try:
+            value = int(thread_id or 0)
+        except Exception:
+            return None
+        if not value:
+            return None
+        channel = self.bot.get_channel(value)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(value)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return None
+        return channel if isinstance(channel, discord.Thread) else None
+
+    async def _fetch_member(self, guild: discord.Guild, user_id: int) -> Optional[discord.Member]:
+        member = guild.get_member(int(user_id))
+        if member is not None:
+            return member
+        try:
+            return await guild.fetch_member(int(user_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+
+    @staticmethod
+    def _member_has_lost_priest_role(member: discord.Member) -> bool:
+        # Canonical IAM capability first; the BOT role-id list is a compatibility
+        # bridge until Discord bindings are fully managed in Elfministration.
+        try:
+            if access_control.evaluate_discord_member(
+                member, "game.conclave.lost_witness"
+            ).allowed:
+                return True
+        except Exception:
+            pass
+        allowed = _configured_role_ids("conclave_lost_priest_role_ids")
+        return bool(allowed and any(int(role.id) in allowed for role in getattr(member, "roles", [])))
+
+    async def ensure_game_spaces(self, state: dict) -> dict:
+        """Ensure the game owns private living/lost discussion threads.
+
+        The bound channel remains the public lobby/control panel. Existing
+        channels keep their normal permissions; the actual game conversation
+        lives in private threads so non-players cannot speak or even read it.
+        """
+        if not state or state.get("phase") == engine.PHASE_ENDED:
+            return state
+        living = await self._fetch_thread(state.get("living_thread_id"))
+        lost = await self._fetch_thread(state.get("lost_thread_id"))
+        if living is not None and lost is not None:
+            return state
+
+        channel_id = int(state.get("channel_id") or 0)
+        parent = self.bot.get_channel(channel_id)
+        if parent is None:
+            try:
+                parent = await self.bot.fetch_channel(channel_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
+                raise engine.GameError(f"Bound Discord channel is unavailable: {exc}", "channel_unavailable") from exc
+        if not isinstance(parent, discord.TextChannel):
+            raise engine.GameError("Verdant Conclave requires a text channel that can host private game threads.", "bad_channel")
+
+        created: dict[str, int] = {}
+        title = str(state.get("title") or "Verdant Conclave")[:70]
+        try:
+            if living is None:
+                living = await parent.create_thread(
+                    name=f"🌿 {title} · Living Circle"[:100],
+                    type=discord.ChannelType.private_thread,
+                    invitable=False,
+                    auto_archive_duration=1440,
+                    reason=f"Living discussion for {state.get('game_id')}",
+                )
+                created["living_thread_id"] = int(living.id)
+                await living.send(
+                    f"🌿 **Living Circle** — only enrolled living players may speak here. "
+                    f"Game controls remain in <#{channel_id}>."
+                )
+            if lost is None:
+                lost = await parent.create_thread(
+                    name=f"🍂 {title} · Lost in the Forest"[:100],
+                    type=discord.ChannelType.private_thread,
+                    invitable=False,
+                    auto_archive_duration=1440,
+                    reason=f"Lost-player discussion for {state.get('game_id')}",
+                )
+                created["lost_thread_id"] = int(lost.id)
+                await lost.send(
+                    "🍂 **Lost in the Forest** — voices here cannot be heard by the living. "
+                    "Only lost players and configured Keepers of the Lost may enter."
+                )
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            raise engine.GameError(
+                f"I could not create the private Conclave discussion spaces: {exc}",
+                "private_space_failed",
+            ) from exc
+
+        if created:
+            def apply_spaces(current: dict) -> dict:
+                current.update(created)
+                return current
+            state = await asyncio.to_thread(self.store.mutate, str(state.get("game_id")), apply_spaces)
+        return state
+
+    async def sync_game_spaces(self, state: dict, *, removed_user_ids=None) -> dict:
+        """Mirror living/lost game membership into Discord private threads."""
+        if not state:
+            return state
+        if state.get("phase") != engine.PHASE_ENDED:
+            state = await self.ensure_game_spaces(state)
+
+        living = await self._fetch_thread(state.get("living_thread_id"))
+        lost = await self._fetch_thread(state.get("lost_thread_id"))
+        guild = self.bot.get_guild(int(state.get("guild_id") or 0))
+        if guild is None or (living is None and lost is None):
+            return state
+
+        async def add(thread: Optional[discord.Thread], member: Optional[discord.Member]) -> None:
+            if thread is None or member is None:
+                return
+            try:
+                await thread.add_user(member)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        async def remove(thread: Optional[discord.Thread], member: Optional[discord.Member]) -> None:
+            if thread is None or member is None:
+                return
+            try:
+                await thread.remove_user(member)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+        for player_obj in (state.get("players") or {}).values():
+            if player_obj.get("synthetic"):
+                continue
+            member = await self._fetch_member(guild, int(player_obj.get("user_id") or 0))
+            if member is None:
+                continue
+            if player_obj.get("alive", True):
+                await add(living, member)
+                if not self._member_has_lost_priest_role(member):
+                    await remove(lost, member)
+            else:
+                await remove(living, member)
+                await add(lost, member)
+
+        for user_id in removed_user_ids or []:
+            member = await self._fetch_member(guild, int(user_id))
+            await remove(living, member)
+            if member is not None and not self._member_has_lost_priest_role(member):
+                await remove(lost, member)
+
+        if lost is not None:
+            # Keepers of the Lost are explicit-only in IAM. The compatibility
+            # Discord role-id setting feeds the same decision until all servers
+            # have migrated their role bindings into Identity & Access.
+            for member in guild.members:
+                if not member.bot and self._member_has_lost_priest_role(member):
+                    await add(lost, member)
+
+        if state.get("phase") == engine.PHASE_ENDED:
+            for thread in (living, lost):
+                if thread is None:
+                    continue
+                try:
+                    await thread.edit(archived=True, locked=True, reason="Verdant Conclave ended")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+        return state
 
     def is_host_or_operator(self, interaction: discord.Interaction, state: dict) -> bool:
         if int(state.get("host_user_id") or 0) == int(interaction.user.id):
@@ -508,12 +892,15 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
     async def refresh_game_panel(self, game_id: str, state: Optional[dict] = None) -> None:
         state = state or await asyncio.to_thread(self.store.get, game_id)
         if state and state.get("channel_id"):
+            state = await self.sync_game_spaces(state)
             await self.refresh_channel_panel(int(state["channel_id"]), state)
 
     async def recreate_game_panel(self, game_id: str) -> dict:
         state = await asyncio.to_thread(self.store.get, game_id)
         if not state or not state.get("channel_id"):
             raise engine.GameError("Conclave session or bound channel not found.", "not_found")
+        if state.get("phase") != engine.PHASE_ENDED:
+            state = await self.sync_game_spaces(state)
         channel = self.bot.get_channel(int(state["channel_id"]))
         if channel is None:
             try:
@@ -536,6 +923,11 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         try:
             active = await asyncio.to_thread(self.store.list_active, 100)
             for state in active:
+                if state.get("channel_id"):
+                    try:
+                        state = await self.sync_game_spaces(state)
+                    except engine.GameError as exc:
+                        logger.warning("[conclave] private space restore failed game=%s: %s", state.get("game_id"), exc)
                 if state.get("panel_message_id") and state.get("channel_id"):
                     await self.refresh_channel_panel(int(state["channel_id"]), state)
             logger.info("[conclave] restored %s active Discord panel(s)", len(active))
@@ -566,15 +958,36 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         bind_existing = bool(channel is not None or use_current_channel)
         if channel is not None and int(channel.guild.id) != int(interaction.guild.id):
             return await interaction.followup.send("The selected channel must belong to this Discord server.", ephemeral=True)
+        if not isinstance(target_channel, discord.TextChannel):
+            return await interaction.followup.send(
+                "Choose a normal text channel for the Conclave lobby; TheBigTree creates private game threads beneath it.",
+                ephemeral=True,
+            )
         if not bind_existing:
             slug = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-") or "verdant-conclave"
             slug = slug[:70]
             try:
                 category = getattr(interaction.channel, "category", None)
+                overwrites = {
+                    interaction.guild.default_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False,
+                    ),
+                }
+                bot_member = interaction.guild.me
+                if bot_member is not None:
+                    overwrites[bot_member] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        create_private_threads=True,
+                        send_messages_in_threads=True,
+                        manage_threads=True,
+                    )
                 created_channel = await interaction.guild.create_text_channel(
                     f"{slug}-{str(interaction.id)[-4:]}",
                     category=category,
-                    topic="Verdant Conclave · channel-locked social deduction · managed by TheBigTree",
+                    topic="Verdant Conclave · lobby/control panel · managed by TheBigTree",
+                    overwrites=overwrites,
                     reason=f"Verdant Conclave created by {interaction.user}",
                 )
                 target_channel = created_channel
@@ -605,6 +1018,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     )
             except Exception as exc:
                 logger.warning("[conclave] unable to persist resource host assignment: %s", exc)
+            state = await self.ensure_game_spaces(state)
             panel_message = await target_channel.send(embed=build_public_embed(state), view=self.panel)
             state = await asyncio.to_thread(self.store.set_panel_message, state["game_id"], panel_message.id)
             await panel_message.edit(embed=build_public_embed(state), view=self.panel)
@@ -616,12 +1030,14 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 not bind_existing,
             )
             channel_note = (
-                "Existing channel bound; current channel members are not auto-enrolled and join with the **Join** button."
+                "Existing channel bound without changing its normal permissions."
                 if bind_existing else
-                "A dedicated channel was created; players join with the **Join** button."
+                "A dedicated read-only lobby channel was created."
             )
             await interaction.followup.send(
-                f"🌿 Verdant Conclave created in {target_channel.mention}. Game actions are locked to that channel. {channel_note}",
+                f"🌿 Verdant Conclave created in {target_channel.mention}. {channel_note} "
+                f"Players opt in with **Join**; enrolled living players speak only in <#{state.get('living_thread_id')}>. "
+                f"Lost players move to <#{state.get('lost_thread_id')}>.",
                 ephemeral=True,
             )
         except Exception as exc:
