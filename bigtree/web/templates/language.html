@@ -74,7 +74,7 @@
           <label>Temperature
             <input id="temperature" type="number" min="0" max="2" step="0.05">
           </label>
-          <label>Max output tokens
+          <label>Preferred output budget
             <input id="maxTokens" type="number" min="64" max="16384" step="1">
           </label>
           <label>Reasoning
@@ -298,6 +298,9 @@
         <div><dt>Latency</dt><dd id="diagLatency">—</dd></div>
         <div><dt>Input tokens</dt><dd id="diagInput">—</dd></div>
         <div><dt>Output tokens</dt><dd id="diagOutput">—</dd></div>
+        <div><dt>Provider ceiling</dt><dd id="diagBudget">—</dd></div>
+        <div><dt>Finish reason</dt><dd id="diagFinish">—</dd></div>
+        <div><dt>Completion retry</dt><dd id="diagRetry">—</dd></div>
         <div><dt>Request ID</dt><dd id="diagRequest">—</dd></div>
         <div class="diagnostic-error"><dt>Last error</dt><dd id="diagError">—</dd></div>
       </dl>

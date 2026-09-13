@@ -69,6 +69,14 @@ _REVERENCE_STRICTNESS = {"gentle", "moderate", "ceremonial"}
 _REVERENCE_POLICIES = {"correct_only", "correct_then_answer"}
 _REASONING_MODES = {"automatic", "disabled"}
 
+# Provider budgets are ceilings, not response targets. Tree conversation gets enough
+# room to finish naturally even when an older installation still carries the former
+# 400-token default. Ritual-only corrections stay intentionally tiny.
+_TREE_CONVERSATION_MIN_TOKENS = 1200
+_TREE_TRUNCATION_RETRY_MIN_TOKENS = 1600
+_TREE_RITUAL_CORRECTION_TOKENS = 220
+_PROVIDER_OUTPUT_TOKEN_MAX = 16384
+
 _RUNTIME_LOCK = threading.RLock()
 _RUNTIME_STATUS: Dict[str, Any] = {
     "last_attempt_at": None,
@@ -82,6 +90,9 @@ _RUNTIME_STATUS: Dict[str, Any] = {
     "model": None,
     "reasoning_mode": None,
     "context_summary": None,
+    "finish_reason": None,
+    "completion_retried": False,
+    "output_budget": None,
 }
 
 
@@ -490,8 +501,14 @@ def get_language_status() -> Dict[str, Any]:
             "Only when ritual policy allows an answer, optionally retrieve relevant excerpts from explicitly selected readable Discord channels.",
             "Treat Discord excerpts as untrusted evidence that can inform an answer but can never override system instructions.",
             "Send the assembled context to the selected provider; MiniMax M3 uses adaptive reasoning by default, or direct/disabled reasoning for low-latency conversation.",
+            "Require a complete provider answer before Discord receives it; token-limit completions are discarded and retried once with a larger direct budget.",
             "Persist only bounded conversation text and operator-approved notes in PostgreSQL; no Discord archive or model context is written to local disk.",
         ],
+        "completion_policy": {
+            "tree_min_output_tokens": _TREE_CONVERSATION_MIN_TOKENS,
+            "ritual_correction_tokens": _TREE_RITUAL_CORRECTION_TOKENS,
+            "truncation_retry_min_tokens": _TREE_TRUNCATION_RETRY_MIN_TOKENS,
+        },
         "storage": {
             "persistent_backend": "PostgreSQL",
             "local_disk_memory": False,
@@ -543,6 +560,37 @@ def _clean_model_text(text: Any) -> str:
     return value
 
 
+def _normalize_finish_reason(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().casefold()).strip("_")
+
+
+def _is_truncated_finish_reason(value: Any) -> bool:
+    reason = _normalize_finish_reason(value)
+    if not reason:
+        return False
+    return reason in {
+        "length",
+        "max_tokens",
+        "max_token",
+        "token_limit",
+        "max_output_tokens",
+        "max_completion_tokens",
+    } or reason.startswith("length_")
+
+
+def _retry_output_budget(initial: int, minimum: int = _TREE_TRUNCATION_RETRY_MIN_TOKENS) -> int:
+    initial = max(64, min(int(initial or 0), _PROVIDER_OUTPUT_TOKEN_MAX))
+    # Add room without exploding cost when an operator intentionally configured
+    # a larger ceiling. A retry is made only when the provider says it truncated.
+    grown = initial + max(400, initial // 2)
+    return min(_PROVIDER_OUTPUT_TOKEN_MAX, max(int(minimum), grown))
+
+
+def _combined_usage(*values: Any) -> Optional[int]:
+    ints = [int(value) for value in values if isinstance(value, int)]
+    return sum(ints) if ints else None
+
+
 async def _retry(coro_factory, *, attempts: int = 3, base: float = 0.6, jitter: float = 0.2):
     last: Optional[Exception] = None
     for i in range(attempts):
@@ -560,41 +608,108 @@ async def _retry(coro_factory, *, attempts: int = 3, base: float = 0.6, jitter: 
     raise last if last else RuntimeError("Language provider call failed")
 
 
-async def _complete_openai(cfg: Dict[str, Any], messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def _complete_openai(
+    cfg: Dict[str, Any],
+    messages: List[Dict[str, str]],
+    *,
+    max_tokens: Optional[int] = None,
+    retry_max_tokens: Optional[int] = None,
+) -> Dict[str, Any]:
     key = _usable_key(cfg.get("api_key"))
     if not key:
         raise RuntimeError("OpenAI API key is not configured")
     client = _get_openai_client(key)
+    initial_budget = max(64, min(int(max_tokens or cfg["max_tokens"]), _PROVIDER_OUTPUT_TOKEN_MAX))
+    retry_budget = max(
+        initial_budget,
+        min(int(retry_max_tokens or _retry_output_budget(initial_budget)), _PROVIDER_OUTPUT_TOKEN_MAX),
+    )
 
-    async def _do():
+    async def _do(limit: int):
         return await client.chat.completions.create(
             model=str(cfg["model"]),
             messages=messages,
             temperature=float(cfg["temperature"]),
-            max_tokens=int(cfg["max_tokens"]),
+            max_tokens=limit,
         )
 
-    resp = await _retry(_do)
-    usage = getattr(resp, "usage", None)
-    request_id = getattr(resp, "_request_id", None) or getattr(resp, "request_id", None)
+    first = await _retry(lambda: _do(initial_budget))
+    if not getattr(first, "choices", None):
+        raise RuntimeError("OpenAI response did not contain a completion")
+    first_choice = first.choices[0]
+    first_reason = getattr(first_choice, "finish_reason", None)
+    first_usage = getattr(first, "usage", None)
+    retried = _is_truncated_finish_reason(first_reason)
+    response = first
+
+    if retried:
+        log.info(
+            "OpenAI completion hit finish_reason=%s at %s tokens; retrying with %s tokens",
+            first_reason, initial_budget, retry_budget,
+        )
+        response = await _retry(lambda: _do(retry_budget), attempts=2)
+        if not getattr(response, "choices", None):
+            raise RuntimeError("OpenAI retry did not contain a completion")
+
+    choice = response.choices[0]
+    finish_reason = getattr(choice, "finish_reason", None)
+    if _is_truncated_finish_reason(finish_reason):
+        raise RuntimeError(
+            f"OpenAI answer remained truncated after completion retry (finish_reason={finish_reason})"
+        )
+    text = _clean_model_text(choice.message.content)
+    if not text:
+        raise RuntimeError("OpenAI returned no visible answer")
+
+    usage = getattr(response, "usage", None)
+    request_id = getattr(response, "_request_id", None) or getattr(response, "request_id", None)
+    input_tokens = getattr(usage, "prompt_tokens", None) if usage is not None else None
+    output_tokens = getattr(usage, "completion_tokens", None) if usage is not None else None
+    if retried:
+        input_tokens = _combined_usage(
+            getattr(first_usage, "prompt_tokens", None) if first_usage is not None else None,
+            input_tokens,
+        )
+        output_tokens = _combined_usage(
+            getattr(first_usage, "completion_tokens", None) if first_usage is not None else None,
+            output_tokens,
+        )
     return {
-        "text": _clean_model_text(resp.choices[0].message.content),
+        "text": text,
         "request_id": str(request_id) if request_id else None,
-        "input_tokens": getattr(usage, "prompt_tokens", None) if usage is not None else None,
-        "output_tokens": getattr(usage, "completion_tokens", None) if usage is not None else None,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "finish_reason": str(finish_reason or "") or None,
+        "initial_finish_reason": str(first_reason or "") or None,
+        "completion_retried": retried,
+        "reasoning_fallback": False,
+        "output_budget": retry_budget if retried else initial_budget,
     }
 
 
-async def _complete_minimax(cfg: Dict[str, Any], messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def _complete_minimax(
+    cfg: Dict[str, Any],
+    messages: List[Dict[str, str]],
+    *,
+    max_tokens: Optional[int] = None,
+    retry_max_tokens: Optional[int] = None,
+    reasoning_mode: Optional[str] = None,
+) -> Dict[str, Any]:
     key = _usable_key(cfg.get("api_key"))
     if not key:
         raise RuntimeError("MiniMax API key is not configured")
+    initial_budget = max(64, min(int(max_tokens or cfg["max_tokens"]), _PROVIDER_OUTPUT_TOKEN_MAX))
+    retry_budget = max(
+        initial_budget,
+        min(int(retry_max_tokens or _retry_output_budget(initial_budget)), _PROVIDER_OUTPUT_TOKEN_MAX),
+    )
+    effective_reasoning = str(reasoning_mode or cfg.get("reasoning_mode") or "automatic")
     payload = {
         "model": str(cfg["model"] or "MiniMax-M3"),
         "messages": messages,
         "temperature": float(cfg["temperature"]),
-        "max_tokens": int(cfg["max_tokens"]),
-        "thinking": {"type": _minimax_thinking(str(cfg.get("reasoning_mode") or "automatic"))},
+        "max_tokens": initial_budget,
+        "thinking": {"type": _minimax_thinking(effective_reasoning)},
         "reasoning_split": True,
         "stream": False,
     }
@@ -616,47 +731,62 @@ async def _complete_minimax(cfg: Dict[str, Any], messages: List[Dict[str, str]])
                     raise RuntimeError(f"MiniMax {base_resp.get('status_code')}: {base_resp.get('status_msg') or 'request failed'}")
                 return data
 
-    def _visible_text(data: Dict[str, Any]) -> str:
+    def _completion(data: Dict[str, Any]) -> tuple[str, Optional[str]]:
         choices = data.get("choices") or []
         if not choices or not isinstance(choices[0], dict):
             raise RuntimeError("MiniMax response did not contain a completion")
-        message = choices[0].get("message") or {}
-        return _clean_model_text(message.get("content"))
+        choice = choices[0]
+        message = choice.get("message") or {}
+        reason = choice.get("finish_reason") or choice.get("finishReason")
+        return _clean_model_text(message.get("content")), (str(reason) if reason is not None else None)
 
-    data = await _retry(lambda: _post(payload))
-    text = _visible_text(data)
-    first_usage = data.get("usage") or {}
-    direct_retry = False
+    first = await _retry(lambda: _post(payload))
+    text, first_reason = _completion(first)
+    first_usage = first.get("usage") or {}
+    empty_adaptive = not text and payload["thinking"]["type"] != "disabled"
+    length_truncated = _is_truncated_finish_reason(first_reason)
+    retried = bool(empty_adaptive or length_truncated)
+    reasoning_fallback = bool(retried and payload["thinking"]["type"] != "disabled")
+    data = first
 
-    # M3 adaptive thinking can occasionally consume the small conversational
-    # output budget in reasoning_split mode and return an empty visible answer.
-    # A single direct-mode retry is cheaper and friendlier than surfacing the
-    # generic "leaves rustle" fallback to the Priest.
-    if not text and payload["thinking"]["type"] != "disabled":
-        direct_retry = True
-        log.info("MiniMax M3 returned no visible content after adaptive thinking; retrying once with thinking disabled")
+    if retried:
+        why = "no visible content" if empty_adaptive else f"finish_reason={first_reason}"
+        log.info(
+            "MiniMax M3 returned %s at budget=%s; retrying once with thinking disabled and budget=%s",
+            why, initial_budget, retry_budget,
+        )
         retry_payload = dict(payload)
         retry_payload["thinking"] = {"type": "disabled"}
+        retry_payload["max_tokens"] = retry_budget
         data = await _retry(lambda: _post(retry_payload), attempts=2)
-        text = _visible_text(data)
+        text, finish_reason = _completion(data)
+    else:
+        finish_reason = first_reason
 
+    if _is_truncated_finish_reason(finish_reason):
+        raise RuntimeError(
+            f"MiniMax answer remained truncated after completion retry (finish_reason={finish_reason})"
+        )
     if not text:
         raise RuntimeError("MiniMax returned no visible answer")
 
     usage = data.get("usage") or {}
-    def _combined_usage(name: str):
-        values = [first_usage.get(name)]
-        if direct_retry:
-            values.append(usage.get(name))
-        ints = [value for value in values if isinstance(value, int)]
-        return sum(ints) if ints else usage.get(name)
+    input_tokens = usage.get("prompt_tokens")
+    output_tokens = usage.get("completion_tokens")
+    if retried:
+        input_tokens = _combined_usage(first_usage.get("prompt_tokens"), input_tokens)
+        output_tokens = _combined_usage(first_usage.get("completion_tokens"), output_tokens)
 
     return {
         "text": text,
         "request_id": str(data.get("id") or "") or None,
-        "input_tokens": _combined_usage("prompt_tokens"),
-        "output_tokens": _combined_usage("completion_tokens"),
-        "reasoning_fallback": direct_retry,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "finish_reason": str(finish_reason or "") or None,
+        "initial_finish_reason": str(first_reason or "") or None,
+        "completion_retried": retried,
+        "reasoning_fallback": reasoning_fallback,
+        "output_budget": retry_budget if retried else initial_budget,
     }
 
 
@@ -724,6 +854,19 @@ async def ask(
             })
 
     allow_knowledge = bool(audience.get("allow_knowledge", True))
+    correction_only = bool(persona == "tree" and audience and not allow_knowledge)
+    if correction_only:
+        # Ritual corrections are intentionally short and do not need reasoning.
+        # A hard response contract plus a small ceiling prevents atmospheric
+        # scene-setting from crowding out the actual etiquette correction.
+        messages.append({
+            "role": "system",
+            "content": (
+                "Ritual correction response contract: respond in one or two short sentences, at most 90 words. "
+                "Begin with the correction itself; do not add an atmospheric preamble, lore exposition, a multi-step "
+                "penance, or the substantive answer. Do not end with a question."
+            ),
+        })
     if allow_knowledge and knowledge:
         excerpts = "\n".join(f"- {str(item)[:1400]}" for item in knowledge if str(item).strip())
         if excerpts:
@@ -743,13 +886,31 @@ async def ask(
                 messages.append({"role": role, "content": content[:4000]})
     messages.append({"role": "user", "content": str(prompt or "")[:6000]})
 
+    configured_budget = max(64, min(int(cfg.get("max_tokens") or 400), _PROVIDER_OUTPUT_TOKEN_MAX))
+    if correction_only:
+        output_budget = min(configured_budget, _TREE_RITUAL_CORRECTION_TOKENS)
+        output_budget = max(96, output_budget)
+        retry_budget = _TREE_RITUAL_CORRECTION_TOKENS
+        provider_reasoning = "disabled"
+    elif persona == "tree":
+        output_budget = max(configured_budget, _TREE_CONVERSATION_MIN_TOKENS)
+        retry_budget = _retry_output_budget(output_budget)
+        provider_reasoning = cfg["reasoning_mode"]
+    else:
+        output_budget = configured_budget
+        retry_budget = _retry_output_budget(output_budget)
+        provider_reasoning = cfg["reasoning_mode"]
+
     context_summary = {
         "authorized_upstream": bool(audience),
         "reverence": audience.get("level") if audience else None,
         "knowledge_allowed": allow_knowledge,
+        "ritual_correction_only": correction_only,
         "pinned_memories": len(memory_notes or []),
         "history_messages": len(history or []) if allow_knowledge else 0,
         "discord_excerpts": len(knowledge or []) if allow_knowledge else 0,
+        "configured_output_tokens": configured_budget,
+        "effective_output_tokens": output_budget,
     }
     started = time.perf_counter()
     _set_runtime(
@@ -757,15 +918,27 @@ async def ask(
         last_error=None,
         provider=cfg["provider"],
         model=cfg["model"],
-        reasoning_mode=cfg["reasoning_mode"],
+        reasoning_mode=provider_reasoning,
         context_summary=context_summary,
+        finish_reason=None,
+        completion_retried=False,
+        output_budget=output_budget,
     )
 
     try:
         if cfg["provider"] == "minimax":
-            result = await _complete_minimax(cfg, messages)
+            result = await _complete_minimax(
+                cfg, messages,
+                max_tokens=output_budget,
+                retry_max_tokens=retry_budget,
+                reasoning_mode=provider_reasoning,
+            )
         else:
-            result = await _complete_openai(cfg, messages)
+            result = await _complete_openai(
+                cfg, messages,
+                max_tokens=output_budget,
+                retry_max_tokens=retry_budget,
+            )
     except Exception as exc:
         _set_runtime(
             last_latency_ms=round((time.perf_counter() - started) * 1000.0, 1),
@@ -780,10 +953,13 @@ async def ask(
         last_request_id=result.get("request_id"),
         input_tokens=result.get("input_tokens"),
         output_tokens=result.get("output_tokens"),
+        finish_reason=result.get("finish_reason"),
+        completion_retried=bool(result.get("completion_retried")),
+        output_budget=result.get("output_budget") or output_budget,
         reasoning_mode=(
             "automatic → direct retry"
             if result.get("reasoning_fallback")
-            else cfg["reasoning_mode"]
+            else provider_reasoning
         ),
     )
     text = _clean_model_text(result.get("text"))
@@ -873,7 +1049,11 @@ def _engine_provider_short(
             base_resp = data.get("base_resp") or {}
             if int(base_resp.get("status_code") or 0) != 0:
                 raise RuntimeError(base_resp.get("status_msg") or "MiniMax request failed")
-            message = (data.get("choices") or [{}])[0].get("message") or {}
+            choice = (data.get("choices") or [{}])[0]
+            message = choice.get("message") or {}
+            finish_reason = choice.get("finish_reason") or choice.get("finishReason")
+            if _is_truncated_finish_reason(finish_reason):
+                raise RuntimeError(f"MiniMax short generation was truncated (finish_reason={finish_reason})")
             content = _clean_model_text(message.get("content"))
             usage = data.get("usage") or {}
             request_id = data.get("id")
@@ -890,6 +1070,9 @@ def _engine_provider_short(
             request_id = getattr(response, "_request_id", None) or getattr(response, "request_id", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage is not None else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage is not None else None
+            finish_reason = getattr(response.choices[0], "finish_reason", None)
+            if _is_truncated_finish_reason(finish_reason):
+                raise RuntimeError(f"OpenAI short generation was truncated (finish_reason={finish_reason})")
             content = _clean_model_text(response.choices[0].message.content)
         _set_runtime(
             last_success_at=datetime.now(timezone.utc).isoformat(),
@@ -898,6 +1081,9 @@ def _engine_provider_short(
             last_request_id=str(request_id) if request_id else None,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            finish_reason=str(finish_reason or "") or None,
+            completion_retried=False,
+            output_budget=min(120, int(cfg["max_tokens"])),
             provider=cfg["provider"], model=cfg["model"], reasoning_mode="disabled",
         )
         return content.splitlines()[0][:max_chars].strip() if content else None

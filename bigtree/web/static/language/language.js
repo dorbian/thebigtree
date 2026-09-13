@@ -100,16 +100,18 @@
     $("provider").value = statusCache.provider || "openai";
     $("model").value = statusCache.model || "";
     $("temperature").value = statusCache.temperature ?? 0.7;
-    $("maxTokens").value = statusCache.max_output_tokens ?? 400;
+    $("maxTokens").value = statusCache.max_output_tokens ?? 1200;
     $("reasoningMode").value = statusCache.reasoning_mode || "automatic";
     $("keyKind").value = statusCache.key_kind || "—";
     $("apiKey").value = "";
     $("apiKey").placeholder = statusCache.key_configured
       ? `Current: ${statusCache.key_hint} — leave blank to keep`
       : "Paste provider API key";
-    $("providerHelp").textContent = statusCache.provider === "minimax"
-      ? "MiniMax M3 supports adaptive/on/off reasoning. sk-cp Token Plan and sk-api pay-as-you-go keys are stored only in PostgreSQL."
-      : "OpenAI remains available as a provider. The selected provider credential is stored only in PostgreSQL.";
+    const completion = statusCache.completion_policy || {};
+    const integrityHelp = ` Priest conversations reserve at least ${completion.tree_min_output_tokens ?? 1200} provider tokens so answers can finish; ritual-only corrections are capped at ${completion.ritual_correction_tokens ?? 220}. A provider-reported token-limit stop is discarded and retried once at ${completion.truncation_retry_min_tokens ?? 1600}+ tokens.`;
+    $("providerHelp").textContent = (statusCache.provider === "minimax"
+      ? "MiniMax M3 supports adaptive/off reasoning. sk-cp Token Plan and sk-api pay-as-you-go keys are stored only in PostgreSQL."
+      : "OpenAI remains available as a provider. The selected provider credential is stored only in PostgreSQL.") + integrityHelp;
     $("checkQuota").disabled = statusCache.provider !== "minimax";
 
     $("priestChat").checked = !!features.priest_chat;
@@ -149,6 +151,9 @@
     $("diagLatency").textContent = runtime.last_latency_ms == null ? "—" : `${runtime.last_latency_ms} ms`;
     $("diagInput").textContent = runtime.input_tokens ?? "—";
     $("diagOutput").textContent = runtime.output_tokens ?? "—";
+    $("diagBudget").textContent = runtime.output_budget == null ? "—" : `${runtime.output_budget} tokens`;
+    $("diagFinish").textContent = runtime.finish_reason || "—";
+    $("diagRetry").textContent = runtime.completion_retried ? "yes — truncated/empty first completion discarded" : "no";
     $("diagRequest").textContent = runtime.last_request_id || "—";
     $("diagError").textContent = runtime.last_error || "—";
 
@@ -243,7 +248,7 @@
       provider: $("provider").value,
       model: $("model").value.trim(),
       temperature: Number($("temperature").value || 0.7),
-      max_output_tokens: Number($("maxTokens").value || 400),
+      max_output_tokens: Number($("maxTokens").value || 1200),
       reasoning_mode: $("reasoningMode").value,
       enable_priest_chat: $("priestChat").checked,
       memory_enabled: $("memoryEnabled").checked,

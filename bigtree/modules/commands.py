@@ -225,6 +225,43 @@ def _strip_bot_mention(text: str, bot_user) -> str:
     # downstream ritual classifier.
     return re.sub("|".join(patterns), "TheBigTree", text).strip()
 
+def _split_tree_reply(text: str, limit: int = 1900) -> list[str]:
+    """Split a complete Tree reply into Discord-safe chunks without dropping text."""
+    remaining = str(text or "").strip()
+    if not remaining:
+        return []
+    chunks: list[str] = []
+    limit = max(500, min(int(limit or 1900), 1990))
+    while len(remaining) > limit:
+        window = remaining[: limit + 1]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"), window.rfind(". "), window.rfind("! "), window.rfind("? "))
+        if cut < int(limit * 0.55):
+            cut = window.rfind(" ")
+        if cut < int(limit * 0.40):
+            cut = limit
+        elif window[cut:cut + 2] in {". ", "! ", "? "}:
+            cut += 1
+        chunk = remaining[:cut].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[cut:].strip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+async def _send_tree_reply(message, reply: str, *, as_reply: bool) -> None:
+    chunks = _split_tree_reply(reply)
+    if not chunks:
+        return
+    if as_reply:
+        await message.reply(chunks[0], mention_author=False)
+    else:
+        await message.channel.send(chunks[0])
+    for chunk in chunks[1:]:
+        await message.channel.send(chunk)
+
+
 def _is_priest(member) -> bool:
     if not member or not hasattr(member, "roles"):
         return False
@@ -444,7 +481,7 @@ async def priest_chat_router(message):
                 except Exception:
                     bigtree.loch.logger.exception("Priest DM language-provider failure")
                     reply = "🍂 The winds falter—my roots feel some trouble reaching the beyond. Try again soon."
-                await message.channel.send(reply)
+                await _send_tree_reply(message, reply, as_reply=False)
             return
 
         # Case 2: Public: only if addressing the bot, and author is Priest
@@ -458,6 +495,6 @@ async def priest_chat_router(message):
                 except Exception:
                     bigtree.loch.logger.exception("Priest public language-provider failure")
                     reply = "🌬️ I hear you, but the spirit channel crackles. Whisper again in a moment."
-                await message.reply(reply, mention_author=False)
+                await _send_tree_reply(message, reply, as_reply=True)
     except Exception:
         bigtree.loch.logger.exception("Unhandled error in priest_chat_router")

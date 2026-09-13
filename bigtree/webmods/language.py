@@ -153,7 +153,7 @@ async def update_language_config(req: web.Request) -> web.Response:
     if "temperature" in body:
         config["temperature"] = _float(body.get("temperature"), 0.7, 0.0, 2.0)
     if "max_output_tokens" in body:
-        config["max_output_tokens"] = _int(body.get("max_output_tokens"), 400, 64, 16384)
+        config["max_output_tokens"] = _int(body.get("max_output_tokens"), 1200, 64, 16384)
     if "reasoning_mode" in body:
         mode = str(body.get("reasoning_mode") or "automatic").strip().lower()
         if mode not in {"automatic", "disabled"}:

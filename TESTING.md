@@ -205,6 +205,9 @@ Language memory is PostgreSQL-backed and intentionally bounded for the container
 - Public `@TheBigTree` counts as the canonical divine address.
 - Existing Priest authorization is never re-requested by the model.
 - Empty adaptive M3 completions retry once with thinking disabled.
+- Normal TheBigTree conversation reserves at least 1,200 provider output tokens even when an older database still contains the former 400-token setting. This is a ceiling, not a target response length.
+- If the provider reports a token-limit/length finish reason, the first completion must be discarded and retried once with a larger direct budget; diagnostics should show the finish reason, effective budget and completion retry. A second truncated completion must surface as an error rather than being posted to Discord.
+- A `correct_only` reverence response should use direct reasoning, stay within one or two short sentences (at most 90 words), and must not spend its response budget on atmospheric scene-setting before the etiquette correction.
 
 
 ## Identity & Access foundation

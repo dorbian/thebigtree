@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-09-13
+- Language Services: treat provider `finish_reason` token-limit stops as incomplete, discard truncated text, and retry once with a larger output budget before anything reaches Discord.
+- MiniMax/OpenAI: reserve a 1,200-token completion ceiling for normal TheBigTree conversation, retry truncation at 1,600+ tokens, expose finish reason/retry/budget diagnostics, and keep ritual-only etiquette corrections to a direct 220-token ceiling.
+- Discord: split complete TheBigTree replies at natural boundaries when they exceed Discord's single-message limit, preserving the full answer instead of failing or clipping it.
 - Conclave: add PostgreSQL-persisted synthetic test elves, host-side fake-choice simulation, and Elfministration controls so one real tester can exercise lobby, night, nomination, trial, and judgement without creating fake Discord accounts.
 - Conclave: allow `/conclave-create` to bind an explicitly selected existing text channel, keep real membership opt-in through Join, mark synthetic players clearly, add a host-side Discord-panel repair action, close failed setup sessions cleanly, and fix the invalid refresh-button emoji that could make Discord reject the panel payload.
 - Access: migrate Verdant Conclave Discord/web host checks to the canonical `game.conclave.host` capability, assign the creator a resource-scoped Conclave host role, and make the browser scope matcher alias/wildcard aware during migration.

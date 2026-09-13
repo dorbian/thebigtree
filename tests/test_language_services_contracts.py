@@ -125,11 +125,36 @@ class LanguageServicesContractTests(unittest.TestCase):
     def test_minimax_empty_adaptive_answer_retries_directly(self):
         ai = (ROOT / "bigtree" / "inc" / "ai.py").read_text("utf-8")
 
-        self.assertIn("returned no visible content after adaptive thinking", ai)
+        self.assertIn('why = "no visible content" if empty_adaptive', ai)
         self.assertIn('retry_payload["thinking"] = {"type": "disabled"}', ai)
-        self.assertIn('"reasoning_fallback": direct_retry', ai)
+        self.assertIn('"reasoning_fallback": reasoning_fallback', ai)
         self.assertIn('"automatic → direct retry"', ai)
-        self.assertIn("returned an empty visible answer", ai)
+        self.assertIn("returned no visible answer", ai)
+
+    def test_provider_completion_integrity_retries_truncated_answers(self):
+        ai = (ROOT / "bigtree" / "inc" / "ai.py").read_text("utf-8")
+        language_html = (ROOT / "bigtree" / "web" / "templates" / "language.html").read_text("utf-8")
+        language_js = (ROOT / "bigtree" / "web" / "static" / "language" / "language.js").read_text("utf-8")
+
+        self.assertIn("_TREE_CONVERSATION_MIN_TOKENS = 1200", ai)
+        self.assertIn("_TREE_TRUNCATION_RETRY_MIN_TOKENS = 1600", ai)
+        self.assertIn("_TREE_RITUAL_CORRECTION_TOKENS = 220", ai)
+        self.assertIn("def _is_truncated_finish_reason", ai)
+        self.assertIn("answer remained truncated after completion retry", ai)
+        self.assertIn("Ritual correction response contract", ai)
+        self.assertIn('"completion_retried": retried', ai)
+        self.assertIn('id="diagFinish"', language_html)
+        self.assertIn('id="diagRetry"', language_html)
+        self.assertIn('runtime.finish_reason', language_js)
+        self.assertIn('runtime.completion_retried', language_js)
+
+    def test_tree_replies_are_split_without_discord_truncation(self):
+        commands = (ROOT / "bigtree" / "modules" / "commands.py").read_text("utf-8")
+        self.assertIn("def _split_tree_reply", commands)
+        self.assertIn("def _send_tree_reply", commands)
+        self.assertIn("chunks[1:]", commands)
+        self.assertIn("await _send_tree_reply(message, reply, as_reply=False)", commands)
+        self.assertIn("await _send_tree_reply(message, reply, as_reply=True)", commands)
 
     def test_discord_search_prefers_relevant_messages(self):
         exact = discord_knowledge.score_text(
