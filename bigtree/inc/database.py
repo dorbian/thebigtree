@@ -90,6 +90,7 @@ class Database:
 
             started = time.perf_counter()
             self._timed_startup_step("schema", self._ensure_tables)
+            self._timed_startup_step("access catalog", self._ensure_access_catalog)
             self._timed_startup_step("config seed", self._import_ini_configs)
 
             # Legacy/bootstrap importers used to run on every process start. In a
@@ -128,6 +129,12 @@ class Database:
                 "[database] initialization complete in %.1f ms",
                 (time.perf_counter() - started) * 1000.0,
             )
+
+    def _ensure_access_catalog(self) -> None:
+        # Identity & Access catalogue is tiny and upserted on start so built-in
+        # role definitions can evolve without disposable-container markers.
+        from bigtree.inc import access_control
+        access_control.seed_builtin_catalog(self)
 
     @staticmethod
     def _env_true(name: str) -> bool:
@@ -342,6 +349,25 @@ class Database:
             if cur.fetchone():
                 return False
             cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        return True
+
+    def _ensure_bigint_column(self, conn: psycopg2.extensions.connection, table: str, column: str) -> bool:
+        """Widen legacy integer identity columns only when needed."""
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                """,
+                (table, column),
+            )
+            row = cur.fetchone()
+            if not row or str(row[0]).lower() == "bigint":
+                return False
+            cur.execute(
+                f"ALTER TABLE {table} ALTER COLUMN {column} TYPE BIGINT USING {column}::BIGINT"
+            )
         return True
 
     # ---------------- schema ----------------
@@ -663,7 +689,7 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS web_tokens (
                 token TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
                 scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
                 user_name TEXT,
                 user_icon TEXT,
@@ -673,6 +699,113 @@ class Database:
                 revoked_at TIMESTAMPTZ,
                 metadata JSONB NOT NULL DEFAULT '{}'::jsonb
             )
+            """,
+
+            """
+            CREATE TABLE IF NOT EXISTS access_principals (
+                id BIGSERIAL PRIMARY KEY,
+                principal_type TEXT NOT NULL DEFAULT 'human',
+                display_name TEXT,
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_identities (
+                id BIGSERIAL PRIMARY KEY,
+                principal_id BIGINT NOT NULL REFERENCES access_principals(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(provider, external_id)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_access_identities_principal
+            ON access_identities (principal_id)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_roles (
+                role_key TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                system BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_capabilities (
+                capability TEXT PRIMARY KEY,
+                description TEXT NOT NULL DEFAULT '',
+                system BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_role_capabilities (
+                role_key TEXT NOT NULL REFERENCES access_roles(role_key) ON DELETE CASCADE,
+                capability TEXT NOT NULL REFERENCES access_capabilities(capability) ON DELETE CASCADE,
+                source TEXT NOT NULL DEFAULT 'operator',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(role_key, capability)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_principal_roles (
+                id BIGSERIAL PRIMARY KEY,
+                principal_id BIGINT NOT NULL REFERENCES access_principals(id) ON DELETE CASCADE,
+                role_key TEXT NOT NULL REFERENCES access_roles(role_key) ON DELETE CASCADE,
+                resource_type TEXT NOT NULL DEFAULT '',
+                resource_id TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'operator',
+                expires_at TIMESTAMPTZ,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(principal_id, role_key, resource_type, resource_id)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_access_principal_roles_principal
+            ON access_principal_roles (principal_id, expires_at)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_external_role_bindings (
+                id BIGSERIAL PRIMARY KEY,
+                provider TEXT NOT NULL,
+                guild_id TEXT NOT NULL DEFAULT '',
+                external_role_id TEXT NOT NULL,
+                role_key TEXT NOT NULL REFERENCES access_roles(role_key) ON DELETE CASCADE,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(provider, guild_id, external_role_id, role_key)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_access_external_role_lookup
+            ON access_external_role_bindings (provider, guild_id, external_role_id, enabled)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS access_audit (
+                id BIGSERIAL PRIMARY KEY,
+                principal_id BIGINT REFERENCES access_principals(id) ON DELETE SET NULL,
+                capability TEXT NOT NULL,
+                resource_type TEXT NOT NULL DEFAULT '',
+                resource_id TEXT NOT NULL DEFAULT '',
+                allowed BOOLEAN NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_access_audit_created
+            ON access_audit (created_at DESC)
             """,
 
             """
@@ -717,6 +850,7 @@ class Database:
             self._ensure_column(conn, "games", "event_id", "INTEGER")
             self._ensure_column(conn, "venues", "deck_id", "TEXT")
             self._ensure_column(conn, "cardgame_sessions", "is_single_player", "BOOLEAN DEFAULT FALSE")
+            self._ensure_bigint_column(conn, "web_tokens", "user_id")
         logger.debug("[database] schema ready")
 
     def _count_rows(self, table: str) -> int:

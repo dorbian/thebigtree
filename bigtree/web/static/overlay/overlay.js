@@ -967,11 +967,42 @@ This will block new games from being created in this event, but existing games c
         }
       }
 
-      function hasScope(scope){
-        if (previewScopesActive){
-          return previewScopes.has("*") || previewScopes.has(scope);
+      const scopeCapabilityAliases = {
+        "admin:web": "admin.web",
+        "admin:*": "admin.*",
+        "event:host": "event.host",
+        "conclave:admin": "game.conclave.host",
+        "bingo:admin": "game.bingo.host",
+        "tarot:admin": "game.tarot.manage",
+        "cardgames:admin": "game.cardgames.manage",
+        "dice:admin": "game.dice.manage",
+        "slots:admin": "game.slots.manage",
+        "hunt:admin": "hunt.manage",
+      };
+
+      function normalizeClientCapability(scope){
+        const raw = String(scope || "").trim().toLowerCase();
+        return scopeCapabilityAliases[raw] || raw.replaceAll(":", ".");
+      }
+
+      function clientCapabilityGrants(grant, required){
+        const have = normalizeClientCapability(grant);
+        const need = normalizeClientCapability(required);
+        if (!have || !need) return false;
+        if (have === need || have === "*") return true;
+        if (have.endsWith(".*")){
+          const prefix = have.slice(0, -2);
+          return need === prefix || need.startsWith(`${prefix}.`);
         }
-        return authUserScopes.has("*") || authUserScopes.has(scope);
+        return false;
+      }
+
+      function hasScope(scope){
+        const granted = previewScopesActive ? previewScopes : authUserScopes;
+        for (const item of granted){
+          if (clientCapabilityGrants(item, scope)) return true;
+        }
+        return false;
       }
 
       function ensureScope(scope, msg){
@@ -2034,7 +2065,7 @@ This will block new games from being created in this event, but existing games c
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
         const canCardgames = hasScope("cardgames:admin") || canTarot;
-        const canConclave = hasScope("conclave:admin");
+        const canConclave = hasScope("game.conclave.host");
         const canAdmin = hasScope("admin:web");
         const canMedia = canBingo || canTarot || canAdmin;
         const canGallery = canTarot || canAdmin;
@@ -3000,7 +3031,7 @@ This will block new games from being created in this event, but existing games c
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
         const canCardgames = hasScope("cardgames:admin") || canTarot;
-        const canConclave = hasScope("conclave:admin");
+        const canConclave = hasScope("game.conclave.host");
         const canAdmin = hasScope("admin:web");
         const allowedPanels = new Set(["dashboard"]);
         if (canBingo){
@@ -3604,7 +3635,7 @@ This will block new games from being created in this event, but existing games c
           top.append(title, phase);
           const meta = document.createElement("small");
           const living = (session.players || []).filter((p) => p.alive).length;
-          meta.textContent = `${living}/${(session.players || []).length} living · channel ${session.channel_id || "?"}`;
+          meta.textContent = `${living}/${(session.players || []).length} living · channel ${session.channel_id || "?"}${session.test_mode ? " · TEST" : ""}`;
           button.append(top, meta);
           button.addEventListener("click", () => selectConclave(session.game_id, true));
           list.appendChild(button);
@@ -3625,7 +3656,8 @@ This will block new games from being created in this event, but existing games c
         if ($("conclavePhase")) $("conclavePhase").textContent = conclavePhaseLabel(session.phase);
         const cycle = session.phase === "night" ? `Night ${session.night || 0}` : (session.day ? `Day ${session.day}` : "Gathering");
         const winner = session.winner ? ` · Winner: ${session.winner === "concord" ? "Concord" : "Thornbound"}` : "";
-        if ($("conclaveMeta")) $("conclaveMeta").textContent = `${cycle} · Discord channel ${session.channel_id || "?"}${winner}`;
+        const testSuffix = session.test_mode ? ` · TEST MODE (${Number(session.test_player_count || 0)} synthetic)` : "";
+        if ($("conclaveMeta")) $("conclaveMeta").textContent = `${cycle} · Discord channel ${session.channel_id || "?"}${winner}${testSuffix}`;
         if ($("conclaveGuidance")) $("conclaveGuidance").textContent = conclaveGuidance(session);
         const discordLink = $("conclaveOpenDiscord");
         if (discordLink){
@@ -3650,13 +3682,14 @@ This will block new games from being created in this event, but existing games c
             const row = document.createElement("div");
             row.className = "conclave-player" + (player.alive ? "" : " dead");
             const name = document.createElement("span");
-            name.textContent = player.display_name || String(player.user_id || "Unknown");
+            name.textContent = `${player.synthetic ? "🧪 " : ""}${player.display_name || String(player.user_id || "Unknown")}`;
             const state = document.createElement("span");
             state.className = "conclave-player-state";
             const onTrial = String(session.on_trial || "") === String(player.user_id || "");
+            const testLabel = player.synthetic ? "Test elf · " : "";
             state.textContent = player.alive
-              ? (onTrial ? "On trial" : "Living")
-              : (player.role ? `Fallen · ${player.role}` : "Fallen");
+              ? `${testLabel}${onTrial ? "On trial" : "Living"}`
+              : `${testLabel}${player.role ? `Fallen · ${player.role}` : "Fallen"}`;
             row.classList.toggle("on-trial", onTrial && player.alive);
             row.append(name, state);
             players.appendChild(row);
@@ -3696,9 +3729,28 @@ This will block new games from being created in this event, but existing games c
         const start = $("conclaveStart");
         const advance = $("conclaveAdvance");
         const end = $("conclaveEnd");
+        const repairPanel = $("conclaveRepairPanel");
+        const fillTest = $("conclaveTestFill");
+        const addTest = $("conclaveTestAdd");
+        const clearTest = $("conclaveTestClear");
+        const actTest = $("conclaveTestAct");
         if (start) start.disabled = phase !== "lobby";
         if (advance) advance.disabled = ["lobby", "ended"].includes(phase);
         if (end) end.disabled = phase === "ended";
+        if (repairPanel){
+          repairPanel.disabled = false;
+          repairPanel.textContent = session.panel_message_id ? "Recreate Discord panel" : "Create Discord panel";
+        }
+        if (fillTest) fillTest.disabled = phase !== "lobby" || (session.players || []).length >= 5;
+        if (addTest) addTest.disabled = phase !== "lobby" || (session.players || []).length >= 15;
+        if (clearTest) clearTest.disabled = phase !== "lobby" || !session.test_player_count;
+        if (actTest) actTest.disabled = !session.test_player_count || !["night", "nomination", "judgement"].includes(phase);
+        const testNote = $("conclaveTestNote");
+        if (testNote){
+          testNote.textContent = session.test_mode
+            ? `${Number(session.test_player_count || 0)} synthetic test elf/elves are stored only in this PostgreSQL game state.`
+            : "Synthetic players exist only inside this game state and can be cleared before starting.";
+        }
         setConclaveStatus("Host-safe state synchronized.", "ok");
       }
 
@@ -3719,7 +3771,7 @@ This will block new games from being created in this event, but existing games c
       }
 
       async function loadConclaveSessions(force = false){
-        if (!hasScope("conclave:admin") || conclaveLoading) return;
+        if (!hasScope("game.conclave.host") || conclaveLoading) return;
         if (!force && conclaveSessionsCache.length) return;
         conclaveLoading = true;
         try{
@@ -3769,11 +3821,68 @@ This will block new games from being created in this event, but existing games c
         }
       }
 
+      async function conclaveRepairPanel(){
+        if (!conclaveSelectedGameId) return;
+        const button = $("conclaveRepairPanel");
+        if (button) button.disabled = true;
+        setConclaveStatus("Posting a fresh Discord panel…", "");
+        try{
+          const data = await jsonFetch(`/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}/panel`, {method:"POST"});
+          const session = data.session || null;
+          if (session){
+            const idx = conclaveSessionsCache.findIndex((item) => String(item.game_id) === conclaveSelectedGameId);
+            if (idx >= 0) conclaveSessionsCache[idx] = session;
+            renderConclaveSessions();
+            renderConclaveDetail(session);
+          }
+          setConclaveStatus("Discord panel posted.", "ok");
+        }catch(err){
+          setConclaveStatus(err.message || "Unable to recreate the Discord panel.", "err");
+        }finally{
+          if (button) button.disabled = false;
+        }
+      }
+
+      async function conclaveTestAction(action){
+        if (!conclaveSelectedGameId) return;
+        const gameId = encodeURIComponent(conclaveSelectedGameId);
+        let url = `/admin/conclave/${gameId}/test-players`;
+        let method = "POST";
+        let body = null;
+        let busy = "Updating test players…";
+        if (action === "fill") body = JSON.stringify({target_total: 5});
+        else if (action === "add") body = JSON.stringify({count: 1});
+        else if (action === "clear"){ method = "DELETE"; busy = "Removing synthetic players…"; }
+        else if (action === "act"){ url = `/admin/conclave/${gameId}/test-act`; busy = "Simulating synthetic choices…"; }
+        else return;
+        setConclaveStatus(busy, "");
+        try{
+          const opts = {method};
+          if (body){
+            opts.body = body;
+            opts.headers = {"Content-Type":"application/json"};
+          }
+          const data = await jsonFetch(url, opts);
+          const session = data.session || null;
+          if (session){
+            const idx = conclaveSessionsCache.findIndex((item) => String(item.game_id) === conclaveSelectedGameId);
+            if (idx >= 0) conclaveSessionsCache[idx] = session;
+            renderConclaveSessions();
+            renderConclaveDetail(session);
+          }
+          const acted = Number(data?.simulation?.acted || 0);
+          if (action === "act") setConclaveStatus(`Synthetic choices submitted: ${acted}.`, "ok");
+          await loadConclaveSessions(true);
+        }catch(err){
+          setConclaveStatus(err.message || "Unable to update Conclave test state.", "err");
+        }
+      }
+
       function ensureConclavePolling(){
         if (conclavePollTimer) return;
         conclavePollTimer = window.setInterval(() => {
           const panel = $("conclavePanel");
-          if (document.hidden || !panel || panel.classList.contains("hidden") || !hasScope("conclave:admin")) return;
+          if (document.hidden || !panel || panel.classList.contains("hidden") || !hasScope("game.conclave.host")) return;
           loadConclaveSessions(true);
         }, 10000);
       }
@@ -4057,7 +4166,7 @@ This will block new games from being created in this event, but existing games c
         showPanel("languageServices");
       });
       on("menuConclave", "click", () => {
-        if (!ensureScope("conclave:admin", "Verdant Conclave host access required.")) return;
+        if (!ensureScope("game.conclave.host", "Verdant Conclave host access required.")) return;
         showPanel("conclave");
       });
       on("conclaveRefresh", "click", () => loadConclaveSessions(true));
@@ -4065,6 +4174,11 @@ This will block new games from being created in this event, but existing games c
       on("conclaveStart", "click", () => conclaveHostAction("start"));
       on("conclaveAdvance", "click", () => conclaveHostAction("advance"));
       on("conclaveEnd", "click", () => conclaveHostAction("end"));
+      on("conclaveRepairPanel", "click", () => conclaveRepairPanel());
+      on("conclaveTestFill", "click", () => conclaveTestAction("fill"));
+      on("conclaveTestAdd", "click", () => conclaveTestAction("add"));
+      on("conclaveTestClear", "click", () => conclaveTestAction("clear"));
+      on("conclaveTestAct", "click", () => conclaveTestAction("act"));
       $("menuBingo").addEventListener("click", () => {
         showPanel("bingoSessions");
         loadGamesMenu();

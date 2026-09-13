@@ -216,6 +216,54 @@ class ConclaveEngineTests(unittest.TestCase):
         self.assertFalse(engine.player(state, target["user_id"])["alive"])
         self.assertIn(state["phase"], {engine.PHASE_NIGHT, engine.PHASE_ENDED})
 
+
+    def test_synthetic_players_fill_lobby_without_creating_discord_identities(self):
+        state = self.make_lobby(1)
+        engine.add_test_players(state, target_total=engine.MIN_PLAYERS)
+        self.assertEqual(engine.MIN_PLAYERS, len(state["players"]))
+        synthetic = engine.test_players(state)
+        self.assertEqual(engine.MIN_PLAYERS - 1, len(synthetic))
+        self.assertTrue(state["test_mode"])
+        self.assertTrue(all(int(p["user_id"]) < 0 for p in synthetic))
+        public = engine.public_state(state)
+        self.assertEqual(len(synthetic), public["test_player_count"])
+        self.assertTrue(any(p.get("synthetic") for p in public["players"]))
+
+    def test_synthetic_players_can_drive_private_phases_for_host_testing(self):
+        state = engine.new_state(
+            "conclave-fakes",
+            title="Synthetic Test",
+            guild_id=1,
+            channel_id=2,
+            host_user_id=99,
+            dedicated_channel=False,
+        )
+        engine.add_test_players(state, target_total=6)
+        engine.start_game(state, rng=random.Random(61))
+        engine.simulate_test_players(state)
+        ready, required = engine.night_readiness(state)
+        self.assertEqual(required, ready)
+        engine.advance_phase(state)
+        self.assertIn(state["phase"], {engine.PHASE_DAY, engine.PHASE_ENDED})
+        if state["phase"] == engine.PHASE_DAY:
+            engine.advance_phase(state)
+            self.assertEqual(engine.PHASE_NOMINATION, state["phase"])
+            engine.simulate_test_players(state)
+            self.assertIn(state["phase"], {engine.PHASE_NOMINATION, engine.PHASE_TRIAL})
+            self.assertGreaterEqual(int((state.get("test_last_simulation") or {}).get("acted") or 0), 1)
+
+    def test_synthetic_players_are_removable_only_before_start(self):
+        state = self.make_lobby(1)
+        engine.add_test_players(state, 2)
+        self.assertEqual(2, len(engine.test_players(state)))
+        engine.remove_test_players(state)
+        self.assertEqual(0, len(engine.test_players(state)))
+        self.assertFalse(state["test_mode"])
+        engine.add_test_players(state, target_total=5)
+        engine.start_game(state, rng=random.Random(67))
+        with self.assertRaises(engine.GameError):
+            engine.remove_test_players(state)
+
     def test_end_game_is_terminal_and_public(self):
         state = self.make_lobby(5)
         engine.start_game(state, rng=random.Random(31))

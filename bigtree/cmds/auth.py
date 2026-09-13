@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import bigtree
-from bigtree.inc import web_tokens
+from bigtree.inc import web_tokens, access_control
 from bigtree.inc.database import get_database
 from bigtree.inc.logging import auth_logger
 
@@ -34,23 +34,11 @@ def _settings_get(section: str, key: str, default=None):
 
 
 def _is_elfministrator(member: discord.Member) -> bool:
-    role_ids = _settings_get("BOT", "elfministrator_role_ids", []) or []
-    allowed = set()
-    if isinstance(role_ids, (str, int)):
-        role_ids = [role_ids]
-    for r in role_ids:
-        try:
-            allowed.add(int(r))
-        except Exception:
-            continue
-    roles = {r.id for r in getattr(member, "roles", [])}
-    if allowed and (allowed & roles):
-        return True
-    # Fallback: allow by role name if IDs not configured
-    for r in getattr(member, "roles", []):
-        if str(r.name or "").strip().lower() == "elfministrator":
-            return True
-    return False
+    # Compatibility wrapper around the central evaluator. Untouched auth-role
+    # scope mapping remains the source of issued scopes during phase 1.
+    return access_control.evaluate_discord_member(
+        member, "legacy.elfministrator"
+    ).allowed
 
 
 def _parse_scope_list(raw) -> list[str]:
@@ -215,11 +203,16 @@ class AuthCog(commands.Cog):
             display_name = member.display_name or member.name
             avatar_url = getattr(member, "display_avatar", None)
             avatar_url = getattr(avatar_url, "url", None)
+            principal_id, _principal_label = access_control.ensure_discord_principal(member)
+            token_meta = {"discord_id": int(member.id)}
+            if principal_id:
+                token_meta["principal_id"] = int(principal_id)
             doc = web_tokens.issue_token(
                 user_id=member.id,
                 scopes=scopes,
                 user_name=display_name,
                 user_icon=avatar_url,
+                metadata=token_meta,
             )
             try:
                 get_database().upsert_discord_user(

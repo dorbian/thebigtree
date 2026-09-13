@@ -414,7 +414,7 @@
                 <label class="compact-check"><input id="conclaveIncludeEnded" type="checkbox"> Ended</label>
               </div>
               <div id="conclaveSessions" class="conclave-sessions"><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
-              <p class="muted conclave-create-note">Create a game with <code>/conclave-create</code> in Discord so BigTree can bind it to its dedicated channel.</p>
+              <p class="muted conclave-create-note">Create a game with <code>/conclave-create</code> in Discord. It can create a dedicated channel, use the current channel, or bind an existing text channel; real players still opt in with Join.</p>
             </aside>
             <div class="conclave-detail" id="conclaveDetail">
               <div class="conclave-empty" id="conclaveEmpty">
@@ -439,8 +439,21 @@
                   <button id="conclaveStart" type="button">Start</button>
                   <button id="conclaveAdvance" class="btn-ghost" type="button">Advance phase</button>
                   <button id="conclaveEnd" class="btn-ghost danger-btn" type="button">End</button>
+                  <button id="conclaveRepairPanel" class="btn-ghost" type="button">Recreate Discord panel</button>
                   <a id="conclaveOpenDiscord" class="btn-ghost hidden" href="#" target="_blank" rel="noopener">Open Discord channel</a>
                 </div>
+                <section class="conclave-test-tools" aria-label="Conclave test tools">
+                  <div>
+                    <strong>Test circle</strong>
+                    <p class="muted" id="conclaveTestNote">Synthetic players exist only inside this game state and can be cleared before starting.</p>
+                  </div>
+                  <div class="conclave-test-actions">
+                    <button id="conclaveTestFill" class="btn-ghost" type="button">Fill to 5</button>
+                    <button id="conclaveTestAdd" class="btn-ghost" type="button">+1 test elf</button>
+                    <button id="conclaveTestAct" class="btn-ghost" type="button">Run test choices</button>
+                    <button id="conclaveTestClear" class="btn-ghost danger-btn" type="button">Clear test elves</button>
+                  </div>
+                </section>
                 <div class="conclave-grid">
                   <section class="conclave-card">
                     <h4>Players</h4>

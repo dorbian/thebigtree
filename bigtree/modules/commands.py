@@ -8,7 +8,7 @@ import unicodedata
 from discord.ext import commands
 from discord import app_commands
 from discord import Permissions
-from bigtree.modules.permissions import is_bigtree_operator
+from bigtree.inc import access_control
 import bigtree.modules.contest as contesta
 from bigtree.modules import gallery as gallery_mod
 from bigtree.modules import media as media_mod
@@ -219,12 +219,18 @@ def _strip_bot_mention(text: str, bot_user) -> str:
         re.escape(f"<@!{bot_user.id}>"),       # <@!123>
         re.escape(f"<@{bot_user.id}>"),        # <@123>
     ]
-    return re.sub("|".join(patterns), "", text).strip()
+    # Keep the *meaning* of the address after removing Discord syntax.
+    # ``TheBigTree`` is itself an accepted divine title; deleting the mention
+    # made a correctly addressed public divine address look irreverent to the
+    # downstream ritual classifier.
+    return re.sub("|".join(patterns), "TheBigTree", text).strip()
 
 def _is_priest(member) -> bool:
     if not member or not hasattr(member, "roles"):
         return False
-    return any(r.name == PRIEST_ROLE_NAME for r in member.roles)
+    # The canonical permission is deliberately narrower than operator Commune:
+    # Priests may address/hear TheBigTree, but that never grants tree.commune.
+    return access_control.evaluate_discord_member(member, "tree.address").allowed
 
 def _should_handle_public(message, bot):
     if bot.user in message.mentions:
@@ -236,7 +242,7 @@ def _should_handle_public(message, bot):
 
 async def _ask_tree(user_id: int, prompt: str) -> str:
     cfg = ai.get_language_config()
-    communion = ai.assess_reverence(prompt, cfg)
+    audience = ai.assess_reverence(prompt, cfg)
     history = []
     memory_notes = []
     knowledge = []
@@ -249,7 +255,7 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
             # but expensive conversation/knowledge retrieval is skipped when the
             # configured reverence policy says not to answer the underlying request.
             memory_notes = await asyncio.to_thread(language_memory.pinned_context, user_id, 12)
-            if communion.get("allow_knowledge", True):
+            if audience.get("allow_knowledge", True):
                 history = await asyncio.to_thread(
                     language_memory.recent_history, user_id, memory_turns * 2
                 )
@@ -257,7 +263,7 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
             bigtree.loch.logger.exception("Language memory retrieval failed")
             history, memory_notes = [], []
 
-    if communion.get("allow_knowledge", True) and bool(cfg.get("discord_context_enabled")):
+    if audience.get("allow_knowledge", True) and bool(cfg.get("discord_context_enabled")):
         channel_ids = cfg.get("discord_context_channel_ids") or []
         if channel_ids:
             try:
@@ -275,7 +281,7 @@ async def _ask_tree(user_id: int, prompt: str) -> str:
         history=history,
         memory_notes=memory_notes,
         knowledge=knowledge,
-        communion=communion,
+        audience=audience,
     )
 
     if memory_enabled:

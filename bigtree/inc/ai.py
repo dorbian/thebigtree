@@ -25,8 +25,8 @@ SYSTEMS: Dict[str, str] = {
     "tree": (
         "You are TheBigTree, the ancient, benevolent and all-powerful deity of the elves. "
         "You are peaceful, warm, occasionally playful, and unmistakably divine rather than a generic assistant. "
-        "Only Priests and other explicitly authorised communicants can hear you answer; never imply that respectful wording itself grants communion. "
-        "Priests may earn familiarity, but communion remains a privilege and reverence still matters. "
+        "Only Priests and other explicitly authorised communicants can hear you answer; never imply that respectful wording itself grants an audience. "
+        "Priests may earn familiarity, but an audience remains a privilege and reverence still matters. "
         "You do not contradict previously established truths without clearly acknowledging and correcting an earlier mistake. "
         "Anything you say should be for the good of those who live in the forest. "
         "Speak clearly and succinctly, with gentle forest/divine imagery where it fits. "
@@ -419,17 +419,24 @@ def assess_reverence(prompt: str, config: Optional[Dict[str, Any]] = None) -> Di
     strictness = str(reverence.get("strictness") or "moderate")
     if policy == "correct_then_answer" and not disrespectful:
         allow = True
-        action = "Briefly correct the manner of address, then answer the substantive request."
+        action = (
+            "Correct the manner of address in no more than one short sentence, then answer the substantive request. "
+            "Do not demand the Priest's name, rank, credentials, or proof of Priesthood; authorization already happened upstream."
+        )
     else:
         allow = False
         action = (
-            "Do not answer the substantive request yet. Briefly correct the manner of address and invite "
-            "the Priest to approach again with an accepted title."
+            "Do not answer the substantive request yet. Correct only the manner of address in at most two short sentences "
+            "and invite the Priest to approach again using an accepted title. Do not demand their name, rank, credentials, "
+            "or proof of Priesthood; authorization already happened upstream."
         )
     flavour = {
         "gentle": "Be warm and lightly amused; no punishment beyond a gentle reminder.",
-        "moderate": "Be peacefully divine and theatrically disappointed; harmless elf-penance may be suggested.",
-        "ceremonial": "Be solemn and ritualistic, but never cruel, threatening, humiliating, or coercive.",
+        "moderate": (
+            "Be peacefully divine and theatrically disappointed. A tiny humorous elf-penance may be suggested as a single "
+            "clause, but never turn the correction into a multi-step chore or sermon."
+        ),
+        "ceremonial": "Be solemn and ritualistic, but never cruel, threatening, humiliating, coercive, or needlessly verbose.",
     }.get(strictness, "Be peacefully divine and theatrically disappointed.")
     if reverence.get("priest_familiarity", True):
         flavour += " A known Priest may receive familiar divine teasing, but familiarity never removes the hierarchy."
@@ -438,7 +445,7 @@ def assess_reverence(prompt: str, config: Optional[Dict[str, Any]] = None) -> Di
         "proper_address": False,
         "emergency": False,
         "allow_knowledge": allow,
-        "instruction": f"{action} {flavour} Correct etiquette never grants communion; it only governs an already-authorised Priest.",
+        "instruction": f"{action} {flavour} Correct etiquette never grants an audience; it only governs an already-authorised Priest.",
     }
 
 
@@ -594,9 +601,9 @@ async def _complete_minimax(cfg: Dict[str, Any], messages: List[Dict[str, str]])
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     timeout = aiohttp.ClientTimeout(total=45)
 
-    async def _do():
+    async def _post(body: Dict[str, Any]) -> Dict[str, Any]:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(_MINIMAX_NATIVE_URL, headers=headers, json=payload) as response:
+            async with session.post(_MINIMAX_NATIVE_URL, headers=headers, json=body) as response:
                 raw = await response.text()
                 if response.status >= 400:
                     raise RuntimeError(f"MiniMax HTTP {response.status}: {raw[:500]}")
@@ -609,17 +616,47 @@ async def _complete_minimax(cfg: Dict[str, Any], messages: List[Dict[str, str]])
                     raise RuntimeError(f"MiniMax {base_resp.get('status_code')}: {base_resp.get('status_msg') or 'request failed'}")
                 return data
 
-    data = await _retry(_do)
-    choices = data.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
-        raise RuntimeError("MiniMax response did not contain a completion")
-    message = choices[0].get("message") or {}
+    def _visible_text(data: Dict[str, Any]) -> str:
+        choices = data.get("choices") or []
+        if not choices or not isinstance(choices[0], dict):
+            raise RuntimeError("MiniMax response did not contain a completion")
+        message = choices[0].get("message") or {}
+        return _clean_model_text(message.get("content"))
+
+    data = await _retry(lambda: _post(payload))
+    text = _visible_text(data)
+    first_usage = data.get("usage") or {}
+    direct_retry = False
+
+    # M3 adaptive thinking can occasionally consume the small conversational
+    # output budget in reasoning_split mode and return an empty visible answer.
+    # A single direct-mode retry is cheaper and friendlier than surfacing the
+    # generic "leaves rustle" fallback to the Priest.
+    if not text and payload["thinking"]["type"] != "disabled":
+        direct_retry = True
+        log.info("MiniMax M3 returned no visible content after adaptive thinking; retrying once with thinking disabled")
+        retry_payload = dict(payload)
+        retry_payload["thinking"] = {"type": "disabled"}
+        data = await _retry(lambda: _post(retry_payload), attempts=2)
+        text = _visible_text(data)
+
+    if not text:
+        raise RuntimeError("MiniMax returned no visible answer")
+
     usage = data.get("usage") or {}
+    def _combined_usage(name: str):
+        values = [first_usage.get(name)]
+        if direct_retry:
+            values.append(usage.get(name))
+        ints = [value for value in values if isinstance(value, int)]
+        return sum(ints) if ints else usage.get(name)
+
     return {
-        "text": _clean_model_text(message.get("content")),
+        "text": text,
         "request_id": str(data.get("id") or "") or None,
-        "input_tokens": usage.get("prompt_tokens"),
-        "output_tokens": usage.get("completion_tokens"),
+        "input_tokens": _combined_usage("prompt_tokens"),
+        "output_tokens": _combined_usage("completion_tokens"),
+        "reasoning_fallback": direct_retry,
     }
 
 
@@ -656,19 +693,22 @@ async def ask(
     history: Optional[List[Dict[str, str]]] = None,
     memory_notes: Optional[List[str]] = None,
     knowledge: Optional[List[str]] = None,
-    communion: Optional[Dict[str, Any]] = None,
+    audience: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Ask the configured provider. Authorization must be performed by the caller."""
     cfg = _get_ai_cfg()
     messages: List[Dict[str, str]] = [_system_msg(persona)]
 
-    communion = dict(communion or {})
-    if persona == "tree" and communion:
+    audience = dict(audience or {})
+    if persona == "tree" and audience:
         messages.append({
             "role": "system",
             "content": (
-                "Communion protocol: the Discord layer has already authorised this speaker as a Priest/communicant. "
-                "Do not reinterpret ritual wording as authorization. " + str(communion.get("instruction") or "")
+                "Divine audience protocol: the Discord layer has already authorised this speaker as a Priest/communicant. "
+                "Do not reinterpret ritual wording as authorization. Never ask the speaker to identify themselves, restate "
+                "their Priest rank/title, prove membership, or perform another authentication ritual; that check is already "
+                "complete. Reverence governs how an authorised Priest addresses TheBigTree, not whether they are authorised. "
+                + str(audience.get("instruction") or "")
             ),
         })
 
@@ -683,7 +723,7 @@ async def ask(
                 ),
             })
 
-    allow_knowledge = bool(communion.get("allow_knowledge", True))
+    allow_knowledge = bool(audience.get("allow_knowledge", True))
     if allow_knowledge and knowledge:
         excerpts = "\n".join(f"- {str(item)[:1400]}" for item in knowledge if str(item).strip())
         if excerpts:
@@ -704,8 +744,8 @@ async def ask(
     messages.append({"role": "user", "content": str(prompt or "")[:6000]})
 
     context_summary = {
-        "authorized_upstream": bool(communion),
-        "reverence": communion.get("level") if communion else None,
+        "authorized_upstream": bool(audience),
+        "reverence": audience.get("level") if audience else None,
         "knowledge_allowed": allow_knowledge,
         "pinned_memories": len(memory_notes or []),
         "history_messages": len(history or []) if allow_knowledge else 0,
@@ -740,8 +780,16 @@ async def ask(
         last_request_id=result.get("request_id"),
         input_tokens=result.get("input_tokens"),
         output_tokens=result.get("output_tokens"),
+        reasoning_mode=(
+            "automatic → direct retry"
+            if result.get("reasoning_fallback")
+            else cfg["reasoning_mode"]
+        ),
     )
-    return result.get("text") or "🍂 The leaves rustle, but I find no words just now."
+    text = _clean_model_text(result.get("text"))
+    if not text:
+        raise RuntimeError(f"{cfg['provider']} returned an empty visible answer")
+    return text
 
 
 def generate_short(

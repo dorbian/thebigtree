@@ -17,6 +17,11 @@ MODULE = "conclave"
 VERSION = 1
 MIN_PLAYERS = 5
 MAX_PLAYERS = 15
+TEST_PLAYER_ID_BASE = -900000
+TEST_PLAYER_NAMES = (
+    "Fern", "Moss", "Willow", "Bramble", "Clover", "Juniper", "Rowan",
+    "Hazel", "Thistle", "Laurel", "Sorrel", "Ivy", "Alder", "Reed", "Sage",
+)
 
 PHASE_LOBBY = "lobby"
 PHASE_NIGHT = "night"
@@ -103,6 +108,7 @@ def new_state(
         "host_user_id": int(host_user_id),
         "dedicated_channel": bool(dedicated_channel),
         "panel_message_id": None,
+        "test_mode": False,
         "phase": PHASE_LOBBY,
         "night": 0,
         "day": 0,
@@ -174,6 +180,143 @@ def remove_player(state: Dict[str, Any], user_id: int) -> Dict[str, Any]:
     if state.get("phase") != PHASE_LOBBY:
         raise GameError("You cannot leave after the Conclave has begun.", "started")
     _players(state).pop(str(int(user_id)), None)
+    state["test_mode"] = any(bool(p.get("synthetic")) for p in _players(state).values())
+    state["updated_at"] = _now()
+    return state
+
+
+def is_test_player(player_obj: Optional[Dict[str, Any]]) -> bool:
+    return bool((player_obj or {}).get("synthetic"))
+
+
+def test_players(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [p for p in _players(state).values() if is_test_player(p)]
+
+
+def add_test_players(
+    state: Dict[str, Any],
+    count: int = 1,
+    *,
+    target_total: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Add unmistakably synthetic lobby players for operator testing.
+
+    Synthetic players live only inside the Conclave game payload in PostgreSQL;
+    no Discord users or persistent BigTree identities are created for them.
+    """
+    if state.get("phase") != PHASE_LOBBY:
+        raise GameError("Test players can only be changed while the Conclave is gathering.", "started")
+    players = _players(state)
+    limit = int((state.get("rules") or {}).get("max_players") or MAX_PLAYERS)
+    if target_total is not None:
+        desired = max(0, min(int(target_total), limit))
+        count = max(0, desired - len(players))
+    count = max(0, min(int(count or 0), limit - len(players)))
+    if count <= 0:
+        return state
+
+    existing_ids = {int(p.get("user_id") or 0) for p in players.values()}
+    synthetic_index = len(test_players(state))
+    added = 0
+    candidate = TEST_PLAYER_ID_BASE
+    while added < count:
+        user_id = candidate
+        candidate -= 1
+        if user_id in existing_ids:
+            continue
+        name = TEST_PLAYER_NAMES[synthetic_index % len(TEST_PLAYER_NAMES)]
+        add_player(state, user_id, f"Test Elf · {name}")
+        player_obj = player(state, user_id)
+        if player_obj is not None:
+            player_obj["synthetic"] = True
+            player_obj["test_index"] = synthetic_index + 1
+        existing_ids.add(user_id)
+        synthetic_index += 1
+        added += 1
+
+    state["test_mode"] = bool(test_players(state))
+    state["updated_at"] = _now()
+    return state
+
+
+def remove_test_players(state: Dict[str, Any]) -> Dict[str, Any]:
+    if state.get("phase") != PHASE_LOBBY:
+        raise GameError("Test players can only be removed while the Conclave is gathering.", "started")
+    players = _players(state)
+    for key in [key for key, value in players.items() if is_test_player(value)]:
+        players.pop(key, None)
+    state["test_mode"] = False
+    state["updated_at"] = _now()
+    return state
+
+
+def _prefer_test_targets(targets: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(
+        list(targets),
+        key=lambda p: (0 if is_test_player(p) else 1, str(p.get("display_name") or "").lower(), int(p.get("user_id") or 0)),
+    )
+
+
+def simulate_test_players(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Submit phase-appropriate choices for synthetic players only.
+
+    This never acts on behalf of a real Discord member. In mixed tests fake
+    players prefer other fake players as targets, and they abstain rather than
+    automatically condemn a real player during judgement.
+    """
+    phase = state.get("phase")
+    bots = [p for p in living_players(state) if is_test_player(p)]
+    acted = 0
+
+    if phase == PHASE_NIGHT:
+        actions = state.setdefault("night_actions", {})
+        for bot in bots:
+            uid = int(bot["user_id"])
+            if str(uid) in actions:
+                continue
+            action = role_definition(bot.get("role")).get("action")
+            if not action:
+                continue
+            targets = _prefer_test_targets(valid_night_targets(state, uid))
+            if targets:
+                submit_night_action(state, uid, int(targets[0]["user_id"]))
+            else:
+                submit_night_pass(state, uid)
+            acted += 1
+
+    elif phase == PHASE_NOMINATION:
+        votes = state.setdefault("nomination_votes", {})
+        synthetic_targets = _prefer_test_targets([p for p in living_players(state) if is_test_player(p)])
+        preferred_target = synthetic_targets[0] if synthetic_targets else None
+        for bot in list(bots):
+            if state.get("phase") != PHASE_NOMINATION:
+                break
+            uid = int(bot["user_id"])
+            if str(uid) in votes:
+                continue
+            target = preferred_target
+            if target is None or int(target["user_id"]) == uid or not target.get("alive", True):
+                candidates = _prefer_test_targets(valid_nomination_targets(state, uid))
+                target = candidates[0] if candidates else None
+            if target is not None:
+                submit_nomination(state, uid, int(target["user_id"]))
+            else:
+                submit_nomination_pass(state, uid)
+            acted += 1
+
+    elif phase == PHASE_JUDGEMENT:
+        votes = state.setdefault("judgement_votes", {})
+        accused = player(state, int(state.get("on_trial") or 0))
+        verdict = "guilty" if is_test_player(accused) else "abstain"
+        for bot in bots:
+            uid = int(bot["user_id"])
+            if uid == int(state.get("on_trial") or 0) or str(uid) in votes:
+                continue
+            submit_judgement(state, uid, verdict)
+            acted += 1
+
+    state["test_mode"] = bool(test_players(state))
+    state["test_last_simulation"] = {"phase": phase, "acted": acted, "at": _now()}
     state["updated_at"] = _now()
     return state
 
@@ -638,6 +781,8 @@ def public_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "channel_id": state.get("channel_id"),
         "host_user_id": state.get("host_user_id"),
         "panel_message_id": state.get("panel_message_id"),
+        "test_mode": bool(state.get("test_mode") or test_players(state)),
+        "test_player_count": len(test_players(state)),
         "phase": state.get("phase"),
         "night": state.get("night"),
         "day": state.get("day"),
@@ -655,6 +800,7 @@ def public_state(state: Dict[str, Any]) -> Dict[str, Any]:
             "user_id": p.get("user_id"),
             "display_name": p.get("display_name"),
             "alive": bool(p.get("alive", True)),
+            "synthetic": is_test_player(p),
         }
         if reveal_all or (not item["alive"] and reveal):
             item["role"] = role_definition(p.get("role")).get("name")

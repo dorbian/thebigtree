@@ -16,6 +16,11 @@ try:
 except Exception:
     get_database = None  # type: ignore
 
+try:
+    from bigtree.inc import access_control
+except Exception:
+    access_control = None  # type: ignore
+
 TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60
 
 
@@ -177,9 +182,11 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
             doc = db.find_web_token(token)
             if doc:
                 scopes = set(doc.get("scopes") or [])
-                if "*" in scopes:
-                    return True
                 if not needed_scopes:
+                    return True
+                if access_control is not None:
+                    return access_control.any_capability_granted(needed_scopes, scopes)
+                if "*" in scopes:
                     return True
                 return any(scope in scopes for scope in needed_scopes)
         except Exception:
@@ -191,9 +198,11 @@ def validate_token(token: str, needed_scopes: Set[str]) -> bool:
         if t.get("revoked"):
             continue
         scopes = set(t.get("scopes") or [])
-        if "*" in scopes:
-            return True
         if not needed_scopes:
+            return True
+        if access_control is not None:
+            return access_control.any_capability_granted(needed_scopes, scopes)
+        if "*" in scopes:
             return True
         return any(scope in scopes for scope in needed_scopes)
     return False

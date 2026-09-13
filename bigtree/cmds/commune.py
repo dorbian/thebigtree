@@ -7,7 +7,7 @@
 
 import bigtree
 import discord
-from bigtree.modules.permissions import is_bigtree_operator
+from bigtree.modules.permissions import requires_capability
 from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional, Dict, Tuple
@@ -182,7 +182,7 @@ class CommuneView(discord.ui.View):
 # -------------------------
 @bot.tree.command(name="commune", description="Compose and post a message as The Big Tree", guild=discord.Object(id=int(bigtree.guildid)))
 @app_commands.default_permissions(send_messages=True)  
-@is_bigtree_operator()
+@requires_capability("tree.commune")
 async def commune_slash(interaction: discord.Interaction):
 
     key = (interaction.guild_id, interaction.user.id)

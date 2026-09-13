@@ -1,10 +1,19 @@
 # Changelog
 
 ## 2026-09-13
+- Conclave: add PostgreSQL-persisted synthetic test elves, host-side fake-choice simulation, and Elfministration controls so one real tester can exercise lobby, night, nomination, trial, and judgement without creating fake Discord accounts.
+- Conclave: allow `/conclave-create` to bind an explicitly selected existing text channel, keep real membership opt-in through Join, mark synthetic players clearly, add a host-side Discord-panel repair action, close failed setup sessions cleanly, and fix the invalid refresh-button emoji that could make Discord reject the panel payload.
+- Access: migrate Verdant Conclave Discord/web host checks to the canonical `game.conclave.host` capability, assign the creator a resource-scoped Conclave host role, and make the browser scope matcher alias/wildcard aware during migration.
+- Access: add the PostgreSQL-backed BigTree Identity & Access foundation with principals, external identities, roles, capabilities, resource-scoped assignments, Discord role bindings, and an explainable evaluator.
+- Access: introduce canonical dotted capabilities while preserving legacy colon scopes through aliases and wildcard-aware matching across web API keys, dynamic tokens, JWT scope checks, and temporary links.
+- Discord: distinguish `tree.commune` (operator speaks as TheBigTree) from `tree.address` (Priest addresses/hears TheBigTree), and migrate those two high-value paths to the central capability evaluator.
+- Access: add read-only `/admin/access/catalog` and `/admin/access/evaluate` inspection APIs as the foundation for the future Elfministration Identity & Access workspace.
+- Language Services: preserve a public `@TheBigTree` mention as the canonical divine address for reverence checks, stop inventing duplicate Priest-authentication rituals, and keep etiquette corrections concise.
+- MiniMax M3: if adaptive reasoning returns no visible content, retry once with reasoning disabled and expose that fallback in runtime diagnostics instead of silently returning the generic empty-answer message.
 - Runtime: persist one-time bootstrap/import completion in PostgreSQL so container replacements no longer rescan tarot decks, media, game JSON backups, legacy state, and legacy contests on every launch.
 - Runtime: adopt already-populated PostgreSQL media/deck/import state without one more full scan, batch schema DDL into one transaction, and log startup-step timings for restart diagnostics.
 - Language Services: add MiniMax M3 as a first-class provider with Token Plan/PAYG credential detection, explicit quota checks, provider-specific diagnostics, and configurable M3 adaptive/direct reasoning mode.
-- Communion: preserve the existing Discord Priest/authorised-speaker gate as the only reply gate, then apply configurable benevolent divine reverence/ritual etiquette with emergency override and optional Priest familiarity.
+- Language Services: preserve the existing Discord Priest/authorised-speaker gate as the only audience gate, then apply configurable benevolent divine reverence/ritual etiquette with emergency override and optional Priest familiarity.
 - Memory: keep persistent language state in PostgreSQL only, cap each conversation item to 4 KB, cap recent per-user history, prune by age, enforce an installation-wide conversation-row ceiling, and never copy Discord history to a local archive.
 - Language Services: replace the hidden vendor-specific OpenAI form with an integrated Elfministration workspace for provider configuration, runtime diagnostics, prompt logic, and the active TheBigTree persona context.
 - Language Services: add bounded PostgreSQL-backed Priest conversation memory plus operator-pinned global/user notes with review, deletion, and conversation-clear controls.

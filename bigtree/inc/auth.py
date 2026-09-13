@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Optional, Set, Dict, Any, Callable
 from aiohttp import web
 import bigtree
-from bigtree.inc import web_tokens
+from bigtree.inc import web_tokens, access_control
 from bigtree.inc.logging import auth_logger
 
 try:
@@ -107,12 +107,9 @@ def _split_scopes(s: str | None) -> Set[str]:
     return {x.strip() for x in s.split(",") if x.strip()}
 
 def _scopes_ok(needed: Set[str], granted: Set[str]) -> bool:
-    if not needed:
-        return True
-    if "*" in granted:
-        return True
-    # Treat route scopes as "any-of" to allow shared admin scopes.
-    return any(scope in granted for scope in needed)
+    # Route requirements remain any-of for compatibility, but both old colon
+    # scopes and new dotted capabilities now use one wildcard-aware matcher.
+    return access_control.any_capability_granted(needed, granted)
 
 def _verify_api_key(token: str, cfg: _Cfg, needed: Set[str]) -> bool:
     if token not in cfg.api_keys:

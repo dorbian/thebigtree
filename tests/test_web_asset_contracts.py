@@ -29,7 +29,11 @@ class WebAssetContractTests(unittest.TestCase):
         html = (TEMPLATES / "overlay.html").read_text("utf-8")
         self.assertIn('id="conclavePanel"', html)
         self.assertIn('id="conclaveOpenDiscord"', html)
+        self.assertIn('id="conclaveTestFill"', html)
+        self.assertIn('id="conclaveTestAct"', html)
+        self.assertIn('id="conclaveRepairPanel"', html)
         self.assertIn("Secret roles and private actions stay in Discord", html)
+        self.assertIn("bind an existing text channel", html)
 
     def test_overlay_does_not_regress_to_large_builtin_png_backgrounds(self):
         html = (TEMPLATES / "overlay.html").read_text("utf-8")

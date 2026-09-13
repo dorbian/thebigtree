@@ -87,7 +87,7 @@
     $("metricKey").textContent = `${statusCache.key_hint || "Not configured"} · ${statusCache.key_source || "unknown"} · ${statusCache.key_kind || "key"}`;
     $("metricModel").textContent = statusCache.model || "—";
     $("metricReasoning").textContent = `Reasoning ${statusCache.reasoning_mode || "—"}`;
-    $("metricCommunion").textContent = features.priest_chat ? "Enabled" : "Disabled";
+    $("metricAudience").textContent = features.priest_chat ? "Enabled" : "Disabled";
     $("metricPriest").textContent = `Priest gate preserved · reverence ${reverence.enabled ? "on" : "off"}`;
     $("metricResult").textContent = runtime.last_error ? "Error" : (runtime.last_success_at ? "OK" : "Never");
     $("metricUsage").textContent = runtime.last_success_at
@@ -260,7 +260,7 @@
     try{
       const response = await request("/admin/language/config", {method:"POST", body:JSON.stringify(payload)});
       renderStatus(response.language || {});
-      statusLine("Saved. New communions use these settings immediately.", "ok");
+      statusLine("Saved. New Priest audiences use these settings immediately.", "ok");
     }catch(err){ statusLine(err.message || "Save failed.", "err"); }
     finally{ button.disabled = false; }
   }

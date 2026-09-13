@@ -18,7 +18,8 @@ import bigtree
 from bigtree.games.conclave import engine
 from bigtree.games.conclave.store import ConclaveStore
 from bigtree.inc.logging import logger
-from bigtree.modules.permissions import is_bigtree_operator
+from bigtree.inc import access_control
+from bigtree.modules.permissions import requires_capability
 
 
 def _phase_label(phase: str) -> str:
@@ -79,10 +80,12 @@ def build_public_embed(state: dict) -> discord.Embed:
     for p in players:
         uid = int(p.get("user_id") or 0)
         alive = bool(p.get("alive", True))
+        synthetic = bool(p.get("synthetic"))
         marker = "🌱" if alive else "🍂"
         trial = " ⚖️" if uid == accused else ""
         role = f" — {p.get('role')}" if p.get("role") else ""
-        lines.append(f"{marker} <@{uid}>{trial}{role}")
+        identity = f"🧪 {p.get('display_name') or 'Test Elf'}" if synthetic else f"<@{uid}>"
+        lines.append(f"{marker} {identity}{trial}{role}")
     embed.add_field(
         name=f"Gathered elves · {sum(1 for p in players if p.get('alive', True))}/{len(players)} living",
         value="\n".join(lines) if lines else "No one has joined yet.",
@@ -109,6 +112,13 @@ def build_public_embed(state: dict) -> discord.Embed:
     events = [str(x) for x in (public.get("public_events") or []) if str(x).strip()]
     if events:
         embed.add_field(name="The boughs whisper", value="\n".join(events[-4:])[:1024], inline=False)
+
+    if public.get("test_mode"):
+        embed.add_field(
+            name="🧪 Test circle",
+            value=f"{int(public.get('test_player_count') or 0)} synthetic elf/elves are present. They are not Discord users and never receive secret messages.",
+            inline=False,
+        )
 
     embed.set_footer(
         text=f"Session {public.get('game_id')} · Discord-channel locked · Host {public.get('host_user_id')}"
@@ -385,7 +395,7 @@ class ConclavePanel(discord.ui.View):
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
 
-    @discord.ui.button(label="Refresh", emoji="↻", style=discord.ButtonStyle.secondary, custom_id="conclave:refresh", row=1)
+    @discord.ui.button(label="Refresh", emoji="🔄", style=discord.ButtonStyle.secondary, custom_id="conclave:refresh", row=1)
     async def refresh(self, interaction: discord.Interaction, _button: discord.ui.Button):
         state = await self._state(interaction)
         if not state:
@@ -448,11 +458,17 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
     def is_host_or_operator(self, interaction: discord.Interaction, state: dict) -> bool:
         if int(state.get("host_user_id") or 0) == int(interaction.user.id):
             return True
-        perms = getattr(interaction.user, "guild_permissions", None)
-        if perms and (perms.administrator or perms.manage_guild):
-            return True
-        role_ids = set(getattr(bigtree, "operator_role_ids", []) or [])
-        return any(getattr(role, "id", 0) in role_ids for role in getattr(interaction.user, "roles", []))
+        decision = access_control.evaluate_discord_member(
+            interaction.user,
+            "game.conclave.host",
+            resource_type="game",
+            resource_id=state.get("game_id") or "",
+            ancestors=[
+                {"type": "channel", "id": str(state.get("channel_id") or "")},
+                {"type": "guild", "id": str(state.get("guild_id") or "")},
+            ],
+        )
+        return bool(decision.allowed)
 
     def _panel_view_for_state(self, state: dict):
         # Remove controls from completed games. Reusing the one persistent view
@@ -494,6 +510,24 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         if state and state.get("channel_id"):
             await self.refresh_channel_panel(int(state["channel_id"]), state)
 
+    async def recreate_game_panel(self, game_id: str) -> dict:
+        state = await asyncio.to_thread(self.store.get, game_id)
+        if not state or not state.get("channel_id"):
+            raise engine.GameError("Conclave session or bound channel not found.", "not_found")
+        channel = self.bot.get_channel(int(state["channel_id"]))
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(int(state["channel_id"]))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
+                raise engine.GameError(f"Bound Discord channel is unavailable: {exc}", "channel_unavailable") from exc
+        try:
+            message = await channel.send(embed=build_public_embed(state), view=self._panel_view_for_state(state))
+            state = await asyncio.to_thread(self.store.set_panel_message, state["game_id"], message.id)
+            await message.edit(embed=build_public_embed(state), view=self._panel_view_for_state(state))
+            return state
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            raise engine.GameError(f"Discord rejected the Conclave panel: {exc}", "panel_failed") from exc
+
     @commands.Cog.listener()
     async def on_ready(self):
         if self._restored:
@@ -511,14 +545,16 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
     @app_commands.command(name="conclave-create", description="Create a channel-locked Verdant Conclave social-deduction game.")
     @app_commands.describe(
         title="Name shown on the game panel",
-        use_current_channel="Use this channel instead of creating a dedicated game channel",
+        channel="Bind to an existing text channel instead of creating a dedicated one",
+        use_current_channel="Use the channel where this command is run",
     )
     @app_commands.guilds(discord.Object(id=int(bigtree.guildid)))
-    @is_bigtree_operator()
+    @requires_capability("game.conclave.host")
     async def create_conclave(
         self,
         interaction: discord.Interaction,
         title: str = "Verdant Conclave",
+        channel: Optional[discord.TextChannel] = None,
         use_current_channel: bool = False,
     ):
         if not interaction.guild or not interaction.channel:
@@ -526,8 +562,11 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         created_channel: Optional[discord.TextChannel] = None
-        target_channel = interaction.channel
-        if not use_current_channel:
+        target_channel = channel or interaction.channel
+        bind_existing = bool(channel is not None or use_current_channel)
+        if channel is not None and int(channel.guild.id) != int(interaction.guild.id):
+            return await interaction.followup.send("The selected channel must belong to this Discord server.", ephemeral=True)
+        if not bind_existing:
             slug = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-") or "verdant-conclave"
             slug = slug[:70]
             try:
@@ -544,6 +583,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     f"I could not create the dedicated game channel: {exc}", ephemeral=True
                 )
 
+        state: Optional[dict] = None
         try:
             state = await asyncio.to_thread(
                 self.store.create,
@@ -551,8 +591,20 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 guild_id=interaction.guild.id,
                 channel_id=target_channel.id,
                 host_user_id=interaction.user.id,
-                dedicated_channel=not use_current_channel,
+                dedicated_channel=not bind_existing,
             )
+            try:
+                principal_id, _ = access_control.ensure_discord_principal(interaction.user)
+                if principal_id:
+                    access_control.assign_role(
+                        principal_id,
+                        "conclave_host",
+                        resource_type="game",
+                        resource_id=state["game_id"],
+                        source="conclave-create",
+                    )
+            except Exception as exc:
+                logger.warning("[conclave] unable to persist resource host assignment: %s", exc)
             panel_message = await target_channel.send(embed=build_public_embed(state), view=self.panel)
             state = await asyncio.to_thread(self.store.set_panel_message, state["game_id"], panel_message.id)
             await panel_message.edit(embed=build_public_embed(state), view=self.panel)
@@ -561,13 +613,27 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 state.get("game_id"),
                 target_channel.id,
                 interaction.user.id,
-                not use_current_channel,
+                not bind_existing,
+            )
+            channel_note = (
+                "Existing channel bound; current channel members are not auto-enrolled and join with the **Join** button."
+                if bind_existing else
+                "A dedicated channel was created; players join with the **Join** button."
             )
             await interaction.followup.send(
-                f"🌿 Verdant Conclave created in {target_channel.mention}. Game actions are locked to that channel.",
+                f"🌿 Verdant Conclave created in {target_channel.mention}. Game actions are locked to that channel. {channel_note}",
                 ephemeral=True,
             )
         except Exception as exc:
+            if state and state.get("game_id"):
+                try:
+                    await asyncio.to_thread(
+                        self.store.mutate,
+                        state["game_id"],
+                        lambda s: engine.end_game(s, "setup_failed"),
+                    )
+                except Exception:
+                    logger.exception("[conclave] unable to close failed setup game=%s", state.get("game_id"))
             if created_channel is not None:
                 try:
                     await created_channel.delete(reason="Verdant Conclave setup failed")
@@ -579,7 +645,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
 
     @app_commands.command(name="conclave-panel", description="Recreate the control panel for the active Conclave in this channel.")
     @app_commands.guilds(discord.Object(id=int(bigtree.guildid)))
-    @is_bigtree_operator()
+    @requires_capability("game.conclave.host")
     async def recreate_conclave_panel(self, interaction: discord.Interaction):
         if interaction.channel_id is None or interaction.channel is None:
             return await interaction.response.send_message("Use this inside the Conclave channel.", ephemeral=True)
@@ -588,11 +654,9 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             return await interaction.response.send_message("There is no active Conclave in this channel.", ephemeral=True)
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            message = await interaction.channel.send(embed=build_public_embed(state), view=self.panel)
-            state = await asyncio.to_thread(self.store.set_panel_message, state["game_id"], message.id)
-            await message.edit(embed=build_public_embed(state), view=self.panel)
+            await self.recreate_game_panel(state["game_id"])
             await interaction.followup.send("🌿 The Conclave panel has been recreated in this channel.", ephemeral=True)
-        except (discord.Forbidden, discord.HTTPException) as exc:
+        except engine.GameError as exc:
             await interaction.followup.send(f"I could not recreate the panel: {exc}", ephemeral=True)
 
 

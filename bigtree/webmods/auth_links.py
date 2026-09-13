@@ -12,6 +12,7 @@ from bigtree.inc.logging import auth_logger
 from bigtree.inc import web_tokens
 from bigtree.inc import temp_links
 from bigtree.inc import auth as auth_mod
+from bigtree.inc import access_control
 from bigtree.inc.database import get_database
 from bigtree.inc.proxy import request_is_secure
 
@@ -128,9 +129,9 @@ def _get_token_scopes(token: str) -> Optional[Set[str]]:
     return _jwt_scopes(token)
 
 def _scopes_allowed(requested: List[str], caller_scopes: Set[str]) -> bool:
-    if "*" in caller_scopes:
-        return True
-    return all(scope in caller_scopes for scope in requested)
+    # Temporary links may never expand authority. Canonical capability aliases
+    # and namespace wildcards (for example admin:*) are evaluated centrally.
+    return access_control.all_capabilities_granted(requested, caller_scopes)
 
 
 def _resolve_scopes(role_ids: List[str], scopes: List[str]) -> List[str]:

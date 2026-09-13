@@ -153,7 +153,11 @@ If Go dependencies are available locally, also run `go test ./...` and `go vet .
 
 For media performance, test with at least one large uploaded image. The media grid should request `/media/thumbs/<filename>`, explicit previews should request `/media/previews/<filename>`, and opening/copying the original should still use `/media/<filename>`.
 
-For Verdant Conclave, create a session in Discord, confirm the game controls only work in the bound channel, then verify the web/Forest host panels can see readiness and public state without exposing living secret roles.
+For Verdant Conclave, create a session in Discord, confirm the game controls only work in the bound channel, then verify the web/Forest host panels can see readiness and public state without exposing living secret roles. `/conclave-create` may create a dedicated channel, use the current channel, or bind an explicitly selected existing text channel; people already able to see that channel are **not** auto-enrolled and must use Join.
+
+For single-operator Conclave testing, open **Elfministration → Verdant Conclave → Test circle** while the session is in the lobby. **Fill to 5** creates only enough synthetic players to reach the minimum, **+1 test elf** adds another up to the normal 15-player cap, and **Clear test elves** removes them before the game starts. Synthetic players live only in the PostgreSQL game payload, use negative non-Discord IDs, and never create Discord users, BigTree principals, DMs, or private role messages. After starting, **Run test choices** submits phase-appropriate actions/votes for synthetic players only; in mixed tests they prefer synthetic targets and abstain rather than automatically condemn a real player.
+
+The Discord public panel must label synthetic players with the test marker rather than emitting invalid user mentions, and the persistent Refresh button must use a valid Unicode emoji.
 
 
 ### Container/static checks
@@ -179,7 +183,7 @@ For a manual smoke test:
 1. Open Language Services and confirm the provider key is masked rather than returned to the browser.
 2. Select **MiniMax**, enter an `sk-cp-…` Token Plan or `sk-api-…` PAYG key, keep `MiniMax-M3`, save, and use **Test provider**. The request diagnostics should identify MiniMax without ever returning the raw key.
 3. For an `sk-cp-…` key, use **Check quota** and verify the MiniMax Token Plan response is shown only on demand; the service does not poll quota in the background.
-4. Confirm the existing Discord Priest/authorised-speaker gate still blocks non-Priests before any language-provider call. Correct ritual wording must never grant communion.
+4. Confirm the existing Discord Priest/authorised-speaker gate still blocks non-Priests before any language-provider call. Correct ritual wording must never grant an audience.
 5. With reverence enforcement enabled and **Correct first; withhold the answer** selected, an authorised Priest saying only `Tree, who did X?` should receive an in-character etiquette correction rather than the requested knowledge. Addressing TheBigTree with an accepted title should allow the normal answer.
 6. Confirm the emergency override helps an already-authorised communicant first rather than insisting on ceremony. It must not bypass the Priest gate.
 7. Pin a global memory, refresh, and verify it survives. Delete it again.
@@ -196,3 +200,18 @@ Language memory is PostgreSQL-backed and intentionally bounded for the container
 3. Restart the application container again. Logs should show normal schema/config timing but no `running one-time startup import ...` lines for completed imports.
 4. Confirm `startup_migrations` is stored in PostgreSQL; no marker file is required in the disposable application container.
 5. For deliberate repair only, `BIGTREE_RECONCILE_MEDIA_ON_START=1` reruns media reconciliation, while `BIGTREE_FORCE_STARTUP_IMPORTS=1` reruns all bootstrap importers. Remove these flags after maintenance. `BIGTREE_STARTUP_IMPORT_REPORT=1` enables the legacy import report without forcing imports.
+
+## MiniMax divine-audience smoke test
+- Public `@TheBigTree` counts as the canonical divine address.
+- Existing Priest authorization is never re-requested by the model.
+- Empty adaptive M3 completions retry once with thinking disabled.
+
+
+## Identity & Access foundation
+
+- Run `python -m unittest tests.test_access_control_contracts -v`.
+- Verify an existing Priest/ess can still address TheBigTree but cannot use `/commune` unless they separately have operator/Elfministrator authority.
+- Verify an existing BigTree operator can use `/commune` without becoming a Priest.
+- Verify legacy web tokens with `admin:*` satisfy routes requiring `admin:web`; existing exact legacy scopes continue to work.
+- With an admin token, inspect `GET /admin/access/catalog` and use `POST /admin/access/evaluate` with a Discord user ID and capability to see an explainable allow/deny decision.
+- Confirm PostgreSQL contains the `access_*` tables and that no IAM state files are created inside the application container.

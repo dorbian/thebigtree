@@ -3022,3 +3022,10 @@ html, body {
 .symbol-picker-item{width:48px;height:48px;border:2px solid rgba(255,255,255,.15);border-radius:6px;background-size:cover;background-position:center;cursor:pointer;transition:all .15s ease;}
 .symbol-picker-item:hover{border-color:rgba(255,255,255,.5);transform:scale(1.05);}
 .symbol-picker-item.selected{border-color:#4a9eff;box-shadow:0 0 8px rgba(74,158,255,.6);}
+
+/* Verdant Conclave operator-only synthetic test controls. */
+.conclave-test-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 12px;padding:10px 12px;border:1px dashed rgba(157,224,125,.28);border-radius:12px;background:rgba(34,74,51,.12);}
+.conclave-test-tools strong{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);}
+.conclave-test-tools p{margin:.25rem 0 0;font-size:11px;line-height:1.4;max-width:620px;}
+.conclave-test-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;}
+@media (max-width:760px){.conclave-test-tools{align-items:flex-start;flex-direction:column}.conclave-test-actions{justify-content:flex-start}}

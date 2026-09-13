@@ -34,7 +34,7 @@ async def _refresh_panel(game_id: str, state: dict) -> None:
             pass
 
 
-@route("GET", "/admin/conclave/sessions", scopes=["conclave:admin"])
+@route("GET", "/admin/conclave/sessions", scopes=["game.conclave.host"])
 async def list_sessions(req: web.Request) -> web.Response:
     include_ended = str(req.query.get("include_ended") or "0").lower() in {"1", "true", "yes"}
     store = _store()
@@ -55,7 +55,7 @@ async def list_sessions(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "sessions": [engine.public_state(s) for s in states]})
 
 
-@route("GET", "/admin/conclave/{game_id}", scopes=["conclave:admin"])
+@route("GET", "/admin/conclave/{game_id}", scopes=["game.conclave.host"])
 async def get_session(req: web.Request) -> web.Response:
     game_id = req.match_info.get("game_id") or ""
     state = await _store_call(_store().get, game_id)
@@ -83,16 +83,95 @@ async def _mutate(req: web.Request, action: str) -> web.Response:
     return web.json_response({"ok": True, "session": engine.public_state(state)})
 
 
-@route("POST", "/admin/conclave/{game_id}/start", scopes=["conclave:admin"])
+@route("POST", "/admin/conclave/{game_id}/panel", scopes=["game.conclave.host"])
+async def recreate_panel(req: web.Request) -> web.Response:
+    game_id = req.match_info.get("game_id") or ""
+    bot = getattr(bigtree, "bot", None)
+    cog = bot.get_cog("VerdantConclave") if bot else None
+    if not cog or not hasattr(cog, "recreate_game_panel"):
+        return web.json_response({"ok": False, "error": "Discord Conclave controller unavailable"}, status=503)
+    try:
+        state = await cog.recreate_game_panel(game_id)
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    return web.json_response({"ok": True, "session": engine.public_state(state)})
+
+
+@route("POST", "/admin/conclave/{game_id}/start", scopes=["game.conclave.host"])
 async def start_session(req: web.Request) -> web.Response:
     return await _mutate(req, "start")
 
 
-@route("POST", "/admin/conclave/{game_id}/advance", scopes=["conclave:admin"])
+@route("POST", "/admin/conclave/{game_id}/advance", scopes=["game.conclave.host"])
 async def advance_session(req: web.Request) -> web.Response:
     return await _mutate(req, "advance")
 
 
-@route("POST", "/admin/conclave/{game_id}/end", scopes=["conclave:admin"])
+@route("POST", "/admin/conclave/{game_id}/end", scopes=["game.conclave.host"])
 async def end_session(req: web.Request) -> web.Response:
     return await _mutate(req, "end")
+
+
+@route("POST", "/admin/conclave/{game_id}/test-players", scopes=["game.conclave.host"])
+async def add_test_players(req: web.Request) -> web.Response:
+    """Add synthetic lobby players for host testing only.
+
+    Test players are stored inside the game payload in PostgreSQL. They are not
+    Discord users and never receive private role/action messages.
+    """
+    game_id = req.match_info.get("game_id") or ""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        count = int(body.get("count") or 1)
+    except Exception:
+        count = 1
+    target_total = body.get("target_total")
+    try:
+        target_total = int(target_total) if target_total is not None else None
+    except Exception:
+        target_total = None
+    try:
+        state = await _store_call(
+            _store().mutate,
+            game_id,
+            lambda s: engine.add_test_players(s, count, target_total=target_total),
+        )
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    await _refresh_panel(game_id, state)
+    return web.json_response({"ok": True, "session": engine.public_state(state)})
+
+
+@route("DELETE", "/admin/conclave/{game_id}/test-players", scopes=["game.conclave.host"])
+async def clear_test_players(req: web.Request) -> web.Response:
+    game_id = req.match_info.get("game_id") or ""
+    try:
+        state = await _store_call(_store().mutate, game_id, engine.remove_test_players)
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    await _refresh_panel(game_id, state)
+    return web.json_response({"ok": True, "session": engine.public_state(state)})
+
+
+@route("POST", "/admin/conclave/{game_id}/test-act", scopes=["game.conclave.host"])
+async def simulate_test_players(req: web.Request) -> web.Response:
+    game_id = req.match_info.get("game_id") or ""
+    before = await _store_call(_store().get, game_id)
+    if not before:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    phase = str(before.get("phase") or "")
+    try:
+        state = await _store_call(_store().mutate, game_id, engine.simulate_test_players)
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    simulation = dict(state.get("test_last_simulation") or {})
+    await _refresh_panel(game_id, state)
+    return web.json_response({
+        "ok": True,
+        "phase": phase,
+        "simulation": simulation,
+        "session": engine.public_state(state),
+    })
