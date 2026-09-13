@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1611">
+  <title>Language Services · Elfministration</title>
+  <link rel="stylesheet" href="/static/language/language.css?v=20260913a">
+  <script src="/static/language/language.js?v=20260913a" defer></script>
+</head>
+<body>
+  <main class="language-shell">
+    <header class="language-header">
+      <div>
+        <div class="eyebrow">TheBigTree intelligence</div>
+        <h1>Language Services</h1>
+        <p>Provider, persona, memory, and Discord knowledge in one inspectable control surface.</p>
+      </div>
+      <div class="header-actions">
+        <button class="ghost" id="refreshAll" type="button">Refresh</button>
+        <button id="testProvider" type="button">Test provider</button>
+      </div>
+    </header>
+
+    <div class="notice hidden" id="pageNotice"></div>
+
+    <section class="metric-grid" aria-label="Language service status">
+      <article class="metric">
+        <span>Provider</span>
+        <strong id="metricProvider">—</strong>
+        <small id="metricKey">Not loaded</small>
+      </article>
+      <article class="metric">
+        <span>Model</span>
+        <strong id="metricModel">—</strong>
+        <small id="metricPriest">Priest chat —</small>
+      </article>
+      <article class="metric">
+        <span>Last request</span>
+        <strong id="metricResult">Never</strong>
+        <small id="metricUsage">No usage yet</small>
+      </article>
+      <article class="metric">
+        <span>Memory</span>
+        <strong id="metricMemory">—</strong>
+        <small id="metricMemoryDetail">No data loaded</small>
+      </article>
+    </section>
+
+    <div class="layout-two">
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Runtime</span>
+            <h2>Provider & generation</h2>
+          </div>
+          <span class="pill" id="configSource">source —</span>
+        </div>
+        <div class="form-grid">
+          <label>Provider
+            <select id="provider">
+              <option value="openai">OpenAI</option>
+            </select>
+          </label>
+          <label>Model
+            <input id="model" placeholder="gpt-4o-mini">
+          </label>
+          <label>Temperature
+            <input id="temperature" type="number" min="0" max="2" step="0.05">
+          </label>
+          <label>Max output tokens
+            <input id="maxTokens" type="number" min="64" max="4096" step="1">
+          </label>
+        </div>
+        <label>Provider API key
+          <input id="apiKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep the current key">
+        </label>
+        <div class="inline-actions">
+          <button id="saveConfig" type="button">Save language settings</button>
+          <button class="danger-ghost" id="clearApiKey" type="button">Clear stored key</button>
+        </div>
+        <div class="status-line" id="configStatus">Ready.</div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Features</span>
+            <h2>Conversation behaviour</h2>
+          </div>
+        </div>
+        <label class="switch-row">
+          <span><strong>Priest chat</strong><small>Allow Priests to commune with TheBigTree.</small></span>
+          <input id="priestChat" type="checkbox">
+        </label>
+        <label class="switch-row">
+          <span><strong>Persistent memory</strong><small>Remember a bounded set of successful Priest exchanges.</small></span>
+          <input id="memoryEnabled" type="checkbox">
+        </label>
+        <label>Recent conversation turns retained per user
+          <input id="memoryTurns" type="number" min="1" max="20" step="1">
+        </label>
+        <label class="switch-row">
+          <span><strong>Discord retrieval for answers</strong><small>Search only the explicitly selected channels for relevant context before a Priest answer.</small></span>
+          <input id="discordContext" type="checkbox">
+        </label>
+        <label>Discord context channels
+          <select id="contextChannels" multiple size="7"></select>
+        </label>
+        <p class="fine-print">Live Discord excerpts are treated as untrusted evidence. They can inform an answer but cannot replace the persona/system context.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Prompt assembly</span>
+          <h2>Logic & active context</h2>
+        </div>
+        <span class="pill" id="contextMode">Built-in context</span>
+      </div>
+      <div class="context-grid">
+        <div>
+          <h3>What happens for a Priest message</h3>
+          <ol class="logic-list" id="logicList"></ol>
+        </div>
+        <div>
+          <div class="textarea-heading">
+            <h3>TheBigTree system context</h3>
+            <button class="ghost compact" id="restoreContext" type="button">Restore built-in</button>
+          </div>
+          <textarea id="systemPrompt" rows="16" spellcheck="true"></textarea>
+          <p class="fine-print">This is the actual editable system/persona context. Saving an empty value restores the built-in source context.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="layout-two layout-memory-search">
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Continuity</span>
+            <h2>Memory</h2>
+          </div>
+          <button class="danger-ghost compact" id="clearConversations" type="button">Clear conversation history</button>
+        </div>
+        <p class="fine-print">Pinned notes are operator-managed and never pruned automatically. Conversation rows are bounded per user and can be cleared independently.</p>
+        <div class="memory-create">
+          <label>Memory scope
+            <select id="memoryScope">
+              <option value="global">Global</option>
+              <option value="user">Discord user</option>
+            </select>
+          </label>
+          <label id="memoryUserWrap" class="hidden">Discord user ID
+            <input id="memoryUserId" inputmode="numeric" placeholder="123456789…">
+          </label>
+          <label class="memory-content">Pinned note
+            <textarea id="memoryContent" rows="3" maxlength="4000" placeholder="Something TheBigTree should remember…"></textarea>
+          </label>
+          <button id="addMemory" type="button">Pin memory</button>
+        </div>
+        <div class="memory-list" id="memoryList">Loading memory…</div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Knowledge lookup</span>
+            <h2>Search Discord</h2>
+          </div>
+          <span class="pill" id="discordIntent">intent —</span>
+        </div>
+        <p class="fine-print">This searches recent message history that the bot itself can read. Searching does not save results into memory.</p>
+        <div class="search-row">
+          <select id="searchChannel">
+            <option value="">All readable channels</option>
+          </select>
+          <input id="searchQuery" placeholder="Search server conversation…">
+          <button id="searchDiscord" type="button">Search</button>
+        </div>
+        <div class="search-results" id="searchResults">Enter at least two characters to search.</div>
+      </section>
+    </div>
+
+    <section class="card diagnostics-card">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Observability</span>
+          <h2>Last provider request</h2>
+        </div>
+      </div>
+      <dl class="diagnostics" id="diagnostics">
+        <div><dt>Attempt</dt><dd id="diagAttempt">—</dd></div>
+        <div><dt>Success</dt><dd id="diagSuccess">—</dd></div>
+        <div><dt>Latency</dt><dd id="diagLatency">—</dd></div>
+        <div><dt>Input tokens</dt><dd id="diagInput">—</dd></div>
+        <div><dt>Output tokens</dt><dd id="diagOutput">—</dd></div>
+        <div><dt>Request ID</dt><dd id="diagRequest">—</dd></div>
+        <div class="diagnostic-error"><dt>Last error</dt><dd id="diagError">—</dd></div>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>

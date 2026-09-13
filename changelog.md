@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-13
+- Language Services: replace the hidden vendor-specific OpenAI form with an integrated Elfministration workspace for provider configuration, runtime diagnostics, prompt logic, and the active TheBigTree persona context.
+- Language Services: add bounded PostgreSQL-backed Priest conversation memory plus operator-pinned global/user notes with review, deletion, and conversation-clear controls.
+- Language Services: add relevance-ranked Discord knowledge search and optional answer-time retrieval from explicitly selected readable channels; retrieved Discord content is treated as untrusted context and cannot override the system prompt.
+- Language Services: make Priest chat honor its enable toggle, unify provider configuration across Priest chat and short-text generation, expose safe key-source/fingerprint diagnostics, and stop returning raw provider keys from the generic system-config API.
+
 ## 2026-09-11
 - Cardgames: serialize and row-lock state mutations, commit state + event publication atomically, and reduce live SSE/WebSocket polling to one database query per tick.
 - Cardgames: fix Blackjack split-hand advancement, reject duplicate Craps round rolls, throttle finished-session cleanup, and rely on PostgreSQL cascade cleanup.

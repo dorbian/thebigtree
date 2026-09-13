@@ -163,3 +163,24 @@ The production image is multi-stage and should be built with BuildKit/Buildx (th
 When testing behind Traefik, confirm `/healthz` reports the expected `build.sha`. `/readyz` should return HTTP 503 until both Discord and PostgreSQL are ready, then HTTP 200. For a Traefik address outside private/loopback ranges, configure `BIGTREE__WEB__trusted_proxy_cidrs` explicitly before validating secure cookies and forwarded client IP logging.
 
 Cardgame regression tests cover split-hand Blackjack progression, duplicate Craps round protection, event polling and maintenance throttling. For a production smoke test, retry the same wallet-backed action nonce and confirm it is not charged or paid twice.
+
+## Language Services regression checks
+
+Language Services is available from **Elfministration → System → Language Services** to users with `admin:web`. The workspace exposes the effective provider/model, safe credential fingerprint/source, active TheBigTree system context, bounded memory, request diagnostics, and Discord search.
+
+Run the language-specific contract tests with:
+
+```bash
+python -m unittest -v tests.test_language_services_contracts
+```
+
+For a manual smoke test:
+
+1. Open Language Services and confirm the provider key is masked rather than returned to the browser.
+2. Use **Test provider** and verify the request status/token counters update (this performs one billable provider request).
+3. Pin a global memory, refresh, and verify it survives. Delete it again.
+4. Search Discord with and without a specific channel. Results should link back to Discord and are not stored as memory.
+5. If answer-time Discord retrieval is desired, select one or more channels and explicitly enable **Discord retrieval for answers**. It is off by default.
+6. Disable **Priest chat** and verify Priest DMs/mentions no longer invoke the language provider.
+
+Conversation memory stores only a bounded set of successful Priest exchanges per user. Pinned notes are retained until an operator deletes them; clearing conversation history leaves pinned notes intact.

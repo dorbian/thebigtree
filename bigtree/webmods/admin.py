@@ -856,9 +856,14 @@ async def send_message(req: web.Request):
 @route("GET", "/admin/system-config", scopes=["admin:web"])
 async def admin_system_config(_req: web.Request):
     db = get_database()
+    openai = dict(db.get_system_config("openai") or {})
+    key = str(openai.get("api_key") or "").strip()
+    if key:
+        openai["api_key"] = f"***{key[-4:]}"
+        openai["api_key_configured"] = True
     configs = {
         "xivauth": db.get_system_config("xivauth"),
-        "openai": db.get_system_config("openai"),
+        "openai": openai,
         "overlay": db.get_system_config("overlay"),
     }
     return web.json_response({"ok": True, "configs": configs})
@@ -877,9 +882,20 @@ async def admin_system_config_update(req: web.Request):
     if not isinstance(data, dict):
         data = {}
     db = get_database()
+    if name == "openai":
+        existing = db.get_system_config("openai") or {}
+        candidate = str(data.get("api_key") or "").strip()
+        if not candidate or candidate.startswith("***"):
+            if existing.get("api_key"):
+                data["api_key"] = existing["api_key"]
     if not db.update_system_config(name, data):
         return web.json_response({"ok": False, "error": "save failed"}, status=500)
-    return web.json_response({"ok": True, "config": db.get_system_config(name)})
+    saved = dict(db.get_system_config(name) or {})
+    if name == "openai" and saved.get("api_key"):
+        key = str(saved["api_key"])
+        saved["api_key"] = f"***{key[-4:]}"
+        saved["api_key_configured"] = True
+    return web.json_response({"ok": True, "config": saved})
 
 
 @route("GET", "/admin/logs", scopes=["admin:web"])

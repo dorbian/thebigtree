@@ -1934,7 +1934,6 @@ This will block new games from being created in this event, but existing games c
           const data = await jsonFetch("/admin/system-config", {method:"GET"});
           const configs = data.configs || {};
           const xiv = configs.xivauth || {};
-          const openai = configs.openai || {};
           setInputValue("systemXivVerifyUrl", xiv.verify_url || xiv.verifyUrl || "");
           setInputValue("systemXivApiKey", xiv.api_key || "");
           setInputValue("systemXivDefaultUsername", xiv.default_username || "");
@@ -1949,14 +1948,6 @@ This will block new games from being created in this event, but existing games c
           setInputValue("systemXivApiKeyHeader", xiv.api_key_header || "");
           setInputValue("systemXivStateSecret", xiv.state_secret || "");
           setNumberValue("systemXivTimeout", normalizeNumber(xiv.timeout_seconds ?? xiv.timeout));
-          setInputValue("systemOpenAIKey", openai.api_key || "");
-          setInputValue("systemOpenAIModel", openai.openai_model || openai.model || "");
-          setNumberValue("systemOpenAITemperature", normalizeNumber(openai.openai_temperature ?? openai.temperature));
-          setNumberValue("systemOpenAITokens", normalizeNumber(openai.openai_max_output_tokens ?? openai.max_tokens));
-          const priestToggle = $("systemOpenAIEnablePriest");
-          if (priestToggle){
-            priestToggle.checked = parseBoolean(openai.enable_priest_chat);
-          }
           setSystemConfigStatus("Configuration loaded.", "ok");
         }catch(err){
           setSystemConfigStatus(err.message || "Unable to load configuration.", "err");
@@ -1964,45 +1955,32 @@ This will block new games from being created in this event, but existing games c
       }
 
       async function saveSystemConfig(section){
+        if (section !== "xivauth"){
+          setSystemConfigStatus("Language provider settings are managed in Language Services.", "err");
+          return;
+        }
         setSystemConfigStatus("Saving...", "");
         const payload = {name: section, data: {}};
-        if (section === "xivauth"){
-          const data = {
-            verify_url: ($("systemXivVerifyUrl")?.value || "").trim(),
-            api_key: ($("systemXivApiKey")?.value || "").trim(),
-            default_username: ($("systemXivDefaultUsername")?.value || "").trim(),
-            client_id: ($("systemXivClientId")?.value || "").trim(),
-            client_secret: ($("systemXivClientSecret")?.value || "").trim(),
-            authorize_url: ($("systemXivAuthorizeUrl")?.value || "").trim(),
-            token_url: ($("systemXivTokenUrl")?.value || "").trim(),
-            scope: ($("systemXivScope")?.value || "").trim(),
-            redirect_url: ($("systemXivRedirectUrl")?.value || "").trim(),
-            token_header: ($("systemXivTokenHeader")?.value || "").trim(),
-            token_prefix: ($("systemXivTokenPrefix")?.value || "").trim(),
-            api_key_header: ($("systemXivApiKeyHeader")?.value || "").trim(),
-            state_secret: ($("systemXivStateSecret")?.value || "").trim(),
-          };
-          const timeout = normalizeNumber($("systemXivTimeout")?.value);
-          if (timeout !== null){
-            data.timeout_seconds = timeout;
-          }
-          payload.data = data;
-        }else{
-          const data = {
-            api_key: ($("systemOpenAIKey")?.value || "").trim(),
-            openai_model: ($("systemOpenAIModel")?.value || "").trim(),
-            enable_priest_chat: $("systemOpenAIEnablePriest")?.checked || false,
-          };
-          const temperature = normalizeNumber($("systemOpenAITemperature")?.value);
-          if (temperature !== null){
-            data.openai_temperature = temperature;
-          }
-          const tokens = normalizeNumber($("systemOpenAITokens")?.value);
-          if (tokens !== null){
-            data.openai_max_output_tokens = tokens;
-          }
-          payload.data = data;
+        const data = {
+          verify_url: ($("systemXivVerifyUrl")?.value || "").trim(),
+          api_key: ($("systemXivApiKey")?.value || "").trim(),
+          default_username: ($("systemXivDefaultUsername")?.value || "").trim(),
+          client_id: ($("systemXivClientId")?.value || "").trim(),
+          client_secret: ($("systemXivClientSecret")?.value || "").trim(),
+          authorize_url: ($("systemXivAuthorizeUrl")?.value || "").trim(),
+          token_url: ($("systemXivTokenUrl")?.value || "").trim(),
+          scope: ($("systemXivScope")?.value || "").trim(),
+          redirect_url: ($("systemXivRedirectUrl")?.value || "").trim(),
+          token_header: ($("systemXivTokenHeader")?.value || "").trim(),
+          token_prefix: ($("systemXivTokenPrefix")?.value || "").trim(),
+          api_key_header: ($("systemXivApiKeyHeader")?.value || "").trim(),
+          state_secret: ($("systemXivStateSecret")?.value || "").trim(),
+        };
+        const timeout = normalizeNumber($("systemXivTimeout")?.value);
+        if (timeout !== null){
+          data.timeout_seconds = timeout;
         }
+        payload.data = data;
         try{
           await jsonFetch("/admin/system-config", {
             method: "POST",
@@ -2086,6 +2064,10 @@ This will block new games from being created in this event, but existing games c
         if (galleryBtn) galleryBtn.classList.toggle("hidden", !canGallery);
         const systemConfigBtn = $("menuSystemConfig");
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
+        const languageServicesBtn = $("menuLanguageServices");
+        if (languageServicesBtn) languageServicesBtn.classList.toggle("hidden", !canAdmin);
+        const dashboardLanguageServices = $("dashboardLanguageServices");
+        if (dashboardLanguageServices) dashboardLanguageServices.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
         if (dashboardAuthLink) dashboardAuthLink.classList.toggle("hidden", !canAdmin);
         const dashboardAuthUsers = $("dashboardAuthUsers");
@@ -2096,7 +2078,7 @@ This will block new games from being created in this event, but existing games c
         const saved = getSavedPanel();
         const blocked =
           (!canBingo && (saved === "bingo" || saved === "bingoSessions" || saved === "media")) ||
-          (!canAdmin && (saved === "contests")) ||
+          (!canAdmin && (saved === "contests" || saved === "languageServices")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
           (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots")) ||
           (!canConclave && saved === "conclave");
@@ -3028,6 +3010,7 @@ This will block new games from being created in this event, but existing games c
         }
         if (canAdmin){
           allowedPanels.add("contests");
+          allowedPanels.add("languageServices");
         }
         if (canTarot){
           allowedPanels.add("tarotLinks");
@@ -3810,6 +3793,7 @@ This will block new games from being created in this event, but existing games c
         events: "Events",
         venues: "Venues",
         conclave: "Verdant Conclave",
+        languageServices: "Language Services",
         iframe: "Administration",
       };
 
@@ -3835,6 +3819,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
         toggleClass("menuConclave", "active", which === "conclave");
+        toggleClass("menuLanguageServices", "active", which === "languageServices");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
         toggleClass("menuDiceEditor", "active", which === "diceEditor");
         toggleClass("menuSlotsEditor", "active", which === "slotsEditor");
@@ -3861,7 +3846,13 @@ This will block new games from being created in this event, but existing games c
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
         toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
-        toggleClass("iframePanel", "hidden", which !== "iframe");
+        toggleClass("iframePanel", "hidden", which !== "iframe" && which !== "languageServices");
+        if (which === "languageServices"){
+          const iframe = $("iframeContent");
+          if (iframe && !iframe.src.endsWith("/admin/language")){
+            iframe.src = "/admin/language";
+          }
+        }
         const workspaceTitle = $("workspaceTitle");
         if (workspaceTitle) workspaceTitle.textContent = WORKSPACE_TITLES[which] || "Elfministration";
         closeMobileNavigation();
@@ -4057,6 +4048,14 @@ This will block new games from being created in this event, but existing games c
       }
 
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
+      on("menuLanguageServices", "click", () => {
+        if (!ensureScope("admin:web", "Language Services requires web administration access.")) return;
+        showPanel("languageServices");
+      });
+      on("dashboardLanguageServices", "click", () => {
+        if (!ensureScope("admin:web", "Language Services requires web administration access.")) return;
+        showPanel("languageServices");
+      });
       on("menuConclave", "click", () => {
         if (!ensureScope("conclave:admin", "Verdant Conclave host access required.")) return;
         showPanel("conclave");
@@ -4180,6 +4179,7 @@ This will block new games from being created in this event, but existing games c
         });
       }
       bindMenuKey("menuDashboard");
+      bindMenuKey("menuLanguageServices");
       bindMenuKey("menuConclave");
       bindMenuKey("menuBingo");
       bindMenuKey("menuTarotLinks");
@@ -4307,7 +4307,10 @@ This will block new games from being created in this event, but existing games c
         }
       });
       on("systemXivSave", "click", () => saveSystemConfig("xivauth"));
-      on("systemOpenAISave", "click", () => saveSystemConfig("openai"));
+      on("systemLanguageServicesOpen", "click", () => {
+        $("systemConfigModal")?.classList.remove("show");
+        showPanel("languageServices");
+      });
       on("dashboardStatsRefresh", "click", () => loadDashboardStats(true));
       on("dashboardLogsClose", "click", () => $("dashboardLogsModal")?.classList.remove("show"));
       on("dashboardLogsModal", "click", (ev) => {

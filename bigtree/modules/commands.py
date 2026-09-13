@@ -15,8 +15,8 @@ from bigtree.modules import media as media_mod
 from bigtree.modules import artists as artist_mod
 import re
 import asyncio
-from collections import defaultdict, deque
-import bigtree.inc.ai as ai 
+import bigtree.inc.ai as ai
+from bigtree.inc import discord_knowledge, language_memory
 
 PRIEST_ROLE_NAME = "Priest/ess"
 
@@ -38,9 +38,6 @@ def _strip_emojis(text: str) -> str:
             continue
         cleaned.append(ch)
     return "".join(cleaned)
-
-# Simple per-user rolling memory (volatile)
-_user_hist = defaultdict(lambda: deque(maxlen=8))
 
 def _can_edit_gallery_upload(member, uploader_id: str) -> bool:
     if not member:
@@ -238,17 +235,54 @@ def _should_handle_public(message, bot):
     return False
 
 async def _ask_tree(user_id: int, prompt: str) -> str:
-    # Gather brief history, let the ai module do the rest
-    history = list(_user_hist[user_id])
+    cfg = ai.get_language_config()
+    history = []
+    memory_notes = []
+    knowledge = []
+
+    memory_enabled = bool(cfg.get("memory_enabled", True))
+    memory_turns = max(1, min(int(cfg.get("memory_turns", 6) or 6), 20))
+    if memory_enabled:
+        try:
+            history, memory_notes = await asyncio.gather(
+                asyncio.to_thread(language_memory.recent_history, user_id, memory_turns * 2),
+                asyncio.to_thread(language_memory.pinned_context, user_id, 12),
+            )
+        except Exception:
+            bigtree.loch.logger.exception("Language memory retrieval failed")
+            history, memory_notes = [], []
+
+    if bool(cfg.get("discord_context_enabled")):
+        channel_ids = cfg.get("discord_context_channel_ids") or []
+        if channel_ids:
+            try:
+                knowledge = await discord_knowledge.search_context(
+                    bot, prompt, channel_ids, limit=5
+                )
+            except Exception:
+                bigtree.loch.logger.exception("Discord language context search failed")
+                knowledge = []
+
     reply = await ai.ask(
         user_id=user_id,
         prompt=prompt,
         persona="tree",
-        history=history
+        history=history,
+        memory_notes=memory_notes,
+        knowledge=knowledge,
     )
-    # update history
-    _user_hist[user_id].append({"role": "user", "content": prompt})
-    _user_hist[user_id].append({"role": "assistant", "content": reply})
+
+    if memory_enabled:
+        try:
+            await asyncio.to_thread(
+                language_memory.record_exchange,
+                user_id,
+                prompt,
+                reply,
+                memory_turns * 2,
+            )
+        except Exception:
+            bigtree.loch.logger.exception("Language memory persistence failed")
     return reply
 
 
@@ -372,6 +406,8 @@ async def receive(message):
 async def priest_chat_router(message):
     try:
         if message.author.bot:
+            return
+        if not ai.priest_chat_enabled():
             return
 
         # Let slash commands pass; still allow mention-triggered chats

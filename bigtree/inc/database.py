@@ -493,6 +493,27 @@ class Database:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS language_memories (
+                id BIGSERIAL PRIMARY KEY,
+                scope_type TEXT NOT NULL DEFAULT 'global',
+                scope_id TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'note',
+                role TEXT NOT NULL DEFAULT 'system',
+                content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'operator',
+                pinned BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_language_memories_scope
+            ON language_memories (scope_type, scope_id, created_at DESC)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_language_memories_kind
+            ON language_memories (kind, pinned, created_at DESC)
+            """,
+            """
             CREATE TABLE IF NOT EXISTS legacy_imports (
                 source_key TEXT PRIMARY KEY,
                 imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP

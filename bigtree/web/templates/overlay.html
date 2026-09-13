@@ -7,7 +7,7 @@
     <title>Elfministration</title>
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="preload" as="image" href="{ADMIN_BACKGROUND}" fetchpriority="high">
-    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260911d">
+    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260913a">
     <style>
       :root{
         --admin-login-bg-url: url("{ADMIN_BACKGROUND}");
@@ -89,6 +89,14 @@
             <div class="nav-title">Manage</div>
             <div class="menu-item" id="menuGamesList" tabindex="0"><span class="menu-label">Games</span></div>
             <div class="menu-item" id="menuGamesEvents" tabindex="0"><span class="menu-label">Events</span></div>
+          </div>
+
+          <div class="nav-block">
+            <div class="nav-title">System</div>
+            <div class="menu-item" id="menuLanguageServices" tabindex="0">
+              <span class="menu-label">Language Services</span>
+              <span class="nav-badge">NLP</span>
+            </div>
           </div>
 
 
@@ -208,6 +216,9 @@
                 <div class="dashboard-admin-title">Configuration</div>
               </div>
               <div class="dashboard-admin-actions">
+                <button type="button" id="dashboardLanguageServices">
+                  <span>Language Services</span>
+                </button>
                 <button type="button" id="menuSystemConfig">
                   <span>System config</span>
                 </button>
@@ -215,7 +226,7 @@
                   <span>Changelog</span>
                 </button>
               </div>
-              <p class="dashboard-admin-note">Service credentials and latest updates.</p>
+              <p class="dashboard-admin-note">Language intelligence, service credentials, and latest updates.</p>
             </div>
             <div class="dashboard-admin-card">
               <div class="dashboard-admin-header">
@@ -2752,29 +2763,9 @@
             <button id="systemXivSave">Save XivAuth</button>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3>OpenAI</h3>
-            <p class="muted" style="margin-top:0;margin-bottom:8px;">Imported from <code>[openai]</code> and env vars if available.</p>
-            <label>
-              API key
-              <input id="systemOpenAIKey" type="password" autocomplete="off">
-            </label>
-            <label>
-              Model
-              <input id="systemOpenAIModel" placeholder="gpt-4o-mini">
-            </label>
-            <label>
-              Temperature
-              <input id="systemOpenAITemperature" type="number" min="0" max="2" step="0.01">
-            </label>
-            <label>
-              Max tokens
-              <input id="systemOpenAITokens" type="number" min="1" step="1">
-            </label>
-            <label>
-              <input id="systemOpenAIEnablePriest" type="checkbox">
-              Enable priest chat
-            </label>
-            <button id="systemOpenAISave">Save OpenAI</button>
+            <h3>Language Services</h3>
+            <p class="muted" style="margin-top:0;margin-bottom:8px;">Language provider credentials, TheBigTree context, memory, and Discord knowledge search now live in one dedicated workspace.</p>
+            <button id="systemLanguageServicesOpen" type="button">Open Language Services</button>
           </div>
         </div>
         <div class="status" id="systemConfigStatus">Ready.</div>
@@ -2784,7 +2775,7 @@
     <div class="scope-preview-overlay hidden" id="scopePreviewOverlay">
       <button class="btn-ghost" id="scopePreviewExit">Return to real scope</button>
     </div>
-    <script src="/static/overlay/overlay.js?v=20260911d" defer></script>
+    <script src="/static/overlay/overlay.js?v=20260913a" defer></script>
 
 
   </body>
