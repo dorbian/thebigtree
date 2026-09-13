@@ -1,10 +1,46 @@
+import importlib.util
 from pathlib import Path
+import sys
+import types
 import unittest
 
-from bigtree.games.conclave import engine, server_config
-
-
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# Keep this contract suite dependency-light just like test_conclave_engine.py:
+# importing bigtree.games.conclave through the package executes bigtree/__init__.py,
+# which imports discord.py. The Validate Python workflow deliberately runs before
+# runtime dependencies are installed, so load these pure modules directly.
+engine = _load_module(
+    "bigtree_conclave_product_engine",
+    ROOT / "bigtree" / "games" / "conclave" / "engine.py",
+)
+
+# server_config only needs get_database when callers do not provide a database.
+# These tests always inject _FakeConfigDB, so provide a narrow import-time stub
+# instead of bootstrapping the full BigTree application package.
+_database_stub = types.ModuleType("bigtree.inc.database")
+_database_stub.get_database = lambda: None
+_previous_database_module = sys.modules.get("bigtree.inc.database")
+sys.modules["bigtree.inc.database"] = _database_stub
+try:
+    server_config = _load_module(
+        "bigtree_conclave_server_config",
+        ROOT / "bigtree" / "games" / "conclave" / "server_config.py",
+    )
+finally:
+    if _previous_database_module is None:
+        sys.modules.pop("bigtree.inc.database", None)
+    else:
+        sys.modules["bigtree.inc.database"] = _previous_database_module
 
 
 class _FakeConfigDB:
