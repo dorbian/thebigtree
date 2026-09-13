@@ -6,10 +6,12 @@ import secrets
 import string
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import psycopg2
+from psycopg2 import pool as pg_pool
 from psycopg2.extras import Json, RealDictCursor
 from tinydb import TinyDB
 
@@ -31,6 +33,14 @@ def get_database() -> "Database":
     return ensure_database()
 
 
+def close_database() -> None:
+    global _DB_INSTANCE
+    db = _DB_INSTANCE
+    _DB_INSTANCE = None
+    if db is not None:
+        db.close()
+
+
 class Database:
     def __init__(self):
         self._settings = getattr(bigtree, "settings", None)
@@ -38,6 +48,15 @@ class Database:
         self._conn_info = conn_info
         self._connect_retries = retries
         self._connect_delay = delay
+
+        # A Raspberry Pi does not benefit from a large connection pool. Keep
+        # the defaults deliberately small while allowing explicit overrides.
+        pool_min = self._settings.get("DATABASE.pool_min", 1, cast=int) if self._settings else 1
+        pool_max = self._settings.get("DATABASE.pool_max", 4, cast=int) if self._settings else 4
+        self._pool_min = max(1, min(int(pool_min), 8))
+        self._pool_max = max(self._pool_min, min(int(pool_max), 16))
+        self._pool: Optional[pg_pool.ThreadedConnectionPool] = None
+        self._pool_lock = threading.RLock()
 
         # internal state
         self._lock = threading.RLock()
@@ -113,25 +132,88 @@ class Database:
         )
         return data, int(retries), float(delay)
 
-    def _connect(self):
-        attempts = getattr(self, "_connect_retries", 5)
-        delay = getattr(self, "_connect_delay", 1.0)
-        for attempt in range(1, attempts + 1):
+    def _ensure_pool(self) -> pg_pool.ThreadedConnectionPool:
+        with self._pool_lock:
+            if self._pool is not None:
+                return self._pool
+            attempts = getattr(self, "_connect_retries", 5)
+            delay = getattr(self, "_connect_delay", 1.0)
+            for attempt in range(1, attempts + 1):
+                try:
+                    self._pool = pg_pool.ThreadedConnectionPool(
+                        self._pool_min, self._pool_max, **self._conn_info
+                    )
+                    logger.info(
+                        "[database] connection pool ready (min=%s max=%s)",
+                        self._pool_min,
+                        self._pool_max,
+                    )
+                    return self._pool
+                except psycopg2.OperationalError as exc:
+                    if attempt >= attempts:
+                        raise
+                    logger.warning(
+                        "[database] Postgres unavailable (%s), retrying (%s/%s)",
+                        exc,
+                        attempt,
+                        attempts,
+                    )
+                    time.sleep(delay)
+            raise RuntimeError("unable to initialize database pool")
+
+    @contextmanager
+    def _connection(self):
+        pool = self._ensure_pool()
+        conn = pool.getconn()
+        broken = False
+        try:
+            # psycopg connection context commits on success and rolls back on
+            # failure, but deliberately does not close the pooled connection.
+            with conn:
+                yield conn
+        except (psycopg2.InterfaceError, psycopg2.OperationalError):
+            broken = True
+            raise
+        finally:
             try:
-                return psycopg2.connect(**self._conn_info)
-            except psycopg2.OperationalError as exc:
-                if attempt >= attempts:
-                    raise
-                logger.warning("[database] Postgres unavailable (%s), retrying (%s/%s)", exc, attempt, attempts)
-                time.sleep(delay)
+                pool.putconn(conn, close=broken or bool(getattr(conn, "closed", False)))
+            except Exception:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    @contextmanager
+    def transaction(self):
+        """Yield a RealDictCursor inside one database transaction."""
+        with self._connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                yield cur
 
     def _execute(self, sql: str, params: Optional[Sequence] = None, fetch: bool = False):
-        with self._connect() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(sql, params or ())
-                if fetch:
-                    return cur.fetchall()
-                return cur.rowcount
+        with self.transaction() as cur:
+            cur.execute(sql, params or ())
+            if fetch:
+                return cur.fetchall()
+            return cur.rowcount
+
+    def ping(self) -> bool:
+        try:
+            row = self._fetchone("SELECT 1 AS ok")
+            return bool(row and int(row.get("ok") or 0) == 1)
+        except Exception:
+            return False
+
+    def close(self) -> None:
+        with self._pool_lock:
+            pool = self._pool
+            self._pool = None
+        if pool is not None:
+            try:
+                pool.closeall()
+                logger.info("[database] connection pool closed")
+            except Exception as exc:
+                logger.warning("[database] failed to close connection pool: %s", exc)
 
     def _fetchone(self, sql: str, params: Optional[Sequence] = None) -> Optional[Dict[str, Any]]:
         rows = self._execute(sql, params, fetch=True)
@@ -209,6 +291,14 @@ class Database:
                 claimed_by INTEGER REFERENCES users(id),
                 claimed_at TIMESTAMPTZ
             )
+            """,
+            # A Conclave is hard-bound to one Discord channel. This partial
+            # unique index closes the race where two create interactions land
+            # at the same time before either can observe the other's session.
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_games_conclave_active_channel
+            ON games (channel_id)
+            WHERE module = 'conclave' AND active = TRUE AND channel_id IS NOT NULL
             """,
             """
             CREATE TABLE IF NOT EXISTS cardgame_sessions (
@@ -485,7 +575,7 @@ class Database:
         ]
         for stmt in statements:
             self._execute(stmt)
-        with self._connect() as conn:
+        with self._connection() as conn:
             self._ensure_column(conn, "discord_users", "name", "TEXT")
             self._ensure_column(conn, "discord_users", "display_name", "TEXT")
             self._ensure_column(conn, "discord_users", "global_name", "TEXT")
@@ -1409,8 +1499,22 @@ class Database:
             return False, 0, "invalid"
         if event_id <= 0 or user_id <= 0:
             return False, 0, "invalid"
-        with self._connect() as conn:
+        with self._connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Materialize the wallet row before locking it.  A plain
+                # SELECT .. FOR UPDATE cannot lock a row that does not exist;
+                # two first-time balance changes could therefore both read a
+                # zero balance and race through the later UPSERT.  Ensuring
+                # the row exists first gives every mutation a concrete row to
+                # serialize on, including the very first one.
+                cur.execute(
+                    """
+                    INSERT INTO event_wallets (event_id, user_id, balance)
+                    VALUES (%s, %s, 0)
+                    ON CONFLICT (event_id, user_id) DO NOTHING
+                    """,
+                    (event_id, user_id),
+                )
                 cur.execute(
                     """
                     SELECT balance
@@ -1427,13 +1531,12 @@ class Database:
                     return False, balance, "insufficient"
                 cur.execute(
                     """
-                    INSERT INTO event_wallets (event_id, user_id, balance)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (event_id, user_id) DO UPDATE
-                      SET balance = EXCLUDED.balance,
-                          updated_at = CURRENT_TIMESTAMP
+                    UPDATE event_wallets
+                    SET balance = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE event_id = %s AND user_id = %s
                     """,
-                    (event_id, user_id, next_balance),
+                    (next_balance, event_id, user_id),
                 )
                 cur.execute(
                     """
@@ -1441,6 +1544,103 @@ class Database:
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (event_id, user_id, delta, next_balance, reason, Json(metadata or {})),
+                )
+                return True, next_balance, "ok"
+
+    def apply_game_wallet_delta_once(
+        self,
+        *,
+        event_id: int,
+        user_id: int,
+        delta: int,
+        reason: str,
+        game_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        allow_negative: bool = False,
+    ) -> Tuple[bool, int, str]:
+        """Apply one idempotent game-wallet mutation.
+
+        The wallet row is locked before the duplicate check.  Calls using the
+        same ``event_id``/``user_id``/``reason``/``game_id`` tuple therefore
+        serialize and exactly one can append history, even when a browser
+        retries a request or two BigTree containers briefly overlap during a
+        rollout.
+
+        Returns ``(applied, balance, status)`` where ``status`` is ``ok``,
+        ``duplicate``, ``insufficient`` or ``invalid``.
+        """
+        try:
+            event_id = int(event_id)
+            user_id = int(user_id)
+            delta = int(delta)
+        except Exception:
+            return False, 0, "invalid"
+        reason = str(reason or "").strip()
+        game_id = str(game_id or "").strip()
+        if event_id <= 0 or user_id <= 0 or not reason or not game_id:
+            return False, 0, "invalid"
+
+        meta = dict(metadata or {})
+        # Keep the lookup key in one canonical place.  Existing history rows
+        # already use metadata.game_id, so this remains backwards compatible.
+        meta["game_id"] = game_id
+
+        with self._connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO event_wallets (event_id, user_id, balance)
+                    VALUES (%s, %s, 0)
+                    ON CONFLICT (event_id, user_id) DO NOTHING
+                    """,
+                    (event_id, user_id),
+                )
+                cur.execute(
+                    """
+                    SELECT balance
+                    FROM event_wallets
+                    WHERE event_id = %s AND user_id = %s
+                    FOR UPDATE
+                    """,
+                    (event_id, user_id),
+                )
+                row = cur.fetchone()
+                balance = int(row.get("balance") or 0) if row else 0
+
+                cur.execute(
+                    """
+                    SELECT 1 AS ok
+                    FROM event_wallet_history
+                    WHERE event_id = %s
+                      AND user_id = %s
+                      AND reason = %s
+                      AND metadata->>'game_id' = %s
+                    LIMIT 1
+                    """,
+                    (event_id, user_id, reason, game_id),
+                )
+                if cur.fetchone():
+                    return False, balance, "duplicate"
+
+                next_balance = balance + delta
+                if not allow_negative and next_balance < 0:
+                    return False, balance, "insufficient"
+
+                cur.execute(
+                    """
+                    UPDATE event_wallets
+                    SET balance = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE event_id = %s AND user_id = %s
+                    """,
+                    (next_balance, event_id, user_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO event_wallet_history (event_id, user_id, delta, balance, reason, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (event_id, user_id, delta, next_balance, reason, Json(meta)),
                 )
                 return True, next_balance, "ok"
 
@@ -2246,112 +2446,6 @@ class Database:
         )
         return True
 
-    def _migrate_media_items(self) -> None:
-        """Import legacy TinyDB media.json + filesystem-only files into Postgres.
-
-        TinyDB is kept only as a legacy import source.
-        """
-        try:
-            from bigtree.modules import media as media_mod
-        except Exception:
-            return
-        try:
-            from bigtree.modules import gallery as gallery_mod
-        except Exception:
-            gallery_mod = None
-
-        # Only run once per process start.
-        if getattr(self, "_media_migrated", False) and self.count_media_items(include_hidden=True) > 0:
-            return
-        self._media_migrated = True
-
-        hidden_set: set[str] = set()
-        try:
-            if gallery_mod:
-                hidden_set = set(gallery_mod.get_hidden_set() or [])
-        except Exception:
-            hidden_set = set()
-
-        media_dir = media_mod.get_media_dir()
-        # 1) Import legacy TinyDB rows
-        try:
-            legacy = list(media_mod.list_media() or [])
-        except Exception:
-            legacy = []
-
-        imported = 0
-        for entry in legacy:
-            filename = str(entry.get("filename") or "").strip()
-            if not filename:
-                continue
-            item_id = f"media:{filename}"
-            hidden = item_id in hidden_set
-            discord_url = (entry.get("discord_url") or "").strip()
-            url = discord_url or f"/media/{filename}"
-            thumb_url = f"/media/thumbs/{filename}"
-            artist_name = ""
-            artist_links: Dict[str, Any] = {}
-            # Keep artist_id mapping as metadata for now.
-            meta = {"legacy": True}
-            if entry.get("artist_id"):
-                meta["artist_id"] = entry.get("artist_id")
-            # Ensure thumbs exist for disk-backed images.
-            try:
-                _ = media_mod.ensure_thumb(filename)
-            except Exception:
-                pass
-            self.upsert_media_item(
-                media_id=filename,
-                filename=filename,
-                title=str(entry.get("title") or entry.get("original_name") or filename),
-                artist_name=artist_name,
-                artist_links=artist_links,
-                inspiration_text=str(entry.get("inspiration_text") or ""),
-                origin_type=str(entry.get("origin_type") or ""),
-                origin_label=str(entry.get("origin_label") or ""),
-                url=url,
-                thumb_url=thumb_url,
-                tags=entry.get("tags") if isinstance(entry.get("tags"), list) else [],
-                hidden=hidden,
-                kind="image",
-                metadata=meta,
-            )
-            imported += 1
-
-        # 2) Import filesystem-only images (present on disk but no DB row).
-        try:
-            names = sorted(os.listdir(media_dir))
-        except Exception:
-            names = []
-        for name in names:
-            if name in ("media.json", "thumbs"):
-                continue
-            path = os.path.join(media_dir, name)
-            if not os.path.isfile(path):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
-                continue
-            # Upsert is idempotent; it will not overwrite existing richer rows.
-            item_id = f"media:{name}"
-            hidden = item_id in hidden_set
-            try:
-                _ = media_mod.ensure_thumb(name)
-            except Exception:
-                pass
-            self.upsert_media_item(
-                media_id=name,
-                filename=name,
-                title=name,
-                url=f"/media/{name}",
-                thumb_url=f"/media/thumbs/{name}",
-                hidden=hidden,
-                kind="image",
-                metadata={"filesystem_only": True},
-            )
-        logger.info("[database] media migration complete (legacy_rows=%s, total=%s)", imported, self.count_media_items(include_hidden=True))
-
-    
     # ---------------- legacy import tracking ----------------
     def is_legacy_imported(self, source_key: str) -> bool:
         key = str(source_key or "").strip()
@@ -2474,26 +2568,40 @@ class Database:
         return out
 
     def increment_gallery_reaction(self, item_id: str, reaction_id: str, amount: int = 1) -> Dict[str, int]:
+        """Increment a gallery reaction without losing concurrent updates."""
         iid = str(item_id or "").strip()
         rid = str(reaction_id or "").strip().lower()
         if not iid or not rid:
             return {}
         amount = max(1, int(amount or 1))
-        row = self._fetchone("SELECT counts FROM gallery_reactions WHERE item_id = %s", (iid,))
-        counts = row.get("counts") if row else {}
-        if not isinstance(counts, dict):
-            counts = {}
-        counts[rid] = int(counts.get(rid) or 0) + amount
-        self._execute(
-            """
-            INSERT INTO gallery_reactions (item_id, counts)
-            VALUES (%s, %s)
-            ON CONFLICT (item_id) DO UPDATE
-              SET counts = EXCLUDED.counts,
-                  updated_at = CURRENT_TIMESTAMP
-            """,
-            (iid, Json(counts)),
-        )
+        with self.transaction() as cur:
+            # Seed the row before taking the lock so concurrent first reactions
+            # serialize on the same primary key.
+            cur.execute(
+                """
+                INSERT INTO gallery_reactions (item_id, counts)
+                VALUES (%s, '{}'::jsonb)
+                ON CONFLICT (item_id) DO NOTHING
+                """,
+                (iid,),
+            )
+            cur.execute(
+                "SELECT counts FROM gallery_reactions WHERE item_id = %s FOR UPDATE",
+                (iid,),
+            )
+            row = cur.fetchone() or {}
+            counts = row.get("counts") or {}
+            if not isinstance(counts, dict):
+                counts = {}
+            counts[rid] = int(counts.get(rid) or 0) + amount
+            cur.execute(
+                """
+                UPDATE gallery_reactions
+                SET counts = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE item_id = %s
+                """,
+                (Json(counts), iid),
+            )
         return {str(k): int(v or 0) for k, v in counts.items()}
 
     # ---------------- gallery calendar ----------------
@@ -2565,28 +2673,30 @@ class Database:
         }
 
     def consume_temp_link(self, token: str, user_name: str) -> Optional[Dict[str, Any]]:
+        """Atomically consume one use of a temporary link.
+
+        The previous SELECT-then-UPDATE allowed two simultaneous requests to
+        consume the final use. PostgreSQL now enforces expiry/use count in the
+        UPDATE predicate itself.
+        """
         tok = str(token or "").strip()
         if not tok:
             return None
         row = self._fetchone(
-            "SELECT token, scopes, role_ids, created_by, created_at, expires_at, max_uses, used_count FROM temp_links WHERE token = %s",
-            (tok,),
+            """
+            UPDATE temp_links
+            SET used_count = used_count + 1,
+                used_at = CURRENT_TIMESTAMP,
+                used_by = %s
+            WHERE token = %s
+              AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+              AND used_count < max_uses
+            RETURNING token, scopes, role_ids, created_by, created_at, expires_at,
+                      max_uses, used_count
+            """,
+            (user_name, tok),
         )
-        if not row:
-            return None
-        expires_at = row.get("expires_at")
-        if isinstance(expires_at, datetime) and expires_at <= datetime.utcnow():
-            return None
-        used_count = int(row.get("used_count") or 0)
-        max_uses = int(row.get("max_uses") or 1)
-        if used_count >= max_uses:
-            return None
-        used_count += 1
-        self._execute(
-            "UPDATE temp_links SET used_count=%s, used_at=CURRENT_TIMESTAMP, used_by=%s WHERE token=%s",
-            (used_count, user_name, tok),
-        )
-        return self._json_safe_dict(row)
+        return self._json_safe_dict(row) if row else None
 
     def purge_expired_temp_links(self) -> int:
         return int(self._execute("DELETE FROM temp_links WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP") or 0)
@@ -3063,6 +3173,12 @@ class Database:
             artist_mod = None
 
         imported = 0
+        hidden_set: set[str] = set()
+        try:
+            from bigtree.modules import gallery as gallery_mod
+            hidden_set = set(gallery_mod.get_hidden_set() or [])
+        except Exception:
+            hidden_set = set()
         media_dir = None
         try:
             media_dir = media_mod.get_media_dir()
@@ -3111,6 +3227,7 @@ class Database:
                         origin_label=origin_label,
                         url=url,
                         thumb_url=thumb_url,
+                        hidden=media_id in hidden_set,
                         metadata={"source": "tinydb", "artist_id": artist_id} if artist_id else {"source": "tinydb"},
                     )
                     imported += 1
@@ -3143,6 +3260,7 @@ class Database:
                         title=os.path.splitext(name)[0],
                         url=url,
                         thumb_url=thumb_url,
+                        hidden=media_id in hidden_set,
                         metadata={"source": "filesystem"},
                     )
                     imported += 1

@@ -121,7 +121,7 @@
   function renderHandHtml(hand){
     return (hand || []).map(card => {
       if (card && card.image){
-        return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
+        return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}" decoding="async" loading="eager"></div>`;
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");

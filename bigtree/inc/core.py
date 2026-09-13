@@ -21,7 +21,7 @@ def find_url(message: str) -> str | bool:
         The first URL found, or False if no URL present
     """
     try:
-        urls = re.search("(?P<url>https?://[^\s]+)", message).group("url")
+        urls = re.search(r"(?P<url>https?://[^\s]+)", message).group("url")
     except AttributeError:
         return False
     return urls

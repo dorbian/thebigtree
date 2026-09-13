@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#07100c">
     <title>BigTree Admin Dashboard</title>
     <style>
         * {
@@ -477,6 +478,81 @@
             height: 100%;
             border: none;
         }
+
+        /* Forest admin shell overrides */
+        :root {
+            color-scheme: dark;
+            --forest-bg: #07100c;
+            --forest-panel: rgba(10, 20, 15, .94);
+            --forest-panel-2: rgba(14, 29, 21, .94);
+            --forest-line: rgba(157, 224, 125, .18);
+            --forest-ink: #e8f7ef;
+            --forest-muted: #9bb6a7;
+            --forest-accent: #9de07d;
+            --forest-accent-2: #3ccf8e;
+        }
+        body {
+            background: radial-gradient(900px 520px at 10% -10%, rgba(157,224,125,.12), transparent 62%), linear-gradient(160deg,#07100c,#0c1d14 56%,#10291c);
+            color: var(--forest-ink);
+            padding: clamp(12px, 2vw, 24px);
+        }
+        header, .card {
+            background: var(--forest-panel);
+            border: 1px solid var(--forest-line);
+            box-shadow: 0 14px 34px rgba(0,0,0,.28);
+            backdrop-filter: blur(8px);
+        }
+        header { padding: 20px; margin-bottom: 18px; }
+        h1 {
+            font-size: clamp(1.55rem, 4vw, 2.3rem);
+            color: var(--forest-accent);
+            background: none;
+            -webkit-text-fill-color: currentColor;
+        }
+        .subtitle, label, .scope-description { color: var(--forest-muted); }
+        .main-grid { gap: 18px; }
+        .card { padding: clamp(16px, 2vw, 24px); content-visibility: auto; contain-intrinsic-size: 600px; }
+        .card h2, .section-title, th { color: var(--forest-accent); }
+        .card h2 { border-bottom-color: var(--forest-line); }
+        input, select, textarea {
+            background: rgba(4,12,8,.82);
+            color: var(--forest-ink);
+            border-color: rgba(255,255,255,.12);
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--forest-accent-2);
+            box-shadow: 0 0 0 3px rgba(60,207,142,.14);
+        }
+        button {
+            background: linear-gradient(135deg,#3a8d62,#28704d);
+            border: 1px solid rgba(157,224,125,.2);
+            border-radius: 9px;
+            box-shadow: none;
+        }
+        button:hover { box-shadow: 0 7px 20px rgba(0,0,0,.25); }
+        button.secondary { background: rgba(255,255,255,.06); color: var(--forest-ink); border-color: rgba(255,255,255,.12); }
+        button.secondary:hover { background: rgba(157,224,125,.1); }
+        button.danger { background: #713d45; }
+        th { background: rgba(157,224,125,.07); border-bottom-color: var(--forest-line); }
+        td { border-bottom-color: rgba(255,255,255,.07); }
+        tr:hover { background: rgba(157,224,125,.045); }
+        .token-preview, .routes-list { background: rgba(0,0,0,.24); color: #c9ded2; }
+        .scope-list li, .routes-list div { border-bottom-color: rgba(255,255,255,.07); }
+        .badge-scope { background: rgba(60,207,142,.14); color: #9de0be; }
+        .badge-active { background: rgba(76,175,80,.15); color: #9ad89d; }
+        .badge-revoked { background: rgba(244,67,54,.15); color: #efa39e; }
+        .badge-warning { background: rgba(255,152,0,.14); color: #e7be79; }
+        .message.success { background: rgba(76,175,80,.13); color: #b9e3bb; }
+        .message.error { background: rgba(244,67,54,.13); color: #efb3ae; }
+        .message.info { background: rgba(60,207,142,.11); color: #b9dfcf; }
+        .loading { border-color: rgba(255,255,255,.15); border-top-color: var(--forest-accent); }
+        @media (max-width: 700px) {
+            header > div { align-items: flex-start !important; gap: 12px; flex-direction: column; }
+            .table-container { margin-inline: -8px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; }
+        }
     </style>
 </head>
 <body>
@@ -487,7 +563,7 @@
                     <h1>🌳 BigTree Admin Dashboard</h1>
                     <p class="subtitle">Manage web tokens, revoke access, and view permissions</p>
                 </div>
-                <button class="secondary" onclick="openAuthLogins()" style="white-space: nowrap;">👥 Auth Logins</button>
+                <button class="secondary" onclick="refreshDashboard()" style="white-space: nowrap;">↻ Refresh data</button>
             </div>
         </header>
         
@@ -555,52 +631,27 @@
         </div>
     </div>
     
-    <!-- Modal for Auth Logins iframe -->
-    <div id="authModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🔑 Auth Logins & Token History</h3>
-                <button class="modal-close" onclick="closeAuthLogins()">×</button>
-            </div>
-            <div class="modal-body">
-                <iframe id="authIframe" src=""></iframe>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Modal for Auth Logins iframe -->
-    <div id="authModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🔑 Auth Logins & Token History</h3>
-                <button class="modal-close" onclick="closeAuthLogins()">×</button>
-            </div>
-            <div class="modal-body">
-                <iframe id="authIframe" src=""></iframe>
-            </div>
-        </div>
-    </div>
-    
     <script>
-        // Get token from URL parameter
+        // Legacy direct links may still provide ?token=, but the normal
+        // Elfministration flow establishes an HttpOnly same-origin cookie.
         const urlParams = new URLSearchParams(window.location.search);
         const TOKEN = urlParams.get('token') || '';
-        
-        if (!TOKEN) {
-            document.body.innerHTML = `
-                <div style="text-align: center; padding: 100px 20px;">
-                    <h1>🔐 No Token Provided</h1>
-                    <p>Run <code>/auth</code> in Discord to get your token, then visit:</p>
-                    <p><code>${window.location.origin}/admin/dashboard?token=YOUR_TOKEN_HERE</code></p>
-                </div>
-            `;
+        if (TOKEN && window.history?.replaceState) {
+            const clean = new URL(window.location.href);
+            clean.searchParams.delete('token');
+            window.history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
         }
-        
-        // Add Authorization header to all fetch requests
+
         function authFetch(url, options = {}) {
             options.headers = options.headers || {};
-            options.headers['Authorization'] = `Bearer ${TOKEN}`;
+            options.credentials = 'same-origin';
+            if (TOKEN) options.headers['Authorization'] = `Bearer ${TOKEN}`;
             return fetch(url, options);
+        }
+
+        function refreshDashboard() {
+            refreshTokens();
+            loadScopes();
         }
         
         // Message notification system
@@ -823,35 +874,6 @@
             setInterval(refreshTokens, 30000);
         });
         
-        // Auth Logins modal functions
-        function openAuthLogins() {
-            const modal = document.getElementById('authModal');
-            const iframe = document.getElementById('authIframe');
-            // Load the dashboard in iframe with token forwarding
-            iframe.src = `${window.location.origin}/admin/dashboard?token=${TOKEN}`;
-            modal.classList.add('show');
-        }
-        
-        function closeAuthLogins() {
-            const modal = document.getElementById('authModal');
-            modal.classList.remove('show');
-            // Clear iframe source when closing
-            document.getElementById('authIframe').src = '';
-        }
-        
-        // Close modal when clicking outside
-        document.getElementById('authModal').addEventListener('click', (e) => {
-            if (e.target.id === 'authModal') {
-                closeAuthLogins();
-            }
-        });
-        
-        // Close modal with Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                closeAuthLogins();
-            }
-        });
     </script>
 </body>
 </html>

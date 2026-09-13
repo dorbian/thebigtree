@@ -12,7 +12,7 @@ body{
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
   background:
     linear-gradient(180deg, rgba(7,16,12,.92), rgba(3,9,6,.92)),
-    url("/static/images/walletimg.png");
+    url("/static/images/walletimg.webp?v=20260911a");
   background-size:cover;
   background-position:center;
   background-repeat:no-repeat;
@@ -285,4 +285,12 @@ tr.game-row:hover{
   letter-spacing:.08em;
   color:#9fb4a6;
   margin-bottom:6px;
+}
+
+@media (max-width:900px){
+  body{background-attachment:scroll !important;}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;scroll-behavior:auto !important;}
 }

@@ -175,7 +175,7 @@
 <div class="image-modal" id="imageModal" aria-hidden="true">
   <div class="info" id="imageInfo"></div>
   <button class="close" id="imageClose" aria-label="Close">×</button>
-  <img id="imageModalImg" alt="">
+  <img id="imageModalImg" alt="" decoding="async">
 </div>
 
 <script>
@@ -249,7 +249,7 @@
         <div class="card">
           <div><strong>${m.month_name || ""}</strong></div>
           ${m.title ? `<div class="muted">${m.title}</div>` : ""}
-          ${m.image ? `<img src="${m.image}" alt="${m.title || m.month_name || ""}" data-full='${encodeURIComponent(JSON.stringify({url: m.image, info: infoText, title: m.title || ""}))}'>` : `<div class="muted">No image yet.</div>`}
+          ${m.image ? `<img src="${m.image}" alt="${m.title || m.month_name || ""}" loading="lazy" decoding="async" data-full='${encodeURIComponent(JSON.stringify({url: m.image, info: infoText, title: m.title || ""}))}'>` : `<div class="muted">No image yet.</div>`}
           <div><a class="artist-link" href="#" data-artist="${artistPayload}">${artistName}</a></div>
         </div>
       `;

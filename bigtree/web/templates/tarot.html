@@ -18,7 +18,7 @@
     (state.drawn||[]).forEach((c,idx)=>{
       const flipped=(state.flipped||[]).includes(idx);
       const el=document.createElement('div'); el.className='card';
-      let img=c.image?`<img src="${c.image}" alt="${c.title}" style="max-width:100%;border-radius:8px;margin-bottom:8px">`:'';
+      let img=c.image?`<img src="${c.image}" alt="${c.title}" loading="lazy" decoding="async" style="max-width:100%;border-radius:8px;margin-bottom:8px">`:'';
       let title=`<div><strong>${c.title}</strong>${flipped?' (flipped)':''}</div>`;
       let meaning=(view==='priest')?`<div class="muted">${c.meaning||''}</div>`:'';
       el.innerHTML=img+title+meaning; grid.appendChild(el);

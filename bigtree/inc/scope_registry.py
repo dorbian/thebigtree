@@ -25,6 +25,7 @@ def _default_scope_descriptions() -> Dict[str, str]:
         "gallery:read": "Read-only access to gallery",
         "contest:admin": "Create and manage contests",
         "bingo:admin": "Create and manage bingo games",
+        "conclave:admin": "Host and advance Verdant Conclave sessions without revealing secret roles",
         "admin:web": "Web administration panel access",
         "admin:api": "API key management",
         "admin:*": "All admin functions",

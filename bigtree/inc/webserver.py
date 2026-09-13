@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio, importlib, pkgutil, logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Any, List, Set, Optional
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSMsgType, WSCloseCode
 from aiohttp.http_exceptions import InvalidURLError
 from importlib.resources import files as pkg_files, as_file
 import bigtree
 from bigtree.inc.auth import auth_middleware  # <-- NEW
 
-log = getattr(bigtree, "logger", logging.getLogger("bigtree"))
+log = getattr(getattr(bigtree, "loch", None), "logger", logging.getLogger("bigtree"))
 
 @dataclass
 class APIRoute:
@@ -46,7 +46,7 @@ def _cfg():
         host = st.get("WEB.listen_host", "0.0.0.0")
         port = st.get("WEB.listen_port", 8443, int)
         base = st.get("WEB.base_url", f"http://{host}:{port}")
-        cors = st.get("webapi.cors_origin", "*")  # legacy CORS if you still keep it there
+        cors = st.get("WEB.cors_origin", "") or st.get("webapi.cors_origin", "*")
         jwt_secret = st.get("WEB.jwt_secret", "")
         jwt_algs = st.get("WEB.jwt_algorithms", ["HS256"], cast="json")
         api_keys = st.get("WEB.api_keys", [], cast="json")
@@ -157,20 +157,14 @@ class DynamicWebServer:
         if not txt:
             return txt
             
-        try:
-            return txt.format(**mapping)
-        except KeyError as e:
-            # Missing template variable - log and fallback
-            log.warning(f"[web] template missing variable {e}: {relpath}")
-            for key, val in (mapping or {}).items():
-                txt = txt.replace("{" + str(key) + "}", str(val))
-            return txt
-        except Exception as e:
-            # Other formatting errors - fallback to simple replacement
-            log.warning(f"[web] template format error: {relpath}: {e}")
-            for key, val in (mapping or {}).items():
-                txt = txt.replace("{" + str(key) + "}", str(val))
-            return txt
+        # Templates are predominantly HTML/CSS/JS and therefore contain a
+        # huge number of literal braces.  ``str.format`` scans all of those,
+        # raises on ordinary CSS blocks, then forces us through an exception
+        # fallback on every request.  BigTree's template contract is simple
+        # named token replacement, so implement exactly that instead.
+        for key, val in (mapping or {}).items():
+            txt = txt.replace("{" + str(key) + "}", str(val))
+        return txt
 
     # ---------- CORS ----------
     @web.middleware
@@ -182,9 +176,42 @@ class DynamicWebServer:
                 resp = await handler(request)
             except InvalidURLError:
                 return web.Response(status=400, text="bad request")
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key, X-Bigtree-Key, Authorization"
+        configured = str(self._cfg.get("cors_origin") or "*").strip()
+        request_origin = (request.headers.get("Origin") or "").strip()
+        if configured == "*":
+            resp.headers["Access-Control-Allow-Origin"] = "*"
+        else:
+            allowed = {item.strip() for item in configured.split(",") if item.strip()}
+            if request_origin and request_origin in allowed:
+                resp.headers["Access-Control-Allow-Origin"] = request_origin
+                resp.headers["Access-Control-Allow-Credentials"] = "true"
+                resp.headers["Vary"] = "Origin"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key, X-Bigtree-Key, Authorization, X-Cardgame-Token"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+
+        # Baseline browser hardening. SAMEORIGIN still permits Elfministration
+        # to embed BigTree's own administration pages while preventing an
+        # unrelated site from framing them. no-referrer also keeps legacy
+        # cardgame/admin bootstrap tokens out of Referer headers until those
+        # compatibility URLs can be retired entirely.
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+
+        # Dynamic/authenticated surfaces should not be restored from a stale
+        # browser or intermediary cache. Static/media handlers provide their
+        # own explicit cache policy and are left untouched.
+        path = request.path
+        if not resp.headers.get("Cache-Control") and (
+            path.startswith("/api/")
+            or path.startswith("/auth/")
+            or path.startswith("/admin")
+            or path.startswith("/overlay")
+            or path.startswith("/elfministration")
+            or path.startswith("/cardgames/")
+        ):
+            resp.headers["Cache-Control"] = "no-store"
         return resp
 
     # ---------- Boot / Stop ----------
@@ -199,6 +226,15 @@ class DynamicWebServer:
         log.info(f"[web] listening on {host}:{port} (base_url={self._cfg['base_url']})")
 
     async def stop(self):
+        # Close live sockets explicitly so clients receive a normal going-away
+        # frame during Podman replacement instead of a hard connection reset.
+        for ws in list(self.ws_active):
+            try:
+                await ws.close(code=WSCloseCode.GOING_AWAY, message=b"BigTree restarting")
+            except Exception:
+                pass
+            finally:
+                self.ws_active.discard(ws)
         if self._runner:
             await self._runner.cleanup()
             self._runner, self._site = None, None

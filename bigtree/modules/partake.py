@@ -10,7 +10,7 @@ client = Client(transport=transport, fetch_schema_from_transport=True)
 
 # Provide a GraphQL query
 def get_eventid(url):
-    value_found = re.findall('\d+', url)
+    value_found = re.findall(r'\d+', url)
     return value_found[0]
     
 async def retrieve_event(eventID):

@@ -13,6 +13,7 @@ from bigtree.inc import web_tokens
 from bigtree.inc import temp_links
 from bigtree.inc import auth as auth_mod
 from bigtree.inc.database import get_database
+from bigtree.inc.proxy import request_is_secure
 
 try:
     import jwt  # PyJWT (optional)
@@ -191,6 +192,37 @@ async def create_temp_link(req: web.Request):
     })
 
 
+
+@route("POST", "/auth/session")
+async def establish_cookie_session(req: web.Request) -> web.Response:
+    """Mirror an already-authenticated bearer/API-key session into HttpOnly cookie auth.
+
+    The auth middleware validates the credential before this handler runs.  This
+    exists primarily for same-origin pages/iframes, so privileged tokens do not
+    need to be copied into query strings.
+    """
+    auth_header = (req.headers.get("Authorization") or "").strip()
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        token = (req.headers.get("X-Bigtree-Key") or req.headers.get("X-API-Key") or "").strip()
+    if not token and req.cookies:
+        token = (req.cookies.get(auth_mod.TOKEN_COOKIE_NAME) or "").strip()
+    if not token:
+        return web.json_response({"ok": False, "error": "missing credential"}, status=401)
+    resp = web.json_response({"ok": True})
+    resp.set_cookie(
+        auth_mod.TOKEN_COOKIE_NAME,
+        token,
+        httponly=True,
+        samesite="Lax",
+        secure=request_is_secure(req),
+        path="/",
+    )
+    return resp
+
+
 @route("GET", "/auth/discord", allow_public=True)
 async def discord_cookie_login(req: web.Request) -> web.StreamResponse:
     token = (req.query.get("token") or "").strip()
@@ -219,7 +251,7 @@ async def discord_cookie_login(req: web.Request) -> web.StreamResponse:
         max_age=max_age,
         httponly=True,
         samesite="Lax",
-        secure=(req.scheme == "https"),
+        secure=request_is_secure(req),
         path="/",
     )
     return resp

@@ -324,10 +324,10 @@ const grid = document.getElementById("feed");
     if (!items || !items.length) return;
     const head = document.head || document.getElementsByTagName("head")[0];
     if (!head) return;
-    const max = Math.min(12, items.length);
+    const max = Math.min(3, items.length);
     for (let i = 0; i < max; i += 1){
       const item = items[i] || {};
-      const href = item.thumb_url;
+      const href = item.preview_url || item.thumb_url;
       if (!href) continue;
       const link = document.createElement("link");
       link.rel = "preload";
@@ -763,13 +763,15 @@ const grid = document.getElementById("feed");
     const tags = getTags(item);
     const itemKey = getItemKey(item);
     const baseCounts = item.reactions || {};
-    // Use the original image for the feed. We are already paging / not loading the full
-    // gallery at once, so the full-size artwork can do it justice.
-    // NOTE: do not rely on inline onerror handlers (CSP can block them). We wire errors via JS.
-    const primaryUrl = item.url || item.thumb_url || "";
+    // Feed images use local WebP derivatives when available. The original is
+    // reserved for the detail viewer/open action so multi-megabyte uploads do
+    // not become the default scrolling payload.
+    const primaryUrl = item.preview_url || item.thumb_url || item.url || "";
     let fallbackUrl = "";
-    if (item.url && item.thumb_url && item.thumb_url !== item.url){
+    if (item.thumb_url && item.thumb_url !== primaryUrl){
       fallbackUrl = item.thumb_url;
+    }else if (item.url && item.url !== primaryUrl){
+      fallbackUrl = item.url;
     }else if (item.fallback_url){
       fallbackUrl = item.fallback_url;
     }

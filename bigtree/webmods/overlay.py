@@ -12,10 +12,16 @@ def _render_overlay_page() -> str:
         raw = str(cfg.get("admin_background") or cfg.get("adminBackground") or "").strip()
         if raw.startswith(("http://", "https://", "/")):
             admin_background = raw.replace('"', "").replace("'", "").strip()
+            # Media-library originals may be very large. The preview endpoint
+            # preserves the artwork while capping the transfer/decoded size.
+            if admin_background.startswith("/media/") and not admin_background.startswith(("/media/thumbs/", "/media/previews/")):
+                filename = admin_background.split("/media/", 1)[1].split("?", 1)[0]
+                if filename and "/" not in filename:
+                    admin_background = f"/media/previews/{filename}"
     except Exception:
         admin_background = ""
     if not admin_background:
-        admin_background = "/static/images/admin_background.png"
+        admin_background = "/static/images/admin_background.webp?v=20260911a"
     return srv.render_template("overlay.html", {"ADMIN_BACKGROUND": admin_background}) if srv else "<h1>Overlay</h1>"
 
 

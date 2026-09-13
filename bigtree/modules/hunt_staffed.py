@@ -5,6 +5,8 @@ import os
 import uuid
 import time
 import secrets
+import threading
+from functools import wraps
 from typing import Dict, Any, List, Optional, Tuple
 from tinydb import TinyDB, Query
 
@@ -17,6 +19,16 @@ except Exception:
 _HUNT_DIR: Optional[str] = None
 _DB_DIR: Optional[str] = None
 _INDEX: Optional[str] = None
+_HUNT_LOCK = threading.RLock()
+_INDEX_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        with _HUNT_LOCK:
+            return fn(*args, **kwargs)
+    return wrapped
 
 def _now() -> float:
     return time.time()
@@ -68,43 +80,62 @@ def _new_id() -> str:
 
 def _read_index() -> Dict[str, Any]:
     _ensure_dirs()
-    try:
-        import json
-        if os.path.exists(_INDEX):
-            with open(_INDEX, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault("join_codes", {})
-                    return data
-    except Exception:
-        pass
-    return {"join_codes": {}}
+    with _INDEX_LOCK:
+        try:
+            import json
+            if os.path.exists(_INDEX):
+                with open(_INDEX, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        data.setdefault("join_codes", {})
+                        return data
+        except Exception as exc:
+            logger.warning("[hunt] failed to read index %s: %s", _INDEX, exc)
+        return {"join_codes": {}}
 
 def _write_index(idx: Dict[str, Any]):
     _ensure_dirs()
     import json
-    with open(_INDEX, "w", encoding="utf-8") as f:
-        json.dump(idx, f, indent=2)
+    with _INDEX_LOCK:
+        tmp = f"{_INDEX}.tmp.{os.getpid()}.{threading.get_ident()}"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(idx, f, indent=2)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError as exc:
+                    logger.debug("[hunt] fsync unavailable for %s: %s", tmp, exc)
+            os.replace(tmp, _INDEX)
+        finally:
+            try:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+            except OSError:
+                pass
 
 def _register_join_code(hunt_id: str) -> str:
-    idx = _read_index()
-    join_codes = idx.setdefault("join_codes", {})
-    for code, hid in join_codes.items():
-        if hid == hunt_id:
-            return code
-    while True:
-        code = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:8]
-        if code and code not in join_codes:
-            join_codes[code] = hunt_id
-            _write_index(idx)
-            return code
+    with _INDEX_LOCK:
+        idx = _read_index()
+        join_codes = idx.setdefault("join_codes", {})
+        for code, hid in join_codes.items():
+            if hid == hunt_id:
+                return code
+        while True:
+            code = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:8]
+            if code and code not in join_codes:
+                join_codes[code] = hunt_id
+                _write_index(idx)
+                return code
 
 def resolve_join_code(code: str) -> Optional[str]:
     if not code:
         return None
-    idx = _read_index()
-    return idx.get("join_codes", {}).get(code)
+    with _INDEX_LOCK:
+        idx = _read_index()
+        return idx.get("join_codes", {}).get(code)
 
+@_locked
 def create_hunt(
     title: str,
     territory_id: int,
@@ -137,6 +168,7 @@ def create_hunt(
     logger.info(f"[hunt] Created hunt {hunt_id} (join_code={code})")
     return hunt
 
+@_locked
 def get_hunt(hunt_id: str) -> Optional[Dict[str, Any]]:
     if not hunt_id:
         return None
@@ -152,6 +184,7 @@ def get_hunt(hunt_id: str) -> Optional[Dict[str, Any]]:
         db.update(h, doc_ids=[h.doc_id])
     return h
 
+@_locked
 def list_hunts() -> List[Dict[str, Any]]:
     _ensure_dirs()
     hunts: List[Dict[str, Any]] = []
@@ -174,6 +207,7 @@ def list_hunts() -> List[Dict[str, Any]]:
     hunts.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
     return hunts
 
+@_locked
 def start_hunt(hunt_id: str) -> Tuple[bool, str]:
     h = get_hunt(hunt_id)
     if not h:
@@ -187,6 +221,7 @@ def start_hunt(hunt_id: str) -> Tuple[bool, str]:
     logger.info(f"[hunt] Started hunt {hunt_id}")
     return True, "OK"
 
+@_locked
 def end_hunt(hunt_id: str) -> Tuple[bool, str]:
     h = get_hunt(hunt_id)
     if not h:
@@ -198,6 +233,7 @@ def end_hunt(hunt_id: str) -> Tuple[bool, str]:
     logger.info(f"[hunt] Ended hunt {hunt_id}")
     return True, "OK"
 
+@_locked
 def add_checkpoint(
     hunt_id: str,
     label: str,
@@ -227,6 +263,7 @@ def add_checkpoint(
     db.insert(checkpoint)
     return checkpoint
 
+@_locked
 def list_checkpoints(hunt_id: str) -> List[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
@@ -234,12 +271,14 @@ def list_checkpoints(hunt_id: str) -> List[Dict[str, Any]]:
     rows.sort(key=lambda c: c.get("created_at", 0))
     return rows
 
+@_locked
 def get_checkpoint(hunt_id: str, checkpoint_id: str) -> Optional[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
     rows = db.search((Row._type == "checkpoint") & (Row.hunt_id == hunt_id) & (Row.checkpoint_id == checkpoint_id))
     return rows[-1] if rows else None
 
+@_locked
 def staff_join(hunt_id: str, staff_name: str, staff_id: Optional[str] = None) -> Dict[str, Any]:
     h = get_hunt(hunt_id)
     if not h:
@@ -265,6 +304,7 @@ def staff_join(hunt_id: str, staff_name: str, staff_id: Optional[str] = None) ->
     db.insert(staff)
     return staff
 
+@_locked
 def list_staff(hunt_id: str) -> List[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
@@ -272,6 +312,7 @@ def list_staff(hunt_id: str) -> List[Dict[str, Any]]:
     rows.sort(key=lambda s: s.get("joined_at", 0))
     return rows
 
+@_locked
 def claim_checkpoint(hunt_id: str, staff_id: str, checkpoint_id: str) -> Tuple[bool, str]:
     db = _open(hunt_id)
     Row = Query()
@@ -292,12 +333,14 @@ def claim_checkpoint(hunt_id: str, staff_id: str, checkpoint_id: str) -> Tuple[b
         db.update(checkpoint, doc_ids=[checkpoint.doc_id])
     return True, "OK"
 
+@_locked
 def _get_group(hunt_id: str, group_id: str) -> Optional[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
     rows = db.search((Row._type == "group") & (Row.hunt_id == hunt_id) & (Row.group_id == group_id))
     return rows[-1] if rows else None
 
+@_locked
 def create_group(
     hunt_id: str,
     group_id: Optional[str],
@@ -320,6 +363,7 @@ def create_group(
     db.insert(group)
     return group
 
+@_locked
 def list_groups(hunt_id: str) -> List[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
@@ -327,6 +371,7 @@ def list_groups(hunt_id: str) -> List[Dict[str, Any]]:
     rows.sort(key=lambda g: g.get("created_at", 0))
     return rows
 
+@_locked
 def record_checkin(
     hunt_id: str,
     group_id: str,
@@ -380,6 +425,7 @@ def record_checkin(
     db.insert(checkin)
     return True, "OK", checkin
 
+@_locked
 def list_checkins(hunt_id: str) -> List[Dict[str, Any]]:
     db = _open(hunt_id)
     Row = Query()
@@ -387,6 +433,7 @@ def list_checkins(hunt_id: str) -> List[Dict[str, Any]]:
     rows.sort(key=lambda c: c.get("ts", 0))
     return rows
 
+@_locked
 def get_state(hunt_id: str) -> Dict[str, Any]:
     h = get_hunt(hunt_id)
     if not h:

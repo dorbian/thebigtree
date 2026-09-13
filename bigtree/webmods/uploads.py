@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import os
 from aiohttp import web
 from bigtree.inc.webserver import route
@@ -127,6 +128,8 @@ def _media_item(
         "item_id": item_id,
         "name": filename,
         "url": url,
+        "thumb_url": f"/media/thumbs/{filename}" if filename else url,
+        "preview_url": f"/media/previews/{filename}" if filename else url,
         "fallback_url": f"/media/{filename}" if discord_url else "",
         "discord_url": discord_url or "",
         "source": "media",
@@ -234,12 +237,12 @@ async def list_bingo_backgrounds(_req: web.Request):
 
 @route("GET", "/media/{filename}", allow_public=True)
 async def media_file(req: web.Request):
-    filename = req.match_info["filename"]
+    filename = os.path.basename(req.match_info["filename"])
     path = os.path.join(_media_dir(), filename)
     if not os.path.exists(path):
         return web.Response(status=404)
     resp = web.FileResponse(path)
-    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return resp
 
 @route("GET", "/media/thumbs/{filename}", allow_public=True)
@@ -248,12 +251,26 @@ async def media_thumb(req: web.Request):
     ext = os.path.splitext(filename)[1].lower()
     if ext not in _IMG_EXTS:
         return web.Response(status=404)
-    thumb_path = os.path.join(_media_thumbs_dir(), filename)
+    thumb_path = media_mod.get_media_thumb_path(filename)
     if not os.path.exists(thumb_path):
-        if not media_mod.ensure_thumb(filename):
+        if not await asyncio.to_thread(media_mod.ensure_thumb, filename):
             return web.Response(status=404)
     resp = web.FileResponse(thumb_path)
-    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+@route("GET", "/media/previews/{filename}", allow_public=True)
+async def media_preview(req: web.Request):
+    filename = os.path.basename(req.match_info["filename"])
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _IMG_EXTS:
+        return web.Response(status=404)
+    preview_path = media_mod.get_media_preview_path(filename)
+    if not os.path.exists(preview_path):
+        if not await asyncio.to_thread(media_mod.ensure_preview, filename):
+            return web.Response(status=404)
+    resp = web.FileResponse(preview_path)
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return resp
 
 @route("POST", "/api/media/upload", scopes=["tarot:admin", "bingo:admin", "admin:web"])
@@ -261,6 +278,9 @@ async def upload_media(req: web.Request):
     fields, filename_hint, data = await read_multipart(req)
     if not data:
         return web.json_response({"ok": False, "error": "file required"}, status=400)
+    valid_image, validation_error = await asyncio.to_thread(media_mod.validate_image_bytes, data)
+    if not valid_image:
+        return web.json_response({"ok": False, "error": validation_error}, status=400)
     artist_id = (fields.get("artist_id") or "").strip() or None
     title = (fields.get("title") or "").strip() or None
     origin_type = (fields.get("origin_type") or "").strip() or None
@@ -319,6 +339,9 @@ async def upload_media(req: web.Request):
         hidden=hidden,
         metadata=metadata,
     )
+    # Generate both derivatives from one source decode.  Keeping this on one
+    # worker avoids two Pillow encoders competing for CPU/RAM on the Pi.
+    await asyncio.to_thread(media_mod.ensure_derivatives, filename)
     try:
         from bigtree.webmods import gallery as gallery_web
         gallery_web.invalidate_gallery_cache()
@@ -395,6 +418,8 @@ async def list_media(req: web.Request):
             venue_id=venue_id,
         ))
         items[-1]["url"] = url
+        items[-1]["thumb_url"] = (row.get("thumb_url") or "").strip() or f"/media/thumbs/{filename}"
+        items[-1]["preview_url"] = f"/media/previews/{filename}"
         if url and url != f"/media/{filename}":
             items[-1]["fallback_url"] = f"/media/{filename}"
         items[-1]["hidden"] = bool(row.get("hidden"))
@@ -441,7 +466,7 @@ async def list_media(req: web.Request):
 
 @route("DELETE", "/api/media/{filename}", scopes=["admin:web"])
 async def delete_media(req: web.Request):
-    filename = req.match_info["filename"]
+    filename = os.path.basename(req.match_info["filename"])
     path = os.path.join(_media_dir(), filename)
     if os.path.exists(path):
         try:
@@ -452,6 +477,7 @@ async def delete_media(req: web.Request):
         get_database().delete_media_item(filename)
     except Exception:
         pass
+    await asyncio.to_thread(media_mod.delete_derivatives, filename)
     tarot_mod.clear_image_references(f"/media/{filename}")
     try:
         from bigtree.webmods import gallery as gallery_web

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-09-11
+- Cardgames: serialize and row-lock state mutations, commit state + event publication atomically, and reduce live SSE/WebSocket polling to one database query per tick.
+- Cardgames: fix Blackjack split-hand advancement, reject duplicate Craps round rolls, throttle finished-session cleanup, and rely on PostgreSQL cascade cleanup.
+- Wallets: make first-use balance changes row-safe and add idempotent per-game debit/payout keys with compensating refunds when a game reducer fails.
+- Web: move the bulk Elfministration CSS/handlers out of the HTML shell, precompress cacheable static assets at image-build time, and serve gzip without spending Pi CPU per request.
+- Web security: trust forwarded HTTPS/client-IP headers only from configured/private proxy networks, add baseline browser hardening/no-store headers, and include X-Cardgame-Token in CORS preflight support.
+- Deployment: use a multi-stage slim runtime container, cancel superseded GitHub builds, and expose the source commit SHA through health/readiness responses for rollout traceability.
+- Runtime: make container stdout the default diagnostic log path and recover optional rotating logs from stale/closed file descriptors.
+- Runtime: add graceful worker/web/database/logging shutdown plus `/healthz` and Discord/PostgreSQL-aware `/readyz`.
+- Database: use a small bounded PostgreSQL connection pool suited to the Raspberry Pi deployment and add transaction support for atomic operations.
+- Plogon: use conditional requests/content checks and stop rewriting `/data/with.leaf` when the source has not changed.
+- Conclave: add Verdant Conclave, a Discord-channel-bound elf social-deduction game with persistent PostgreSQL state, private roles/actions, nominations, trials, judgements, last wills and deliberate pass/abstain choices.
+- Conclave: add host-safe web and Forest controls without revealing living secret roles.
+- Web: add responsive workspace navigation, Conclave host guidance, connection state, mobile drawer navigation, and a forest-themed embedded admin dashboard.
+- Web: convert bundled multi-megabyte backgrounds to compact WebP assets and preload the active shell background.
+- Media: generate WebP thumbnails and screen-sized previews for uploaded images, lazy-load/decode gallery images, progressively render large media grids, and validate oversized/damaged raster uploads before decoding.
+- Web: defer panel-specific Tarot/Bingo/dashboard work until it is actually needed and prefer the local changelog before the GitHub fallback.
+- Auth: establish same-origin HttpOnly browser sessions for embedded administration instead of placing the active admin token in iframe query strings.
+- Correctness: make one-use temporary links and gallery reactions atomic, remove the duplicate media migration implementation, and harden Bingo/Hunt local state writes.
+- UI: fix the existing Tarot calendar preview DOM bug and remove the recursive/duplicated Auth Logins dashboard iframe.
+- CI: run Python tests/compile checks before container publication and add Go validation to the overlay-client workflow.
+
 ## 2026-02-01
 - Auth: store discord_id in web token metadata and resolve venue by discord_id.
 - Forest: add event selector row and popup in sessions view, scoped to venue.

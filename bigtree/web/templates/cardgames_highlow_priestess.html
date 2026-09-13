@@ -289,7 +289,7 @@
     updateBackgroundArtist(state.session.background_url || "", state.session.background_artist || {});
 
     const current = state.state && state.state.current;
-    currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}">` : cardLabel(current);
+    currentCard.innerHTML = current && current.image ? `<img src="${current.image}" alt="${cardLabel(current)}" decoding="async" loading="eager">` : cardLabel(current);
     renderArtists([current]);
 
     const result = state.state && (state.state.last_result || state.state.result) ? (state.state.last_result || state.state.result) : null;

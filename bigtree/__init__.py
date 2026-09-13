@@ -78,6 +78,10 @@ def initialize():
         settings = load_settings()  # env overlays applied automatically
         import bigtree as _bt
         _bt.settings = settings
+        # Reconfigure BigTree-owned handlers after settings/env overlays are
+        # available. This is idempotent and keeps reload/test runs from
+        # accumulating duplicate handlers.
+        loch.configure_logging(force=True)
         ensure_database()
         db = get_database()
         ensure_plogon_file()
@@ -170,18 +174,8 @@ def initialize():
         import bigtree.inc.banner  # warm welcome banner
         import bigtree.modules.commands  # register CLI-ish commands
 
-        # Start dynamic webserver when the bot becomes ready (exactly once)
-        from bigtree.inc.webserver import ensure_webserver
-
-        # Load command extensions (safe to do here; initialize runs before bot loop)
-        for cmd_file in view_dir.glob("*.py"):
-            if cmd_file.name not in ("__init__.py", "gpose_cmd.py", "content_cmd.py", "review_cmd.py"):
-                asyncio.run(bot.load_extension(f"bigtree.cmds.{cmd_file.name[:-3]}"))
-        # G-Pose contest cog — loaded after others so it registers cleanly
-        asyncio.run(bot.load_extension("bigtree.cmds.gpose_cmd"))
-        # Content request cog — proposal and review workflow
-        asyncio.run(bot.load_extension("bigtree.cmds.content_cmd"))
-        # Review/submit cog — modal-based submission → review channel workflow
-        asyncio.run(bot.load_extension("bigtree.cmds.review_cmd"))
+        # Extensions and the web server are loaded by TheBigTree.setup_hook()
+        # on the same event loop used by discord.py. Avoid creating temporary
+        # asyncio.run() loops during synchronous process initialization.
 
     return True

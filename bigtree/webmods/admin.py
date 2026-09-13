@@ -14,9 +14,13 @@ from bigtree.inc import web_tokens
 from bigtree.inc.auth import TOKEN_COOKIE_NAME
 from bigtree.inc.settings import load_settings
 from bigtree.inc.database import get_database
+from bigtree.inc.proxy import client_ip
 from bigtree.inc.jsonutil import to_jsonable
 from pathlib import Path
-from bigtree.inc.logging import logger, auth_logger, upload_logger, log_path, auth_log_path, upload_log_path
+from bigtree.inc.logging import (
+    logger, auth_logger, upload_logger, log_path, auth_log_path, upload_log_path,
+    get_memory_log_tail,
+)
 import discord
 
 # ---------- TinyDB for admin clients ----------
@@ -85,7 +89,7 @@ def _resolve_token_scopes(token: str) -> tuple[bool, list[str], str]:
 
 
 def _admin_venue_scopes() -> list[str]:
-    return ["admin:web", "bingo:admin", "tarot:admin", "cardgames:admin", "event:host"]
+    return ["admin:web", "bingo:admin", "tarot:admin", "cardgames:admin", "event:host", "conclave:admin"]
 
 
 def _read_log_tail(path: str, max_lines: int = 200, max_bytes: int = 200_000) -> list[str]:
@@ -897,7 +901,11 @@ async def admin_logs(req: web.Request) -> web.Response:
         kind = "boot"
         path = log_path
     entries = _read_log_tail(path, max_lines=lines)
-    return web.json_response({"ok": True, "kind": kind, "lines": lines, "entries": entries})
+    source = "file"
+    if not entries:
+        entries = get_memory_log_tail(kind, lines)
+        source = "memory"
+    return web.json_response({"ok": True, "kind": kind, "lines": lines, "entries": entries, "source": source})
 
 
 @route("GET", "/admin/overlay/stats", scopes=["admin:web"])
@@ -1039,7 +1047,7 @@ async def admin_announce(req: web.Request):
     if not client_id:
         return web.json_response({"ok": False, "error": "client_id required"}, status=400)
 
-    ip = req.headers.get("X-Forwarded-For") or req.remote
+    ip = client_ip(req)
     ua = req.headers.get("User-Agent", "")
     now_ms = int(time.time() * 1000)
 

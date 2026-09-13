@@ -179,7 +179,7 @@
     }
     el.innerHTML = (hand || []).map(card => {
       if (card && card.image){
-        return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`;
+        return `<div class="card"><img src="${card.image}" alt="${cardLabel(card)}" decoding="async" loading="eager"></div>`;
       }
       return `<div class="card">${cardLabel(card)}</div>`;
     }).join("");
@@ -229,7 +229,7 @@
       const card = hand[i];
       if (i < revealCount && card){
         if (card.image){
-          slots.push(`<div class="card"><img src="${card.image}" alt="${cardLabel(card)}"></div>`);
+          slots.push(`<div class="card"><img src="${card.image}" alt="${cardLabel(card)}" decoding="async" loading="eager"></div>`);
         }else{
           slots.push(`<div class="card">${cardLabel(card)}</div>`);
         }

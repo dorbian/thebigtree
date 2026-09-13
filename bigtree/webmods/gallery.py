@@ -16,36 +16,38 @@ from bigtree.modules import gallery as gallery_mod
 from bigtree.webmods import contest as contest_mod
 import random
 import time
+import threading
 
 _GALLERY_CACHE: dict | None = None
 _GALLERY_CACHE_AT = 0.0
 _GALLERY_CACHE_TTL = 600.0
 _GALLERY_SHUFFLES: dict[int, list[int]] = {}
-_THUMB_WARM_AT = 0.0
-_THUMB_WARM_TTL = 30.0
 _CONTEST_THUMB_DIR = "thumbs"
+_GALLERY_CACHE_LOCK = threading.RLock()
 
 def invalidate_gallery_cache() -> None:
     global _GALLERY_CACHE, _GALLERY_CACHE_AT, _GALLERY_SHUFFLES
-    _GALLERY_CACHE = None
-    _GALLERY_CACHE_AT = 0.0
-    _GALLERY_SHUFFLES = {}
+    with _GALLERY_CACHE_LOCK:
+        _GALLERY_CACHE = None
+        _GALLERY_CACHE_AT = 0.0
+        _GALLERY_SHUFFLES = {}
 
 def _get_gallery_cached(include_hidden: bool) -> list[dict]:
     global _GALLERY_CACHE, _GALLERY_CACHE_AT, _GALLERY_SHUFFLES
-    now = time.time()
-    if _GALLERY_CACHE is not None and (now - _GALLERY_CACHE_AT) < _GALLERY_CACHE_TTL:
-        cached = _GALLERY_CACHE.get("items", [])
+    with _GALLERY_CACHE_LOCK:
+        now = time.time()
+        if _GALLERY_CACHE is not None and (now - _GALLERY_CACHE_AT) < _GALLERY_CACHE_TTL:
+            cached = _GALLERY_CACHE.get("items", [])
+            if include_hidden:
+                return list(cached)
+            return [item for item in cached if not item.get("hidden")]
+        items = _collect_gallery_items(include_hidden=True)
+        _GALLERY_CACHE = {"items": items}
+        _GALLERY_CACHE_AT = now
+        _GALLERY_SHUFFLES = {}
         if include_hidden:
-            return list(cached)
-        return [item for item in cached if not item.get("hidden")]
-    items = _collect_gallery_items(include_hidden=True)
-    _GALLERY_CACHE = {"items": items}
-    _GALLERY_CACHE_AT = now
-    _GALLERY_SHUFFLES = {}
-    if include_hidden:
-        return list(items)
-    return [item for item in items if not item.get("hidden")]
+            return list(items)
+        return [item for item in items if not item.get("hidden")]
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _REACTION_TYPES = set(gallery_mod.reaction_types())
@@ -87,7 +89,8 @@ def _contest_thumb_dir() -> str:
     return path
 
 def _contest_thumb_path(filename: str) -> str:
-    return os.path.join(_contest_thumb_dir(), filename)
+    safe = os.path.basename(filename or "")
+    return os.path.join(_contest_thumb_dir(), f"{safe}.thumb.webp")
 
 def _ensure_contest_thumb(filename: str, size: tuple[int, int] = (480, 672)) -> bool:
     if not filename:
@@ -102,31 +105,28 @@ def _ensure_contest_thumb(filename: str, size: tuple[int, int] = (480, 672)) -> 
     if not os.path.exists(source):
         return False
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except Exception:
         return False
+    tmp_path = f"{thumb_path}.tmp"
     try:
         with Image.open(source) as img:
             try:
                 img.seek(0)
             except Exception:
                 pass
-            img.thumbnail(size)
-            fmt = {
-                ".jpg": "JPEG",
-                ".jpeg": "JPEG",
-                ".png": "PNG",
-                ".gif": "GIF",
-                ".bmp": "BMP",
-                ".webp": "WEBP",
-            }.get(ext, "PNG")
-            save_kwargs = {}
-            if fmt == "JPEG":
-                if img.mode not in ("RGB", "L"):
-                    img = img.convert("RGB")
-                save_kwargs = {"quality": 82, "optimize": True, "progressive": True}
-            img.save(thumb_path, fmt, **save_kwargs)
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail(size, Image.Resampling.LANCZOS)
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA" if "transparency" in img.info else "RGB")
+            img.save(tmp_path, "WEBP", quality=76, method=4)
+        os.replace(tmp_path, thumb_path)
     except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
         return False
     return True
 
@@ -206,12 +206,6 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
         thumb_url = (row.get("thumb_url") or "").strip() or f"/media/thumbs/{filename}"
         if url in seen:
             continue
-        # Ensure thumb exists for disk-backed images.
-        try:
-            if url.startswith("/media/"):
-                _ = media_mod.ensure_thumb(filename)
-        except Exception:
-            pass
         artist_name = (row.get("artist_name") or "").strip()
         artist_links = row.get("artist_links") if isinstance(row.get("artist_links"), dict) else {}
         if not artist_name:
@@ -234,6 +228,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             "url": url,
             "fallback_url": f"/media/{filename}" if url != f"/media/{filename}" else "",
             "thumb_url": thumb_url,
+            "preview_url": f"/media/previews/{filename}",
             "source": "media",
             "type": row.get("origin_type") or "Artifact",
             "origin": row.get("origin_label") or "",
@@ -265,10 +260,6 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             if url in seen:
                 continue
             try:
-                _ = media_mod.ensure_thumb(name)
-            except Exception:
-                pass
-            try:
                 db.upsert_media_item(
                     media_id=name,
                     filename=name,
@@ -288,6 +279,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
                 "url": url,
                 "fallback_url": "",
                 "thumb_url": f"/media/thumbs/{name}",
+                "preview_url": f"/media/previews/{name}",
                 "source": "media",
                 "type": "Artifact",
                 "origin": "",
@@ -309,7 +301,7 @@ def _collect_gallery_items(include_hidden: bool) -> List[Dict[str, Any]]:
             if not include_hidden and hidden:
                 continue
             thumb_url = ""
-            if filename and _ensure_contest_thumb(filename):
+            if filename and os.path.splitext(filename)[1].lower() in _IMG_EXTS:
                 thumb_url = f"/contest/media/thumbs/{filename}"
             entry["item_id"] = item_id
             entry["type"] = entry.get("type") or "Contest"
@@ -341,54 +333,6 @@ def _get_shuffle_indices(total: int, seed: int) -> list[int]:
     _GALLERY_SHUFFLES[seed] = indices
     return indices
 
-def _schedule_thumb_warm(items: list[dict]) -> None:
-    global _THUMB_WARM_AT
-    now = time.time()
-    if (now - _THUMB_WARM_AT) < _THUMB_WARM_TTL:
-        return
-    _THUMB_WARM_AT = now
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-    loop.create_task(_warm_thumbnails(items))
-
-def _media_filename_from_url(url: str) -> str:
-    if not url or not url.startswith("/media/"):
-        return ""
-    return url.split("/media/", 1)[1]
-
-def _contest_filename_from_url(url: str) -> str:
-    if not url or not url.startswith("/contest/media/"):
-        return ""
-    return url.split("/contest/media/", 1)[1]
-
-def _ensure_thumb_for_item(item: dict) -> None:
-    url = (item.get("url") or "").strip()
-    if url.startswith("/media/"):
-        name = _media_filename_from_url(url)
-        if name:
-            media_mod.ensure_thumb(name)
-        return
-    if url.startswith("/contest/media/"):
-        name = _contest_filename_from_url(url)
-        if name:
-            _ensure_contest_thumb(name)
-        return
-
-async def _warm_thumbnails(items: list[dict], limit: int = 48) -> None:
-    if not items:
-        return
-    slice_items = items[:limit]
-    await asyncio.to_thread(_ensure_thumbs_for_items, slice_items)
-
-def _ensure_thumbs_for_items(items: list[dict]) -> None:
-    for item in items:
-        try:
-            _ensure_thumb_for_item(item)
-        except Exception:
-            continue
-
 @route("GET", "/contest/media/{filename}", allow_public=True)
 async def contest_media_file(req: web.Request):
     filename = os.path.basename(req.match_info["filename"])
@@ -398,7 +342,9 @@ async def contest_media_file(req: web.Request):
     path = os.path.join(contest_mod._contest_dir(), filename)
     if not os.path.exists(path):
         return web.Response(status=404)
-    return web.FileResponse(path)
+    resp = web.FileResponse(path)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 @route("GET", "/contest/media/thumbs/{filename}", allow_public=True)
 async def contest_media_thumb(req: web.Request):
@@ -406,16 +352,20 @@ async def contest_media_thumb(req: web.Request):
     ext = os.path.splitext(filename)[1].lower()
     if ext not in _IMG_EXTS:
         return web.Response(status=404)
-    if not _ensure_contest_thumb(filename):
+    if not await asyncio.to_thread(_ensure_contest_thumb, filename):
         return web.Response(status=404)
     path = _contest_thumb_path(filename)
     if not os.path.exists(path):
         return web.Response(status=404)
-    return web.FileResponse(path)
+    resp = web.FileResponse(path)
+    resp.headers["Cache-Control"] = "public, max-age=604800"
+    return resp
 
 @route("GET", "/api/gallery/images", allow_public=True)
 async def gallery_images(_req: web.Request):
-    items = _get_gallery_cached(include_hidden=False)
+    # Cache rebuilds touch PostgreSQL, TinyDB/legacy data and the filesystem.
+    # Keep that cold path away from Discord/aiohttp's event loop.
+    items = await asyncio.to_thread(_get_gallery_cached, False)
     total = len(items)
     seed_raw = _req.query.get("seed")
     try:
@@ -425,7 +375,8 @@ async def gallery_images(_req: web.Request):
     if seed is None:
         seed = int(time.time() * 1000) & 0x7FFFFFFF
     indices = _get_shuffle_indices(total, seed)
-    _schedule_thumb_warm(items)
+    # Derivatives are generated on upload or lazily by the thumbnail/preview
+    # endpoints. Avoid a 48-image background encode burst on the Pi.
     try:
         limit = int(_req.query.get("limit") or 0)
     except Exception:

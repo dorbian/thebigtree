@@ -5,6 +5,7 @@ import secrets
 import random
 import itertools
 import threading
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 from psycopg2.extras import Json
 
@@ -26,7 +27,11 @@ except Exception:
 
 GAMES = {"blackjack", "poker", "highlow", "slots", "crapslite"}
 _DB_LOCK = threading.RLock()
+_MUTATION_CONTEXT = threading.local()
 _FINISHED_TTL = 15.0
+_CLEANUP_INTERVAL = 30.0
+_CLEANUP_LOCK = threading.Lock()
+_LAST_CLEANUP = 0.0
 
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["spades", "hearts", "diamonds", "clubs"]
@@ -39,6 +44,67 @@ def _db():
     if not get_database:
         raise RuntimeError("database unavailable")
     return get_database()
+
+
+def _serialized_mutation(func):
+    """Serialize card-game state mutations inside this BigTree process.
+
+    Card sessions are persisted as one JSONB document.  Most reducers follow a
+    read -> mutate -> write pattern, so two simultaneous button presses can
+    otherwise both read the same revision and let the later write erase the
+    first.  A single BigTree process owns game execution on the Pi, making a
+    small process-wide lock a cheap and predictable guard while the database
+    remains the durable source of truth.
+
+    The lock is re-entrant because higher-level mutations call helper
+    mutations in a few legacy flows.  PostgreSQL wallet changes have their own
+    row-level transaction locks and are intentionally kept separate.
+    """
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        with _DB_LOCK:
+            return func(*args, **kwargs)
+    return wrapped
+
+
+def _transactional_session_mutation(func):
+    """Hold a PostgreSQL row lock and one transaction for a session mutation.
+
+    The decorated function may continue using the legacy `_update_session()`
+    and `_add_event()` helpers; those helpers detect the transaction cursor in
+    thread-local context and join the same commit.  This lets us make state +
+    event publication atomic without duplicating the large game reducers.
+
+    A plain read performed by the legacy loader remains safe under PostgreSQL
+    MVCC while this transaction owns the row lock.  Competing new BigTree
+    workers block on `FOR UPDATE`, which also protects the short overlap that
+    can happen during an automatic container rollout.
+    """
+    @wraps(func)
+    def wrapped(session_id, *args, **kwargs):
+        db = _db()
+        with db.transaction() as cur:
+            cur.execute(
+                "SELECT session_id FROM cardgame_sessions WHERE session_id = %s FOR UPDATE",
+                (session_id,),
+            )
+            previous = getattr(_MUTATION_CONTEXT, "cursor", None)
+            _MUTATION_CONTEXT.cursor = cur
+            try:
+                return func(session_id, *args, **kwargs)
+            finally:
+                if previous is None:
+                    try:
+                        delattr(_MUTATION_CONTEXT, "cursor")
+                    except AttributeError:
+                        pass
+                else:
+                    _MUTATION_CONTEXT.cursor = previous
+    return wrapped
+
+
+def _mutation_cursor():
+    return getattr(_MUTATION_CONTEXT, "cursor", None)
 
 def _new_id() -> str:
     return secrets.token_urlsafe(10)
@@ -297,29 +363,36 @@ def _apply_blackjack_action(state: Dict[str, Any], action: str) -> Tuple[Dict[st
     if action == "hit":
         hands[active] = (hands[active] or []) + _draw(deck, 1)
         player_total = _blackjack_value(hands[active])
-        if player_total > 21:
-            results[active] = "bust"
-            if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
-                state["player_hands"] = hands
-                state["hand_results"] = results
-                state["hand_multipliers"] = multipliers
-                _resolve_blackjack(state)
-                return state, None
         state["player_hands"] = hands
         state["hand_results"] = results
         state["hand_multipliers"] = multipliers
         state["active_hand"] = active
-        state["player_hand"] = hands[active]
         state["deck"] = deck
+        if player_total > 21:
+            results[active] = "bust"
+            state["hand_results"] = results
+            if not _advance_blackjack_hand(state):
+                _resolve_blackjack(state)
+                return state, None
+        # `_advance_blackjack_hand()` mutates state when a split hand busts;
+        # always mirror the newly-active hand instead of restoring the old
+        # index.  The previous code advanced a temporary dict and then wrote
+        # `active` back, which could trap split games on an already-finished
+        # hand.
+        active_now = int(state.get("active_hand") or 0)
+        state["player_hand"] = hands[active_now] if hands else []
         return state, None
     if action == "stand":
         results[active] = results[active] or "pending"
         state["player_hands"] = hands
         state["hand_results"] = results
         state["hand_multipliers"] = multipliers
-        if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
+        state["active_hand"] = active
+        state["deck"] = deck
+        if not _advance_blackjack_hand(state):
             _resolve_blackjack(state)
-        state["player_hand"] = hands[state.get("active_hand", 0)] if hands else []
+        active_now = int(state.get("active_hand") or 0)
+        state["player_hand"] = hands[active_now] if hands and active_now < len(hands) else []
         return state, None
     if action == "double":
         if len(hands[active]) != 2:
@@ -333,10 +406,12 @@ def _apply_blackjack_action(state: Dict[str, Any], action: str) -> Tuple[Dict[st
         state["player_hands"] = hands
         state["hand_results"] = results
         state["hand_multipliers"] = multipliers
-        if not _advance_blackjack_hand({"player_hands": hands, "hand_results": results, "active_hand": active, **state}):
-            _resolve_blackjack(state)
-        state["player_hand"] = hands[state.get("active_hand", 0)] if hands else []
+        state["active_hand"] = active
         state["deck"] = deck
+        if not _advance_blackjack_hand(state):
+            _resolve_blackjack(state)
+        active_now = int(state.get("active_hand") or 0)
+        state["player_hand"] = hands[active_now] if hands and active_now < len(hands) else []
         return state, None
     if action == "split":
         if len(hands) >= 2:
@@ -806,19 +881,33 @@ def _session_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _cleanup_finished() -> None:
-    cutoff = _now() - _FINISHED_TTL
-    db = _db()
-    rows = db._execute(
-        "SELECT session_id FROM cardgame_sessions WHERE status = 'finished' AND EXTRACT(EPOCH FROM updated_at) < %s",
-        (cutoff,),
-        fetch=True,
-    ) or []
-    ids = [r.get("session_id") for r in rows if r.get("session_id")]
-    if not ids:
-        return
-    db._execute("DELETE FROM cardgame_events WHERE session_id = ANY(%s)", (ids,))
-    db._execute("DELETE FROM cardgame_sessions WHERE session_id = ANY(%s)", (ids,))
+    """Periodically retire short-lived finished session rows.
 
+    Session reads used to run a cleanup SELECT on every request.  On the Pi
+    that meant a completely unrelated history query for each page refresh.
+    Throttle the maintenance work and let the existing ON DELETE CASCADE
+    remove event rows in the same statement.
+    """
+    global _LAST_CLEANUP
+    now = _now()
+    if now - _LAST_CLEANUP < _CLEANUP_INTERVAL:
+        return
+    if not _CLEANUP_LOCK.acquire(blocking=False):
+        return
+    try:
+        now = _now()
+        if now - _LAST_CLEANUP < _CLEANUP_INTERVAL:
+            return
+        cutoff = now - _FINISHED_TTL
+        _db()._execute(
+            "DELETE FROM cardgame_sessions WHERE status = 'finished' AND EXTRACT(EPOCH FROM updated_at) < %s",
+            (cutoff,),
+        )
+        _LAST_CLEANUP = now
+    finally:
+        _CLEANUP_LOCK.release()
+
+@_serialized_mutation
 def create_session(
     game_id: str,
     pot: int = 0,
@@ -966,27 +1055,30 @@ def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
 
 def _update_session(session_id: str, payload: Dict[str, Any]) -> None:
     now = _now()
-    db = _db()
-    db._execute(
-        """
-        UPDATE cardgame_sessions
-        SET status = %s,
-            pot = %s,
-            winnings = %s,
-            state = %s,
-            updated_at = to_timestamp(%s)
-        WHERE session_id = %s
-        """,
-        (
-            payload.get("status"),
-            int(payload.get("pot") or 0),
-            int(payload.get("winnings") or 0),
-            Json(payload.get("state") or {}),
-            now,
-            session_id,
-        ),
+    sql = """
+    UPDATE cardgame_sessions
+    SET status = %s,
+        pot = %s,
+        winnings = %s,
+        state = %s,
+        updated_at = to_timestamp(%s)
+    WHERE session_id = %s
+    """
+    params = (
+        payload.get("status"),
+        int(payload.get("pot") or 0),
+        int(payload.get("winnings") or 0),
+        Json(payload.get("state") or {}),
+        now,
+        session_id,
     )
+    cur = _mutation_cursor()
+    if cur is not None:
+        cur.execute(sql, params)
+    else:
+        _db()._execute(sql, params)
 
+@_serialized_mutation
 def join_session(join_code: str, player_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Join a session as a player.
 
@@ -1035,14 +1127,16 @@ def join_session(join_code: str, player_meta: Optional[Dict[str, Any]] = None) -
     return {"player_token": token, "session": s}
 
 def _add_event(session_id: str, event_type: str, data: Dict[str, Any]) -> None:
-    db = _db()
-    db._execute(
-        """
-        INSERT INTO cardgame_events (session_id, ts, type, data)
-        VALUES (%s, to_timestamp(%s), %s, %s)
-        """,
-        (session_id, _now(), event_type, Json(data or {})),
-    )
+    sql = """
+    INSERT INTO cardgame_events (session_id, ts, type, data)
+    VALUES (%s, to_timestamp(%s), %s, %s)
+    """
+    params = (session_id, _now(), event_type, Json(data or {}))
+    cur = _mutation_cursor()
+    if cur is not None:
+        cur.execute(sql, params)
+    else:
+        _db()._execute(sql, params)
 
 def list_events(session_id: str, since_seq: int) -> List[Dict[str, Any]]:
     db = _db()
@@ -1074,6 +1168,61 @@ def list_events(session_id: str, since_seq: int) -> List[Dict[str, Any]]:
         })
     return out
 
+
+def poll_events(session_id: str, since_seq: int) -> Tuple[bool, List[Dict[str, Any]]]:
+    """Poll session existence and new events with a single PostgreSQL query.
+
+    WebSocket/SSE clients used to issue one query to check whether the session
+    still existed and a second query for its events every second.  That grows
+    needlessly on a Raspberry Pi when several player/host views are open.
+    The lateral join always returns one row for a live session even when no
+    event is pending, so callers get both answers in one round trip.
+    """
+    db = _db()
+    rows = db._execute(
+        """
+        SELECT e.id,
+               EXTRACT(EPOCH FROM e.ts) AS ts,
+               e.type,
+               e.data
+        FROM cardgame_sessions s
+        LEFT JOIN LATERAL (
+            SELECT id, ts, type, data
+            FROM cardgame_events
+            WHERE session_id = s.session_id AND id > %s
+            ORDER BY id ASC
+        ) e ON TRUE
+        WHERE s.session_id = %s
+          AND s.status != 'finished'
+        ORDER BY e.id ASC NULLS FIRST
+        """,
+        (int(since_seq), session_id),
+        fetch=True,
+    ) or []
+    if not rows:
+        return False, []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if not r.get("id"):
+            continue
+        payload = r.get("data")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        out.append({
+            "seq": int(r.get("id") or 0),
+            "ts": float(r.get("ts") or 0),
+            "type": r.get("type"),
+            "data": payload,
+        })
+    return True, out
+
+@_serialized_mutation
+@_transactional_session_mutation
 def start_session(session_id: str, token: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -1095,6 +1244,8 @@ def start_session(session_id: str, token: str) -> Dict[str, Any]:
     _add_event(session_id, "SESSION_STARTED", {})
     return s
 
+@_serialized_mutation
+@_transactional_session_mutation
 def restart_blackjack_session(session_id: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -1110,6 +1261,8 @@ def restart_blackjack_session(session_id: str) -> Dict[str, Any]:
     _add_event(session_id, "STATE_UPDATED", {"action": "start_round"})
     return s
 
+@_serialized_mutation
+@_transactional_session_mutation
 def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -1121,6 +1274,8 @@ def finish_session(session_id: str, token: str) -> Dict[str, Any]:
     _add_event(session_id, "SESSION_FINISHED", {})
     return s
 
+@_serialized_mutation
+@_transactional_session_mutation
 def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -1221,11 +1376,13 @@ def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
             if state.get("betting_open"):
                 raise ValueError("betting is still open")
             lr = state.get("last_resolution")
-            try:
-                if isinstance(lr, dict) and int(lr.get("round") or 0) == int(state.get("round") or 0):
+            if isinstance(lr, dict):
+                try:
+                    already_resolved = int(lr.get("round") or 0) == int(state.get("round") or 0)
+                except (TypeError, ValueError):
+                    already_resolved = False
+                if already_resolved:
                     raise ValueError("already rolled this round")
-            except Exception:
-                pass
             die1 = random.randint(1, 6)
             die2 = random.randint(1, 6)
             total = die1 + die2
@@ -1288,6 +1445,8 @@ def host_action(session_id: str, token: str, action: str) -> Dict[str, Any]:
             return s
     raise ValueError("invalid action")
 
+@_serialized_mutation
+@_transactional_session_mutation
 def player_action(session_id: str, token: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     s = get_session_by_id(session_id)
     if not s:
@@ -1487,6 +1646,7 @@ def get_state(session: Dict[str, Any], view: str = "player", token: Optional[str
         },
         "state": state,
     }
+@_serialized_mutation
 def delete_session(session_id: str, token: Optional[str] = None) -> None:
     if token:
         s = get_session_by_id(session_id)

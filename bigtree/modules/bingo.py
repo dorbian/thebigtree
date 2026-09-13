@@ -6,6 +6,8 @@ import uuid
 import time
 import random
 import shutil
+import threading
+from functools import wraps
 from typing import Dict, Any, List, Optional, Tuple
 from tinydb import TinyDB, Query
 
@@ -21,6 +23,16 @@ _BINGO_DIR: Optional[str] = None
 _DB_DIR: Optional[str] = None
 _ASSETS: Optional[str] = None
 _INDEX: Optional[str] = None
+_INDEX_LOCK = threading.RLock()
+_GAME_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        with _GAME_LOCK:
+            return fn(*args, **kwargs)
+    return wrapped
 
 # -------- stages --------
 STAGES = ("single", "double", "full")  # single line, double line, whole card
@@ -107,37 +119,61 @@ def generate_card_numbers() -> List[List[int]]:
 # ------- indexing helpers (track active game per channel) -------
 def _read_index() -> Dict[str, Any]:
     _ensure_dirs()
-    try:
-        import json
-        if os.path.exists(_INDEX):
-            with open(_INDEX, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault("active_by_channel", {})
-                    data.setdefault("owner_tokens", {})
-                    data.setdefault("owner_keys", {})
-                    return data
-    except Exception:
-        pass
-    return {
-        "active_by_channel": {},  # channel_id(str) -> game_id
-        "owner_tokens": {},       # token -> {game_id, owner_name}
-        "owner_keys": {},         # game_id -> {owner_name: token}
-    }
+    with _INDEX_LOCK:
+        try:
+            import json
+            if os.path.exists(_INDEX):
+                with open(_INDEX, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        data.setdefault("active_by_channel", {})
+                        data.setdefault("owner_tokens", {})
+                        data.setdefault("owner_keys", {})
+                        return data
+        except Exception as exc:
+            logger.warning("[bingo] failed to read index %s: %s", _INDEX, exc)
+        return {
+            "active_by_channel": {},  # channel_id(str) -> game_id
+            "owner_tokens": {},       # token -> {game_id, owner_name}
+            "owner_keys": {},         # game_id -> {owner_name: token}
+        }
 
 def _write_index(idx: Dict[str, Any]):
+    """Atomically replace Bingo's small coordination index.
+
+    /data can be backed by removable/network storage on appliance installs. A
+    temporary file plus fsync+replace avoids exposing partially-written JSON
+    to the Discord and web readers.
+    """
     _ensure_dirs()
     import json
-    with open(_INDEX, "w", encoding="utf-8") as f:
-        json.dump(idx, f, indent=2)
+    with _INDEX_LOCK:
+        tmp = f"{_INDEX}.tmp.{os.getpid()}.{threading.get_ident()}"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(idx, f, indent=2)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError as exc:
+                    logger.debug("[bingo] fsync unavailable for %s: %s", tmp, exc)
+            os.replace(tmp, _INDEX)
+        finally:
+            try:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+            except OSError:
+                pass
 
 def set_active_for_channel(channel_id: int, game_id: str):
-    idx = _read_index()
-    idx["active_by_channel"][str(channel_id)] = game_id
-    _write_index(idx)
+    with _INDEX_LOCK:
+        idx = _read_index()
+        idx["active_by_channel"][str(channel_id)] = game_id
+        _write_index(idx)
 
 def get_active_for_channel(channel_id: int) -> Optional[str]:
-    return _read_index()["active_by_channel"].get(str(channel_id))
+    with _INDEX_LOCK:
+        return _read_index()["active_by_channel"].get(str(channel_id))
 
 # -------- owner tokens (public links) --------
 def get_owner_token(game_id: str, owner_name: str) -> str:
@@ -145,27 +181,31 @@ def get_owner_token(game_id: str, owner_name: str) -> str:
     owner_name = (owner_name or "").strip()
     if not owner_name:
         raise ValueError("Owner name required.")
-    idx = _read_index()
-    game_map = idx.setdefault("owner_keys", {}).setdefault(str(game_id), {})
-    token = game_map.get(owner_name)
-    if token and token in idx.get("owner_tokens", {}):
+    with _INDEX_LOCK:
+        idx = _read_index()
+        game_map = idx.setdefault("owner_keys", {}).setdefault(str(game_id), {})
+        token = game_map.get(owner_name)
+        if token and token in idx.get("owner_tokens", {}):
+            return token
+        token = secrets.token_urlsafe(10)
+        game_map[owner_name] = token
+        idx.setdefault("owner_tokens", {})[token] = {
+            "game_id": str(game_id),
+            "owner_name": owner_name,
+        }
+        _write_index(idx)
         return token
-    token = secrets.token_urlsafe(10)
-    game_map[owner_name] = token
-    idx.setdefault("owner_tokens", {})[token] = {
-        "game_id": str(game_id),
-        "owner_name": owner_name,
-    }
-    _write_index(idx)
-    return token
 
 def resolve_owner_token(token: str) -> Optional[Dict[str, str]]:
     if not token:
         return None
-    idx = _read_index()
-    return idx.get("owner_tokens", {}).get(str(token))
+    with _INDEX_LOCK:
+        idx = _read_index()
+        found = idx.get("owner_tokens", {}).get(str(token))
+        return dict(found) if isinstance(found, dict) else None
 
 # ----------------- Game lifecycle -----------------
+@_locked
 def create_game(
     channel_id: int,
     title: str,
@@ -220,6 +260,7 @@ def create_game(
     )
     return game
 
+@_locked
 def get_game(game_id: str) -> Optional[Dict[str, Any]]:
     _ensure_dirs()
     if not os.path.exists(_db_path(game_id)):
@@ -243,6 +284,7 @@ def get_game(game_id: str) -> Optional[Dict[str, Any]]:
         db.update(g, doc_ids=[g.doc_id])
     return g
 
+@_locked
 def end_game(game_id: str) -> bool:
     g = get_game(game_id)
     if not g:
@@ -253,6 +295,7 @@ def end_game(game_id: str) -> bool:
     logger.info(f"[bingo] Ended game {game_id}")
     return True
 
+@_locked
 def set_stage(game_id: str, stage: str) -> Tuple[bool, str]:
     stage = (stage or "").lower().strip()
     if stage not in STAGES:
@@ -266,6 +309,7 @@ def set_stage(game_id: str, stage: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Stage set to {stage} for game {game_id}")
     return True, "OK"
 
+@_locked
 def claim_bingo(game_id: str, card_id: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -300,6 +344,7 @@ def claim_bingo(game_id: str, card_id: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Claim by {claim['owner_name']} on card {card_id} (stage={claim['stage']}) in game {game_id}")
     return True, "OK"
 
+@_locked
 def advance_stage(game_id: str) -> Tuple[bool, str, Optional[str], bool]:
     g = get_game(game_id)
     if not g:
@@ -318,6 +363,7 @@ def advance_stage(game_id: str) -> Tuple[bool, str, Optional[str], bool]:
     return True, "ended", current, True
 
 
+@_locked
 def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -351,6 +397,7 @@ def public_claim(game_id: str, card_id: str, owner_name: Optional[str] = None) -
     logger.info(f"[bingo] Public claim by {name} on card {card_id} (stage={claim['stage']}) in game {game_id}")
     return True, "OK"
 
+@_locked
 def approve_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -380,6 +427,7 @@ def approve_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Approved public claim on card {card_id} in game {game_id}")
     return True, "OK"
 
+@_locked
 def deny_public_claim(game_id: str, card_id: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -411,6 +459,7 @@ def player_card_count(db: TinyDB, game_id: str, owner_name: str) -> int:
     Card = Query()
     return len(db.search((Card._type == "card") & (Card.game_id == game_id) & (Card.owner_name == owner_name)))
 
+@_locked
 def buy_card(game_id: str, owner_name: str, owner_user_id: Optional[int]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Backward-compatible single-card purchase."""
     cards, err = buy_cards(game_id, owner_name, 1, owner_user_id, gift=False)
@@ -418,6 +467,7 @@ def buy_card(game_id: str, owner_name: str, owner_user_id: Optional[int]) -> Tup
         return None, err
     return (cards[0] if cards else None), None
 
+@_locked
 def buy_cards(
     game_id: str,
     owner_name: str,
@@ -478,6 +528,7 @@ def buy_cards(
     )
     return cards, None
 
+@_locked
 def seed_pot(game_id: str, amount: int) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -496,6 +547,7 @@ def seed_pot(game_id: str, amount: int) -> Tuple[bool, str]:
     logger.info(f"[bingo] Seeded {amt} {g.get('currency')} into game {game_id} (pot={g['pot']})")
     return True, "OK"
 
+@_locked
 def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     n = int(number)
     if n < 1 or n > MAX_NUMBER:
@@ -517,6 +569,7 @@ def call_number(game_id: str, number: int) -> Tuple[Optional[Dict[str, Any]], Op
     logger.info(f"[bingo] Called number {n} in game {game_id}")
     return g, None
 
+@_locked
 def start_game(game_id: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -531,6 +584,7 @@ def start_game(game_id: str) -> Tuple[bool, str]:
     logger.info(f"[bingo] Game {game_id} started.")
     return True, "OK"
 
+@_locked
 def call_random_number(game_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     g = get_game(game_id)
     if not g:
@@ -542,6 +596,7 @@ def call_random_number(game_id: str) -> Tuple[Optional[Dict[str, Any]], Optional
     n = random.choice(remaining)
     return call_number(game_id, n)
 
+@_locked
 def mark_card(game_id: str, card_id: str, row: int, col: int) -> Tuple[bool, str]:
     db = _open(game_id)
     Card = Query()
@@ -555,6 +610,7 @@ def mark_card(game_id: str, card_id: str, row: int, col: int) -> Tuple[bool, str
     db.update(card, doc_ids=[card.doc_id])
     return True, "Marked."
 
+@_locked
 def get_public_state(game_id: str) -> Dict[str, Any]:
     g = get_game(game_id)
     if not g:
@@ -608,12 +664,14 @@ def get_public_state(game_id: str) -> Dict[str, Any]:
     }
 
 
+@_locked
 def get_card(game_id: str, card_id: str) -> Optional[Dict[str, Any]]:
     db = _open(game_id)
     Card = Query()
     rows = db.search((Card._type == "card") & (Card.card_id == card_id))
     return rows[-1] if rows else None
 
+@_locked
 def get_owner_cards(
     game_id: str,
     owner_name: Optional[str] = None,
@@ -635,6 +693,7 @@ def get_owner_cards(
 
 # -------- XIVAuth linking helpers --------
 
+@_locked
 def link_owner_to_user(game_id: str, owner_name: str, owner_user_id: int) -> Tuple[bool, str]:
     """Associate all cards for an owner_name with a registered user id."""
     owner_name = (owner_name or "").strip()
@@ -664,6 +723,7 @@ def link_owner_to_user(game_id: str, owner_name: str, owner_user_id: int) -> Tup
     return True, "OK"
 
 
+@_locked
 def get_owner_name_for_user(game_id: str, owner_user_id: int) -> Optional[str]:
     """Return the most common owner_name used for a given registered user id."""
     try:
@@ -694,6 +754,7 @@ def get_owner_name_for_user(game_id: str, owner_user_id: int) -> Optional[str]:
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
+@_locked
 def get_owner_token_for_user(game_id: str, owner_user_id: int, fallback_owner_name: Optional[str] = None) -> str:
     """Create/return an owner token that matches the user's linked cards when possible."""
     name = get_owner_name_for_user(game_id, owner_user_id)
@@ -704,6 +765,7 @@ def get_owner_token_for_user(game_id: str, owner_user_id: int, fallback_owner_na
     return get_owner_token(game_id, name)
 
 # -------- background handling --------
+@_locked
 def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     _ensure_dirs()
     g = get_game(game_id)
@@ -725,6 +787,7 @@ def save_background(game_id: str, src_path: str) -> Tuple[bool, str]:
     db.update(g, doc_ids=[g.doc_id])
     return True, dest
 
+@_locked
 def delete_background(game_id: str) -> Tuple[bool, str]:
     g = get_game(game_id)
     if not g:
@@ -743,6 +806,7 @@ def delete_background(game_id: str) -> Tuple[bool, str]:
     return True, "OK"
 
 # -------- admin helpers --------
+@_locked
 def list_games() -> List[Dict[str, Any]]:
     _ensure_dirs()
     games: List[Dict[str, Any]] = []
@@ -773,6 +837,7 @@ def list_games() -> List[Dict[str, Any]]:
     return games
 
 
+@_locked
 def list_owners(game_id: str) -> List[Dict[str, Any]]:
     g = get_game(game_id)
     if not g:
@@ -817,6 +882,7 @@ def list_owners(game_id: str) -> List[Dict[str, Any]]:
     return out
 
 
+@_locked
 def update_game(game_id: str, **fields) -> Dict[str, Any]:
     g = get_game(game_id)
     if not g:
@@ -862,6 +928,7 @@ def update_game(game_id: str, **fields) -> Dict[str, Any]:
     return g
 
 
+@_locked
 def delete_game(game_id: str) -> bool:
     _ensure_dirs()
     db_path = _db_path(game_id)
@@ -877,16 +944,17 @@ def delete_game(game_id: str) -> bool:
             os.remove(g["background_path"])
         except Exception:
             pass
-    idx = _read_index()
-    active = idx.get("active_by_channel", {})
-    idx["active_by_channel"] = {k: v for k, v in active.items() if v != game_id}
-    owner_keys = idx.get("owner_keys", {})
-    owner_map = owner_keys.pop(str(game_id), None)
-    if owner_map:
-        tokens = idx.get("owner_tokens", {})
-        for token in list(owner_map.values()):
-            tokens.pop(token, None)
-        idx["owner_tokens"] = tokens
-    idx["owner_keys"] = owner_keys
-    _write_index(idx)
+    with _INDEX_LOCK:
+        idx = _read_index()
+        active = idx.get("active_by_channel", {})
+        idx["active_by_channel"] = {k: v for k, v in active.items() if v != game_id}
+        owner_keys = idx.get("owner_keys", {})
+        owner_map = owner_keys.pop(str(game_id), None)
+        if owner_map:
+            tokens = idx.get("owner_tokens", {})
+            for token in list(owner_map.values()):
+                tokens.pop(token, None)
+            idx["owner_tokens"] = tokens
+        idx["owner_keys"] = owner_keys
+        _write_index(idx)
     return True

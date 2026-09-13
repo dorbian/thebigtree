@@ -12,6 +12,7 @@ using Dalamud.Plugin.Services;
 using Forest.Windows;
 using Forest.Features.Venues;
 using Forest.Features.Events;
+using Forest.Features.Conclave;
 
 namespace Forest;
 
@@ -39,6 +40,7 @@ public sealed class Plugin : IDalamudPlugin
     // Venue & Event API clients
     public VenuesApiClient? VenuesApi { get; private set; }
     public EventsApiClient? EventsApi { get; private set; }
+    public ConclaveApiClient? ConclaveApi { get; private set; }
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
@@ -81,17 +83,19 @@ public sealed class Plugin : IDalamudPlugin
     {
         var baseUrl = Config.BingoApiBaseUrl?.Trim();
         var apiKey = Config.BingoApiKey?.Trim();
-VenuesApi?.Dispose();
-        EventsApi?.Dispose();
 
-        
+        VenuesApi?.Dispose();
+        EventsApi?.Dispose();
+        ConclaveApi?.Dispose();
+        VenuesApi = null;
+        EventsApi = null;
+        ConclaveApi = null;
+
         if (!string.IsNullOrWhiteSpace(baseUrl))
         {
-            VenuesApi?.Dispose();
-            EventsApi?.Dispose();
-
             VenuesApi = new VenuesApiClient(baseUrl, apiKey);
             EventsApi = new EventsApiClient(baseUrl, apiKey);
+            ConclaveApi = new ConclaveApiClient(baseUrl, apiKey);
         }
     }
 
@@ -101,6 +105,10 @@ VenuesApi?.Dispose();
 
         ConfigWindow.Dispose();
         MainWindow.Dispose();
+
+        VenuesApi?.Dispose();
+        EventsApi?.Dispose();
+        ConclaveApi?.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
     }

@@ -3,6 +3,7 @@ from aiohttp import web, WSMsgType
 from typing import Dict, Any
 import asyncio
 import json
+import logging
 from bigtree.inc.webserver import route, frontend_route, get_server
 from bigtree.modules import cardgames as cg
 from bigtree.inc.database import get_database
@@ -11,8 +12,35 @@ from bigtree.inc.auth import TOKEN_COOKIE_NAME
 from bigtree.modules import tarot
 from bigtree.webmods.user_area import _resolve_user
 
+log = logging.getLogger("bigtree.cardgames")
+
 async def _run_blocking(func, *args):
     return await asyncio.to_thread(func, *args)
+
+
+def _refund_wallet_debit(db, debit: Dict[str, Any] | None, cause: str) -> None:
+    if not debit:
+        return
+    try:
+        db.apply_game_wallet_delta_once(
+            event_id=debit["event_id"],
+            user_id=debit["user_id"],
+            delta=debit["amount"],
+            reason=f"{debit['reason']}_refund",
+            game_id=debit["game_id"],
+            metadata={
+                "amount": debit["amount"],
+                "nonce": debit["nonce"],
+                "kind": debit["kind"],
+                "cause": cause,
+            },
+            allow_negative=True,
+        )
+    except Exception:
+        # Preserve the original API error, but make a failed compensation
+        # visible in container logs so it can be reconciled from wallet
+        # history instead of silently disappearing.
+        log.exception("wallet action refund failed (game_id=%s reason=%s)", debit.get("game_id"), debit.get("reason"))
 
 def _get_view(req: web.Request) -> str:
     view = str(req.query.get("view") or "player").strip().lower()
@@ -81,12 +109,11 @@ async def ws_stream(req: web.Request):
         if now - last_seen > 300:
             await ws.close(message=b"idle")
             break
-        current = await _run_blocking(cg.get_session_by_id, session_id)
-        if not current:
+        alive, events = await _run_blocking(cg.poll_events, session_id, last_seq)
+        if not alive:
             await ws.send_json({"type": "SESSION_GONE", "redirect": "/gallery"})
             await ws.close()
             break
-        events = await _run_blocking(cg.list_events, session_id, last_seq)
         if events:
             last_seq = int(events[-1].get("seq", last_seq))
             for ev in events:
@@ -207,26 +234,27 @@ async def _ensure_wallet_balance(req: web.Request, join_code: str, session: Dict
         return user
     event_id = int(ctx.get("event_id") or 0)
     game_id = ctx.get("game_id") or session.get("session_id")
-    if db.has_wallet_history_entry(event_id=event_id, user_id=int(user["id"]), reason="game_join", game_id=game_id):
-        db.add_user_game(int(user["id"]), str(game_id), role="player")
-        return {"user": user}
-    ok, balance, status = db.apply_game_wallet_delta(
+    ok, balance, status = db.apply_game_wallet_delta_once(
         event_id=event_id,
         user_id=int(user["id"]),
         delta=-pot,
         reason="game_join",
-        metadata={"game_id": str(game_id), "join_code": join_code, "currency": currency, "amount": pot},
+        game_id=str(game_id),
+        metadata={"join_code": join_code, "currency": currency, "amount": pot},
         allow_negative=False,
     )
+    if status == "duplicate":
+        db.add_user_game(int(user["id"]), str(game_id), role="player")
+        return {"user": user, "balance": balance}
     if not ok:
         return web.json_response(
             {
                 "ok": False,
-                "error": "insufficient balance",
+                "error": "insufficient balance" if status == "insufficient" else "wallet unavailable",
                 "required": pot,
                 "balance": balance,
             },
-            status=409,
+            status=409 if status == "insufficient" else 400,
         )
     db.add_user_game(int(user["id"]), str(game_id), role="player")
     return {"user": user, "balance": balance}
@@ -454,12 +482,11 @@ async def stream_events(req: web.Request):
     try:
         while True:
             await asyncio.sleep(1.0)
-            current = await _run_blocking(cg.get_session_by_id, session_id)
-            if not current:
+            alive, events = await _run_blocking(cg.poll_events, session_id, last_seq)
+            if not alive:
                 payload = {"type": "SESSION_GONE", "redirect": "/gallery"}
                 await resp.write(f"data: {json.dumps(payload)}\n\n".encode("utf-8"))
                 break
-            events = await _run_blocking(cg.list_events, session_id, last_seq)
             if events:
                 last_seq = int(events[-1].get("seq", last_seq))
                 for ev in events:
@@ -513,6 +540,7 @@ async def player_action(req: web.Request):
     wallet_enabled = bool(ctx and ctx.get("wallet_enabled"))
     wallet_currency = _normalize_currency(ctx.get("currency")) if ctx else ""
     needs_wallet = wallet_enabled and wallet_currency and wallet_currency != "gil"
+    wallet_debit: Dict[str, Any] | None = None
 
     # For wallet-enabled sessions, these actions must have a logged-in user.
     user = None
@@ -562,20 +590,13 @@ async def player_action(req: web.Request):
         if not nonce:
             return web.json_response({"ok": False, "error": "missing nonce"}, status=400)
         reason = f"craps_bet_{nonce}"
-        if db.has_wallet_history_entry(
-            event_id=int(ctx.get("event_id") or 0),
-            user_id=int(user["id"]),
-            reason=reason,
-            game_id=str(s0.get("session_id")),
-        ):
-            return web.json_response({"ok": False, "error": "duplicate bet"}, status=409)
-        ok, balance, status = db.apply_game_wallet_delta(
+        ok, balance, status = db.apply_game_wallet_delta_once(
             event_id=int(ctx.get("event_id") or 0),
             user_id=int(user["id"]),
             delta=-bet_amount,
             reason=reason,
+            game_id=str(s0.get("session_id")),
             metadata={
-                "game_id": str(s0.get("session_id")),
                 "join_code": s0.get("join_code"),
                 "currency": wallet_currency,
                 "amount": bet_amount,
@@ -584,11 +605,27 @@ async def player_action(req: web.Request):
             },
             allow_negative=False,
         )
+        if status == "duplicate":
+            return web.json_response({"ok": False, "error": "duplicate bet", "balance": balance}, status=409)
         if not ok:
             return web.json_response(
-                {"ok": False, "error": "insufficient balance", "required": bet_amount, "balance": balance},
-                status=409,
+                {
+                    "ok": False,
+                    "error": "insufficient balance" if status == "insufficient" else "wallet unavailable",
+                    "required": bet_amount,
+                    "balance": balance,
+                },
+                status=409 if status == "insufficient" else 400,
             )
+        wallet_debit = {
+            "event_id": int(ctx.get("event_id") or 0),
+            "user_id": int(user["id"]),
+            "amount": bet_amount,
+            "reason": reason,
+            "game_id": str(s0.get("session_id")),
+            "nonce": nonce,
+            "kind": "crapslite_bet_refund",
+        }
         db.add_user_game(int(user["id"]), str(s0.get("session_id")), role="player")
 
     if needs_wallet and user and game_id == "slots" and action == "spin":
@@ -603,20 +640,13 @@ async def player_action(req: web.Request):
         if not nonce:
             return web.json_response({"ok": False, "error": "missing nonce"}, status=400)
         reason = f"slots_spin_bet_{nonce}"
-        if db.has_wallet_history_entry(
-            event_id=int(ctx.get("event_id") or 0),
-            user_id=int(user["id"]),
-            reason=reason,
-            game_id=str(s0.get("session_id")),
-        ):
-            return web.json_response({"ok": False, "error": "duplicate spin"}, status=409)
-        ok, balance, status = db.apply_game_wallet_delta(
+        ok, balance, status = db.apply_game_wallet_delta_once(
             event_id=int(ctx.get("event_id") or 0),
             user_id=int(user["id"]),
             delta=-bet_amount,
             reason=reason,
+            game_id=str(s0.get("session_id")),
             metadata={
-                "game_id": str(s0.get("session_id")),
                 "join_code": s0.get("join_code"),
                 "currency": wallet_currency,
                 "amount": bet_amount,
@@ -625,18 +655,39 @@ async def player_action(req: web.Request):
             },
             allow_negative=False,
         )
+        if status == "duplicate":
+            return web.json_response({"ok": False, "error": "duplicate spin", "balance": balance}, status=409)
         if not ok:
             return web.json_response(
-                {"ok": False, "error": "insufficient balance", "required": bet_amount, "balance": balance},
-                status=409,
+                {
+                    "ok": False,
+                    "error": "insufficient balance" if status == "insufficient" else "wallet unavailable",
+                    "required": bet_amount,
+                    "balance": balance,
+                },
+                status=409 if status == "insufficient" else 400,
             )
+        wallet_debit = {
+            "event_id": int(ctx.get("event_id") or 0),
+            "user_id": int(user["id"]),
+            "amount": bet_amount,
+            "reason": reason,
+            "game_id": str(s0.get("session_id")),
+            "nonce": nonce,
+            "kind": "slots_spin_refund",
+        }
         db.add_user_game(int(user["id"]), str(s0.get("session_id")), role="player")
 
     try:
         s = await _run_blocking(cg.player_action, session_id, token, action, payload)
     except PermissionError:
+        _refund_wallet_debit(db, wallet_debit, "unauthorized_action")
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
+        # The game reducer/state-event transaction did not commit.  Put the
+        # per-action stake back using a second idempotency key so a retried
+        # error response cannot refund twice.
+        _refund_wallet_debit(db, wallet_debit, "game_action_failed")
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     # Slots: after a successful spin, pay out if needed.
     if needs_wallet and user and game_id == "slots" and action == "spin":
@@ -650,26 +701,20 @@ async def player_action(req: web.Request):
             nonce = str(payload.get("nonce") or "").strip()
         if payout > 0 and nonce:
             reason = f"slots_spin_pay_{nonce}"
-            if not db.has_wallet_history_entry(
+            db.apply_game_wallet_delta_once(
                 event_id=int(ctx.get("event_id") or 0),
                 user_id=int(user["id"]),
+                delta=payout,
                 reason=reason,
                 game_id=str(s0.get("session_id")),
-            ):
-                db.apply_game_wallet_delta(
-                    event_id=int(ctx.get("event_id") or 0),
-                    user_id=int(user["id"]),
-                    delta=payout,
-                    reason=reason,
-                    metadata={
-                        "game_id": str(s0.get("session_id")),
-                        "currency": wallet_currency,
-                        "amount": payout,
-                        "nonce": nonce,
-                        "kind": "slots_spin_payout",
-                    },
-                    allow_negative=True,
-                )
+                metadata={
+                    "currency": wallet_currency,
+                    "amount": payout,
+                    "nonce": nonce,
+                    "kind": "slots_spin_payout",
+                },
+                allow_negative=True,
+            )
     if s and str(s.get("status") or "").lower() == "finished":
         try:
             _sync_game_record(db, dict(s))
@@ -746,19 +791,14 @@ async def host_action(req: web.Request):
                         payout = 0
                     # Deduplicate by round per user.
                     reason = f"craps_roll_{round_no}"
-                    if payout > 0 and not db.has_wallet_history_entry(
-                        event_id=int(ctx.get("event_id") or 0),
-                        user_id=uid_int,
-                        reason=reason,
-                        game_id=str(session_id),
-                    ):
-                        db.apply_game_wallet_delta(
+                    if payout > 0:
+                        db.apply_game_wallet_delta_once(
                             event_id=int(ctx.get("event_id") or 0),
                             user_id=uid_int,
                             delta=payout,
                             reason=reason,
+                            game_id=str(session_id),
                             metadata={
-                                "game_id": str(session_id),
                                 "currency": wallet_currency,
                                 "amount": payout,
                                 "round": round_no,
@@ -779,13 +819,16 @@ async def finish_session(req: web.Request):
         body = {}
     token = _get_token(req, body)
     try:
-        await _run_blocking(cg.finish_session, session_id, token)
+        # Keep the returned terminal snapshot. `get_session_by_id()`
+        # intentionally hides finished sessions, so re-reading after this
+        # mutation used to return None and silently skip game-history sync and
+        # wallet payouts.
+        s = await _run_blocking(cg.finish_session, session_id, token)
     except PermissionError:
         return web.json_response({"ok": False, "error": "unauthorized"}, status=403)
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     try:
-        s = await _run_blocking(cg.get_session_by_id, session_id)
         if s:
             db = get_database()
             payload = dict(s or {})
@@ -815,19 +858,14 @@ async def finish_session(req: web.Request):
                 winnings = int(ctx.get("winnings") or 0)
                 if currency and currency != "gil" and winnings > 0:
                     user_id = db.get_primary_game_user(str(payload.get("session_id") or ""), role="player")
-                    if user_id and not db.has_wallet_history_entry(
-                        event_id=int(ctx.get("event_id") or 0),
-                        user_id=int(user_id),
-                        reason="game_win",
-                        game_id=str(payload.get("session_id") or ""),
-                    ):
-                        db.apply_game_wallet_delta(
+                    if user_id:
+                        db.apply_game_wallet_delta_once(
                             event_id=int(ctx.get("event_id") or 0),
                             user_id=int(user_id),
                             delta=winnings,
                             reason="game_win",
+                            game_id=str(payload.get("session_id") or ""),
                             metadata={
-                                "game_id": str(payload.get("session_id") or ""),
                                 "currency": currency,
                                 "amount": winnings,
                             },

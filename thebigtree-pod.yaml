@@ -70,6 +70,12 @@ spec:
           value: "treehouse"
         - name: BIGTREE__DATABASE__name
           value: "bigtree"
+        - name: BIGTREE__DATABASE__pool_min
+          value: "1"
+        - name: BIGTREE__DATABASE__pool_max
+          value: "4"
+        - name: BIGTREE_LOG_MODE
+          value: "console"
       ports:
         - containerPort: 8443
           hostPort: 8443   # change this if it conflicts on the host
@@ -93,7 +99,7 @@ spec:
           hostPort: 8080   # change this if it conflicts on the host
           protocol: TCP
     - name: postgres
-      image: postgres:15-alpine
+      image: postgres:16-alpine
       imagePullPolicy: IfNotPresent
       env:
         - name: POSTGRES_USER

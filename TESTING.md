@@ -11,7 +11,7 @@ This serves only the UI and proxies API calls to a remote server.
 run_frontend_server.bat
 ```
 
-**Opens at:** http://localhost:3000/elfministration
+**Opens at:** http://localhost:3001/elfministration
 
 Edit `dev_frontend.py` to point to your API server:
 ```python
@@ -36,7 +36,7 @@ podman run -p 8443:8443 thebigtree-web
 ## What Gets Started
 
 **Frontend Server** starts the web UI and proxies to a remote API:
-- **Admin Overlay**: http://localhost:3000/elfministration
+- **Admin Overlay**: http://localhost:3001/elfministration
 - **API Proxy**: Routes to your remote server
 
 **Full Server** starts everything locally (requires DB):
@@ -137,3 +137,29 @@ If you have VS Code's Python extension installed:
 The dev server does NOT auto-reload on file changes. After editing:
 - **HTML/CSS/JS**: Just refresh your browser (Ctrl+F5 for hard refresh)
 - **Python code**: Stop the server (Ctrl+C) and restart it
+
+
+### Fast regression checks
+
+Before building a container, run:
+
+```bash
+python -m compileall -q bigtree tests tools dev_frontend.py
+python -m unittest discover -s tests -v
+node --check bigtree/web/static/overlay/overlay.js
+```
+
+If Go dependencies are available locally, also run `go test ./...` and `go vet ./...` inside `overlay-client`. The Forest client should be built with the .NET SDK through its normal workflow.
+
+For media performance, test with at least one large uploaded image. The media grid should request `/media/thumbs/<filename>`, explicit previews should request `/media/previews/<filename>`, and opening/copying the original should still use `/media/<filename>`.
+
+For Verdant Conclave, create a session in Discord, confirm the game controls only work in the bound channel, then verify the web/Forest host panels can see readiness and public state without exposing living secret roles.
+
+
+### Container/static checks
+
+The production image is multi-stage and should be built with BuildKit/Buildx (the GitHub workflow already does this). During the image build, `tools/precompress_static.py` creates deterministic `.gz` sidecars for compressible static assets. Confirm a browser request with `Accept-Encoding: gzip` receives `Content-Encoding: gzip`, while an explicit `gzip;q=0` receives the original asset.
+
+When testing behind Traefik, confirm `/healthz` reports the expected `build.sha`. `/readyz` should return HTTP 503 until both Discord and PostgreSQL are ready, then HTTP 200. For a Traefik address outside private/loopback ranges, configure `BIGTREE__WEB__trusted_proxy_cidrs` explicitly before validating secure cookies and forwarded client IP logging.
+
+Cardgame regression tests cover split-hand Blackjack progression, duplicate Craps round protection, event polling and maintenance throttling. For a production smoke test, retry the same wallet-backed action nonce and confirm it is not charged or paid twice.

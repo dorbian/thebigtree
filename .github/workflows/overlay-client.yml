@@ -9,6 +9,10 @@ on:
     tags:
       - "overlay-client-v*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -28,6 +32,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Test
+        shell: bash
+        run: |
+          cd overlay-client
+          go test ./...
+          go vet ./...
 
       - name: Build
         shell: bash

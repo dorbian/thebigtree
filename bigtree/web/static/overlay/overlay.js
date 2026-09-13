@@ -1,4 +1,4 @@
-﻿const $ = (id) => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
       const statusEl = $("status");
       const loginStatusEl = $("loginStatus");
       const apiKeyEl = $("apiKeyLogin");
@@ -19,6 +19,44 @@
         }
         el.addEventListener(event, handler);
         return true;
+      }
+
+      function scheduleUiIdle(callback, timeout = 350){
+        if (typeof window.requestIdleCallback === "function"){
+          return window.requestIdleCallback(callback, {timeout});
+        }
+        return window.setTimeout(callback, Math.min(timeout, 120));
+      }
+
+      function configureImage(img, src, options = {}){
+        if (!img) return img;
+        img.decoding = "async";
+        img.loading = options.eager ? "eager" : "lazy";
+        if (options.eager){
+          img.fetchPriority = options.fetchPriority || "high";
+        }else{
+          img.fetchPriority = options.fetchPriority || "low";
+        }
+        if (options.alt !== undefined){
+          img.alt = options.alt || "";
+        }
+        const fallback = options.fallback || "";
+        if (fallback){
+          img.dataset.fallback = fallback;
+          img.addEventListener("error", () => {
+            if (img.dataset.fallback && img.src !== img.dataset.fallback){
+              const next = img.dataset.fallback;
+              img.dataset.fallback = "";
+              img.src = next;
+            }
+          }, {once:false});
+        }
+        if (src) img.src = src;
+        return img;
+      }
+
+      function itemPreviewUrl(item){
+        return (item && (item.thumb_url || item.thumbnail_url || item.url)) || "";
       }
       let currentCard = null;
       let currentGame = null;
@@ -45,6 +83,10 @@
       let adminVenueDeckId = null;
       let adminVenueCurrency = null;
       let adminVenueGameBackgrounds = {};
+      let conclaveSessionsCache = [];
+      let conclaveSelectedGameId = "";
+      let conclaveLoading = false;
+      let conclavePollTimer = null;
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -80,7 +122,8 @@
         {id: "admin:message", label: "Admin messages"},
         {id: "admin:announce", label: "Admin announce"},
         {id: "admin:web", label: "Admin web"},
-        {id: "hunt:admin", label: "Hunt admin"}
+        {id: "hunt:admin", label: "Hunt admin"},
+        {id: "conclave:admin", label: "Verdant Conclave host"}
       ];
       const SUIT_PRESETS = {
         forest: [
@@ -146,6 +189,8 @@
       let mediaVisibleItems = [];
       let mediaSelected = new Set();
       let mediaLastIndex = null;
+      let mediaRenderGeneration = 0;
+      let mediaSearchTimer = null;
       let deckEditHadSuits = false;
       let gallerySettingsCache = null;
       let galleryHiddenDecks = [];
@@ -1122,17 +1167,10 @@ This will block new games from being created in this event, but existing games c
             card.addEventListener("click", () => onCardClick(item));
           }
 
-          const img = document.createElement("img");
-            img.src = item.url;
-            img.alt = item.name || "image";
-            if (item.fallback_url){
-              img.dataset.fallback = item.fallback_url;
-              img.addEventListener("error", () => {
-                if (img.dataset.fallback && img.src !== img.dataset.fallback){
-                  img.src = img.dataset.fallback;
-                }
-              });
-            }
+          const img = configureImage(document.createElement("img"), itemPreviewUrl(item), {
+            alt: item.title || item.name || "image",
+            fallback: item.url || item.fallback_url || "",
+          });
 
             const titleText = document.createElement("div");
             titleText.className = "library-card-title";
@@ -1353,17 +1391,12 @@ This will block new games from being created in this event, but existing games c
           }
         const preview = $("mediaEditPreview");
         if (preview){
-          const img = document.createElement("img");
-          img.src = currentMediaEdit.url || "";
-          img.alt = currentMediaEdit.title || currentMediaEdit.name || "Preview";
-          if (currentMediaEdit.fallback_url){
-            img.dataset.fallback = currentMediaEdit.fallback_url;
-            img.addEventListener("error", () => {
-              if (img.dataset.fallback && img.src !== img.dataset.fallback){
-                img.src = img.dataset.fallback;
-              }
-            });
-          }
+          const img = configureImage(document.createElement("img"), currentMediaEdit.preview_url || currentMediaEdit.url || "", {
+            alt: currentMediaEdit.title || currentMediaEdit.name || "Preview",
+            fallback: currentMediaEdit.fallback_url || "",
+            eager: true,
+            fetchPriority: "auto",
+          });
           preview.innerHTML = "";
           preview.appendChild(img);
         }
@@ -1555,6 +1588,7 @@ This will block new games from being created in this event, but existing games c
       function renderMediaGrid(items){
         const grid = $("mediaLibraryGrid");
         if (!grid) return;
+        const generation = ++mediaRenderGeneration;
         grid.innerHTML = "";
         if (!items.length){
           grid.innerHTML = "<div class=\"muted\">No images found.</div>";
@@ -1562,7 +1596,13 @@ This will block new games from being created in this event, but existing games c
           updateMediaEditPanel();
           return;
         }
-        items.forEach((item, idx) => {
+        const batchSize = 48;
+        const appendBatch = (start) => {
+          if (generation !== mediaRenderGeneration) return;
+          const end = Math.min(start + batchSize, items.length);
+          const fragment = document.createDocumentFragment();
+          for (let idx = start; idx < end; idx += 1){
+            const item = items[idx];
           const key = mediaKey(item);
           const card = document.createElement("div");
           card.className = "preview-card library-card";
@@ -1589,17 +1629,12 @@ This will block new games from being created in this event, but existing games c
           checkmark.textContent = "OK";
           card.appendChild(checkmark);
 
-          const img = document.createElement("img");
-          img.src = item.url;
-          img.alt = item.title || item.name || "image";
-          if (item.fallback_url){
-            img.dataset.fallback = item.fallback_url;
-            img.addEventListener("error", () => {
-              if (img.dataset.fallback && img.src !== img.dataset.fallback){
-                img.src = img.dataset.fallback;
-              }
-            });
-          }
+          const img = configureImage(document.createElement("img"), itemPreviewUrl(item), {
+            alt: item.title || item.name || "image",
+            fallback: item.url || item.fallback_url || "",
+            eager: idx < 8,
+            fetchPriority: idx < 4 ? "auto" : "low",
+          });
 
           const titleText = document.createElement("div");
           titleText.className = "library-card-title";
@@ -1722,9 +1757,18 @@ This will block new games from being created in this event, but existing games c
           if (mediaSelected.has(key)){
             card.classList.add("selected");
           }
-          grid.appendChild(card);
-        });
-        updateMediaSelectionUI();
+          fragment.appendChild(card);
+          }
+          grid.appendChild(fragment);
+          updateMediaSelectionUI();
+          if (end < items.length){
+            const schedule = window.requestIdleCallback
+              ? (fn) => window.requestIdleCallback(fn, {timeout: 120})
+              : (fn) => window.setTimeout(fn, 12);
+            schedule(() => appendBatch(end));
+          }
+        };
+        appendBatch(0);
       }
 
       function toggleMediaSelection(item, index, opts){
@@ -2012,6 +2056,7 @@ This will block new games from being created in this event, but existing games c
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
         const canCardgames = hasScope("cardgames:admin") || canTarot;
+        const canConclave = hasScope("conclave:admin");
         const canAdmin = hasScope("admin:web");
         const canMedia = canBingo || canTarot || canAdmin;
         const canGallery = canTarot || canAdmin;
@@ -2021,6 +2066,7 @@ This will block new games from being created in this event, but existing games c
         const calendarBtn = $("menuCalendar");
         const tarotLinksBtn = $("menuTarotLinks");
         const cardgameBtn = $("menuCardgameSessions");
+        const conclaveBtn = $("menuConclave");
         const tarotDecksBtn = $("menuTarotDecks");
         const artistsBtn = $("menuArtists");
         const galleryBtn = $("menuGallery");
@@ -2032,6 +2078,7 @@ This will block new games from being created in this event, but existing games c
         if (calendarBtn) calendarBtn.classList.toggle("hidden", !canAdmin);
         if (tarotLinksBtn) tarotLinksBtn.classList.toggle("hidden", !canTarot);
         if (cardgameBtn) cardgameBtn.classList.toggle("hidden", !canCardgames);
+        if (conclaveBtn) conclaveBtn.classList.toggle("hidden", !canConclave);
         if (tarotDecksBtn) tarotDecksBtn.classList.toggle("hidden", !canTarot);
         if (crapsBtn) crapsBtn.classList.toggle("hidden", !canCardgames);
         if (slotsBtn) slotsBtn.classList.toggle("hidden", !canCardgames);
@@ -2051,7 +2098,8 @@ This will block new games from being created in this event, but existing games c
           (!canBingo && (saved === "bingo" || saved === "bingoSessions" || saved === "media")) ||
           (!canAdmin && (saved === "contests")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
-          (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots"));
+          (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots")) ||
+          (!canConclave && saved === "conclave");
         if (blocked){
           showPanel("dashboard");
         }
@@ -2422,15 +2470,18 @@ This will block new games from being created in this event, but existing games c
       }
 
       function renderCalendarPreview(){
-        const preview = `${emoji} | ${name}`;
+        const preview = $("calendarPreview");
+        if (!preview) return;
         preview.innerHTML = "";
         if (!calendarSelected.image){
           preview.textContent = "No image selected.";
           return;
         }
-        const img = document.createElement("img");
-        img.src = calendarSelected.image;
-        img.alt = calendarSelected.title || "calendar";
+        const img = configureImage(document.createElement("img"), calendarSelected.image, {
+          alt: calendarSelected.title || "Calendar preview",
+          eager: true,
+          fetchPriority: "auto",
+        });
         preview.appendChild(img);
       }
 
@@ -2626,7 +2677,20 @@ This will block new games from being created in this event, but existing games c
           const session = window.sessionStorage ? (window.sessionStorage.getItem("bt_api_key") || "") : "";
           apiKeyEl.value = saved || session;
         }
-        if (overlayToggle){
+        on("sidebarToggle", "click", () => {
+        const open = !document.body.classList.contains("nav-open");
+        document.body.classList.toggle("nav-open", open);
+        $("sidebarToggle")?.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      window.addEventListener("online", () => setWorkspaceConnectivity(true));
+      window.addEventListener("offline", () => setWorkspaceConnectivity(false));
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && $("conclavePanel") && !$("conclavePanel").classList.contains("hidden")){
+          loadConclaveSessions(true);
+        }
+      });
+
+      if (overlayToggle){
           overlayToggle.checked = storage.getItem("bt_overlay") === "1";
           if (overlayToggle.checked) document.body.classList.add("overlay");
         }
@@ -2679,6 +2743,13 @@ This will block new games from being created in this event, but existing games c
         storage.setItem("bt_overlay", overlayToggle.checked ? "1" : "0");
       }
 
+      function setWorkspaceConnectivity(connected){
+        const wrap = $("workspaceRuntimeLabel")?.closest(".workspace-runtime");
+        const label = $("workspaceRuntimeLabel");
+        if (label) label.textContent = connected ? "Connected" : "Connection issue";
+        if (wrap) wrap.classList.toggle("offline", !connected);
+      }
+
       function apiFetch(path, opts, withKey = true){
         const base = getBase();
         // Ensure path starts with / for absolute URL
@@ -2698,7 +2769,13 @@ This will block new games from being created in this event, but existing games c
             }
           }
         }
-        return fetch(url, options);
+        return fetch(url, options).then((response) => {
+          setWorkspaceConnectivity(true);
+          return response;
+        }).catch((error) => {
+          setWorkspaceConnectivity(false);
+          throw error;
+        });
       }
 
       async function jsonFetch(path, opts, withKey = true){
@@ -2941,6 +3018,7 @@ This will block new games from being created in this event, but existing games c
         const canBingo = hasScope("bingo:admin");
         const canTarot = hasScope("tarot:admin");
         const canCardgames = hasScope("cardgames:admin") || canTarot;
+        const canConclave = hasScope("conclave:admin");
         const canAdmin = hasScope("admin:web");
         const allowedPanels = new Set(["dashboard"]);
         if (canBingo){
@@ -2960,6 +3038,9 @@ This will block new games from being created in this event, but existing games c
           allowedPanels.add("craps");
           allowedPanels.add("slots");
         }
+        if (canConclave){
+          allowedPanels.add("conclave");
+        }
         let nextPanel = saved || (canBingo ? "bingoSessions" : "dashboard");
         if (nextPanel === "bingo" && !getGameId()){
           nextPanel = "bingoSessions";
@@ -2972,17 +3053,6 @@ This will block new games from being created in this event, but existing games c
           setSeenDashboard();
         } else {
           showPanel(nextPanel);
-        }
-        if (hasScope("bingo:admin")){
-          loadGamesMenu();
-          ensureBingoPolling();
-        }
-        if (hasScope("tarot:admin")){
-          loadTarotDeckList();
-          loadTarotSessionDecks();
-          loadTarotSessions();
-          loadTarotNumbers();
-          loadTarotArtists();
         }
       }
 
@@ -3494,6 +3564,261 @@ This will block new games from being created in this event, but existing games c
         }
       }
 
+      function conclavePhaseLabel(phase){
+        const labels = {
+          lobby: "Lobby",
+          night: "Night",
+          day: "Dawn council",
+          nomination: "Nominations",
+          trial: "Trial",
+          judgement: "Judgement",
+          ended: "Ended",
+        };
+        return labels[String(phase || "").toLowerCase()] || String(phase || "Unknown");
+      }
+
+      function setConclaveStatus(message, kind = ""){
+        setStatusText("conclaveStatus", message, kind);
+      }
+
+      function conclaveGuidance(session){
+        const phase = String(session?.phase || "lobby");
+        const guidance = {
+          lobby: "Gather players in the bound Discord channel, then start when the circle is ready.",
+          night: "Private night choices happen in Discord. Advance when readiness is complete or when the host decides the night is over.",
+          day: "Let the council discuss the public night result, then advance to nominations.",
+          nomination: "Players nominate or deliberately abstain in Discord. Advance when the council is ready.",
+          trial: "The accused has the floor. Give them time to defend themselves before advancing to judgement.",
+          judgement: "Players cast private guilty, innocent, or abstain judgements in Discord. Advance to resolve the verdict.",
+          ended: "The Conclave has ended. The final public state remains available for review.",
+        };
+        return guidance[phase] || "Use Discord for player choices and this panel for host-safe control.";
+      }
+
+      function renderConclaveSessions(){
+        const list = $("conclaveSessions");
+        if (!list) return;
+        list.innerHTML = "";
+        if (!conclaveSessionsCache.length){
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.textContent = "No Conclave sessions found.";
+          list.appendChild(empty);
+          return;
+        }
+        conclaveSessionsCache.forEach((session) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "conclave-session" + (String(session.game_id) === String(conclaveSelectedGameId) ? " active" : "");
+          button.dataset.gameId = session.game_id || "";
+          const top = document.createElement("span");
+          top.className = "conclave-session-line";
+          const title = document.createElement("strong");
+          title.textContent = session.title || "Verdant Conclave";
+          const phase = document.createElement("span");
+          phase.className = "phase-chip";
+          phase.textContent = conclavePhaseLabel(session.phase);
+          top.append(title, phase);
+          const meta = document.createElement("small");
+          const living = (session.players || []).filter((p) => p.alive).length;
+          meta.textContent = `${living}/${(session.players || []).length} living · channel ${session.channel_id || "?"}`;
+          button.append(top, meta);
+          button.addEventListener("click", () => selectConclave(session.game_id, true));
+          list.appendChild(button);
+        });
+      }
+
+      function renderConclaveDetail(session){
+        const empty = $("conclaveEmpty");
+        const selected = $("conclaveSelected");
+        if (!session){
+          empty?.classList.remove("hidden");
+          selected?.classList.add("hidden");
+          return;
+        }
+        empty?.classList.add("hidden");
+        selected?.classList.remove("hidden");
+        if ($("conclaveTitle")) $("conclaveTitle").textContent = session.title || "Verdant Conclave";
+        if ($("conclavePhase")) $("conclavePhase").textContent = conclavePhaseLabel(session.phase);
+        const cycle = session.phase === "night" ? `Night ${session.night || 0}` : (session.day ? `Day ${session.day}` : "Gathering");
+        const winner = session.winner ? ` · Winner: ${session.winner === "concord" ? "Concord" : "Thornbound"}` : "";
+        if ($("conclaveMeta")) $("conclaveMeta").textContent = `${cycle} · Discord channel ${session.channel_id || "?"}${winner}`;
+        if ($("conclaveGuidance")) $("conclaveGuidance").textContent = conclaveGuidance(session);
+        const discordLink = $("conclaveOpenDiscord");
+        if (discordLink){
+          const guildId = String(session.guild_id || "");
+          const channelId = String(session.channel_id || "");
+          const available = /^\d+$/.test(guildId) && /^\d+$/.test(channelId);
+          discordLink.classList.toggle("hidden", !available);
+          discordLink.href = available ? `https://discord.com/channels/${guildId}/${channelId}` : "#";
+        }
+
+        const readiness = session.readiness || {ready:0, required:0};
+        const ready = Number(readiness.ready || 0);
+        const required = Number(readiness.required || 0);
+        const pct = required > 0 ? Math.min(100, Math.round((ready / required) * 100)) : 0;
+        if ($("conclaveReadinessText")) $("conclaveReadinessText").textContent = required ? `${ready} / ${required} ready` : "No private input required";
+        if ($("conclaveReadinessBar")) $("conclaveReadinessBar").style.width = `${pct}%`;
+
+        const players = $("conclavePlayers");
+        if (players){
+          players.innerHTML = "";
+          (session.players || []).forEach((player) => {
+            const row = document.createElement("div");
+            row.className = "conclave-player" + (player.alive ? "" : " dead");
+            const name = document.createElement("span");
+            name.textContent = player.display_name || String(player.user_id || "Unknown");
+            const state = document.createElement("span");
+            state.className = "conclave-player-state";
+            const onTrial = String(session.on_trial || "") === String(player.user_id || "");
+            state.textContent = player.alive
+              ? (onTrial ? "On trial" : "Living")
+              : (player.role ? `Fallen · ${player.role}` : "Fallen");
+            row.classList.toggle("on-trial", onTrial && player.alive);
+            row.append(name, state);
+            players.appendChild(row);
+          });
+          if (!(session.players || []).length) players.textContent = "No players yet.";
+        }
+
+        const roles = $("conclaveRoles");
+        if (roles){
+          roles.innerHTML = "";
+          (session.role_roster || []).forEach((role) => {
+            const row = document.createElement("div");
+            row.className = "conclave-role";
+            const name = document.createElement("span");
+            name.textContent = role.name || role.role_id || "Unknown";
+            const count = document.createElement("span");
+            count.className = "conclave-role-count";
+            count.textContent = `×${role.count || 0}`;
+            row.append(name, count);
+            roles.appendChild(row);
+          });
+          if (!(session.role_roster || []).length) roles.textContent = "Role composition appears when enough players have joined.";
+        }
+
+        const events = $("conclaveEvents");
+        if (events){
+          events.innerHTML = "";
+          (session.public_events || []).slice(-8).reverse().forEach((event) => {
+            const line = document.createElement("div");
+            line.textContent = String(event || "").replace(/\*\*/g, "");
+            events.appendChild(line);
+          });
+          if (!(session.public_events || []).length) events.textContent = "No public events yet.";
+        }
+
+        const phase = String(session.phase || "");
+        const start = $("conclaveStart");
+        const advance = $("conclaveAdvance");
+        const end = $("conclaveEnd");
+        if (start) start.disabled = phase !== "lobby";
+        if (advance) advance.disabled = ["lobby", "ended"].includes(phase);
+        if (end) end.disabled = phase === "ended";
+        setConclaveStatus("Host-safe state synchronized.", "ok");
+      }
+
+      async function selectConclave(gameId, force = false){
+        if (!gameId) return;
+        conclaveSelectedGameId = String(gameId);
+        renderConclaveSessions();
+        let session = !force ? conclaveSessionsCache.find((item) => String(item.game_id) === conclaveSelectedGameId) : null;
+        try{
+          if (!session){
+            const data = await jsonFetch(`/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}`, {method:"GET"});
+            session = data.session || null;
+          }
+          renderConclaveDetail(session);
+        }catch(err){
+          setConclaveStatus(err.message || "Unable to load Conclave.", "err");
+        }
+      }
+
+      async function loadConclaveSessions(force = false){
+        if (!hasScope("conclave:admin") || conclaveLoading) return;
+        if (!force && conclaveSessionsCache.length) return;
+        conclaveLoading = true;
+        try{
+          const includeEnded = $("conclaveIncludeEnded")?.checked ? "1" : "0";
+          const data = await jsonFetch(`/admin/conclave/sessions?include_ended=${includeEnded}`, {method:"GET"});
+          conclaveSessionsCache = Array.isArray(data.sessions) ? data.sessions : [];
+          if (conclaveSelectedGameId && !conclaveSessionsCache.some((item) => String(item.game_id) === conclaveSelectedGameId)){
+            conclaveSelectedGameId = "";
+          }
+          if (!conclaveSelectedGameId && conclaveSessionsCache.length){
+            conclaveSelectedGameId = String(conclaveSessionsCache[0].game_id || "");
+          }
+          renderConclaveSessions();
+          if (conclaveSelectedGameId){
+            const current = conclaveSessionsCache.find((item) => String(item.game_id) === conclaveSelectedGameId);
+            renderConclaveDetail(current || null);
+          }else{
+            renderConclaveDetail(null);
+          }
+        }catch(err){
+          setConclaveStatus(err.message || "Unable to load Conclave sessions.", "err");
+        }finally{
+          conclaveLoading = false;
+        }
+      }
+
+      async function conclaveHostAction(action){
+        if (!conclaveSelectedGameId) return;
+        if (action === "end" && !window.confirm("End this Verdant Conclave? This reveals the final result and closes the active session.")) return;
+        const button = $(`conclave${action.charAt(0).toUpperCase()}${action.slice(1)}`);
+        if (button) button.disabled = true;
+        setConclaveStatus(`${action === "advance" ? "Advancing" : action === "start" ? "Starting" : "Ending"}…`, "");
+        try{
+          const data = await jsonFetch(`/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}/${action}`, {method:"POST"});
+          const session = data.session || null;
+          if (session){
+            const idx = conclaveSessionsCache.findIndex((item) => String(item.game_id) === conclaveSelectedGameId);
+            if (idx >= 0) conclaveSessionsCache[idx] = session;
+            renderConclaveSessions();
+            renderConclaveDetail(session);
+          }
+          await loadConclaveSessions(true);
+        }catch(err){
+          setConclaveStatus(err.message || `Unable to ${action} Conclave.`, "err");
+        }finally{
+          if (button) button.disabled = false;
+        }
+      }
+
+      function ensureConclavePolling(){
+        if (conclavePollTimer) return;
+        conclavePollTimer = window.setInterval(() => {
+          const panel = $("conclavePanel");
+          if (document.hidden || !panel || panel.classList.contains("hidden") || !hasScope("conclave:admin")) return;
+          loadConclaveSessions(true);
+        }, 10000);
+      }
+
+      const WORKSPACE_TITLES = {
+        dashboard: "Forest Dashboard",
+        bingo: "Bingo Manager",
+        bingoSessions: "Bingo Sessions",
+        tarotLinks: "Tarot Sessions",
+        cardgameSessions: "Casino Sessions",
+        tarotDecks: "Card Decks",
+        diceEditor: "Dice Sets",
+        slotsEditor: "Slot Machines",
+        contests: "Contests",
+        media: "Media Library",
+        gamesList: "Games",
+        events: "Events",
+        venues: "Venues",
+        conclave: "Verdant Conclave",
+        iframe: "Administration",
+      };
+
+      function closeMobileNavigation(){
+        document.body.classList.remove("nav-open");
+        const toggle = $("sidebarToggle");
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+      }
+
       function showPanel(which){
         if (!suppressPanelSave){
           try{
@@ -3509,6 +3834,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("menuBingo", "active", which === "bingo" || which === "bingoSessions");
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
+        toggleClass("menuConclave", "active", which === "conclave");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
         toggleClass("menuDiceEditor", "active", which === "diceEditor");
         toggleClass("menuSlotsEditor", "active", which === "slotsEditor");
@@ -3524,6 +3850,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("bingoSessionsPanel", "hidden", which !== "bingoSessions");
         toggleClass("tarotLinksPanel", "hidden", which !== "tarotLinks");
         toggleClass("cardgameSessionsPanel", "hidden", which !== "cardgameSessions");
+        toggleClass("conclavePanel", "hidden", which !== "conclave");
         toggleClass("tarotDecksPanel", "hidden", which !== "tarotDecks");
         toggleClass("diceEditorPanel", "hidden", which !== "diceEditor");
         toggleClass("slotsEditorPanel", "hidden", which !== "slotsEditor");
@@ -3535,16 +3862,32 @@ This will block new games from being created in this event, but existing games c
         toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
         toggleClass("iframePanel", "hidden", which !== "iframe");
+        const workspaceTitle = $("workspaceTitle");
+        if (workspaceTitle) workspaceTitle.textContent = WORKSPACE_TITLES[which] || "Elfministration";
+        closeMobileNavigation();
         if (which === "dashboard"){
-          renderDashboardChangelog();
           loadDashboardStats();
-          loadDashboardLogs(dashboardLogsKind);
+          scheduleUiIdle(() => renderDashboardChangelog(), 500);
+          scheduleUiIdle(() => loadDashboardLogs(dashboardLogsKind), 700);
+        } else if (which === "bingo" || which === "bingoSessions"){
+          loadGamesMenu();
+          ensureBingoPolling();
+        } else if (which === "tarotLinks"){
+          loadTarotSessionDecks();
+          loadTarotSessions();
+        } else if (which === "tarotDecks"){
+          loadTarotDeckList();
+          loadTarotNumbers();
+          loadTarotArtists();
         } else if (which === "diceEditor"){
           loadDiceSetList();
         } else if (which === "slotsEditor"){
           loadSlotMachineList();
         } else if (which === "venues"){
           loadVenuesPanel(true);
+        } else if (which === "conclave"){
+          loadConclaveSessions(true);
+          ensureConclavePolling();
         } else if (which === "media"){
           setMediaTab("upload");
           ensureMediaVenueOptions().then(() => loadMediaLibrary());
@@ -3665,13 +4008,13 @@ This will block new games from being created in this event, but existing games c
         changelogLoaded = true;
         target.textContent = "Loading changelog...";
         const sources = [
-          "https://raw.githubusercontent.com/dorbian/thebigtree/main/changelog.md",
-          "/static/changelog.md"
+          "/static/changelog.md",
+          "https://raw.githubusercontent.com/dorbian/thebigtree/main/changelog.md"
         ];
         try{
           let text = "";
           for (const url of sources){
-            const res = await fetch(url, {cache:"no-store"});
+            const res = await fetch(url, {cache: url.startsWith("/static/") ? "force-cache" : "default"});
             if (!res.ok) continue;
             text = await res.text();
             if (text) break;
@@ -3693,22 +4036,36 @@ This will block new games from being created in this event, but existing games c
         suppressPanelSave = false;
       }
 
-      function openAuthDashboard(){
-        // Get current token from apiKeyEl or storage
+      async function openAuthDashboard(){
         const token = (apiKeyEl && apiKeyEl.value && apiKeyEl.value.trim()) ||
           storage.getItem("bt_api_key") ||
           (window.sessionStorage ? window.sessionStorage.getItem("bt_api_key") || "" : "");
-        
-        if (!token) {
-          alert("No authentication token found. Please log in first.");
+        if (!token){
+          showToast("No authentication token found. Please log in first.", "err");
           return;
         }
-        // Load admin dashboard in the iframe
-        const dashboardUrl = `/admin/dashboard?token=${encodeURIComponent(token)}`;
-        loadIframe(dashboardUrl);
+        try{
+          const res = await apiFetch("/auth/session", {method:"POST"}, true);
+          if (!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Unable to establish browser session.");
+          }
+          loadIframe("/admin/dashboard");
+        }catch(err){
+          showToast(err.message || "Unable to open admin dashboard.", "err");
+        }
       }
 
       $("menuDashboard").addEventListener("click", () => showPanel("dashboard"));
+      on("menuConclave", "click", () => {
+        if (!ensureScope("conclave:admin", "Verdant Conclave host access required.")) return;
+        showPanel("conclave");
+      });
+      on("conclaveRefresh", "click", () => loadConclaveSessions(true));
+      on("conclaveIncludeEnded", "change", () => loadConclaveSessions(true));
+      on("conclaveStart", "click", () => conclaveHostAction("start"));
+      on("conclaveAdvance", "click", () => conclaveHostAction("advance"));
+      on("conclaveEnd", "click", () => conclaveHostAction("end"));
       $("menuBingo").addEventListener("click", () => {
         showPanel("bingoSessions");
         loadGamesMenu();
@@ -3823,6 +4180,7 @@ This will block new games from being created in this event, but existing games c
         });
       }
       bindMenuKey("menuDashboard");
+      bindMenuKey("menuConclave");
       bindMenuKey("menuBingo");
       bindMenuKey("menuTarotLinks");
       bindMenuKey("menuCardgameSessions");
@@ -6058,8 +6416,12 @@ function getOwnerClaimStatus(ownerName){
           if (preview){
             preview.innerHTML = '<span class="preview-label">Back</span>';
             if (item.url){
-              const img = document.createElement("img");
-              img.src = item.url;
+              const img = configureImage(document.createElement("img"), itemPreviewUrl(item), {
+                alt: item.title || item.name || "Selected image",
+                fallback: item.url || "",
+                eager: true,
+                fetchPriority: "auto",
+              });
               preview.appendChild(img);
             }
           }
@@ -7740,8 +8102,7 @@ function getOwnerClaimStatus(ownerName){
         front.innerHTML = '<span class="preview-label">Front</span>';
         back.innerHTML = '<span class="preview-label">Back</span>';
         if (card && card.image){
-          const img = document.createElement("img");
-          img.src = card.image;
+          const img = configureImage(document.createElement("img"), card.image, {alt: card.name || "Card preview", eager:true, fetchPriority:"auto"});
           front.appendChild(img);
         }
         if (card && card.number !== undefined && card.number !== null){
@@ -7770,8 +8131,7 @@ function getOwnerClaimStatus(ownerName){
           front.appendChild(meaning);
         }
         if (backUrl){
-          const img = document.createElement("img");
-          img.src = backUrl;
+          const img = configureImage(document.createElement("img"), backUrl, {alt:"Deck back", eager:true, fetchPriority:"auto"});
           back.appendChild(img);
         }
       }
@@ -7994,7 +8354,13 @@ function getOwnerClaimStatus(ownerName){
       $("mediaTabEditBtn").addEventListener("click", () => setMediaTab("edit"));
       const mediaToolbarSearch = $("mediaToolbarSearch");
       if (mediaToolbarSearch){
-        mediaToolbarSearch.addEventListener("input", () => applyMediaFilters());
+        mediaToolbarSearch.addEventListener("input", () => {
+          if (mediaSearchTimer) window.clearTimeout(mediaSearchTimer);
+          mediaSearchTimer = window.setTimeout(() => {
+            mediaSearchTimer = null;
+            applyMediaFilters();
+          }, 120);
+        });
       }
       const mediaFilterArtist = $("mediaFilterArtist");
       if (mediaFilterArtist){
@@ -8590,8 +8956,7 @@ function getOwnerClaimStatus(ownerName){
           if (preview){
             preview.innerHTML = '<span class="preview-label">Back</span>';
             if (backUrl){
-              const img = document.createElement("img");
-              img.src = backUrl;
+              const img = configureImage(document.createElement("img"), backUrl, {alt:"Deck back", eager:true, fetchPriority:"auto"});
               preview.appendChild(img);
             }
           }
@@ -8623,8 +8988,12 @@ function getOwnerClaimStatus(ownerName){
           if (preview){
             preview.innerHTML = '<span class="preview-label">Back</span>';
             if (item.url){
-              const img = document.createElement("img");
-              img.src = item.url;
+              const img = configureImage(document.createElement("img"), itemPreviewUrl(item), {
+                alt: item.title || item.name || "Selected image",
+                fallback: item.url || "",
+                eager: true,
+                fetchPriority: "auto",
+              });
               preview.appendChild(img);
             }
           }
@@ -9452,6 +9821,23 @@ function getOwnerClaimStatus(ownerName){
           setSlotsStatus("Symbol saved.", "ok");
         }catch(err){
           setSlotsStatus(err.message, "err");
+        }
+      });
+
+      on("updatePlogonmasterBtn", "click", async () => {
+        const btn = $("updatePlogonmasterBtn");
+        if (!btn || btn.disabled) return;
+        const previous = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Updating…";
+        try{
+          const data = await jsonFetch("/admin/update_with_leaf", {method:"POST"}, true);
+          showToast(data && data.ok ? "with.leaf updated successfully." : `Update failed: ${(data && data.error) || "Unknown error"}`, data && data.ok ? "ok" : "err");
+        }catch(err){
+          showToast(`Update failed: ${err && err.message ? err.message : err}`, "err");
+        }finally{
+          btn.disabled = false;
+          btn.textContent = previous || "Update Plugin Master";
         }
       });
 

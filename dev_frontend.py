@@ -39,7 +39,7 @@ async def serve_html(request):
     html_content = html_file.read_text(encoding='utf-8')
     
     # Replace template variable for admin background (serve locally from static)
-    admin_background = "/static/images/admin_background.png?v=20260125a"
+    admin_background = "/static/images/admin_background.webp?v=20260911a"
     html_content = html_content.replace("{ADMIN_BACKGROUND}", admin_background)
     
     # Inject API base URL pointing to LOCAL PROXY (not remote server)

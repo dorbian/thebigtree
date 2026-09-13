@@ -3,246 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b1611">
     <title>Elfministration</title>
     <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260125a">
+    <link rel="preload" as="image" href="{ADMIN_BACKGROUND}" fetchpriority="high">
+    <link rel="stylesheet" href="/static/overlay/overlay.css?v=20260911d">
     <style>
       :root{
         --admin-login-bg-url: url("{ADMIN_BACKGROUND}");
-        --admin-shell-bg-url: url("/static/images/adminlogin.png");
+        --admin-shell-bg-url: url("/static/images/adminlogin.webp?v=20260911a");
       }
-      .dashboard-kpis-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-      html, body {
-        height: 100%;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-      }
-      .login-screen{
-        min-height: 100vh;
-        min-width: 100vw;
-        height: 100vh;
-        width: 100vw;
-        background:
-          var(--admin-login-bg-url),
-          var(--admin-bg-overlay);
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-      }
-      .dashboard-kpis {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-      .dashboard-kpis .stat-card {
-        flex: 1;
-        min-width: 160px;
-        padding: 14px 16px;
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 12px;
-        background: rgba(6, 10, 18, .6);
-      }
-      .dashboard-kpis .stat-value {
-        font-size: 2rem;
-        font-weight: 600;
-        line-height: 1.2;
-      }
-      .dashboard-kpis .stat-label {
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        margin-top: 6px;
-        color: rgba(231, 242, 234, .7);
-      }
-      .dashboard-admin-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .dashboard-admin-actions button,
-      .dashboard-admin-actions a {
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        border-radius: 12px;
-        padding: 10px 14px;
-        font-size: 0.9rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        text-decoration: none;
-      }
-      .dashboard-admin-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-bottom: 16px;
-      }
-      .dashboard-admin-card {
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 14px;
-        padding: 14px 14px 16px;
-        background: rgba(6, 10, 18, .6);
-      }
-      .dashboard-admin-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      .dashboard-admin-header svg {
-        width: 22px;
-        height: 22px;
-        fill: currentColor;
-        opacity: .8;
-      }
-      .dashboard-admin-title {
-        font-weight: 600;
-        letter-spacing: .02em;
-      }
-      .dashboard-admin-note {
-        margin: 6px 0 0;
-        color: rgba(231, 242, 234, .7);
-        font-size: 0.85rem;
-      }
-      .dashboard-logs {
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 14px;
-        padding: 14px;
-        margin-bottom: 16px;
-        background: rgba(6, 10, 18, .6);
-      }
-      .dashboard-logs-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .dashboard-logs-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .dashboard-logs-tabs{
-        display:flex;
-        flex-wrap:wrap;
-        gap:8px;
-        align-items:center;
-      }
-      .dashboard-logs-tab{
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        border-radius: 10px;
-        padding: 6px 10px;
-        font-size: 0.8rem;
-        cursor: pointer;
-      }
-      .dashboard-logs-tab.active {
-        border-color: rgba(107, 212, 162, .7);
-        color: #6bd4a2;
-      }
-      .dashboard-logs-refresh{
-        width:34px;
-        height:34px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, .15);
-        background: rgba(255, 255, 255, .03);
-        color: #e7f2ea;
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        cursor:pointer;
-      }
-      .dashboard-logs-refresh svg{width:18px;height:18px;fill:currentColor;opacity:.9;}
-      .dashboard-logs-body {
-        margin-top: 10px;
-        padding: 12px;
-        border-radius: 12px;
-        background: rgba(7, 12, 10, .5);
-        max-height: 240px;
-        overflow: auto;
-        font-family: "JetBrains Mono", "Consolas", monospace;
-        font-size: 0.78rem;
-        white-space: pre-wrap;
-        line-height: 1.4;
-        color: rgba(231, 242, 234, .9);
-      }
-
-      .games-list-toolbar{
-        display:flex;
-        flex-wrap:wrap;
-        gap:10px;
-        align-items:flex-end;
-        margin: 10px 0 12px;
-      }
-      .games-list-toolbar label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:rgba(231,242,234,.75);}
-      .games-list-toolbar input,.games-list-toolbar select{
-        min-width: 180px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.15);
-        background: rgba(255,255,255,.03);
-        color:#e7f2ea;
-      }
-      .games-list-table{
-        width:100%;
-        border-collapse: collapse;
-        font-size: 0.86rem;
-      }
-      .games-list-table th,.games-list-table td{
-        padding: 8px 10px;
-        border-bottom: 1px solid rgba(255,255,255,.08);
-        vertical-align: top;
-      }
-      .games-list-table th{color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;}
-      .games-list-footer{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px;}
-      .games-list-pager{display:flex;gap:8px;align-items:center;}
-      .games-list-pager button{border: 1px solid rgba(255,255,255,.15);background: rgba(255,255,255,.03);color:#e7f2ea;border-radius:10px;padding:6px 10px;cursor:pointer;}
-      .games-list-muted{color:rgba(231,242,234,.7);font-size:0.86rem;}
-      .dashboard-admin-actions button svg {
-        width: 20px;
-        height: 20px;
-        fill: currentColor;
-      }
-      .dashboard-admin-actions button span {
-        white-space: nowrap;
-      }
-      .dashboard-stats-refresh {
-        margin-left: auto;
-        border: none;
-        background: none;
-        color: #6bd4a2;
-        font-size: 0.85rem;
-        cursor: pointer;
-        align-self: flex-start;
-      }
-
-      .section-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
-
-      /* Bingo owners list: compact + scrollable */
-      #bOwners{max-height:360px;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(0,0,0,.12);}
-      .owners-table{width:100%;border-collapse:collapse;font-size:0.88rem;}
-      .owners-table th,.owners-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:middle;}
-      .owners-table th{position:sticky;top:0;background:rgba(9,14,12,.95);backdrop-filter: blur(6px);color:rgba(231,242,234,.65);font-size:0.72rem;text-transform:uppercase;letter-spacing:.08em;z-index:2;}
-      .owner-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
-      .owner-actions .icon-action{padding:6px;border-radius:10px;}
-      .owner-actions .icon-svg{width:16px;height:16px;}
-      .owner-actions .mini-btn{padding:6px 10px;border-radius:10px;font-size:0.82rem;}
-      .symbol-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;max-height:240px;overflow-y:auto;}
-      .symbol-picker-item{width:48px;height:48px;border:2px solid rgba(255,255,255,.15);border-radius:6px;background-size:cover;background-position:center;cursor:pointer;transition:all .15s ease;}
-      .symbol-picker-item:hover{border-color:rgba(255,255,255,.5);transform:scale(1.05);}
-      .symbol-picker-item.selected{border-color:#4a9eff;box-shadow:0 0 8px rgba(74,158,255,.6);}
     </style>
   </head>
   <body>
@@ -262,7 +32,7 @@
           <div class="nav-block">
             <div class="brand">Elfministration</div>
             <div class="brand-user hidden" id="brandUser">
-              <img id="brandUserIcon" alt="" class="hidden">
+              <img id="brandUserIcon" alt="" class="hidden" decoding="async">
               <svg viewBox="0 0 24 24" aria-hidden="true" id="brandUserFallback">
                 <path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4zm0 10c3.31 0 6 1.34 6 3v3H6v-3c0-1.66 2.69-3 6-3z"/>
               </svg>
@@ -300,6 +70,10 @@
             <div class="hidden" id="menuCreateGamePlaceholder"></div>
             <div class="menu-item" id="menuTarotLinks" tabindex="0"><span class="menu-label">Tarot Sessions</span></div>
             <div class="menu-item" id="menuCardgameSessions" tabindex="0"><span class="menu-label">Casino Sessions</span></div>
+            <div class="menu-item" id="menuConclave" tabindex="0">
+              <span class="menu-label">Verdant Conclave</span>
+              <span class="nav-badge">Discord</span>
+            </div>
           </div>
 
           <div class="nav-block">
@@ -330,6 +104,19 @@
         <input type="checkbox" id="overlayMode" class="hidden">
       </aside>
       <main class="content">
+      <header class="workspace-bar">
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+        </button>
+        <div class="workspace-heading">
+          <span class="workspace-kicker">Elfministration</span>
+          <strong id="workspaceTitle">Forest Dashboard</strong>
+        </div>
+        <div class="workspace-runtime" title="BigTree web console">
+          <span class="runtime-dot" aria-hidden="true"></span>
+          <span id="workspaceRuntimeLabel">Connected</span>
+        </div>
+      </header>
       <div class="grid">
         <section class="panel dashboard hidden" style="animation-delay:.02s" id="dashboardPanel">
           <h2>Forest Dashboard</h2>
@@ -596,6 +383,70 @@
               </button>
             </div>
             <div class="bingo-sessions-list" id="bGames">Loading sessions...</div>
+          </div>
+        </section>
+
+        <section class="panel hidden conclave-panel" style="animation-delay:.048s" id="conclavePanel">
+          <div class="section-header-row">
+            <div>
+              <h2>Verdant Conclave</h2>
+              <p class="muted">Discord-bound social deduction. Secret roles and private actions stay in Discord; this console exposes host-safe state only.</p>
+            </div>
+            <button class="btn-ghost icon-btn icon-btn--small" id="conclaveRefresh" type="button" title="Refresh sessions" aria-label="Refresh sessions">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/></svg>
+            </button>
+          </div>
+          <div class="conclave-layout">
+            <aside class="conclave-session-list" aria-label="Conclave sessions">
+              <div class="conclave-list-head">
+                <strong>Sessions</strong>
+                <label class="compact-check"><input id="conclaveIncludeEnded" type="checkbox"> Ended</label>
+              </div>
+              <div id="conclaveSessions" class="conclave-sessions"><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
+              <p class="muted conclave-create-note">Create a game with <code>/conclave-create</code> in Discord so BigTree can bind it to its dedicated channel.</p>
+            </aside>
+            <div class="conclave-detail" id="conclaveDetail">
+              <div class="conclave-empty" id="conclaveEmpty">
+                <span class="conclave-glyph" aria-hidden="true">✦</span>
+                <strong>Select a Conclave</strong>
+                <span class="muted">Public state, readiness, players and host controls will appear here.</span>
+              </div>
+              <div class="hidden" id="conclaveSelected">
+                <div class="conclave-hero">
+                  <div>
+                    <span class="phase-chip" id="conclavePhase">Lobby</span>
+                    <h3 id="conclaveTitle">Verdant Conclave</h3>
+                    <p class="muted" id="conclaveMeta">Waiting for players.</p>
+                    <p class="conclave-guidance" id="conclaveGuidance">Gather players in the bound Discord channel, then start when the circle is ready.</p>
+                  </div>
+                  <div class="conclave-readiness" aria-label="Phase readiness">
+                    <span id="conclaveReadinessText">0 / 0 ready</span>
+                    <div class="conclave-progress"><span id="conclaveReadinessBar"></span></div>
+                  </div>
+                </div>
+                <div class="conclave-controls">
+                  <button id="conclaveStart" type="button">Start</button>
+                  <button id="conclaveAdvance" class="btn-ghost" type="button">Advance phase</button>
+                  <button id="conclaveEnd" class="btn-ghost danger-btn" type="button">End</button>
+                  <a id="conclaveOpenDiscord" class="btn-ghost hidden" href="#" target="_blank" rel="noopener">Open Discord channel</a>
+                </div>
+                <div class="conclave-grid">
+                  <section class="conclave-card">
+                    <h4>Players</h4>
+                    <div id="conclavePlayers" class="conclave-player-list"></div>
+                  </section>
+                  <section class="conclave-card">
+                    <h4>Role composition</h4>
+                    <div id="conclaveRoles" class="conclave-role-list"></div>
+                  </section>
+                </div>
+                <section class="conclave-card conclave-events">
+                  <h4>Latest public events</h4>
+                  <div id="conclaveEvents" class="conclave-event-list"></div>
+                </section>
+                <div class="status" id="conclaveStatus">Ready.</div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -2017,7 +1868,7 @@
 
             <div id="eventBackgroundPreview" style="grid-column:1 / -1; display:flex; gap:12px; align-items:center; margin-top:6px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(0,0,0,.12);">
               <div style="width:140px; height:90px; border-radius:10px; overflow:hidden; background:rgba(0,0,0,.2); display:flex; align-items:center; justify-content:center;">
-                <img id="eventBackgroundPreviewImg" src="" alt="Background preview" style="width:100%; height:100%; object-fit:cover; display:none;" />
+                <img id="eventBackgroundPreviewImg" src="" alt="Background preview" decoding="async" style="width:100%; height:100%; object-fit:cover; display:none;" />
                 <div id="eventBackgroundPreviewEmpty" class="muted" style="font-size:12px;">No image selected</div>
               </div>
               <div class="status" id="eventBackgroundStatus" style="margin:0;">No background selected.</div>
@@ -2377,7 +2228,7 @@
           <div>
             <label>&nbsp;</label>
             <div class="background-preview" id="sessionCreateBackgroundPreview" style="display:none;">
-              <img id="sessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+              <img id="sessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" decoding="async" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
             </div>
           </div>
         </div>
@@ -2436,7 +2287,7 @@
           <div>
             <label>&nbsp;</label>
             <div class="background-preview" id="casinoSessionCreateBackgroundPreview" style="display:none;">
-              <img id="casinoSessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
+              <img id="casinoSessionCreateBackgroundPreviewImg" src="" alt="" aria-hidden="true" decoding="async" style="max-width: 120px; max-height: 80px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); object-fit: cover; display: block;">
             </div>
           </div>
         </div>
@@ -2933,45 +2784,7 @@
     <div class="scope-preview-overlay hidden" id="scopePreviewOverlay">
       <button class="btn-ghost" id="scopePreviewExit">Return to real scope</button>
     </div>
-    <script src="/static/overlay/overlay.js?v=20260120b" defer></script>
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      const btn = document.getElementById("updatePlogonmasterBtn");
-      if (btn) {
-        btn.addEventListener("click", async function() {
-          btn.disabled = true;
-          btn.textContent = "Updating...";
-          try {
-            const resp = await fetch("/admin/update_with_leaf", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              }
-            });
-            const data = await resp.json();
-            if (data.ok) {
-              showToast("with.leaf updated successfully.");
-            } else {
-              showToast("Update failed: " + (data.error || "Unknown error"));
-            }
-          } catch (err) {
-            showToast("Update failed: " + err);
-          }
-          btn.disabled = false;
-          btn.textContent = "Update Plugin Master";
-        });
-      }
-      function showToast(msg) {
-        const stack = document.getElementById("toastStack");
-        if (!stack) return;
-        const toast = document.createElement("div");
-        toast.className = "toast";
-        toast.textContent = msg;
-        stack.appendChild(toast);
-        setTimeout(() => { toast.remove(); }, 3500);
-      }
-    });
-    </script>
+    <script src="/static/overlay/overlay.js?v=20260911d" defer></script>
 
 
   </body>

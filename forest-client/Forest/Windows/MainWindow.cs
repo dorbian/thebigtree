@@ -41,7 +41,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly Plugin Plugin;
 
     // ---------- View switch ----------
-    private enum View { Home, Hunt, MurderMystery, Bingo, Raffle, SpinWheel, Glam, Cardgames, Events }
+    private enum View { Home, Hunt, MurderMystery, Conclave, Bingo, Raffle, SpinWheel, Glam, Cardgames, Events }
     private enum TopView { Sessions, Games, Players }
     private enum SessionCategory { All, Party, Casino, Draw }
     private enum SessionStatusFilter { All, Live, Waiting, Finished }
@@ -2681,6 +2681,7 @@ private bool DrawBingoHeaderBlock(GameInfo game, BingoUiState uiState)
             if (CanLoadCardgames()) _ = Cardgames_LoadSessions();
             if (CanLoadBingo()) _ = Bingo_LoadGames();
             if (CanLoadHunt()) _ = Hunt_LoadList();
+            if (CanLoadConclave()) _ = Conclave_LoadSessions();
         }
         finally
         {
@@ -3359,6 +3360,29 @@ private void DrawPermissionsStatusFooter()
             });
         }
 
+        foreach (var conclave in _conclaveSessions)
+        {
+            if (!hasApiKey)
+                continue;
+            if (filterByEvent)
+                continue;
+            var id = conclave.game_id ?? "";
+            var phase = (conclave.phase ?? "").ToLowerInvariant();
+            var status = phase == "lobby" ? "Waiting" : phase == "ended" ? "Finished" : "Live";
+            list.Add(new SessionEntry
+            {
+                Id = $"conclave-{id}",
+                Name = string.IsNullOrWhiteSpace(conclave.title) ? "Verdant Conclave" : conclave.title,
+                Status = status,
+                Category = SessionCategory.Party,
+                Managed = true,
+                TargetView = View.Conclave,
+                GameId = id,
+                TypeIcon = TypeIcon(SessionCategory.Party),
+                CanClose = phase != "ended"
+            });
+        }
+
         if (_huntState?.hunt is not null)
         {
             if (!hasApiKey)
@@ -3506,6 +3530,13 @@ private void DrawPermissionsStatusFooter()
             _huntId = entry.GameId;
             _ = Hunt_LoadState();
         }
+        else if (entry.TargetView == View.Conclave && !string.IsNullOrWhiteSpace(entry.GameId))
+        {
+            _conclaveSelected = _conclaveSessions.FirstOrDefault(x =>
+                string.Equals(x.game_id, entry.GameId, StringComparison.OrdinalIgnoreCase));
+            if (_conclaveSelected is null)
+                _ = Conclave_LoadSessions();
+        }
         else if (entry.TargetView == View.Events)
         {
             if (_currentVenue == null)
@@ -3535,6 +3566,15 @@ private void DrawPermissionsStatusFooter()
             case View.Hunt:
                 if (!string.IsNullOrWhiteSpace(entry.GameId))
                     await Hunt_EndGame(entry.GameId);
+                break;
+            case View.Conclave:
+                if (!string.IsNullOrWhiteSpace(entry.GameId))
+                {
+                    _conclaveSelected = _conclaveSessions.FirstOrDefault(x =>
+                        string.Equals(x.game_id, entry.GameId, StringComparison.OrdinalIgnoreCase));
+                    if (_conclaveSelected is not null)
+                        await Conclave_Action("end");
+                }
                 break;
         }
         RequestSessionsRefresh(true);
@@ -3614,6 +3654,7 @@ private void DrawPermissionsStatusFooter()
     private bool CanLoadCardgames() => HasAnyScope("cardgames:admin", "tarot:admin");
     private bool CanLoadBingo() => HasScope("bingo:admin");
     private bool CanLoadHunt() => HasScope("hunt:admin");
+    private bool CanLoadConclave() => HasScope("conclave:admin");
 
     private ForestConfig.GameDefaults GetCharacterDefaults()
     {
@@ -3670,6 +3711,7 @@ private void DrawPermissionsStatusFooter()
         return title switch
         {
             "Scavenger Hunt" => CanLoadHunt(),
+            "Verdant Conclave" => CanLoadConclave(),
             "Bingo" => CanLoadBingo(),
             "Blackjack" => CanLoadCardgames(),
             "Poker" => CanLoadCardgames(),
@@ -3965,6 +4007,7 @@ private void DrawPermissionsStatusFooter()
             case View.Bingo: ImGui.PushStyleColor(ImGuiCol.ChildBg, ImGui.ColorConvertFloat4ToU32(CategoryColor(SessionCategory.Party))); DrawBingoAdminPanel(); ImGui.PopStyleColor(); break;
             case View.Hunt: DrawHuntPanel(); break;
             case View.MurderMystery: DrawMurderMysteryPanel(); break;
+            case View.Conclave: DrawConclavePanel(); break;
             case View.Raffle: DrawRafflePanel(); break;
             case View.SpinWheel: DrawSpinWheelPanel(); break;
             case View.Glam: DrawGlamRoulettePanel(); break;
@@ -4007,6 +4050,7 @@ private void DrawPermissionsStatusFooter()
             {
                 new GameCard("Scavenger Hunt", SessionCategory.Party, true, true, false, "Managed staff-led hunt with shared locations."),
                 new GameCard("Murder Mystery", SessionCategory.Party, false, false, false, "Local story and text management."),
+                new GameCard("Verdant Conclave", SessionCategory.Party, true, false, false, "Discord-channel-locked social deduction with persistent guided panels."),
                 new GameCard("Glam Competition", SessionCategory.Party, false, false, true, "Local voting with themed prompts and online lists."),
                 new GameCard("Bingo", SessionCategory.Party, true, false, false, "Managed bingo with live calls.")
             });
@@ -4325,6 +4369,9 @@ private void DrawPermissionsStatusFooter()
                         break;
                     case "Murder Mystery":
                         break;
+                    case "Verdant Conclave":
+                        _ = Conclave_LoadSessions();
+                        break;
                     case "Glam Competition":
                         break;
                 case "Blackjack":
@@ -4512,6 +4559,7 @@ private void DrawPermissionsStatusFooter()
         {
             "Scavenger Hunt" => View.Hunt,
             "Murder Mystery" => View.MurderMystery,
+            "Verdant Conclave" => View.Conclave,
             "Glam Competition" => View.Glam,
             "Blackjack" => View.Cardgames,
             "Poker" => View.Cardgames,
