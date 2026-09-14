@@ -15,8 +15,15 @@ def strings_without_docstrings(path: Path):
     tree = ast.parse(path.read_text("utf-8"))
     docstrings = set()
     for node in ast.walk(tree):
-        body = getattr(node, "body", None)
-        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
             docstrings.add(id(body[0].value))
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
