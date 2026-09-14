@@ -3,7 +3,7 @@
 The control panel is hard-bound to the session's Discord lobby channel. Actual
 player conversation lives in private managed threads: living players cannot be
 heard by outsiders, and fallen players move to a separate Lost Forest. Secret
-roles and actions remain ephemeral/private.
+roles and actions stay hidden from the other players.
 """
 from __future__ import annotations
 
