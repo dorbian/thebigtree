@@ -949,7 +949,7 @@ def _resolve_judgement(state: Dict[str, Any]) -> List[str]:
 def advance_phase(state: Dict[str, Any]) -> Dict[str, Any]:
     phase = state.get("phase")
     if phase == PHASE_LOBBY:
-        raise GameError("Use Start while the game is in its lobby.", "wrong_phase")
+        raise GameError("The Conclave must begin before it can continue.", "wrong_phase")
     if phase == PHASE_ENDED:
         raise GameError("This Conclave has ended.", "ended")
 
