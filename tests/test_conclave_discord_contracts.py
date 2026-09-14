@@ -80,13 +80,15 @@ class ConclaveDiscordContractTests(unittest.TestCase):
         self.assertIn('if mode == "sealed"', source)
         self.assertIn('await message.delete()', source)
         self.assertIn('await intro.pin(', source)
-        self.assertIn('To speak here, return to the Conclave altar and use **Speak**.', source)
+        self.assertIn('**Speak** on the Conclave altar carries your voice into this circle.', source)
 
-    def test_forced_dm_delivery_sends_identity_and_role_without_being_required(self):
+    def test_dm_delivery_respects_per_player_choice_and_server_policy(self):
         source = CMD.read_text("utf-8")
         self.assertIn('maybe_send_identity_dm', source)
         self.assertIn('deliver_role_dms', source)
-        self.assertIn('!= "on"', source)
+        self.assertIn('engine.wants_dm_delivery', source)
+        self.assertIn('class _WhisperPreferenceView', source)
+        self.assertIn('custom_id="conclave:whispers"', source)
         self.assertIn('except (discord.Forbidden, discord.HTTPException)', source)
 
     def test_player_copy_avoids_development_language(self):

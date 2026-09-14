@@ -18,6 +18,7 @@ VERSION = 1
 MIN_PLAYERS = 5
 MAX_PLAYERS = 15
 TEST_PLAYER_ID_BASE = -900000
+FOREST_NAME_REROLL_LIMIT = 3
 TEST_PLAYER_NAMES = (
     "Fern", "Moss", "Willow", "Bramble", "Clover", "Juniper", "Rowan",
     "Hazel", "Thistle", "Laurel", "Sorrel", "Ivy", "Alder", "Reed", "Sage",
@@ -189,6 +190,9 @@ def add_player(state: Dict[str, Any], user_id: int, display_name: str) -> Dict[s
         "user_id": int(user_id),
         "display_name": (display_name or f"Elf {user_id}")[:80],
         "forest_name": None,
+        "forest_name_rerolls": 0,
+        "forest_name_spoken": False,
+        "dm_delivery": None,
         "alive": True,
         "role": None,
         "faction": None,
@@ -208,10 +212,13 @@ def set_forest_name(state: Dict[str, Any], user_id: int, forest_name: str) -> Di
     if player_obj is None:
         raise GameError("Join the Conclave before choosing a Forest name.", "not_joined")
     name = " ".join(str(forest_name or "").strip().split())
+    existing = str(player_obj.get("forest_name") or "").strip()
+    if player_obj.get("forest_name_spoken") and existing and existing.casefold() != name.casefold():
+        raise GameError("That Forest name has already been heard in the circle.", "forest_name_locked")
     if len(name) < 2 or len(name) > 32 or not any(ch.isalpha() for ch in name):
         raise GameError("Forest names must be between 2 and 32 characters.", "bad_forest_name")
     if any(ch in name for ch in "@#`<>\\"):
-        raise GameError("That Forest name contains characters the Conclave cannot safely use.", "bad_forest_name")
+        raise GameError("That Forest name contains characters the Conclave does not accept.", "bad_forest_name")
     folded = name.casefold()
     reserved = set(FOREST_RESERVED_NAMES)
     reserved.update(
@@ -224,7 +231,7 @@ def set_forest_name(state: Dict[str, Any], user_id: int, forest_name: str) -> Di
         if int(other.get("user_id") or 0) == int(user_id):
             continue
         if str(other.get("forest_name") or "").strip().casefold() == folded:
-            raise GameError("That Forest name is already in use in this Conclave.", "forest_name_taken")
+            raise GameError("That Forest name already belongs to another elf in this Conclave.", "forest_name_taken")
     player_obj["forest_name"] = name
     state["updated_at"] = _now()
     return state
@@ -235,7 +242,7 @@ def generate_forest_name(
     *,
     rng: Optional[random.Random] = None,
 ) -> str:
-    """Choose a short, memorable game-local name that is not already in use."""
+    """Choose a short, memorable game-local name that is not already assigned."""
     used = {
         str(p.get("forest_name") or "").strip().casefold()
         for p in _players(state).values()
@@ -259,12 +266,66 @@ def ensure_forest_name(
         raise GameError("Join the Conclave before receiving a Forest name.", "not_joined")
     if player_obj.get("synthetic") or str(player_obj.get("forest_name") or "").strip():
         return state
-    # Recovery may need to backfill a legacy player after the lobby has ended.
-    # Generated names are trusted input, so do not route this through the
-    # lobby-only custom rename guard in set_forest_name().
     player_obj["forest_name"] = generate_forest_name(state, rng=rng)
     state["updated_at"] = _now()
     return state
+
+
+def reroll_forest_name(
+    state: Dict[str, Any],
+    user_id: int,
+    *,
+    rng: Optional[random.Random] = None,
+) -> Dict[str, Any]:
+    if state.get("phase") != PHASE_LOBBY:
+        raise GameError("Forest names settle when the Conclave begins.", "started")
+    identity = state.get("identity") or {}
+    if not bool(identity.get("aliases_enabled", False)):
+        raise GameError("This Conclave knows you by your usual name.", "aliases_disabled")
+    if str(identity.get("choice") or "both") not in {"generated", "both"}:
+        raise GameError("This Conclave asks each elf to choose their own Forest name.", "custom_name_only")
+    player_obj = player(state, user_id)
+    if player_obj is None:
+        raise GameError("Join the Conclave before receiving another Forest name.", "not_joined")
+    if player_obj.get("forest_name_spoken"):
+        raise GameError("Your Forest name has already been heard in the circle.", "forest_name_locked")
+    count = int(player_obj.get("forest_name_rerolls") or 0)
+    if count >= FOREST_NAME_REROLL_LIMIT:
+        raise GameError("The Forest has offered all of your names for this gathering.", "forest_name_rerolls_exhausted")
+    player_obj["forest_name"] = generate_forest_name(state, rng=rng)
+    player_obj["forest_name_rerolls"] = count + 1
+    state["updated_at"] = _now()
+    return state
+
+
+def mark_forest_name_spoken(state: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    player_obj = player(state, user_id)
+    if player_obj is not None and not player_obj.get("synthetic"):
+        player_obj["forest_name_spoken"] = True
+        state["updated_at"] = _now()
+    return state
+
+
+def set_dm_preference(state: Dict[str, Any], user_id: int, enabled: bool) -> Dict[str, Any]:
+    player_obj = player(state, user_id)
+    if player_obj is None:
+        raise GameError("You are not part of this Conclave.", "not_player")
+    policy = str((state.get("server_policy") or {}).get("dm_delivery") or "optional")
+    if policy != "optional":
+        raise GameError("Private-message delivery is fixed for this Conclave.", "dm_delivery_fixed")
+    player_obj["dm_delivery"] = bool(enabled)
+    state["updated_at"] = _now()
+    return state
+
+
+def wants_dm_delivery(state: Dict[str, Any], user_id: int) -> bool:
+    policy = str((state.get("server_policy") or {}).get("dm_delivery") or "optional")
+    if policy == "on":
+        return True
+    if policy == "off":
+        return False
+    player_obj = player(state, user_id)
+    return bool(player_obj and player_obj.get("dm_delivery") is True)
 
 
 def public_player_name(player_obj: Optional[Dict[str, Any]]) -> str:
@@ -524,12 +585,19 @@ def start_game(state: Dict[str, Any], *, rng: Optional[random.Random] = None) ->
     players = list(_players(state).values())
     if len(players) < int((state.get("rules") or {}).get("min_players") or MIN_PLAYERS):
         raise GameError(f"At least {MIN_PLAYERS} players are required.", "too_few_players")
-    if bool((state.get("identity") or {}).get("aliases_enabled", False)):
-        # Never begin an aliased match with a Discord identity as the fallback.
-        # Players who did not choose a name receive a short generated one.
-        for p in players:
-            if not p.get("synthetic") and not str(p.get("forest_name") or "").strip():
-                ensure_forest_name(state, int(p["user_id"]))
+    identity = state.get("identity") or {}
+    if bool(identity.get("aliases_enabled", False)):
+        missing = [
+            p for p in players
+            if not p.get("synthetic") and not str(p.get("forest_name") or "").strip()
+        ]
+        if str(identity.get("choice") or "both") == "custom" and missing:
+            raise GameError(
+                "Every elf must choose a Forest name before the Conclave begins.",
+                "forest_name_required",
+            )
+        for p in missing:
+            ensure_forest_name(state, int(p["user_id"]))
     deck = _role_deck(len(players))
     shuffler = rng if rng is not None else secrets.SystemRandom()
     shuffler.shuffle(deck)
@@ -991,12 +1059,17 @@ def private_player_state(state: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         "user_id": p.get("user_id"),
         "display_name": game_player_name(state, p),
         "forest_name": p.get("forest_name"),
+        "forest_name_rerolls": int(p.get("forest_name_rerolls") or 0),
+        "forest_name_rerolls_left": max(0, FOREST_NAME_REROLL_LIMIT - int(p.get("forest_name_rerolls") or 0)),
+        "forest_name_spoken": bool(p.get("forest_name_spoken", False)),
+        "dm_delivery_enabled": wants_dm_delivery(state, user_id),
+        "dm_delivery_policy": str((state.get("server_policy") or {}).get("dm_delivery") or "optional"),
         "alive": bool(p.get("alive", True)),
         "role_id": p.get("role"),
         "role_name": role.get("name") if role else None,
         "faction": p.get("faction"),
         "ability": role.get("action") if role else None,
-        "description": role.get("description") if role else "Your role will be revealed when the game starts.",
+        "description": role.get("description") if role else "Your calling will be revealed when the Conclave begins.",
         "allies": allies,
         "notes": list(p.get("private_notes") or []),
         "last_will": str(p.get("last_will") or ""),

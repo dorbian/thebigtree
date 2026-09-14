@@ -290,7 +290,8 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
     embed = discord.Embed(
         title="🌿 Verdant Conclave guide",
         description=(
-            "Use this guide whenever you need to remember where to speak, what the cycle allows, or what a calling can do."
+            "The Concord hunts for the Thornbound hidden among the gathering, while the Thornbound work to survive and seize the Conclave. "
+            "Each night secret callings act; at dawn the living discuss, nominate, hear a defence, and pass judgement."
         ),
         colour=colour,
     )
@@ -320,7 +321,6 @@ def build_guide_embed(state: dict, user_id: int, page: str = "overview") -> disc
         embed.add_field(name="Your place", value=f"Your calling is **{role_text}**.", inline=False)
     else:
         embed.add_field(name="Your place", value="Take a place in the gathering with **Join**.", inline=False)
-    embed.set_footer(text="Use the selector below for controls, phases, callings, or the Lost Forest.")
     return embed
 
 
@@ -528,6 +528,85 @@ class _SpeakModal(discord.ui.Modal, title="Speak through the Forest"):
             )
         except engine.GameError as exc:
             await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+
+
+class _ForestRerollView(discord.ui.View):
+    def __init__(self, cog: "ConclaveCog", actor_id: int):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.actor_id = int(actor_id)
+
+    @discord.ui.button(label="Another name", emoji="🍃", style=discord.ButtonStyle.secondary)
+    async def reroll(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.channel_id is None or interaction.user.id != self.actor_id:
+            return await interaction.response.send_message("This Forest name choice is not yours.", ephemeral=True)
+        try:
+            state = await self.cog.mutate_channel(
+                interaction.channel_id,
+                lambda current: engine.reroll_forest_name(current, self.actor_id),
+            )
+            info = engine.private_player_state(state, self.actor_id)
+            remaining = int(info.get("forest_name_rerolls_left") or 0)
+            view = self if remaining > 0 and not info.get("forest_name_spoken") else None
+            await interaction.response.edit_message(
+                content=f"🌿 The Forest now knows you as **{info.get('forest_name')}**. {remaining} name change{'s' if remaining != 1 else ''} remain before the Conclave begins.",
+                view=view,
+            )
+            await self.cog.refresh_channel_panel(interaction.channel_id, state)
+        except engine.GameError as exc:
+            await interaction.response.edit_message(content=f"❌ {exc}", view=None)
+
+
+class _WhisperPreferenceView(discord.ui.View):
+    def __init__(self, cog: "ConclaveCog", actor_id: int):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.actor_id = int(actor_id)
+
+    @discord.ui.button(label="DM me", emoji="✉️", style=discord.ButtonStyle.primary)
+    async def enable(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.channel_id is None or interaction.user.id != self.actor_id:
+            return await interaction.response.send_message("These whispers are not yours.", ephemeral=True)
+        try:
+            state = await self.cog.mutate_channel(
+                interaction.channel_id,
+                lambda current: engine.set_dm_preference(current, self.actor_id, True),
+            )
+            try:
+                await interaction.user.send(
+                    f"🌿 Whispers from **{state.get('title') or 'Verdant Conclave'}** can reach you here."
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                await self.cog.mutate_channel(
+                    interaction.channel_id,
+                    lambda current: engine.set_dm_preference(current, self.actor_id, False),
+                )
+                return await interaction.response.edit_message(
+                    content="Discord could not deliver a private message to you, so whispers remain inside the Conclave.",
+                    view=None,
+                )
+            await interaction.response.edit_message(
+                content="🌿 Private Conclave updates will also arrive by DM.",
+                view=None,
+            )
+        except engine.GameError as exc:
+            await interaction.response.edit_message(content=f"❌ {exc}", view=None)
+
+    @discord.ui.button(label="Keep here", emoji="🌿", style=discord.ButtonStyle.secondary)
+    async def disable(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.channel_id is None or interaction.user.id != self.actor_id:
+            return await interaction.response.send_message("These whispers are not yours.", ephemeral=True)
+        try:
+            await self.cog.mutate_channel(
+                interaction.channel_id,
+                lambda current: engine.set_dm_preference(current, self.actor_id, False),
+            )
+            await interaction.response.edit_message(
+                content="🌿 Private Conclave updates will stay inside the Conclave.",
+                view=None,
+            )
+        except engine.GameError as exc:
+            await interaction.response.edit_message(content=f"❌ {exc}", view=None)
 
 
 class _JudgementView(discord.ui.View):
@@ -747,9 +826,17 @@ class ConclavePanel(discord.ui.View):
         if not bool(identity.get("aliases_enabled", False)):
             return await interaction.response.send_message("This Conclave knows you by your usual name.", ephemeral=True)
         if str(identity.get("choice") or "both") == "generated":
-            alias = engine.game_player_name(state, player_obj)
+            info = engine.private_player_state(state, interaction.user.id)
+            remaining = int(info.get("forest_name_rerolls_left") or 0)
+            view = (
+                _ForestRerollView(self.cog, interaction.user.id)
+                if state.get("phase") == engine.PHASE_LOBBY and remaining > 0 and not info.get("forest_name_spoken")
+                else None
+            )
+            detail = f" {remaining} name change{'s' if remaining != 1 else ''} remain before the Conclave begins." if view else ""
             return await interaction.response.send_message(
-                f"🌿 The Forest knows you as **{alias}**.",
+                f"🌿 The Forest knows you as **{info.get('forest_name')}**.{detail}",
+                view=view,
                 ephemeral=True,
             )
         await interaction.response.send_modal(
@@ -770,6 +857,23 @@ class ConclavePanel(discord.ui.View):
         if not bool((state.get("identity") or {}).get("aliases_enabled", False)):
             return await interaction.response.send_message("Speak in the Living Circle as yourself.", ephemeral=True)
         await interaction.response.send_modal(_SpeakModal(self.cog, interaction.user.id))
+
+    @discord.ui.button(label="Whispers", emoji="✉️", style=discord.ButtonStyle.secondary, custom_id="conclave:whispers", row=2)
+    async def whispers(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        state = await self._state(interaction)
+        if not state or not engine.player(state, interaction.user.id):
+            return await interaction.response.send_message("Join this Conclave before choosing where whispers arrive.", ephemeral=True)
+        policy = str((state.get("server_policy") or {}).get("dm_delivery") or "optional")
+        if policy == "on":
+            return await interaction.response.send_message("✉️ Private Conclave updates also arrive by DM in this gathering.", ephemeral=True)
+        if policy == "off":
+            return await interaction.response.send_message("🌿 Private Conclave updates remain inside the Conclave in this gathering.", ephemeral=True)
+        enabled = engine.wants_dm_delivery(state, interaction.user.id)
+        await interaction.response.send_message(
+            "✉️ Private Discord messages are currently " + ("on." if enabled else "off.") + " Choose where future private updates should arrive.",
+            view=_WhisperPreferenceView(self.cog, interaction.user.id),
+            ephemeral=True,
+        )
 
     @discord.ui.button(label="Start", style=discord.ButtonStyle.success, custom_id="conclave:start", row=1)
     async def start(self, interaction: discord.Interaction, _button: discord.ui.Button):
@@ -833,7 +937,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         state: dict,
         alias: str,
     ) -> None:
-        if str((state.get("server_policy") or {}).get("dm_delivery") or "optional") != "on":
+        if not engine.wants_dm_delivery(state, int(member.id)):
             return
         try:
             await member.send(
@@ -844,19 +948,20 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             pass
 
     async def deliver_role_dms(self, state: dict) -> None:
-        if str((state.get("server_policy") or {}).get("dm_delivery") or "optional") != "on":
-            return
         guild = self.bot.get_guild(int(state.get("guild_id") or 0))
         if guild is None:
             return
         for player_obj in (state.get("players") or {}).values():
             if player_obj.get("synthetic"):
                 continue
-            member = await self._fetch_member(guild, int(player_obj.get("user_id") or 0))
+            user_id = int(player_obj.get("user_id") or 0)
+            if not engine.wants_dm_delivery(state, user_id):
+                continue
+            member = await self._fetch_member(guild, user_id)
             if member is None:
                 continue
             try:
-                await member.send(embed=build_private_embed(state, int(player_obj["user_id"])))
+                await member.send(embed=build_private_embed(state, user_id))
             except (discord.Forbidden, discord.HTTPException):
                 continue
 
@@ -907,6 +1012,10 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
         if webhook is None:
             raise engine.GameError("The Forest cannot carry your words right now.", "webhook_unavailable")
         await discord_identity.relay_text(webhook, thread, state, player_obj, content)
+        await self.mutate_game(
+            str(state.get("game_id") or ""),
+            lambda current: engine.mark_forest_name_spoken(current, user_id),
+        )
         return engine.game_player_name(state, player_obj), (
             "Living Circle" if room_key == "living" else "Lost in the Forest"
         )
@@ -947,7 +1056,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
             try:
                 await message.author.send(
                     "🌿 Your voice must pass through the Forest here. "
-                    "Use **Speak** on the Conclave altar."
+                    "**Speak** on the Conclave altar carries it into the circle."
                 )
             except (discord.Forbidden, discord.HTTPException):
                 pass
@@ -959,6 +1068,18 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                 raise engine.GameError("The Forest cannot carry your words right now.", "webhook_unavailable")
             await discord_identity.relay_message(webhook, message.channel, state, player_obj, message)
             await message.delete()
+            try:
+                await self.mutate_game(
+                    str(state.get("game_id") or ""),
+                    lambda current: engine.mark_forest_name_spoken(current, int(message.author.id)),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[conclave] could not lock spoken Forest name game=%s user=%s: %s",
+                    state.get("game_id"),
+                    message.author.id,
+                    exc,
+                )
         except (engine.GameError, discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
             logger.warning(
                 "[conclave] alias relay failed game=%s user=%s: %s",
@@ -1253,10 +1374,10 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
                     "Within this circle, players are known by their **Forest names**. "
                     f"Your calling, choices and **Speak** are waiting in <#{channel_id}>.\n"
                     + (
-                        "To speak here, return to the Conclave altar and use **Speak**."
+                        "**Speak** on the Conclave altar carries your voice into this circle."
                         if mode == "sealed"
-                        else "Speak here as you normally would; the Forest carries your words under your Forest name. "
-                             "You may also use **Speak** from the Conclave altar."
+                        else "Speak here normally; the Forest carries your words under your Forest name. "
+                             "**Speak** at the altar offers the same path."
                     )
                 )
                 try:
@@ -1712,7 +1833,7 @@ class ConclaveCog(commands.Cog, name="VerdantConclave"):
     @requires_capability("game.conclave.host")
     async def recreate_conclave_panel(self, interaction: discord.Interaction):
         if interaction.channel_id is None or interaction.channel is None:
-            return await interaction.response.send_message("Use this inside the Conclave channel.", ephemeral=True)
+            return await interaction.response.send_message("Open this from the Conclave channel.", ephemeral=True)
         state = await self.get_channel_state(interaction.channel_id)
         if not state:
             return await interaction.response.send_message("There is no active Conclave in this channel.", ephemeral=True)
