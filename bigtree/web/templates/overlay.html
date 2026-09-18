@@ -97,10 +97,10 @@
               <span class="menu-label">Language Services</span>
               <span class="nav-badge">NLP</span>
             </div>
-            <a class="menu-item" href="/admin/verdant" target="_blank" rel="noopener">
-              <span class="menu-label">Verdant Conclave</span>
+            <div class="menu-item" id="menuVerdantSettings" tabindex="0">
+              <span class="menu-label">Verdant settings</span>
               <span class="nav-badge">GAME</span>
-            </a>
+            </div>
           </div>
 
 
@@ -223,9 +223,9 @@
                 <button type="button" id="dashboardLanguageServices">
                   <span>Language Services</span>
                 </button>
-                <a class="dashboard-admin-link" href="/admin/verdant" target="_blank" rel="noopener">
-                  <span>Verdant Conclave</span>
-                </a>
+                <button type="button" id="dashboardVerdantSettings">
+                  <span>Verdant settings</span>
+                </button>
                 <button type="button" id="menuSystemConfig">
                   <span>System config</span>
                 </button>
@@ -453,16 +453,32 @@
                   <a id="conclaveOpenLost" class="btn-ghost hidden" href="#" target="_blank" rel="noopener">Open Lost Forest</a>
                 </div>
                 <section class="conclave-test-tools" aria-label="Conclave test tools">
-                  <div>
-                    <strong>Test circle</strong>
-                    <p class="muted" id="conclaveTestNote">Synthetic players exist only inside this game state and can be cleared before starting.</p>
+                  <div class="conclave-test-head">
+                    <div>
+                      <strong>Test circle</strong>
+                      <p class="muted" id="conclaveTestNote">Synthetic players exist only inside this game state and can be cleared before starting.</p>
+                    </div>
+                    <div class="conclave-test-actions">
+                      <label class="compact-check" for="conclaveTestSize">
+                        Players
+                        <select id="conclaveTestSize">
+                          <option value="5">5</option>
+                          <option value="6">6</option>
+                          <option value="8" selected>8</option>
+                          <option value="10">10</option>
+                          <option value="12">12</option>
+                          <option value="15">15</option>
+                        </select>
+                      </label>
+                      <button id="conclaveTestRun" type="button">Run fake game</button>
+                      <button id="conclaveTestStop" class="btn-ghost hidden" type="button">Stop</button>
+                      <button id="conclaveTestFill" class="btn-ghost" type="button">Fill to 5</button>
+                      <button id="conclaveTestAdd" class="btn-ghost" type="button">+1 test elf</button>
+                      <button id="conclaveTestAct" class="btn-ghost" type="button">Run test choices</button>
+                      <button id="conclaveTestClear" class="btn-ghost danger-btn" type="button">Clear test elves</button>
+                    </div>
                   </div>
-                  <div class="conclave-test-actions">
-                    <button id="conclaveTestFill" class="btn-ghost" type="button">Fill to 5</button>
-                    <button id="conclaveTestAdd" class="btn-ghost" type="button">+1 test elf</button>
-                    <button id="conclaveTestAct" class="btn-ghost" type="button">Run test choices</button>
-                    <button id="conclaveTestClear" class="btn-ghost danger-btn" type="button">Clear test elves</button>
-                  </div>
+                  <div id="conclaveTestRunLog" class="conclave-test-log muted">No fake-game run yet.</div>
                 </section>
                 <div class="conclave-grid">
                   <section class="conclave-card">

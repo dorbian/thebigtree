@@ -501,6 +501,7 @@ def add_test_players(
         if player_obj is not None:
             player_obj["synthetic"] = True
             player_obj["test_index"] = synthetic_index + 1
+            player_obj["forest_name"] = name
         existing_ids.add(user_id)
         synthetic_index += 1
         added += 1
@@ -588,6 +589,102 @@ def simulate_test_players(state: Dict[str, Any]) -> Dict[str, Any]:
 
     state["test_mode"] = bool(test_players(state))
     state["test_last_simulation"] = {"phase": phase, "acted": acted, "at": _now()}
+    state["updated_at"] = _now()
+    return state
+
+
+def _random_test_target(
+    targets: Iterable[Dict[str, Any]],
+    chooser: random.Random,
+) -> Optional[Dict[str, Any]]:
+    candidates = list(targets)
+    if not candidates:
+        return None
+    synthetic = [candidate for candidate in candidates if is_test_player(candidate)]
+    return chooser.choice(synthetic or candidates)
+
+
+def advance_test_game(
+    state: Dict[str, Any],
+    *,
+    target_total: int = 8,
+    rng: Optional[random.Random] = None,
+) -> Dict[str, Any]:
+    """Advance one observable step of a synthetic-only smoke-test game."""
+    real_players = [p for p in _players(state).values() if not is_test_player(p)]
+    if real_players:
+        raise GameError(
+            "Fake-game autoplay is available only when every participant is synthetic.",
+            "test_has_real_players",
+        )
+    if state.get("phase") == PHASE_ENDED:
+        raise GameError("This fake game has already ended.", "ended")
+
+    chooser = rng if rng is not None else secrets.SystemRandom()
+    before_phase = str(state.get("phase") or PHASE_LOBBY)
+    acted = 0
+
+    if before_phase == PHASE_LOBBY:
+        limit = int((state.get("rules") or {}).get("max_players") or MAX_PLAYERS)
+        desired = max(MIN_PLAYERS, min(int(target_total or 8), limit))
+        add_test_players(state, target_total=desired)
+        start_game(state, rng=chooser)
+    elif before_phase == PHASE_NIGHT:
+        actions = state.setdefault("night_actions", {})
+        for bot in [p for p in living_players(state) if is_test_player(p)]:
+            uid = int(bot["user_id"])
+            if str(uid) in actions:
+                continue
+            action = role_definition(bot.get("role")).get("action")
+            if not action:
+                continue
+            target = _random_test_target(valid_night_targets(state, uid), chooser)
+            if target is None:
+                submit_night_pass(state, uid)
+            else:
+                submit_night_action(state, uid, int(target["user_id"]))
+            acted += 1
+        advance_phase(state)
+    elif before_phase == PHASE_DAY:
+        advance_phase(state)
+    elif before_phase == PHASE_NOMINATION:
+        accused = _random_test_target(living_players(state), chooser)
+        for bot in list(living_players(state)):
+            if state.get("phase") != PHASE_NOMINATION:
+                break
+            uid = int(bot["user_id"])
+            if str(uid) in (state.get("nomination_votes") or {}):
+                continue
+            if accused is None or uid == int(accused["user_id"]):
+                submit_nomination_pass(state, uid)
+            else:
+                submit_nomination(state, uid, int(accused["user_id"]))
+            acted += 1
+        if state.get("phase") == PHASE_NOMINATION:
+            advance_phase(state)
+    elif before_phase == PHASE_TRIAL:
+        advance_phase(state)
+    elif before_phase == PHASE_JUDGEMENT:
+        votes = state.setdefault("judgement_votes", {})
+        accused_id = int(state.get("on_trial") or 0)
+        for bot in [p for p in living_players(state) if is_test_player(p)]:
+            uid = int(bot["user_id"])
+            if uid == accused_id or str(uid) in votes:
+                continue
+            submit_judgement(state, uid, chooser.choice(("guilty", "innocent", "abstain")))
+            acted += 1
+        advance_phase(state)
+    else:
+        raise GameError("Unknown Conclave phase.", "corrupt")
+
+    state["test_mode"] = True
+    state["test_last_step"] = {
+        "before_phase": before_phase,
+        "after_phase": str(state.get("phase") or ""),
+        "acted": acted,
+        "events": list(state.get("public_events") or []),
+        "at": _now(),
+    }
     state["updated_at"] = _now()
     return state
 

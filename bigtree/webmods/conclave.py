@@ -34,6 +34,36 @@ async def _refresh_panel(game_id: str, state: dict) -> None:
             pass
 
 
+async def _sync_discord_gameplay(game_id: str, state: dict, previous_phase: str) -> dict:
+    """Mirror a web-host mutation through the Discord gameplay lifecycle."""
+    bot = getattr(bigtree, "bot", None)
+    cog = bot.get_cog("VerdantConclave") if bot else None
+    if cog is None:
+        return state
+    if hasattr(cog, "sync_game_spaces"):
+        try:
+            state = await cog.sync_game_spaces(state)
+        except Exception:
+            pass
+    changed = str(state.get("phase") or "") != str(previous_phase or "")
+    if changed and hasattr(cog, "announce_phase_transition"):
+        try:
+            await cog.announce_phase_transition(state)
+        except Exception:
+            pass
+    if hasattr(cog, "refresh_game_panel"):
+        try:
+            await cog.refresh_game_panel(game_id, state)
+        except Exception:
+            pass
+    if changed and hasattr(cog, "deliver_role_dms"):
+        try:
+            await cog.deliver_role_dms(state)
+        except Exception:
+            pass
+    return state
+
+
 @route("GET", "/admin/conclave/sessions", scopes=["game.conclave.host"])
 async def list_sessions(req: web.Request) -> web.Response:
     include_ended = str(req.query.get("include_ended") or "0").lower() in {"1", "true", "yes"}
@@ -119,6 +149,8 @@ async def join_self(req: web.Request) -> web.Response:
 async def _mutate(req: web.Request, action: str) -> web.Response:
     game_id = req.match_info.get("game_id") or ""
     store = _store()
+    before = await _store_call(store.get, game_id)
+    previous_phase = str((before or {}).get("phase") or "")
     try:
         if action == "start":
             mutator = engine.start_game
@@ -131,7 +163,7 @@ async def _mutate(req: web.Request, action: str) -> web.Response:
         state = await _store_call(store.mutate, game_id, mutator)
     except engine.GameError as exc:
         return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
-    await _refresh_panel(game_id, state)
+    state = await _sync_discord_gameplay(game_id, state, previous_phase)
     return web.json_response({"ok": True, "session": engine.public_state(state)})
 
 
@@ -225,5 +257,36 @@ async def simulate_test_players(req: web.Request) -> web.Response:
         "ok": True,
         "phase": phase,
         "simulation": simulation,
+        "session": engine.public_state(state),
+    })
+
+
+@route("POST", "/admin/conclave/{game_id}/test-step", scopes=["game.conclave.host"])
+async def step_test_game(req: web.Request) -> web.Response:
+    game_id = req.match_info.get("game_id") or ""
+    before = await _store_call(_store().get, game_id)
+    if not before:
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    try:
+        target_total = int(body.get("target_total") or 8)
+    except Exception:
+        target_total = 8
+    previous_phase = str(before.get("phase") or "")
+    try:
+        state = await _store_call(
+            _store().mutate,
+            game_id,
+            lambda current: engine.advance_test_game(current, target_total=target_total),
+        )
+    except engine.GameError as exc:
+        return web.json_response({"ok": False, "error": str(exc), "code": exc.code}, status=409)
+    state = await _sync_discord_gameplay(game_id, state, previous_phase)
+    return web.json_response({
+        "ok": True,
+        "step": dict(state.get("test_last_step") or {}),
         "session": engine.public_state(state),
     })

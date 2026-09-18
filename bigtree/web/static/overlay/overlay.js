@@ -87,6 +87,9 @@ const $ = (id) => document.getElementById(id);
       let conclaveSelectedGameId = "";
       let conclaveLoading = false;
       let conclavePollTimer = null;
+      let conclaveAutoplayRunning = false;
+      let conclaveAutoplayStopRequested = false;
+      const CONCLAVE_SELECTED_KEY = "bt_conclave_selected";
 
       // Games list (admin:web)
       let gamesListVenues = [];
@@ -2097,8 +2100,12 @@ This will block new games from being created in this event, but existing games c
         if (systemConfigBtn) systemConfigBtn.classList.toggle("hidden", !canAdmin);
         const languageServicesBtn = $("menuLanguageServices");
         if (languageServicesBtn) languageServicesBtn.classList.toggle("hidden", !canAdmin);
+        const verdantSettingsBtn = $("menuVerdantSettings");
+        if (verdantSettingsBtn) verdantSettingsBtn.classList.toggle("hidden", !canAdmin);
         const dashboardLanguageServices = $("dashboardLanguageServices");
         if (dashboardLanguageServices) dashboardLanguageServices.classList.toggle("hidden", !canAdmin);
+        const dashboardVerdantSettings = $("dashboardVerdantSettings");
+        if (dashboardVerdantSettings) dashboardVerdantSettings.classList.toggle("hidden", !canAdmin);
         const dashboardAuthLink = $("dashboardXivAuthLink");
         if (dashboardAuthLink) dashboardAuthLink.classList.toggle("hidden", !canAdmin);
         const dashboardAuthUsers = $("dashboardAuthUsers");
@@ -2109,7 +2116,7 @@ This will block new games from being created in this event, but existing games c
         const saved = getSavedPanel();
         const blocked =
           (!canBingo && (saved === "bingo" || saved === "bingoSessions" || saved === "media")) ||
-          (!canAdmin && (saved === "contests" || saved === "languageServices")) ||
+          (!canAdmin && (saved === "contests" || saved === "languageServices" || saved === "verdantSettings")) ||
           (!canTarot && (saved === "tarotLinks" || saved === "tarotDecks")) ||
           (!canCardgames && (saved === "cardgameSessions" || saved === "craps" || saved === "slots")) ||
           (!canConclave && saved === "conclave");
@@ -3606,7 +3613,7 @@ This will block new games from being created in this event, but existing games c
           judgement: "Players cast private guilty, innocent, or abstain judgements in Discord. Advance to resolve the verdict.",
           ended: "The Conclave has ended. The final public state remains available for review.",
         };
-        return guidance[phase] || "Use Discord for player choices and this panel for host-safe control.";
+        return guidance[phase] || "Player choices happen in Discord; host controls remain here.";
       }
 
       function renderConclaveSessions(){
@@ -3623,8 +3630,10 @@ This will block new games from being created in this event, but existing games c
         conclaveSessionsCache.forEach((session) => {
           const button = document.createElement("button");
           button.type = "button";
-          button.className = "conclave-session" + (String(session.game_id) === String(conclaveSelectedGameId) ? " active" : "");
+          const selected = String(session.game_id) === String(conclaveSelectedGameId);
+          button.className = "conclave-session" + (selected ? " active" : "");
           button.dataset.gameId = session.game_id || "";
+          button.setAttribute("aria-pressed", selected ? "true" : "false");
           const top = document.createElement("span");
           top.className = "conclave-session-line";
           const title = document.createElement("strong");
@@ -3749,39 +3758,66 @@ This will block new games from being created in this event, but existing games c
         const addTest = $("conclaveTestAdd");
         const clearTest = $("conclaveTestClear");
         const actTest = $("conclaveTestAct");
-        if (joinSelf) joinSelf.disabled = phase !== "lobby";
-        if (start) start.disabled = phase !== "lobby";
-        if (advance) advance.disabled = ["lobby", "ended"].includes(phase);
-        if (end) end.disabled = phase === "ended";
+        const runTest = $("conclaveTestRun");
+        const stopTest = $("conclaveTestStop");
+        const sizeTest = $("conclaveTestSize");
+        const allPlayers = session.players || [];
+        const realPlayerCount = allPlayers.filter((player) => !player.synthetic).length;
+        if (joinSelf) joinSelf.disabled = phase !== "lobby" || conclaveAutoplayRunning;
+        if (start) start.disabled = phase !== "lobby" || conclaveAutoplayRunning;
+        if (advance) advance.disabled = ["lobby", "ended"].includes(phase) || conclaveAutoplayRunning;
+        if (end) end.disabled = phase === "ended" || conclaveAutoplayRunning;
         if (repairPanel){
-          repairPanel.disabled = false;
+          repairPanel.disabled = conclaveAutoplayRunning;
           repairPanel.textContent = session.panel_message_id ? "Recreate Discord panel" : "Create Discord panel";
         }
-        if (fillTest) fillTest.disabled = phase !== "lobby" || (session.players || []).length >= 5;
-        if (addTest) addTest.disabled = phase !== "lobby" || (session.players || []).length >= 15;
-        if (clearTest) clearTest.disabled = phase !== "lobby" || !session.test_player_count;
-        if (actTest) actTest.disabled = !session.test_player_count || !["night", "nomination", "judgement"].includes(phase);
+        if (fillTest) fillTest.disabled = phase !== "lobby" || allPlayers.length >= 5 || conclaveAutoplayRunning;
+        if (addTest) addTest.disabled = phase !== "lobby" || allPlayers.length >= 15 || conclaveAutoplayRunning;
+        if (clearTest) clearTest.disabled = phase !== "lobby" || !session.test_player_count || conclaveAutoplayRunning;
+        if (actTest) actTest.disabled = !session.test_player_count || !["night", "nomination", "judgement"].includes(phase) || conclaveAutoplayRunning;
+        const fakeOnly = realPlayerCount === 0 && (allPlayers.length === 0 || Boolean(session.test_mode));
+        if (runTest){
+          runTest.disabled = phase === "ended" || !fakeOnly || conclaveAutoplayRunning;
+          runTest.textContent = phase === "lobby" ? "Run fake game" : "Continue fake game";
+        }
+        if (stopTest) stopTest.classList.toggle("hidden", !conclaveAutoplayRunning);
+        if (sizeTest) sizeTest.disabled = conclaveAutoplayRunning || phase !== "lobby" || allPlayers.length > 0;
         const testNote = $("conclaveTestNote");
         if (testNote){
           testNote.textContent = session.test_mode
             ? `${Number(session.test_player_count || 0)} synthetic test elf/elves are stored only in this PostgreSQL game state.`
             : "Synthetic players exist only inside this game state and can be cleared before starting.";
         }
-        setConclaveStatus("Host-safe state synchronized.", "ok");
+        if (!conclaveAutoplayRunning) setConclaveStatus("Host-safe state synchronized.", "ok");
+      }
+
+      function cacheConclaveSession(session){
+        if (!session || !session.game_id) return;
+        const id = String(session.game_id);
+        const idx = conclaveSessionsCache.findIndex((item) => String(item.game_id) === id);
+        if (idx >= 0) conclaveSessionsCache[idx] = session;
+        else conclaveSessionsCache.unshift(session);
       }
 
       async function selectConclave(gameId, force = false){
         if (!gameId) return;
         conclaveSelectedGameId = String(gameId);
+        try{ storage.setItem(CONCLAVE_SELECTED_KEY, conclaveSelectedGameId); }catch(err){}
+        const cached = conclaveSessionsCache.find((item) => String(item.game_id) === conclaveSelectedGameId) || null;
         renderConclaveSessions();
-        let session = !force ? conclaveSessionsCache.find((item) => String(item.game_id) === conclaveSelectedGameId) : null;
+        if (cached) renderConclaveDetail(cached);
         try{
-          if (!session){
+          if (force || !cached){
             const data = await jsonFetch(`/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}`, {method:"GET"});
-            session = data.session || null;
+            const session = data.session || cached;
+            if (session){
+              cacheConclaveSession(session);
+              renderConclaveSessions();
+              renderConclaveDetail(session);
+            }
           }
-          renderConclaveDetail(session);
         }catch(err){
+          if (!cached) renderConclaveDetail(null);
           setConclaveStatus(err.message || "Unable to load Conclave.", "err");
         }
       }
@@ -3794,11 +3830,16 @@ This will block new games from being created in this event, but existing games c
           const includeEnded = $("conclaveIncludeEnded")?.checked ? "1" : "0";
           const data = await jsonFetch(`/admin/conclave/sessions?include_ended=${includeEnded}`, {method:"GET"});
           conclaveSessionsCache = Array.isArray(data.sessions) ? data.sessions : [];
+          if (!conclaveSelectedGameId){
+            try{ conclaveSelectedGameId = storage.getItem(CONCLAVE_SELECTED_KEY) || ""; }catch(err){}
+          }
           if (conclaveSelectedGameId && !conclaveSessionsCache.some((item) => String(item.game_id) === conclaveSelectedGameId)){
             conclaveSelectedGameId = "";
+            try{ storage.removeItem(CONCLAVE_SELECTED_KEY); }catch(err){}
           }
           if (!conclaveSelectedGameId && conclaveSessionsCache.length){
             conclaveSelectedGameId = String(conclaveSessionsCache[0].game_id || "");
+            try{ storage.setItem(CONCLAVE_SELECTED_KEY, conclaveSelectedGameId); }catch(err){}
           }
           renderConclaveSessions();
           if (conclaveSelectedGameId){
@@ -3917,11 +3958,82 @@ This will block new games from being created in this event, but existing games c
         }
       }
 
+      function appendConclaveTestRun(step, number){
+        const log = $("conclaveTestRunLog");
+        if (!log) return;
+        if (number === 1) log.textContent = "";
+        const before = conclavePhaseLabel(step?.before_phase || "lobby");
+        const after = conclavePhaseLabel(step?.after_phase || "unknown");
+        const acted = Number(step?.acted || 0);
+        const events = Array.isArray(step?.events) ? step.events.map((event) => String(event || "").replace(/\*\*/g, "")) : [];
+        const detail = events.length ? ` · ${events.join(" | ")}` : "";
+        log.textContent += `${number}. ${before} → ${after}${acted ? ` · ${acted} choices` : ""}${detail}\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+
+      async function conclaveRunFakeGame(){
+        if (!conclaveSelectedGameId || conclaveAutoplayRunning) return;
+        const current = conclaveSessionsCache.find((item) => String(item.game_id) === String(conclaveSelectedGameId));
+        const realPlayers = (current?.players || []).filter((player) => !player.synthetic);
+        if (realPlayers.length){
+          setConclaveStatus("Fake-game autoplay is available only when every participant is synthetic.", "err");
+          return;
+        }
+        const targetTotal = Math.max(5, Math.min(15, Number($("conclaveTestSize")?.value || 8)));
+        conclaveAutoplayRunning = true;
+        conclaveAutoplayStopRequested = false;
+        if (current) renderConclaveDetail(current);
+        setConclaveStatus(`Running a ${targetTotal}-elf fake game…`, "");
+        try{
+          for (let stepNumber = 1; stepNumber <= 100; stepNumber += 1){
+            if (conclaveAutoplayStopRequested){
+              setConclaveStatus("Fake-game autoplay stopped.", "");
+              break;
+            }
+            const data = await jsonFetch(
+              `/admin/conclave/${encodeURIComponent(conclaveSelectedGameId)}/test-step`,
+              {
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({target_total: targetTotal}),
+              }
+            );
+            const session = data.session || null;
+            if (session){
+              cacheConclaveSession(session);
+              renderConclaveSessions();
+              renderConclaveDetail(session);
+            }
+            appendConclaveTestRun(data.step || {}, stepNumber);
+            if (session?.phase === "ended"){
+              const winner = session.winner === "concord" ? "Concord" : session.winner === "thornbound" ? "Thornbound" : "No faction";
+              setConclaveStatus(`Fake game completed in ${stepNumber} steps · ${winner} won.`, "ok");
+              break;
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 450));
+            if (stepNumber === 100) setConclaveStatus("Fake game reached the 100-step safety limit.", "err");
+          }
+        }catch(err){
+          setConclaveStatus(err.message || "Fake-game autoplay failed.", "err");
+        }finally{
+          conclaveAutoplayRunning = false;
+          conclaveAutoplayStopRequested = false;
+          const latest = conclaveSessionsCache.find((item) => String(item.game_id) === String(conclaveSelectedGameId));
+          if (latest) renderConclaveDetail(latest);
+          await loadConclaveSessions(true);
+        }
+      }
+
+      function conclaveStopFakeGame(){
+        conclaveAutoplayStopRequested = true;
+        setConclaveStatus("Stopping after the current phase…", "");
+      }
+
       function ensureConclavePolling(){
         if (conclavePollTimer) return;
         conclavePollTimer = window.setInterval(() => {
           const panel = $("conclavePanel");
-          if (document.hidden || !panel || panel.classList.contains("hidden") || !hasScope("game.conclave.host")) return;
+          if (conclaveAutoplayRunning || document.hidden || !panel || panel.classList.contains("hidden") || !hasScope("game.conclave.host")) return;
           loadConclaveSessions(true);
         }, 10000);
       }
@@ -3941,6 +4053,7 @@ This will block new games from being created in this event, but existing games c
         events: "Events",
         venues: "Venues",
         conclave: "Verdant Conclave",
+        verdantSettings: "Verdant settings",
         languageServices: "Language Services",
         iframe: "Administration",
       };
@@ -3967,6 +4080,7 @@ This will block new games from being created in this event, but existing games c
         toggleClass("menuTarotLinks", "active", which === "tarotLinks");
         toggleClass("menuCardgameSessions", "active", which === "cardgameSessions");
         toggleClass("menuConclave", "active", which === "conclave");
+        toggleClass("menuVerdantSettings", "active", which === "verdantSettings");
         toggleClass("menuLanguageServices", "active", which === "languageServices");
         toggleClass("menuTarotDecks", "active", which === "tarotDecks");
         toggleClass("menuDiceEditor", "active", which === "diceEditor");
@@ -3994,11 +4108,16 @@ This will block new games from being created in this event, but existing games c
         toggleClass("gamesListPanel", "hidden", which !== "gamesList");
         toggleClass("eventsPanel", "hidden", which !== "events");
         toggleClass("venuesPanel", "hidden", which !== "venues");
-        toggleClass("iframePanel", "hidden", which !== "iframe" && which !== "languageServices");
+        toggleClass("iframePanel", "hidden", which !== "iframe" && which !== "languageServices" && which !== "verdantSettings");
         if (which === "languageServices"){
           const iframe = $("iframeContent");
           if (iframe && !iframe.src.endsWith("/admin/language")){
             iframe.src = "/admin/language";
+          }
+        } else if (which === "verdantSettings"){
+          const iframe = $("iframeContent");
+          if (iframe && !iframe.src.endsWith("/admin/verdant")){
+            iframe.src = "/admin/verdant";
           }
         }
         const workspaceTitle = $("workspaceTitle");
@@ -4204,6 +4323,14 @@ This will block new games from being created in this event, but existing games c
         if (!ensureScope("admin:web", "Language Services requires web administration access.")) return;
         showPanel("languageServices");
       });
+      on("menuVerdantSettings", "click", () => {
+        if (!ensureScope("admin:web", "Verdant settings require web administration access.")) return;
+        showPanel("verdantSettings");
+      });
+      on("dashboardVerdantSettings", "click", () => {
+        if (!ensureScope("admin:web", "Verdant settings require web administration access.")) return;
+        showPanel("verdantSettings");
+      });
       on("menuConclave", "click", () => {
         if (!ensureScope("game.conclave.host", "Verdant Conclave host access required.")) return;
         showPanel("conclave");
@@ -4219,6 +4346,8 @@ This will block new games from being created in this event, but existing games c
       on("conclaveTestAdd", "click", () => conclaveTestAction("add"));
       on("conclaveTestClear", "click", () => conclaveTestAction("clear"));
       on("conclaveTestAct", "click", () => conclaveTestAction("act"));
+      on("conclaveTestRun", "click", () => conclaveRunFakeGame());
+      on("conclaveTestStop", "click", () => conclaveStopFakeGame());
       $("menuBingo").addEventListener("click", () => {
         showPanel("bingoSessions");
         loadGamesMenu();
@@ -4334,6 +4463,7 @@ This will block new games from being created in this event, but existing games c
       }
       bindMenuKey("menuDashboard");
       bindMenuKey("menuLanguageServices");
+      bindMenuKey("menuVerdantSettings");
       bindMenuKey("menuConclave");
       bindMenuKey("menuBingo");
       bindMenuKey("menuTarotLinks");
