@@ -162,11 +162,13 @@ class ConclaveProductFoundationTests(unittest.TestCase):
         webmod = (ROOT / "bigtree" / "webmods" / "conclave_settings.py").read_text("utf-8")
         template = (ROOT / "bigtree" / "web" / "templates" / "conclave_settings.html").read_text("utf-8")
         overlay = (ROOT / "bigtree" / "web" / "templates" / "overlay.html").read_text("utf-8")
+        overlay_script = (ROOT / "bigtree" / "web" / "static" / "overlay" / "overlay.js").read_text("utf-8")
         self.assertIn('"/admin/verdant"', webmod)
         self.assertIn('"/admin/verdant/status"', webmod)
         self.assertNotIn('"/admin/conclave/settings"', webmod)
         self.assertIn("/admin/verdant", template)
-        self.assertIn("/admin/verdant", overlay)
+        self.assertIn('id="menuVerdantSettings"', overlay)
+        self.assertIn('iframe.src = "/admin/verdant"', overlay_script)
 
     def test_store_enforces_server_enable_and_concurrency_policy(self):
         source = (ROOT / "bigtree" / "games" / "conclave" / "store.py").read_text("utf-8")
