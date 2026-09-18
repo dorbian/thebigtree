@@ -19,6 +19,7 @@ MIN_PLAYERS = 5
 MAX_PLAYERS = 15
 TEST_PLAYER_ID_BASE = -900000
 FOREST_NAME_REROLL_LIMIT = 3
+MAX_RELAY_HISTORY = 200
 TEST_PLAYER_NAMES = (
     "Fern", "Moss", "Willow", "Bramble", "Clover", "Juniper", "Rowan",
     "Hazel", "Thistle", "Laurel", "Sorrel", "Ivy", "Alder", "Reed", "Sage",
@@ -132,6 +133,7 @@ def new_state(
             "channel_id": None,
             "webhook_id": None,
         },
+        "relay_history": [],
         "test_mode": False,
         "phase": PHASE_LOBBY,
         "night": 0,
@@ -365,13 +367,18 @@ def register_room(
     if not isinstance(rooms, dict):
         rooms = {}
         state["rooms"] = rooms
-    rooms[key] = {
+    existing = rooms.get(key) if isinstance(rooms.get(key), dict) else {}
+    same_channel = int((existing or {}).get("channel_id") or 0) == int(channel_id)
+    metadata = {
         "channel_id": int(channel_id),
         "purpose": str(purpose or key)[:80],
         "lifecycle": str(lifecycle or "game")[:24],
         "private": bool(private),
-        "registered_at": _now(),
+        "registered_at": (existing or {}).get("registered_at") or _now(),
     }
+    if same_channel and (existing or {}).get("guidance_message_id"):
+        metadata["guidance_message_id"] = int(existing["guidance_message_id"])
+    rooms[key] = metadata
     state["updated_at"] = _now()
     return state
 
@@ -380,6 +387,62 @@ def unregister_room(state: Dict[str, Any], room_key: str) -> Dict[str, Any]:
     rooms = state.setdefault("rooms", {})
     if isinstance(rooms, dict):
         rooms.pop(str(room_key or "").strip().lower(), None)
+    state["updated_at"] = _now()
+    return state
+
+
+def record_relay_message(
+    state: Dict[str, Any],
+    message_id: int,
+    owner_user_id: int,
+    room_key: str,
+    forest_name: str,
+) -> Dict[str, Any]:
+    """Remember relay ownership without storing the relayed message body."""
+    history = state.setdefault("relay_history", [])
+    if not isinstance(history, list):
+        history = []
+        state["relay_history"] = history
+    wanted = int(message_id)
+    history[:] = [
+        item
+        for item in history
+        if isinstance(item, dict) and int(item.get("message_id") or 0) != wanted
+    ]
+    history.append(
+        {
+            "message_id": wanted,
+            "owner_user_id": int(owner_user_id),
+            "room_key": str(room_key or "")[:24],
+            "forest_name": str(forest_name or "Unnamed elf")[:80],
+            "timestamp": _now(),
+        }
+    )
+    del history[:-MAX_RELAY_HISTORY]
+    state["updated_at"] = _now()
+    return state
+
+
+def relay_message_record(state: Dict[str, Any], message_id: int) -> Optional[Dict[str, Any]]:
+    wanted = int(message_id)
+    history = state.get("relay_history") or []
+    if not isinstance(history, list):
+        return None
+    for item in reversed(history):
+        if isinstance(item, dict) and int(item.get("message_id") or 0) == wanted:
+            return item
+    return None
+
+
+def forget_relay_message(state: Dict[str, Any], message_id: int) -> Dict[str, Any]:
+    wanted = int(message_id)
+    history = state.get("relay_history") or []
+    if isinstance(history, list):
+        state["relay_history"] = [
+            item
+            for item in history
+            if not isinstance(item, dict) or int(item.get("message_id") or 0) != wanted
+        ]
     state["updated_at"] = _now()
     return state
 

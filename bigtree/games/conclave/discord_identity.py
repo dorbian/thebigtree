@@ -63,18 +63,31 @@ async def _attachment_files(message: discord.Message) -> list[discord.File]:
     return files
 
 
+def _reply_prefix(reply_to: Optional[str]) -> str:
+    if not str(reply_to or "").strip():
+        return ""
+    name = discord.utils.escape_markdown(str(reply_to).strip())[:80]
+    return f"↪ **Replying to {name}**\n"
+
+
 async def relay_message(
     webhook: discord.Webhook,
     thread: discord.Thread,
     state: Dict[str, Any],
     player_obj: Dict[str, Any],
     message: discord.Message,
-) -> None:
+    *,
+    reply_to: Optional[str] = None,
+) -> Optional[discord.WebhookMessage]:
     """Repost one ordinary Discord message under its game-local Forest name."""
     content = sanitise_content(state, message.content, message.raw_mentions)
     files = await _attachment_files(message)
+    if not content and not files and message.stickers:
+        sticker = str(message.stickers[0].name or "sticker")[:80]
+        content = f"🖼️ *Sticker: {discord.utils.escape_markdown(sticker)}*"
     if not content and not files:
-        return
+        return None
+    content = _reply_prefix(reply_to) + content if reply_to else content
     kwargs: Dict[str, Any] = {
         "content": content or None,
         "username": engine.game_player_name(state, player_obj)[:80],
@@ -85,7 +98,7 @@ async def relay_message(
     if files:
         kwargs["files"] = files
     # Deliberately do not forward the Discord avatar: it is identifying data.
-    await webhook.send(**kwargs)
+    return await webhook.send(**kwargs)
 
 
 async def relay_text(
@@ -94,11 +107,11 @@ async def relay_text(
     state: Dict[str, Any],
     player_obj: Dict[str, Any],
     content: str,
-) -> None:
+) -> Optional[discord.WebhookMessage]:
     text = sanitise_content(state, content)
     if not text.strip():
-        return
-    await webhook.send(
+        return None
+    return await webhook.send(
         content=text,
         username=engine.game_player_name(state, player_obj)[:80],
         thread=thread,
